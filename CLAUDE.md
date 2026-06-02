@@ -1,0 +1,61 @@
+# CLAUDE.md
+
+This file provides guidance to Claude (Claude Code and chat) when working with code in this repository.
+
+## Commands
+
+```bash
+npm install        # Install dependencies
+npm run dev        # Start dev server at http://localhost:5173
+npm run build      # Build for production (outputs to dist/)
+npm run preview    # Preview the production build
+```
+
+No test runner is configured.
+
+## Architecture
+
+**Stack:** React 18 + Vite, deployed to Vercel (frontend + serverless functions). UI is Hebrew, right-to-left (`dir="rtl"` in `index.html`), styled entirely with inline styles + a small injected `<style>` block. **Responsive layout:** on desktop it renders as a centered phone mockup (~390×800 card, the `.phone-frame` class); on phones (`max-width: 440px`) it goes full-screen — the frame fills the viewport (`100dvh`, no border/shadow/radius) so the bottom nav bar stays pinned to the bottom of the screen, like a native app. The responsive switch is done with a CSS media query inside the injected `<style>` block (the `.app-outer` / `.phone-frame` classes), since inline styles can't hold media queries.
+
+### Frontend
+Nearly all frontend logic lives in a single file: `src/App.jsx` (~1,570 lines). It is a **monolithic** component file — no component library, no state-management framework; everything uses React `useState` / `useEffect` / `useMemo`. `src/main.jsx` just mounts it.
+
+Key sections inside `src/App.jsx` (top to bottom):
+- **DOMAIN** — pure nutrition logic: `computeTargets` (Mifflin-St Jeor BMR for women, TDEE, deficit, protein/fat/carb targets), `projection`, `nutritionFor`, `programWeekFor`, `programDayNumber`, `unlockedOn`, `streakDays`.
+- **SEED DATA** — `FOODS` (Israeli staples, per-100g macros), `RECIPES`, `MEALS`, `INITIAL_LOG`, `makeWeightSeed`.
+- **THEME** — the `C` color object (feminine rose palette) and `fontStack` (Rubik). `VERSION` constant lives here.
+- **PRIMITIVES** — `Ring`, `MacroCard`, `MacroRow`, `WaterCard`, `Btn`, `Header`, `Stepper`.
+- **ONBOARDING** — `Onboarding`.
+- **SCREENS** — `DayScreen` (the "today" home screen), `ReportScreen` (weight + calorie-adherence charts), `RecipesScreen`, `ProfileScreen`.
+- **AI FUNCTIONS** — `analyzeMeal` (photo → items), `aiNutritionChat` (logging-by-chat), `aiMealChat` ("what should I eat?" conversational helper), `searchIsraeliDB`.
+- **MODALS / SHEETS** — `EntryMenu`, `SheetShell`, `ActivityModal`, `WeightModal`, `CalorieGoalModal`, `AccessGate`, `AddModal`, `RecommendModal`, `StreakCheer`, `IntroOverlay`, `NotesFab`.
+- **ROOT** — `export default function App()` (near the bottom): all state, persistence, and wiring of screens + modals.
+
+### Navigation (bottom bar)
+The bottom nav bar holds four tabs (`tabs` array: היום / דוח / מתכונים / פרופיל) split two-and-two around a **raised circular "+" action button** in the center. The "+" is the brand-gradient circle (class `fab-center`, a gentle float + glow animation) and opens the entry menu (`setSheet("menu")`). It is part of the bar and persistent across all tabs. All sheets/modals render as full-screen overlays (`position: absolute; inset: 0`) above the bar, so the "+" never collides with them.
+
+### Persistence
+State is saved to `localStorage` under the key `myprime_demo_state_v1` (profile, log, weights, activityLog, waterByDate). A device id is stored separately as `myprime_device_id`.
+
+### Feature unlock system (time-gated)
+Trackers are gated by program week, computed from `profile.startDate`:
+- `MACRO_UNLOCK = { week: 3, day: 4 }` — nutrition macros (protein/fat/carbs/fiber).
+- `WATER_UNLOCK = { week: 3, day: 2 }` — water tracker.
+- `unlockedOn(startDate, onDate, u)` decides whether a tracker is open on a given date.
+
+**Product rule:** before a tracker's week, it must **not appear at all** — not shown as "locked", just absent from the screen. Protein focus / macros are only relevant **from week 3**. The whole codebase follows this single rule (hidden before week 3, never "locked"). The previous leftover `PROTEIN_UNLOCK_WEEK = 2` constant and the "locked" mode in `MacroCard` (text "ייפתח בשבוע 2") were removed in v0.23.
+
+### Backend (Vercel serverless functions in `api/`)
+- `api/ai.js` — proxy to the Anthropic Messages API. Requires env var `ANTHROPIC_API_KEY`; optional `AI_MODEL` (defaults to a current Sonnet model). The frontend calls it via `AI_ENDPOINT` (`/api/ai`, overridable with `VITE_AI_ENDPOINT`). The proxy overrides the model server-side, so the model string sent from the client is not authoritative.
+- `api/access.js` — access gate: checks an email against the program participant list (`ACCESS_ENDPOINT` / `/api/access`).
+- `api/il-food.js` — Israeli food database lookup (`/api/il-food?q=...`).
+
+The AI features only work when deployed (or with the functions running), since they depend on `/api/*`. In a plain local `npm run dev` they may not respond — that is expected.
+
+## Working rules (owner preferences — important)
+
+- **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.24`.
+- **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
+- **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
+- **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").

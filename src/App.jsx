@@ -155,7 +155,6 @@ function prettyDate(dateStr) {
   return `${HE_DAYS[d.getDay()]}, ${d.getDate()} ב${HE_MONTHS[d.getMonth()]}`;
 }
 const TODAY = ymd(new Date());
-const PROTEIN_UNLOCK_WEEK = 2;
 function sundayOf(dateStr) { const d = new Date(dateStr); d.setDate(d.getDate() - d.getDay()); return ymd(d); }
 function listSundays() {
   const base = sundayOf(TODAY);
@@ -222,7 +221,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.22";
+const VERSION = "0.24";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -244,16 +243,7 @@ function Ring({ consumed, budget, size = 132 }) {
     </svg>
   );
 }
-function MacroCard({ label, value, target, color, emphasized, headline, locked, lockedText }) {
-  if (locked) return (
-    <div style={{ flex: 1, background: C.bg, borderRadius: 12, padding: "10px 9px", opacity: 0.8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 7 }}>
-        <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0 }} />
-        <span style={{ fontSize: 14, color: C.sub }}>{label}</span>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.faint, fontSize: 13 }}><Lock size={12} /> {lockedText}</div>
-    </div>
-  );
+function MacroCard({ label, value, target, color, emphasized, headline }) {
   const pct = target ? Math.max(0, Math.min(100, Math.round((value / target) * 100))) : 0;
   return (
     <div style={{ flex: 1, background: emphasized ? C.brandBg : C.bg, border: `1px solid ${emphasized ? C.brand : "transparent"}`, borderRadius: 12, padding: "10px 9px" }}>
@@ -272,10 +262,10 @@ function MacroCard({ label, value, target, color, emphasized, headline, locked, 
     </div>
   );
 }
-function MacroRow({ p, f, c, tp, tf, tc, headline, proteinLocked }) {
+function MacroRow({ p, f, c, tp, tf, tc, headline }) {
   return (
     <div style={{ display: "flex", gap: 8 }}>
-      <MacroCard label="חלבון" value={p} target={tp} color={C.macroP} emphasized headline={headline} locked={proteinLocked} lockedText={`ייפתח בשבוע ${PROTEIN_UNLOCK_WEEK}`} />
+      <MacroCard label="חלבון" value={p} target={tp} color={C.macroP} emphasized headline={headline} />
       <MacroCard label="שומן" value={f} target={tf} color={C.macroF} headline={headline} />
       <MacroCard label="פחמימות" value={c} target={tc} color={C.macroC} headline={headline} />
     </div>
@@ -1514,7 +1504,7 @@ export default function App() {
   ];
 
   return (
-    <div dir="rtl" style={{ minHeight: "100vh", background: C.bg, display: "flex", justifyContent: "center", alignItems: "flex-start", padding: "24px 12px", fontFamily: fontStack }}>
+    <div dir="rtl" className="app-outer">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600&display=swap');
         *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
         ::-webkit-scrollbar{width:0;height:0}
@@ -1524,13 +1514,16 @@ export default function App() {
         @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,93,121,0.5)}50%{box-shadow:0 0 0 8px rgba(212,93,121,0)}}
         .spin-pulse{animation:pulse 1.2s ease-in-out infinite}
         @keyframes flameFlicker{0%,100%{transform:rotate(-6deg) scale(1)}50%{transform:rotate(6deg) scale(1.18)}}
-        @keyframes fabFloat{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-6px)}}
+        @keyframes fabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
         @keyframes fabGlow{0%,100%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 0 rgba(212,93,121,0.45)}50%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 12px rgba(212,93,121,0)}}
         .fab-center{animation:fabFloat 3.2s ease-in-out infinite, fabGlow 2.2s ease-in-out infinite}
         .streak-pill:active{transform:scale(0.96)}
         @keyframes cheerPop{0%{transform:scale(0.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
-        @keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(150px) rotate(360deg);opacity:0}}`}</style>
-      <div style={{ width: 390, maxWidth: "100%", height: 800, background: C.panel, borderRadius: 30, boxShadow: "0 12px 40px rgba(168,66,92,0.14)", border: `1px solid ${C.line}`, overflow: "hidden", display: "flex", flexDirection: "column", position: "relative" }}>
+        @keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(150px) rotate(360deg);opacity:0}}
+        .app-outer{min-height:100vh;min-height:100dvh;background:${C.bg};display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;font-family:${fontStack}}
+        .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
+        @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;border-radius:0;box-shadow:none;border:none}}`}</style>
+      <div className="phone-frame">
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "10px 18px 4px", flexShrink: 0 }}>
           <span style={{ fontSize: 13, color: C.brandD, fontWeight: 600 }}>MyPrime · v{VERSION}</span>
         </div>
@@ -1546,16 +1539,17 @@ export default function App() {
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} />}
             </div>
-            <div style={{ display: "flex", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.panel, flexShrink: 0 }}>
-              {tabs.map((t) => {
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.panel, flexShrink: 0 }}>
+              {tabs.slice(0, 2).map((t) => {
+                const active = tab === t.id;
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", background: "transparent", cursor: "pointer", color: active ? C.brand : C.faint, fontWeight: active ? 500 : 400 }}><t.ic size={21} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+              })}
+              <button onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
+              {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
                 return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", background: "transparent", cursor: "pointer", color: active ? C.brand : C.faint, fontWeight: active ? 500 : 400 }}><t.ic size={21} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
             </div>
-
-            {tab === "day" && !modal && !sheet && (
-              <button onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ position: "absolute", bottom: 78, left: "50%", transform: "translateX(-50%)", width: 64, height: 64, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={30} strokeWidth={2.6} /></button>
-            )}
 
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} waterOpen={waterOpenToday} />}
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} />}
