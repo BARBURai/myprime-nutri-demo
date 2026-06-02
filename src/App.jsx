@@ -5,7 +5,7 @@ import {
   Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet,
   MessageCircle, Loader, Copy, Mic, Send, Lock,
 } from "lucide-react";
-import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart } from "recharts";
+import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
@@ -222,7 +222,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.21";
+const VERSION = "0.22";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -463,7 +463,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, editEntry, deleteEntry, onRecommend, userName }) {
+function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, editEntry, deleteEntry, onRecommend, userName, onStreakTap }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -480,16 +480,18 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
   const days = Array.from({ length: 15 }, (_, i) => addDays(TODAY, i - 10));
   return (
     <div style={{ padding: "8px 0 24px" }}>
-      <div style={{ textAlign: "center", padding: "0 16px" }}>
-        {userName && userName.trim() && <div style={{ fontSize: 14, color: C.brandD, fontWeight: 500, marginBottom: 2 }}>היי {userName.trim()} 👋</div>}
-        <div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{prettyDate(date)}</div>
-        {relLabel(date) && <div style={{ fontSize: 14, color: C.faint, marginTop: 2 }}>{relLabel(date)}</div>}
-        {week >= 1 && <div style={{ fontSize: 13, color: C.brandD, marginTop: 2 }}>שבוע {week} בתוכנית</div>}
-        <div style={{ marginTop: 7 }}>
-          {streak > 0
-            ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: C.brandBg, color: C.brandD, borderRadius: 16, padding: "5px 13px", fontSize: 14, fontWeight: 600 }}>🔥 {streak} ימים ברצף</span>
-            : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: C.faint, fontSize: 13 }}>🔥 מלאי משהו היום כדי להתחיל רצף</span>}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 16px 0", gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          {userName && userName.trim() && <div style={{ fontSize: 15, color: C.brandD, fontWeight: 600 }}>היי {userName.trim()} 👋</div>}
+          <div style={{ fontSize: 14, color: C.sub, fontWeight: 500, marginTop: 1 }}>
+            {relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD }}> · שבוע {week}</span> : null}
+          </div>
         </div>
+        {streak > 0
+          ? <button onClick={onStreakTap} className="streak-pill" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.amber}, ${C.brand})`, color: "#fff", border: "none", borderRadius: 18, padding: "7px 14px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(199,122,60,0.35)", fontFamily: fontStack }}>
+              <span style={{ display: "inline-block", animation: "flameFlicker 1s ease-in-out infinite" }}>🔥</span> {streak} ימים ברצף
+            </button>
+          : <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, color: C.faint, fontSize: 13 }}>🔥 מלאי משהו להתחיל רצף</span>}
       </div>
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "12px 16px 4px" }}>
@@ -510,28 +512,26 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
         <div style={{ display: "flex", justifyContent: "center", gap: 12, fontSize: 13, color: C.sub, margin: "4px 0 12px" }}>
           <span>יעד {dailyTarget.toLocaleString()}</span>
           {actKcal > 0 && <span style={{ color: C.brandD }}>פעילות +{actKcal}</span>}
-          <span>נאכל {consumed.toLocaleString()}</span>
+          {consumed > 0 && <span>נאכל {consumed.toLocaleString()}</span>}
         </div>
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <button onClick={onRecommend} style={{ border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 20, padding: "8px 18px", fontSize: 14, fontWeight: 500, fontFamily: fontStack, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}><Sparkles size={16} /> מה כדאי לאכול?</button>
         </div>
 
-        <div style={{ fontSize: 13, color: C.faint, marginBottom: 8 }}>תזונה</div>
-        {macroOpen ? (
-          <div style={{ display: "flex", gap: 7, marginBottom: 16 }}>
-            <MacroCard label="חלבון" value={macros.p} target={targets.protein} color={C.macroP} emphasized />
-            <MacroCard label="שומן" value={macros.f} target={targets.fat} color={C.macroF} />
-            <MacroCard label="פחמימות" value={macros.c} target={targets.carbs} color={C.macroC} />
-            <MacroCard label="סיבים" value={macros.fib} target={FIBER_TARGET} color={C.info} />
-          </div>
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, borderRadius: 12, padding: 12, marginBottom: 16, color: C.faint, fontSize: 14, lineHeight: 1.5 }}><Lock size={15} style={{ flexShrink: 0 }} /> מעקב תזונה (חלבון, שומן, פחמימות, סיבים) נפתח בשבוע 3</div>
+        {macroOpen && (
+          <>
+            <div style={{ fontSize: 13, color: C.faint, marginBottom: 8 }}>תזונה</div>
+            <div style={{ display: "flex", gap: 7, marginBottom: 16 }}>
+              <MacroCard label="חלבון" value={macros.p} target={targets.protein} color={C.macroP} emphasized />
+              <MacroCard label="שומן" value={macros.f} target={targets.fat} color={C.macroF} />
+              <MacroCard label="פחמימות" value={macros.c} target={targets.carbs} color={C.macroC} />
+              <MacroCard label="סיבים" value={macros.fib} target={FIBER_TARGET} color={C.info} />
+            </div>
+          </>
         )}
 
-        {waterOpen ? (
+        {waterOpen && (
           <WaterCard glasses={glasses} setGlasses={(n) => setWaterForDate(date, n)} />
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, borderRadius: 12, padding: 12, marginBottom: 16, color: C.faint, fontSize: 14 }}><Lock size={15} style={{ flexShrink: 0 }} /> מעקב מים נפתח בשבוע 3</div>
         )}
 
         {dayAct.length > 0 && (
@@ -547,7 +547,7 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
         )}
 
         <div style={{ fontSize: 13, color: C.faint, margin: "16px 0 2px" }}>מה שהוזן</div>
-        {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 15, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה — הקישי על הכפתור למטה</div>}
+        {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 15, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה — הקישי על כפתור ה־+ להוספה</div>}
         {dayLog.map((e) => (
           <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
             <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
@@ -567,19 +567,49 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek }) {
   const data = weights.map((w) => ({ ...w, label: `${new Date(w.date).getDate()}/${new Date(w.date).getMonth() + 1}` }));
   const change = Math.round((weights[weights.length - 1].kg - weights[0].kg) * 10) / 10;
   const current = weights[weights.length - 1].kg;
-  const daysOnTarget = (() => {
-    const byDate = {};
-    log.forEach((e) => { byDate[e.date] = (byDate[e.date] || 0) + e.kcal; });
-    const dates = Object.keys(byDate);
-    return dates.filter((d) => byDate[d] <= targets.targetKcal).length + "/" + dates.length;
-  })();
+  const calByDate = {};
+  log.forEach((e) => { calByDate[e.date] = (calByDate[e.date] || 0) + e.kcal; });
+  const goalKcal = targets.targetKcal;
+  const calSeries = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(TODAY, i - 6);
+    const dd = new Date(d);
+    return { label: `${dd.getDate()}/${dd.getMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
+  });
+  const loggedDays = calSeries.filter((x) => x.kcal > 0);
+  const metDays = loggedDays.filter((x) => x.kcal <= goalKcal).length;
+  const daysOnTarget = `${metDays}/${loggedDays.length}`;
+  const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
+  const proteinFocus = programWeek >= MACRO_UNLOCK.week;
   const adaptive = Math.round(targets.tdee + (change < 0 ? -40 : 40));
   return (
     <div style={{ padding: "8px 16px 16px" }}>
       <Header title="דוח והתקדמות" />
       <div style={{ marginBottom: 12 }}><span style={{ fontSize: 13, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 20 }}>שבוע {programWeek} בתוכנית</span></div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-        {["שבוע", "חודש", "3 חודשים"].map((t, i) => (<span key={t} style={{ fontSize: 14, padding: "5px 12px", borderRadius: 20, background: i === 1 ? C.ink : "transparent", color: i === 1 ? "#fff" : C.sub, boxShadow: i === 1 ? "none" : `inset 0 0 0 1px ${C.line}` }}>{t}</span>))}
+      <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+          <Target size={16} color={C.brand} />
+          <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>עמידה ביעד הקלורי</span>
+        </div>
+        <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>
+          {loggedDays.length > 0
+            ? <>עמדת ביעד <b style={{ color: C.brandD }}>{metDays} מתוך {loggedDays.length}</b> הימים האחרונים 🎯</>
+            : "עדיין אין נתוני אכילה לשבוע הזה"}
+        </div>
+        {loggedDays.length > 0 && (
+          <div style={{ height: 140, margin: "0 -6px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={calSeries} margin={{ top: 12, right: 8, left: 8, bottom: 0 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, Math.round(maxCal * 1.15)]} hide />
+                <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
+                <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 11, fill: C.brandD }} />
+                <Bar dataKey="kcal" radius={[6, 6, 0, 0]}>
+                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : d.kcal <= goalKcal ? C.brand : C.amber} />))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
       <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
@@ -601,7 +631,9 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek }) {
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>ימים ביעד</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div></div>
-        <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>יעד חלבון</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{targets.protein} ג׳</div></div>
+        {proteinFocus
+          ? <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>יעד חלבון</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{targets.protein} ג׳</div></div>
+          : <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>ירידה מתחילת המעקב</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{Math.abs(change)} ק״ג</div></div>}
       </div>
       <div style={{ fontSize: 13, color: C.sub, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, display: "flex", gap: 6 }}>
         <Target size={15} color={C.brandD} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -738,22 +770,26 @@ async function aiNutritionChat(messages) {
   };
 }
 
-async function aiMealSuggest({ remainingKcal, remainingProtein, diet, dislikes, mealsHad }) {
-  const system = "את עוזרת תזונה של MyPrime, מדברת עברית. בהינתן כמה קלוריות נשארו למשתמשת היום, יעד החלבון שנותר, והעדפותיה — הציעי 2-3 רעיונות מעשיים לארוחה או נשנוש שמתאימים לכמות הקלוריות שנותרה ולהעדפות, באופי ים-תיכוני, פשוט וזמין בישראל. שמרי על כמות קלוריות לכל הצעה שמתאימה למה שנשאר. החזירי JSON תקין בלבד, בלי טקסט מסביב ובלי סימוני קוד, במבנה: {\"suggestions\":[{\"name\":\"שם המנה\",\"kcal\":מספר,\"note\":\"משפט קצר למה זה מתאים\"}]}";
-  const user = `נשארו כ-${Math.max(0, Math.round(remainingKcal))} קלוריות להיום` +
-    (remainingProtein > 0 ? `, ויעד חלבון שנותר כ-${Math.round(remainingProtein)} גרם` : "") +
-    `. העדפות תזונה: ${diet && diet.length ? diet.join(", ") : "ללא"}` +
-    (dislikes ? `; להימנע מ: ${dislikes}` : "") +
-    (mealsHad ? `. כבר נאכל היום: ${mealsHad}` : "") + ".";
+async function aiMealChat(messages, ctx) {
+  const proteinRule = ctx.proteinFocus
+    ? "אם רלוונטי אפשר להזכיר חלבון בעדינות."
+    : "חשוב מאוד: בשלב הזה של התוכנית אל תדגישי חלבון, מאקרו או גרמים — דברי על ארוחות מאוזנות, משביעות וקלות להכנה.";
+  const system =
+    "את היועצת של MyPrime, מדברת עברית בגוף שני נקבה. הטון: חברה חמה ואכפתית שמדברת, לא משווקת שמוכרת — אישי, פשוט ומעודד. " +
+    "המטרה: לעזור לה להחליט מה לאכול עכשיו, לפי מה שנשאר לה היום ומה שיש לה בבית. " +
+    proteinRule + " " +
+    "הציעי 2-3 רעיונות מעשיים, ים-תיכוניים וזמינים בישראל, שמתאימים לקלוריות שנותרו. שמרי על תשובות קצרות (2-4 משפטים). " +
+    "תמיד סיימי בשאלה עדינה — מה היא חושבת, או אם יש לה את המצרכים. אם חסר לה מצרך (למשל אין סלמון) — הציעי מיד חלופה זמינה ופשוטה. " +
+    "אם היא רוצה לדבר עם בן אדם / מאמנת / מישהי מהצוות — הגיבי בחום, הרגיעי אותה שהיא לא לבד, והציעי להעביר את הפנייה לצוות MyPrime שיחזרו אליה. " +
+    "אל תיתני ייעוץ רפואי. החזירי טקסט רגיל בלבד (לא JSON, בלי סימוני קוד).";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 700, system, messages: [{ role: "user", content: user }] }),
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 700, system, messages }),
   });
   const data = await res.json();
-  if (!res.ok || data.error || !Array.isArray(data.content)) return { error: true, suggestions: [] };
-  const text = (data.content || []).map((i) => i.text || "").join("");
-  const obj = extractAiJson(text);
-  return { suggestions: (obj && obj.suggestions) || [] };
+  if (!res.ok || data.error || !Array.isArray(data.content)) return { error: true, text: "" };
+  const text = (data.content || []).map((i) => i.text || "").join("").trim();
+  return { text };
 }
 
 async function searchIsraeliDB(q) {
@@ -1296,34 +1332,86 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
   );
 }
 
-function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, mealsHad, onClose }) {
-  const [state, setState] = useState("loading");
-  const [items, setItems] = useState([]);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const r = await aiMealSuggest({ remainingKcal, remainingProtein, diet, dislikes, mealsHad });
-      if (!alive) return;
-      if (r.error || !r.suggestions.length) setState("error");
-      else { setItems(r.suggestions); setState("done"); }
-    })();
-    return () => { alive = false; };
-  }, []);
+function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, mealsHad, proteinFocus, onClose }) {
+  const seed = `הקשר: נשארו לי כ-${Math.max(0, Math.round(remainingKcal))} קלוריות להיום`
+    + (proteinFocus && remainingProtein > 0 ? `, ונותרו כ-${Math.round(remainingProtein)} ג׳ חלבון ליעד` : "")
+    + (diet && diet.length ? `. העדפות: ${diet.join(", ")}` : "")
+    + (dislikes ? `. להימנע מ: ${dislikes}` : "")
+    + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
+    + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
+  const [msgs, setMsgs] = useState([{ role: "user", content: seed }]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(false);
+  const endRef = useRef(null);
+  const ctx = { proteinFocus };
+
+  const run = async (history) => {
+    setLoading(true); setErr(false);
+    const r = await aiMealChat(history, ctx);
+    setLoading(false);
+    if (r.error || !r.text) { setErr(true); return; }
+    setMsgs([...history, { role: "assistant", content: r.text }]);
+  };
+  useEffect(() => { run(msgs); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
+
+  const sendText = (t) => {
+    const text = (t || "").trim();
+    if (!text || loading) return;
+    const next = [...msgs, { role: "user", content: text }];
+    setMsgs(next); setInput(""); run(next);
+  };
+
+  const visible = msgs.slice(1); // hide the synthetic opening prompt
+
   return (
     <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
-      <div style={{ fontSize: 13, color: C.sub, marginBottom: 12, lineHeight: 1.6 }}>לפי כ-{Math.max(0, Math.round(remainingKcal))} קלוריות שנותרו לך היום{remainingProtein > 0 ? ` ועוד כ-${Math.round(remainingProtein)} ג׳ חלבון ליעד` : ""}{diet && diet.length ? ` · ${diet.join(", ")}` : ""}.</div>
-      {state === "loading" && <div style={{ textAlign: "center", padding: "24px 0" }}><Loader size={26} color={C.brand} className="spin" /><div style={{ fontSize: 14, color: C.sub, marginTop: 10 }}>חושבת על רעיונות בשבילך…</div></div>}
-      {state === "error" && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>לא הצלחתי להביא המלצות כרגע. ודאי שמפתח ה-AI מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
-      {state === "done" && items.map((it, i) => (
-        <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: it.note ? 4 : 0 }}>
-            <span style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{it.name}</span>
-            <span style={{ fontSize: 13, color: C.brandD, flexShrink: 0 }}>~{it.kcal} קק״ל</span>
-          </div>
-          {it.note && <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.5 }}>{it.note}</div>}
+      <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {visible.map((m, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+              <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+            </div>
+          ))}
+          {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 15, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
+          {err && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
+          <div ref={endRef} />
         </div>
-      ))}
+
+        {!loading && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            <span onClick={() => sendText("תני לי בבקשה רעיון אחר")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>רעיון אחר</span>
+            <span onClick={() => sendText("אין לי את המצרכים האלה בבית")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אין לי את זה</span>
+            <span onClick={() => sendText("אני רוצה לדבר עם מישהי מהצוות")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>לדבר עם מישהי</span>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendText(input)} disabled={loading} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel }} />
+          <button onClick={() => sendText(input)} disabled={loading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 }}><Send size={18} /></button>
+        </div>
+      </div>
     </SheetShell>
+  );
+}
+
+function StreakCheer({ streak, name, onClose }) {
+  const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
+  return (
+    <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        {Array.from({ length: 26 }).map((_, i) => (
+          <span key={i} style={{ position: "absolute", top: -12, left: `${(i * 3.9) % 100}%`, width: 8, height: 8, borderRadius: 2, background: colors[i % colors.length], animation: `confettiFall ${1 + (i % 5) * 0.15}s ease-out ${(i % 7) * 0.08}s forwards` }} />
+        ))}
+      </div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 300, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
+        <div style={{ fontSize: 52, animation: "flameFlicker 1s ease-in-out infinite" }}>🔥</div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginTop: 6 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""}!</div>
+        <div style={{ fontSize: 15, color: C.sub, marginTop: 8, lineHeight: 1.5 }}>{streak} ימים ברצף 💪 את עקבית ומדהימה — ככה ממשיכים!</div>
+        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות!</Btn></div>
+      </div>
+    </div>
   );
 }
 
@@ -1434,10 +1522,17 @@ export default function App() {
         @keyframes spin{to{transform:rotate(360deg)}}
         .spin{animation:spin 1s linear infinite}
         @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,93,121,0.5)}50%{box-shadow:0 0 0 8px rgba(212,93,121,0)}}
-        .spin-pulse{animation:pulse 1.2s ease-in-out infinite}`}</style>
+        .spin-pulse{animation:pulse 1.2s ease-in-out infinite}
+        @keyframes flameFlicker{0%,100%{transform:rotate(-6deg) scale(1)}50%{transform:rotate(6deg) scale(1.18)}}
+        @keyframes fabFloat{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-6px)}}
+        @keyframes fabGlow{0%,100%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 0 rgba(212,93,121,0.45)}50%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 12px rgba(212,93,121,0)}}
+        .fab-center{animation:fabFloat 3.2s ease-in-out infinite, fabGlow 2.2s ease-in-out infinite}
+        .streak-pill:active{transform:scale(0.96)}
+        @keyframes cheerPop{0%{transform:scale(0.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+        @keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(150px) rotate(360deg);opacity:0}}`}</style>
       <div style={{ width: 390, maxWidth: "100%", height: 800, background: C.panel, borderRadius: 30, boxShadow: "0 12px 40px rgba(168,66,92,0.14)", border: `1px solid ${C.line}`, overflow: "hidden", display: "flex", flexDirection: "column", position: "relative" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 18px 4px", fontSize: 14, color: C.faint, flexShrink: 0 }}>
-          <span>9:41</span><span style={{ fontSize: 13, color: C.brandD, fontWeight: 600 }}>MyPrime · v{VERSION}</span>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "10px 18px 4px", flexShrink: 0 }}>
+          <span style={{ fontSize: 13, color: C.brandD, fontWeight: 600 }}>MyPrime · v{VERSION}</span>
         </div>
         {gate !== "ok" ? (
           <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} />
@@ -1446,7 +1541,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} />}
@@ -1459,14 +1554,15 @@ export default function App() {
             </div>
 
             {tab === "day" && !modal && !sheet && (
-              <button onClick={() => setSheet("menu")} style={{ position: "absolute", bottom: 74, insetInlineStart: 18, width: 58, height: 58, borderRadius: "50%", background: C.brand, color: "#fff", border: "none", boxShadow: "0 6px 18px rgba(168,66,92,0.45)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} /></button>
+              <button onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ position: "absolute", bottom: 78, left: "50%", transform: "translateX(-50%)", width: 64, height: 64, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={30} strokeWidth={2.6} /></button>
             )}
 
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} waterOpen={waterOpenToday} />}
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} />}
             {sheet === "weight" && <WeightModal current={weights[weights.length - 1].kg} onClose={() => setSheet(null)} onAdd={addWeightValue} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
-            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} diet={profile.diet} dislikes={profile.dislikes} mealsHad={recMealsHad} onClose={() => setSheet(null)} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} diet={profile.diet} dislikes={profile.dislikes} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onClose={() => setSheet(null)} />}
+            {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {modal && <AddModal state={modal} close={() => setModal(null)} commit={commit} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />}
           </>
         )}
