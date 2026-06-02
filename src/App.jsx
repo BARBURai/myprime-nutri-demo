@@ -10,6 +10,15 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
+const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
+const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "#";
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem("myprime_device_id");
+    if (!id) { id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(16).slice(2)); localStorage.setItem("myprime_device_id", id); }
+    return id;
+  } catch (e) { return "nodevice"; }
+}
 
 /* ============================================================
    DOMAIN — pure logic, zero UI dependency (mirrors src/domain)
@@ -70,6 +79,18 @@ function nutritionFor(food, grams) {
     f: Math.round(food.per100.f * k),
     c: Math.round(food.per100.c * k),
   };
+}
+function unitLabelFor(unit) { return unit === "ml" ? "מ\"ל" : "ג׳"; }
+function measuresForUnit(unit) {
+  return unit === "ml"
+    ? [{ label: "כוס", g: 250 }, { label: "פחית", g: 330 }, { label: "חצי ליטר", g: 500 }, { label: "בקבוק גדול", g: 1500 }]
+    : [{ label: "100 ג׳", g: 100 }, { label: "מנה קטנה", g: 80 }, { label: "מנה בינונית", g: 150 }, { label: "מנה גדולה", g: 250 }];
+}
+function foodFromEntry(e) {
+  const g = e.g || 100;
+  const per100 = { kcal: (e.kcal || 0) / g * 100, p: (e.p || 0) / g * 100, f: (e.f || 0) / g * 100, c: (e.c || 0) / g * 100 };
+  const unit = e.unit === "ml" ? "ml" : "g";
+  return { name: e.name, per100, unit, measures: measuresForUnit(unit) };
 }
 function activityBonus(stepsKcal, workoutKcal, returnPct) {
   return Math.round((stepsKcal + workoutKcal) * (returnPct / 100));
@@ -162,6 +183,13 @@ function unlockedOn(startDate, onDate, u) {
 const MACRO_UNLOCK = { week: 3, day: 4 };
 const WATER_UNLOCK = { week: 3, day: 2 };
 const FIBER_TARGET = 25;
+const DIET_OPTIONS = ["צמחוני", "טבעוני", "ללא גלוטן", "ללא לקטוז", "כשר", "דל פחמימה"];
+function streakDays(log) {
+  const has = (d) => log.some((e) => e.date === d);
+  let n = 0, d = TODAY;
+  while (has(d)) { n++; d = addDays(d, -1); }
+  return n;
+}
 const seedEntry = (id, date, meal, foodId, g, source = "verified") => {
   const f = FOOD_BY_ID[foodId];
   return { id, date, meal, name: f.name, g, source, ...nutritionFor(f, g) };
@@ -194,7 +222,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.18";
+const VERSION = "0.21";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -311,7 +339,7 @@ function Stepper({ value, set, step = 1, min = 0, suffix }) {
 /* ============================================================
    ONBOARDING
    ============================================================ */
-function Onboarding({ onFinish }) {
+function Onboarding({ onFinish, name }) {
   const [step, setStep] = useState(0);
   const [age, setAge] = useState(50);
   const [heightCm, setHeightCm] = useState(165);
@@ -321,7 +349,7 @@ function Onboarding({ onFinish }) {
   const [agree, setAgree] = useState(false);
   const [startDate, setStartDate] = useState(sundayOf(TODAY));
 
-  const draft = { age, heightCm, weightKg, activity: "בינונית", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate };
+  const draft = { age, heightCm, weightKg, activity: "בינונית", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, diet: [], dislikes: "" };
   const targets = computeTargets(draft);
   const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
@@ -345,7 +373,7 @@ function Onboarding({ onFinish }) {
 
         {step === 0 && (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>נעים להכיר</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>{name && name.trim() ? `היי ${name.trim()}, נעים להכיר!` : "נעים להכיר"}</span></div>
             <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
             <Field label="גיל"><Stepper value={age} set={(v) => setAge(Math.max(18, v))} min={18} /></Field>
             <Field label="גובה"><Stepper value={heightCm} set={setHeightCm} suffix="ס״מ" /></Field>
@@ -414,7 +442,11 @@ function Onboarding({ onFinish }) {
 
             <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "4px 0 8px" }}>
               <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
-              <span style={{ fontSize: 14, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <span style={{ color: C.brandD, textDecoration: "underline" }}>תנאי השימוש ומדיניות הפרטיות</span></span>
+              <span style={{ fontSize: 14, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>תנאי השימוש ומדיניות הפרטיות</a></span>
+            </div>
+            <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 4 }}>
+              <Lock size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>כל הנתונים שאת מזינה נשמרים רק במכשיר שלך, ואינם נשמרים בשרתי החברה.</span>
             </div>
           </>
         )}
@@ -431,7 +463,7 @@ function Onboarding({ onFinish }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, editEntry, deleteEntry }) {
+function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, editEntry, deleteEntry, onRecommend, userName }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -443,14 +475,21 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
   const waterOpen = unlockedOn(profile.startDate, date, WATER_UNLOCK);
   const glasses = waterByDate[date] || 0;
   const todayRef = useRef(null);
+  const streak = streakDays(log);
   useEffect(() => { if (todayRef.current) todayRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, []);
   const days = Array.from({ length: 15 }, (_, i) => addDays(TODAY, i - 10));
   return (
     <div style={{ padding: "8px 0 24px" }}>
       <div style={{ textAlign: "center", padding: "0 16px" }}>
+        {userName && userName.trim() && <div style={{ fontSize: 14, color: C.brandD, fontWeight: 500, marginBottom: 2 }}>היי {userName.trim()} 👋</div>}
         <div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{prettyDate(date)}</div>
         {relLabel(date) && <div style={{ fontSize: 14, color: C.faint, marginTop: 2 }}>{relLabel(date)}</div>}
         {week >= 1 && <div style={{ fontSize: 13, color: C.brandD, marginTop: 2 }}>שבוע {week} בתוכנית</div>}
+        <div style={{ marginTop: 7 }}>
+          {streak > 0
+            ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: C.brandBg, color: C.brandD, borderRadius: 16, padding: "5px 13px", fontSize: 14, fontWeight: 600 }}>🔥 {streak} ימים ברצף</span>
+            : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: C.faint, fontSize: 13 }}>🔥 מלאי משהו היום כדי להתחיל רצף</span>}
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "12px 16px 4px" }}>
@@ -468,10 +507,13 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
 
       <div style={{ padding: "0 16px" }}>
         <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}><Ring consumed={consumed} budget={budget} /></div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 12, fontSize: 13, color: C.sub, margin: "4px 0 16px" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 12, fontSize: 13, color: C.sub, margin: "4px 0 12px" }}>
           <span>יעד {dailyTarget.toLocaleString()}</span>
           {actKcal > 0 && <span style={{ color: C.brandD }}>פעילות +{actKcal}</span>}
           <span>נאכל {consumed.toLocaleString()}</span>
+        </div>
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          <button onClick={onRecommend} style={{ border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 20, padding: "8px 18px", fontSize: 14, fontWeight: 500, fontFamily: fontStack, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}><Sparkles size={16} /> מה כדאי לאכול?</button>
         </div>
 
         <div style={{ fontSize: 13, color: C.faint, marginBottom: 8 }}>תזונה</div>
@@ -510,7 +552,7 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
           <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
             <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
               <div style={{ fontSize: 15, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
-              <div style={{ fontSize: 13, color: C.faint }}>{e.meal} · {e.g} ג׳ · {e.kcal} קק״ל</div>
+              <div style={{ fontSize: 13, color: C.faint }}>{e.meal} · {e.g} {e.unit === "ml" ? "מ\"ל" : "ג׳"} · {e.kcal} קק״ל</div>
             </div>
             <button onClick={() => editEntry(e)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Pencil size={15} /></button>
             <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
@@ -612,8 +654,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset }) {
     <div style={{ padding: "8px 16px 16px" }}>
       <Header title="פרופיל" />
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>דכ</div>
-        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>דנה כהן</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
+        <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>{(profile.name || "♥").trim().charAt(0)}</div>
+        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{profile.name || "משתמשת"}</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
       </div>
       <Row label="גיל"><Mini value={profile.age} set={(v) => setProfile({ ...profile, age: Math.max(18, v) })} /></Row>
       <Row label="גובה"><Mini value={profile.heightCm} set={(v) => setProfile({ ...profile, heightCm: v })} suffix="ס״מ" /></Row>
@@ -628,6 +670,16 @@ function ProfileScreen({ profile, setProfile, targets, onReset }) {
         </select>
       </Row>
       <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>את/ה כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
+
+      <div style={{ fontSize: 13, color: C.sub, marginTop: 18, marginBottom: 8 }}>העדפות תזונה (משמשות להמלצות)</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        {DIET_OPTIONS.map((d) => {
+          const on = (profile.diet || []).includes(d);
+          return (<span key={d} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d) : [...(profile.diet || []), d] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d}</span>);
+        })}
+      </div>
+      <input value={profile.dislikes || ""} onChange={(e) => setProfile({ ...profile, dislikes: e.target.value })} placeholder="לא אוהבת / אלרגיות (למשל: בלי אגוזים, בלי דגים)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+
       <div style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: C.brandD, marginBottom: 8 }}>יעד קלורי יומי</div>
         <div style={{ fontSize: 26, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 15 }}>קק״ל</span></div>
@@ -666,7 +718,7 @@ function extractAiJson(text) {
 }
 
 async function aiNutritionChat(messages) {
-  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') — אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה — אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות בגרמים. שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב — אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר ושאלי אם לעדכן כמויות או להוסיף משהו לפני האישור. אם מבקשים שינוי או תוספת — החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} עם הערכות סבירות.";
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') — אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה — אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב — אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת — החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system, messages }),
@@ -682,8 +734,26 @@ async function aiNutritionChat(messages) {
     raw: text,
     reply: parsed.reply || "",
     done: !!parsed.done,
-    items: (parsed.items || []).map((it) => ({ name: it.name, grams: Math.round(it.grams || 0), kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) })),
+    items: (parsed.items || []).map((it) => ({ name: it.name, grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) })),
   };
+}
+
+async function aiMealSuggest({ remainingKcal, remainingProtein, diet, dislikes, mealsHad }) {
+  const system = "את עוזרת תזונה של MyPrime, מדברת עברית. בהינתן כמה קלוריות נשארו למשתמשת היום, יעד החלבון שנותר, והעדפותיה — הציעי 2-3 רעיונות מעשיים לארוחה או נשנוש שמתאימים לכמות הקלוריות שנותרה ולהעדפות, באופי ים-תיכוני, פשוט וזמין בישראל. שמרי על כמות קלוריות לכל הצעה שמתאימה למה שנשאר. החזירי JSON תקין בלבד, בלי טקסט מסביב ובלי סימוני קוד, במבנה: {\"suggestions\":[{\"name\":\"שם המנה\",\"kcal\":מספר,\"note\":\"משפט קצר למה זה מתאים\"}]}";
+  const user = `נשארו כ-${Math.max(0, Math.round(remainingKcal))} קלוריות להיום` +
+    (remainingProtein > 0 ? `, ויעד חלבון שנותר כ-${Math.round(remainingProtein)} גרם` : "") +
+    `. העדפות תזונה: ${diet && diet.length ? diet.join(", ") : "ללא"}` +
+    (dislikes ? `; להימנע מ: ${dislikes}` : "") +
+    (mealsHad ? `. כבר נאכל היום: ${mealsHad}` : "") + ".";
+  const res = await fetch(AI_ENDPOINT, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 700, system, messages: [{ role: "user", content: user }] }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error || !Array.isArray(data.content)) return { error: true, suggestions: [] };
+  const text = (data.content || []).map((i) => i.text || "").join("");
+  const obj = extractAiJson(text);
+  return { suggestions: (obj && obj.suggestions) || [] };
 }
 
 async function searchIsraeliDB(q) {
@@ -785,7 +855,7 @@ function NotesFab({ notes, setNotes, screen }) {
 function AddModal({ state, close, commit, removeAndClose }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
   const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || "בוקר");
-  const [food, setFood] = useState(state.editEntry ? FOODS.find((f) => f.name === state.editEntry.name) || FOODS[0] : null);
+  const [food, setFood] = useState(state.editEntry ? (FOODS.find((f) => f.name === state.editEntry.name) || foodFromEntry(state.editEntry)) : null);
   const [grams, setGrams] = useState(state.editEntry?.g || 100);
   const [query, setQuery] = useState("");
   const [dbResults, setDbResults] = useState([]);
@@ -916,6 +986,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
   const photoItems = [{ f: FOOD_BY_ID["rice"], g: 158 }, { f: FOOD_BY_ID["chk"], g: 120 }, { f: FOOD_BY_ID["sal"], g: 80 }];
   const filtered = query.trim() ? FOODS.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
   const nut = food ? nutritionFor(food, grams) : null;
+  const unitLabel = unitLabelFor(food?.unit);
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
   const back = step === "qty" && !state.editEntry ? () => setStep("list") : (step === "list" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   return (
@@ -1050,10 +1121,13 @@ function AddModal({ state, close, commit, removeAndClose }) {
                   {aiDoneItems.map((it, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
                       <span style={{ fontSize: 15, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source="estimated" /></span>
-                      <span style={{ fontSize: 14, color: C.sub }}>{it.grams} ג׳ · {it.kcal} קק״ל</span>
+                      <span style={{ fontSize: 14, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
                     </div>
                   ))}
-                  <div style={{ marginTop: 10 }}><Btn onClick={() => commit(aiDoneItems.map((it) => ({ meal: "נשנושים", name: it.name, g: it.grams, source: "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })))}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> אשרי והוסיפי ליומן</Btn></div>
+                  <div style={{ fontSize: 12, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
+                  <Btn onClick={() => commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })))}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ליומן</Btn>
+                  <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setAiDoneItems(null)}>אני רוצה לשנות</Btn></div>
                 </div>
               )}
             </div>
@@ -1067,22 +1141,21 @@ function AddModal({ state, close, commit, removeAndClose }) {
         )}
         {step === "qty" && food && (
           <>
-            {!state.editEntry && (
-              <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
-            )}
+            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>שיוך לארוחה</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
             <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>מידת בית</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>{food.measures.map((ms) => (<span key={ms.label} onClick={() => setGrams(ms.g)} style={{ fontSize: 14, padding: "6px 11px", borderRadius: 8, cursor: "pointer", background: grams === ms.g ? C.brandBg : "transparent", color: grams === ms.g ? C.brandD : C.sub, boxShadow: grams === ms.g ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{ms.label}{ms.label !== "100 ג׳" ? ` · ${ms.g} ג׳` : ""}</span>))}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>{food.measures.map((ms) => (<span key={ms.label} onClick={() => setGrams(ms.g)} style={{ fontSize: 14, padding: "6px 11px", borderRadius: 8, cursor: "pointer", background: grams === ms.g ? C.brandBg : "transparent", color: grams === ms.g ? C.brandD : C.sub, boxShadow: grams === ms.g ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{ms.label}{ms.label.includes(String(ms.g)) ? "" : ` · ${ms.g} ${unitLabel}`}</span>))}</div>
             <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>או כמות מדויקת</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
               <button onClick={() => setGrams(Math.max(5, grams - 10))} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 21, color: C.ink }}>−</button>
-              <div style={{ minWidth: 70, textAlign: "center" }}><span style={{ fontSize: 26, fontWeight: 600, color: C.ink }}>{grams}</span> <span style={{ fontSize: 14, color: C.sub }}>ג׳</span></div>
+              <div style={{ minWidth: 70, textAlign: "center" }}><span style={{ fontSize: 26, fontWeight: 600, color: C.ink }}>{grams}</span> <span style={{ fontSize: 14, color: C.sub }}>{unitLabel}</span></div>
               <button onClick={() => setGrams(grams + 10)} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 21, color: C.ink }}>+</button>
             </div>
             <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
             </div>
-            <Btn onClick={() => commit({ meal, name: food.name, g: grams, source: state.editEntry?.source || "verified", ...nut })}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
+            <Btn onClick={() => commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...nut })}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
           </>
         )}
@@ -1189,8 +1262,73 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
   );
 }
 
+function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg }) {
+  const deniedText = reason === "device_limit"
+    ? "המייל שלך כבר מחובר בשני מכשירים. ניתן להשתמש ב-MyPrime בו-זמנית בשני מכשירים בלבד. התנתקי במכשיר אחר ונסי שוב, או פני למנהלת התוכנית."
+    : "המייל הזה לא נמצא ברשימת המשתתפות בתוכנית. אם נרשמת לאחרונה, או שיש בעיה — פני למנהלת התוכנית.";
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center", fontFamily: fontStack }}>
+      <div style={{ width: 64, height: 64, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><Sparkles size={28} color={C.brand} /></div>
+      <div style={{ fontSize: 22, fontWeight: 600, color: C.ink, marginBottom: 6 }}>{name.trim() ? `היי ${name.trim()}!` : "ברוכה הבאה ל-MyPrime"}</div>
+      {status === "checking" && (
+        <><Loader size={26} color={C.brand} className="spin" style={{ marginTop: 18 }} /><div style={{ fontSize: 14, color: C.sub, marginTop: 12 }}>מאמתת את ההרשמה לתוכנית…</div></>
+      )}
+      {status === "form" && (
+        <>
+          <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>הזיני שם פרטי והמייל שאיתו נרשמת לתוכנית.</p>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם פרטי" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 10 }} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל שלך" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
+          <div style={{ width: "100%" }}><Btn onClick={onSubmit}>כניסה</Btn></div>
+          {msg && <div style={{ fontSize: 13, color: C.amber, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}
+          <div style={{ fontSize: 12, color: C.faint, marginTop: 18, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, textAlign: "right" }}>
+            <Lock size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>כל הנתונים שאת מזינה נשמרים רק במכשיר שלך, ואינם נשמרים בשרתי החברה. <a href={PRIVACY_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a></span>
+          </div>
+        </>
+      )}
+      {status === "denied" && (
+        <>
+          <div style={{ fontSize: 14, lineHeight: 1.7, margin: "12px 0 18px", background: C.amberBg, color: C.amber, padding: 12, borderRadius: 12 }}>{deniedText}</div>
+          <div style={{ width: "100%" }}><Btn variant="ghost" onClick={onRetry}>נסי שוב / כתובת אחרת</Btn></div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, mealsHad, onClose }) {
+  const [state, setState] = useState("loading");
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const r = await aiMealSuggest({ remainingKcal, remainingProtein, diet, dislikes, mealsHad });
+      if (!alive) return;
+      if (r.error || !r.suggestions.length) setState("error");
+      else { setItems(r.suggestions); setState("done"); }
+    })();
+    return () => { alive = false; };
+  }, []);
+  return (
+    <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 12, lineHeight: 1.6 }}>לפי כ-{Math.max(0, Math.round(remainingKcal))} קלוריות שנותרו לך היום{remainingProtein > 0 ? ` ועוד כ-${Math.round(remainingProtein)} ג׳ חלבון ליעד` : ""}{diet && diet.length ? ` · ${diet.join(", ")}` : ""}.</div>
+      {state === "loading" && <div style={{ textAlign: "center", padding: "24px 0" }}><Loader size={26} color={C.brand} className="spin" /><div style={{ fontSize: 14, color: C.sub, marginTop: 10 }}>חושבת על רעיונות בשבילך…</div></div>}
+      {state === "error" && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>לא הצלחתי להביא המלצות כרגע. ודאי שמפתח ה-AI מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
+      {state === "done" && items.map((it, i) => (
+        <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: it.note ? 4 : 0 }}>
+            <span style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{it.name}</span>
+            <span style={{ fontSize: 13, color: C.brandD, flexShrink: 0 }}>~{it.kcal} קק״ל</span>
+          </div>
+          {it.note && <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.5 }}>{it.note}</div>}
+        </div>
+      ))}
+    </SheetShell>
+  );
+}
+
 export default function App() {
-  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null };
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, diet: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
@@ -1204,17 +1342,51 @@ export default function App() {
   const [sheet, setSheet] = useState(null);
   const [showIntro, setShowIntro] = useState(saved ? false : true);
   const [notes, setNotes] = useState([]);
+  const [gate, setGate] = useState("checking");
+  const [gateReason, setGateReason] = useState("");
+  const [gateEmail, setGateEmail] = useState("");
+  const [gateName, setGateName] = useState("");
+  const [gateMsg, setGateMsg] = useState("");
+
+  const checkAccess = async (em, nm) => {
+    setGate("checking"); setGateMsg("");
+    try {
+      const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
+      const d = await r.json();
+      if (d.allowed) {
+        try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
+        setGateReason(""); setGate("ok");
+      } else { setGateReason(d.reason || "not_registered"); setGate("denied"); }
+    } catch (e) { setGateMsg("תקלת תקשורת. נסי שוב."); setGate("form"); }
+  };
+  useEffect(() => {
+    let em = "", nm = "";
+    try { em = localStorage.getItem("myprime_access_email") || ""; nm = localStorage.getItem("myprime_access_name") || ""; } catch (e) {}
+    if (nm) setGateName(nm);
+    if (em) { setGateEmail(em); checkAccess(em, nm); } else { setGate("form"); }
+  }, []);
+  const submitGate = () => {
+    const e = gateEmail.trim().toLowerCase(); const n = gateName.trim();
+    if (!n) { setGateMsg("נא להזין שם פרטי."); return; }
+    if (!e || !e.includes("@")) { setGateMsg("נא להזין כתובת מייל תקינה."); return; }
+    checkAccess(e, n);
+  };
+  const retryGate = () => { try { localStorage.removeItem("myprime_access_email"); } catch (e) {} setGateEmail(""); setGateMsg(""); setGateReason(""); setGate("form"); };
 
   const targets = useMemo(() => computeTargets(profile), [profile]);
   const dailyTarget = profile.calorieOverride || targets.targetKcal;
   const programWeek = programWeekFor(profile.startDate, TODAY);
   const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
+  const recDayLog = log.filter((e) => e.date === selectedDate);
+  const recRemainingKcal = (dailyTarget + activityLog.filter((a) => a.date === selectedDate).reduce((s, a) => s + a.kcal, 0)) - recDayLog.reduce((s, e) => s + e.kcal, 0);
+  const recRemainingProtein = Math.max(0, targets.protein - recDayLog.reduce((s, e) => s + (e.p || 0), 0));
+  const recMealsHad = recDayLog.map((e) => e.name).join(", ");
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate })); } catch (e) {}
   }, [onboarded, profile, log, weights, activityLog, waterByDate]);
 
-  const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null }); setWeights(makeWeightSeed(p.weightKg)); setOnboarded(true); };
+  const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "" }); setWeights(makeWeightSeed(p.weightKg)); setOnboarded(true); };
   const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
   const editEntry = (e) => setModal({ kind: "food", preMeal: null, editEntry: e });
   const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
@@ -1267,12 +1439,14 @@ export default function App() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 18px 4px", fontSize: 14, color: C.faint, flexShrink: 0 }}>
           <span>9:41</span><span style={{ fontSize: 13, color: C.brandD, fontWeight: 600 }}>MyPrime · v{VERSION}</span>
         </div>
-        {!onboarded ? (
-          <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} /></div>
+        {gate !== "ok" ? (
+          <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} />
+        ) : !onboarded ? (
+          <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} /></div>
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} />}
@@ -1292,11 +1466,12 @@ export default function App() {
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} />}
             {sheet === "weight" && <WeightModal current={weights[weights.length - 1].kg} onClose={() => setSheet(null)} onAdd={addWeightValue} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} diet={profile.diet} dislikes={profile.dislikes} mealsHad={recMealsHad} onClose={() => setSheet(null)} />}
             {modal && <AddModal state={modal} close={() => setModal(null)} commit={commit} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />}
           </>
         )}
-        {!showIntro && <NotesFab notes={notes} setNotes={setNotes} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
-        {showIntro && <IntroOverlay onClose={() => setShowIntro(false)} />}
+        {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
+        {gate === "ok" && showIntro && <IntroOverlay onClose={() => setShowIntro(false)} />}
       </div>
     </div>
   );
