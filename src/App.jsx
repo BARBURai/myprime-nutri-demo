@@ -194,7 +194,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.16";
+const VERSION = "0.18";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -657,8 +657,16 @@ async function analyzeMeal(base64, mediaType) {
   return arr.map((it) => ({ name: it.name, grams: Math.round(it.grams || 0), kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) }));
 }
 
+function extractAiJson(text) {
+  const cleaned = (text || "").replace(/```json|```/g, "").trim();
+  try { return JSON.parse(cleaned); } catch (e) {}
+  const s = cleaned.indexOf("{"), e2 = cleaned.lastIndexOf("}");
+  if (s !== -1 && e2 > s) { try { return JSON.parse(cleaned.slice(s, e2 + 1)); } catch (e3) {} }
+  return null;
+}
+
 async function aiNutritionChat(messages) {
-  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית. המשתמשת מספרת מה אכלה או מצרפת תמונה של הארוחה — אם צורפה תמונה, זהי את הפריטים שבה. נהלי שיחה קצרה מאוד: אם חסר מידע קריטי לחישוב (כמות או גודל מנה), שאלי שאלה אחת קצרה וברורה. כשיש מספיק מידע — סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי את הסיכום ושאלי בקצרה האם היא רוצה לעדכן כמויות או להוסיף עוד משהו לפני האישור. אם המשתמשת מבקשת שינוי או תוספת — החזירי שוב done=true עם רשימת items מעודכנת. החזירי בכל תור JSON בלבד, בלי טקסט נוסף ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} עם הערכות סבירות.";
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') — אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה — אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות בגרמים. שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב — אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר ושאלי אם לעדכן כמויות או להוסיף משהו לפני האישור. אם מבקשים שינוי או תוספת — החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} עם הערכות סבירות.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system, messages }),
@@ -668,9 +676,8 @@ async function aiNutritionChat(messages) {
     return { raw: "", reply: "אופס — החיבור ל-AI לא עבד. ודאי שמפתח ה-API מוגדר ב-Vercel (Environment Variables) ושנעשה Redeploy, ושיש קרדיט בחשבון Anthropic.", done: false, items: [] };
   }
   const text = (data.content || []).map((i) => i.text || "").join("");
-  let parsed;
-  try { parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); }
-  catch (e) { parsed = { reply: text || "לא הבנתי, אפשר לנסות שוב?", done: false, items: [] }; }
+  const obj = extractAiJson(text);
+  const parsed = obj || { reply: (text || "").replace(/\{[\s\S]*\}/g, "").trim() || "לא הבנתי, אפשר לנסות שוב?", done: false, items: [] };
   return {
     raw: text,
     reply: parsed.reply || "",
@@ -1227,7 +1234,7 @@ export default function App() {
   const resetDemo = () => {
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
     setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
-    setLog(INITIAL_LOG); setWaterByDate({}); setActivityLog([]); setWeights(makeWeightSeed(72)); setSelectedDate(TODAY);
+    setLog([]); setWaterByDate({}); setActivityLog([]); setWeights(makeWeightSeed(DEFAULT_PROFILE.weightKg)); setSelectedDate(TODAY);
     setProfile(DEFAULT_PROFILE);
   };
   const onPickEntry = (id) => {
