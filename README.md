@@ -1,4 +1,4 @@
-# MyPrime — דמו תזונה (v0.8)
+# MyPrime — דמו תזונה (v0.11)
 
 אפליקציית ווב (Vite + React) לדמו של מעקב תזונה. גרסה אחת חיה, מנוהלת ב-Git, מוכנה לפריסה.
 
@@ -26,7 +26,7 @@ npm run dev
 ```
 git init
 git add .
-git commit -m "MyPrime demo v0.8"
+git commit -m "MyPrime demo v0.11"
 git branch -M main
 git remote add origin <כתובת-הריפו-שלך>
 git push -u origin main
@@ -41,4 +41,4 @@ git push -u origin main
 בלי המפתח — האפליקציה עובדת רגיל, ופשוט מציגה ערכי דוגמה בניתוח.
 
 ## גרסאות
-מספר הגרסה מופיע בפס העליון ובמסך הפרופיל. כרגע **v0.8**.
+מספר הגרסה מופיע בפס העליון ובמסך הפרופיל. כרגע **v0.11**.

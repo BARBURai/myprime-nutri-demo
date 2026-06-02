@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Home, BookOpen, TrendingDown, ChefHat, User, Plus, Check, Search,
   Barcode, Camera, ChevronRight, ChevronLeft, Pencil, Trash2, Minus, X,
@@ -6,6 +6,7 @@ import {
   MessageCircle, Loader, Copy, Mic, Send, Lock,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart } from "recharts";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -78,14 +79,33 @@ function activityBonus(stepsKcal, workoutKcal, returnPct) {
    SEED DATA
    ============================================================ */
 const FOODS = [
-  { id: "yog", name: "יוגורט יווני 5%", per100: { kcal: 90, p: 9, f: 5, c: 4 }, measures: [{ label: "כף", g: 20 }, { label: "מיכל", g: 150 }, { label: "כוס", g: 245 }, { label: "100 ג׳", g: 100 }], def: 1 },
-  { id: "ban", name: "בננה בינונית", per100: { kcal: 89, p: 1.1, f: 0.3, c: 23 }, measures: [{ label: "יחידה", g: 118 }, { label: "100 ג׳", g: 100 }], def: 0 },
-  { id: "chk", name: "חזה עוף בגריל", per100: { kcal: 165, p: 31, f: 3.6, c: 0 }, measures: [{ label: "מנה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 0 },
-  { id: "rice", name: "אורז לבן מבושל", per100: { kcal: 130, p: 2.7, f: 0.3, c: 28 }, measures: [{ label: "כוס", g: 158 }, { label: "100 ג׳", g: 100 }], def: 1 },
-  { id: "sal", name: "סלט ירקות", per100: { kcal: 30, p: 1.3, f: 0.2, c: 6 }, measures: [{ label: "מנה", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
-  { id: "cot", name: "קוטג׳ 5%", per100: { kcal: 98, p: 11, f: 5, c: 3 }, measures: [{ label: "מנה", g: 100 }, { label: "100 ג׳", g: 100 }], def: 0 },
-  { id: "oat", name: "דייסת שיבולת שועל", per100: { kcal: 380, p: 13, f: 7, c: 67 }, measures: [{ label: "מנה", g: 60 }, { label: "100 ג׳", g: 100 }], def: 0 },
-  { id: "cof", name: "קפה עם חלב", per100: { kcal: 40, p: 2, f: 1.5, c: 4 }, measures: [{ label: "כוס", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "yog", name: "יוגורט יווני 5%", search: "יוגורט", per100: { kcal: 90, p: 9, f: 5, c: 4 }, measures: [{ label: "כף", g: 20 }, { label: "מיכל", g: 150 }, { label: "כוס", g: 245 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "ban", name: "בננה בינונית", search: "בננה בננות פרי", per100: { kcal: 89, p: 1.1, f: 0.3, c: 23 }, measures: [{ label: "יחידה", g: 118 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "chk", name: "חזה עוף בגריל", search: "עוף חזה פרגית", per100: { kcal: 165, p: 31, f: 3.6, c: 0 }, measures: [{ label: "מנה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "rice", name: "אורז לבן מבושל", search: "אורז", per100: { kcal: 130, p: 2.7, f: 0.3, c: 28 }, measures: [{ label: "כוס", g: 158 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "sal", name: "סלט ירקות", search: "סלט ירקות", per100: { kcal: 30, p: 1.3, f: 0.2, c: 6 }, measures: [{ label: "מנה", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "cot", name: "קוטג׳ 5%", search: "קוטג גבינה", per100: { kcal: 98, p: 11, f: 5, c: 3 }, measures: [{ label: "מנה", g: 100 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "oat", name: "דייסת שיבולת שועל", search: "שיבולת שועל קוואקר דייסה", per100: { kcal: 380, p: 13, f: 7, c: 67 }, measures: [{ label: "מנה", g: 60 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "cof", name: "קפה עם חלב", search: "קפה הפוך", per100: { kcal: 40, p: 2, f: 1.5, c: 4 }, measures: [{ label: "כוס", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "egg", name: "ביצה גדולה", search: "ביצים ביצה חביתה", per100: { kcal: 143, p: 13, f: 10, c: 1 }, measures: [{ label: "יחידה", g: 50 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "bread", name: "לחם פרוס", search: "לחם פרוסה טוסט", per100: { kcal: 265, p: 9, f: 3.2, c: 49 }, measures: [{ label: "פרוסה", g: 28 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "pita", name: "פיתה", search: "פיתה לחם", per100: { kcal: 275, p: 9, f: 1.2, c: 55 }, measures: [{ label: "פיתה", g: 60 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "pasta", name: "פסטה מבושלת", search: "פסטה מקרוני ספגטי", per100: { kcal: 158, p: 5.8, f: 0.9, c: 31 }, measures: [{ label: "כוס", g: 140 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "beef", name: "בשר בקר רזה", search: "בקר בשר סטייק", per100: { kcal: 250, p: 26, f: 15, c: 0 }, measures: [{ label: "מנה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "salmon", name: "סלמון אפוי", search: "סלמון דג", per100: { kcal: 206, p: 22, f: 13, c: 0 }, measures: [{ label: "מנה", g: 140 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "tuna", name: "טונה במים", search: "טונה דג", per100: { kcal: 116, p: 26, f: 1, c: 0 }, measures: [{ label: "קופסה", g: 140 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "wcheese", name: "גבינה לבנה 5%", search: "גבינה לבנה", per100: { kcal: 90, p: 9, f: 5, c: 4 }, measures: [{ label: "כף", g: 30 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "ycheese", name: "גבינה צהובה 28%", search: "גבינה צהובה", per100: { kcal: 350, p: 25, f: 28, c: 1 }, measures: [{ label: "פרוסה", g: 25 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "milk", name: "חלב 3%", search: "חלב", per100: { kcal: 60, p: 3.3, f: 3, c: 4.7 }, measures: [{ label: "כוס", g: 240 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "apple", name: "תפוח עץ", search: "תפוח פרי", per100: { kcal: 52, p: 0.3, f: 0.2, c: 14 }, measures: [{ label: "יחידה", g: 180 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "cuke", name: "מלפפון", search: "מלפפון ירק", per100: { kcal: 15, p: 0.7, f: 0.1, c: 3.6 }, measures: [{ label: "יחידה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "tomato", name: "עגבניה", search: "עגבניה עגבניות ירק", per100: { kcal: 18, p: 0.9, f: 0.2, c: 3.9 }, measures: [{ label: "יחידה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "avocado", name: "אבוקדו", search: "אבוקדו", per100: { kcal: 160, p: 2, f: 15, c: 9 }, measures: [{ label: "חצי", g: 100 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "tahini", name: "טחינה גולמית", search: "טחינה", per100: { kcal: 595, p: 17, f: 53, c: 21 }, measures: [{ label: "כף", g: 15 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "hummus", name: "חומוס (ממרח)", search: "חומוס", per100: { kcal: 177, p: 8, f: 10, c: 14 }, measures: [{ label: "כף", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "almond", name: "שקדים", search: "שקדים אגוזים", per100: { kcal: 579, p: 21, f: 50, c: 22 }, measures: [{ label: "חופן", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "potato", name: "תפוח אדמה מבושל", search: "תפוח אדמה תפוד", per100: { kcal: 87, p: 2, f: 0.1, c: 20 }, measures: [{ label: "בינוני", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "lentil", name: "עדשים מבושלות", search: "עדשים קטניות", per100: { kcal: 116, p: 9, f: 0.4, c: 20 }, measures: [{ label: "כוס", g: 198 }, { label: "100 ג׳", g: 100 }], def: 0 },
 ];
 const FOOD_BY_ID = Object.fromEntries(FOODS.map((f) => [f.id, f]));
 const RECENT = [
@@ -164,7 +184,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.8";
+const VERSION = "0.11";
 
 /* ============================================================
    PRIMITIVES
@@ -640,6 +660,7 @@ async function analyzeMeal(base64, mediaType) {
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: prompt }] }] }),
   });
   const data = await res.json();
+  if (!res.ok || data.error || !Array.isArray(data.content)) throw new Error("ai_unavailable");
   const text = (data.content || []).map((i) => i.text || "").join("");
   const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
   const arr = parsed.items || parsed || [];
@@ -653,6 +674,9 @@ async function aiNutritionChat(messages) {
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system, messages }),
   });
   const data = await res.json();
+  if (!res.ok || data.error || !Array.isArray(data.content)) {
+    return { raw: "", reply: "אופס — החיבור ל-AI לא עבד. ודאי שמפתח ה-API מוגדר ב-Vercel (Environment Variables) ושנעשה Redeploy, ושיש קרדיט בחשבון Anthropic.", done: false, items: [] };
+  }
   const text = (data.content || []).map((i) => i.text || "").join("");
   let parsed;
   try { parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); }
@@ -663,6 +687,42 @@ async function aiNutritionChat(messages) {
     done: !!parsed.done,
     items: (parsed.items || []).map((it) => ({ name: it.name, grams: Math.round(it.grams || 0), kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) })),
   };
+}
+
+async function searchIsraeliDB(q) {
+  const res = await fetch(`/api/il-food?q=${encodeURIComponent(q)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.items || []).map((it, i) => ({
+    id: "il_" + i,
+    name: it.name,
+    per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
+    measures: [{ label: "100 ג׳", g: 100 }],
+    def: 0,
+  }));
+}
+
+async function searchOpenFoodFacts(q) {
+  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=20&fields=code,product_name,product_name_he,brands,nutriments`;
+  const res = await fetch(url);
+  const data = await res.json();
+  const out = [];
+  for (const p of data.products || []) {
+    const n = p.nutriments || {};
+    const kcal = n["energy-kcal_100g"];
+    if (kcal == null) continue;
+    const name = (p.product_name_he || p.product_name || p.brands || "").trim();
+    if (!name) continue;
+    out.push({
+      id: "off_" + (p.code || out.length),
+      name,
+      per100: { kcal: Math.round(kcal), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) },
+      measures: [{ label: "100 ג׳", g: 100 }],
+      def: 0,
+    });
+    if (out.length >= 12) break;
+  }
+  return out;
 }
 
 function IntroOverlay({ onClose }) {
@@ -731,6 +791,24 @@ function AddModal({ state, close, commit, removeAndClose }) {
   const [food, setFood] = useState(state.editEntry ? FOODS.find((f) => f.name === state.editEntry.name) || FOODS[0] : null);
   const [grams, setGrams] = useState(state.editEntry?.g || 100);
   const [query, setQuery] = useState("");
+  const [dbResults, setDbResults] = useState([]);
+  const [dbSource, setDbSource] = useState("il");
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const q = query.trim();
+    if (!q || step !== "list") { setDbResults([]); setSearching(false); return; }
+    setSearching(true);
+    const id = setTimeout(async () => {
+      try {
+        let items = await searchIsraeliDB(q);
+        let src = "il";
+        if (!items.length) { items = await searchOpenFoodFacts(q); src = "off"; }
+        setDbResults(items); setDbSource(src);
+      } catch (e) { setDbResults([]); }
+      finally { setSearching(false); }
+    }, 450);
+    return () => clearTimeout(id);
+  }, [query, step]);
   const fileRef = useRef(null);
   const [photoState, setPhotoState] = useState("capture");
   const [photoResult, setPhotoResult] = useState(null);
@@ -757,6 +835,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiDoneItems, setAiDoneItems] = useState(null);
   const recRef = useRef(null);
+  const [aiListening, setAiListening] = useState(false);
   const sendAi = async (textArg) => {
     const text = (textArg != null ? textArg : aiInput).trim();
     if (!text || aiLoading) return;
@@ -774,19 +853,63 @@ function AddModal({ state, close, commit, removeAndClose }) {
     } finally { setAiLoading(false); }
   };
   const startMic = () => {
+    if (aiListening && recRef.current) { recRef.current.stop(); return; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("זיהוי דיבור לא נתמך בדפדפן הזה — נסי ב-Chrome או הקלידי."); return; }
-    const rec = new SR(); rec.lang = "he-IL"; rec.interimResults = false; rec.maxAlternatives = 1;
-    rec.onresult = (e) => setAiInput(e.results[0][0].transcript);
-    rec.onerror = () => {};
-    rec.start(); recRef.current = rec;
+    if (!SR) { alert("זיהוי דיבור לא נתמך בדפדפן הזה — נסי ב-Chrome/Safari עדכני, או הקלידי."); return; }
+    const rec = new SR();
+    rec.lang = "he-IL";
+    rec.interimResults = true;   // מציג טקסט תוך כדי דיבור
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => setAiListening(true);
+    rec.onresult = (e) => {
+      let t = "";
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      setAiInput(t);
+    };
+    rec.onerror = () => setAiListening(false);
+    rec.onend = () => setAiListening(false);
+    try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
   };
   const pickFood = (f, g) => { setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const videoRef = useRef(null);
+  const scanControlsRef = useRef(null);
+  const [scanState, setScanState] = useState("idle");
+  const [manualCode, setManualCode] = useState("");
+  const stopScan = () => { try { scanControlsRef.current && scanControlsRef.current.stop(); } catch (e) {} scanControlsRef.current = null; };
+  const lookupBarcode = async (code) => {
+    setScanState("looking");
+    try {
+      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_he,brands,nutriments`);
+      const d = await r.json();
+      if (d.status !== 1 || !d.product) { setScanState("notfound"); return; }
+      const p = d.product, n = p.nutriments || {};
+      const food = { id: "bc_" + code, name: (p.product_name_he || p.product_name || p.brands || "מוצר"), per100: { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) }, measures: [{ label: "100 ג׳", g: 100 }], def: 0 };
+      pickFood(food, 100);
+    } catch (e) { setScanState("error"); }
+  };
+  const startScan = () => setScanState("scanning");
+  useEffect(() => {
+    if (scanState !== "scanning") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const reader = new BrowserMultiFormatReader();
+        const controls = await reader.decodeFromConstraints(
+          { video: { facingMode: "environment" } },
+          videoRef.current,
+          (result) => { if (result) { stopScan(); lookupBarcode(result.getText()); } }
+        );
+        if (cancelled) controls.stop(); else scanControlsRef.current = controls;
+      } catch (e) { setScanState("error"); }
+    })();
+    return () => { cancelled = true; stopScan(); };
+  }, [scanState]);
   const photoItems = [{ f: FOOD_BY_ID["rice"], g: 158 }, { f: FOOD_BY_ID["chk"], g: 120 }, { f: FOOD_BY_ID["sal"], g: 80 }];
-  const filtered = FOODS.filter((f) => f.name.includes(query));
+  const filtered = query.trim() ? FOODS.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
   const nut = food ? nutritionFor(food, grams) : null;
-  const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : (state.editEntry ? "עריכת פריט" : food?.name);
-  const back = step === "qty" && !state.editEntry ? () => setStep("list") : (step === "list" || step === "photo" || step === "ai") ? () => setStep("method") : null;
+  const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
+  const back = step === "qty" && !state.editEntry ? () => setStep("list") : (step === "list" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "92%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", overflowY: "auto", fontFamily: fontStack }}>
@@ -796,7 +919,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
         </div>
         {step === "method" && (
           <>
-            {[{ ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", tag: "מומלץ", tagBg: C.brandBg, tagC: C.brandD, go: () => pickFood(FOOD_BY_ID["cot"], 100) },
+            {[{ ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", tag: "מומלץ", tagBg: C.brandBg, tagC: C.brandD, go: () => setStep("barcode") },
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר ומההיסטוריה", go: () => setStep("list") },
               { ic: Camera, t: "צילום ארוחה", s: "המהיר ביותר", tag: "מהיר", tagBg: C.infoBg, tagC: C.info, go: () => setStep("photo") },
               { ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", tagBg: C.infoBg, tagC: C.info, go: () => setStep("ai") }].map((o) => (
@@ -818,9 +941,8 @@ function AddModal({ state, close, commit, removeAndClose }) {
               {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
             </div>
             {!query && <div style={{ fontSize: 11, color: C.faint, margin: "10px 0 2px" }}>אחרונים</div>}
-            {(query ? filtered : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
-              const g = f.lastG ?? f.measures[f.def].g;
-              const n = nutritionFor(f, g);
+            {!query && RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g })).map((f) => {
+              const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
                 <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
                   <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 13, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 10, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
@@ -828,8 +950,68 @@ function AddModal({ state, close, commit, removeAndClose }) {
                 </div>
               );
             })}
-            <div style={{ fontSize: 10, color: C.faint, marginTop: 10, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת מוסיפה עם הכמות האחרונה — בלי להזין שוב</span></div>
+            {query && filtered.length > 0 && <div style={{ fontSize: 11, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
+            {query && filtered.map((f) => {
+              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 13, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 10, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            {query && <div style={{ fontSize: 11, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
+            {query && dbResults.map((f) => {
+              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 13, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 10, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 12, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
+            {!query && <div style={{ fontSize: 10, color: C.faint, marginTop: 10, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת מוסיפה עם הכמות האחרונה — בלי להזין שוב</span></div>}
           </>
+        )}
+        {step === "barcode" && (
+          <div>
+            {scanState === "idle" && (
+              <div style={{ textAlign: "center", padding: "4px 0" }}>
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Barcode size={32} color={C.brand} /></div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: C.ink, marginBottom: 6 }}>סריקת ברקוד</div>
+                <p style={{ fontSize: 12, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>כווני את המצלמה לברקוד של המוצר — הערכים יישלפו אוטומטית מ-Open Food Facts.</p>
+                <Btn onClick={startScan}>פתחי מצלמה לסריקה</Btn>
+                <div style={{ fontSize: 11, color: C.faint, margin: "16px 0 6px" }}>או הקלידי את מספר הברקוד</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={manualCode} onChange={(e) => setManualCode(e.target.value)} inputMode="numeric" placeholder="מספר ברקוד" style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+                  <button onClick={() => manualCode.trim() && lookupBarcode(manualCode.trim())} style={{ border: "none", background: C.brand, color: "#fff", borderRadius: 10, padding: "0 18px", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>חפשי</button>
+                </div>
+              </div>
+            )}
+            {scanState === "scanning" && (
+              <div style={{ textAlign: "center" }}>
+                <video ref={videoRef} style={{ width: "100%", borderRadius: 12, background: "#000", maxHeight: 320, objectFit: "cover" }} muted playsInline />
+                <div style={{ fontSize: 12, color: C.sub, marginTop: 10 }}>מכוונים את הברקוד למרכז…</div>
+                <div style={{ marginTop: 10 }}><Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>ביטול</Btn></div>
+              </div>
+            )}
+            {scanState === "looking" && (
+              <div style={{ textAlign: "center", padding: "32px 0" }}><Loader size={28} color={C.brand} className="spin" /><div style={{ fontSize: 13, color: C.ink, marginTop: 12 }}>מחפש את המוצר…</div></div>
+            )}
+            {scanState === "notfound" && (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div style={{ fontSize: 13, color: C.ink, marginBottom: 12, lineHeight: 1.6 }}>המוצר לא נמצא ב-Open Food Facts. אפשר לנסות שוב, או להוסיף דרך חיפוש.</div>
+                <Btn variant="ghost" onClick={() => setScanState("idle")}>נסי שוב</Btn>
+              </div>
+            )}
+            {scanState === "error" && (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div style={{ fontSize: 13, color: C.amber, marginBottom: 12, lineHeight: 1.6 }}>לא ניתן לפתוח את המצלמה. ודאי שאישרת גישה למצלמה בדפדפן, או הקלידי את הברקוד ידנית.</div>
+                <Btn variant="ghost" onClick={() => setScanState("idle")}>חזרה</Btn>
+              </div>
+            )}
+          </div>
         )}
         {step === "photo" && (
           <>
@@ -854,7 +1036,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
             )}
             {(photoState === "result" || photoState === "error") && photoResult && (
               <>
-                {photoState === "error" && <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, padding: 9, borderRadius: 9, marginBottom: 10, lineHeight: 1.6 }}>לא הצלחנו לנתח את התמונה כעת — מוצגת דוגמה לצורך ההדגמה.</div>}
+                {photoState === "error" && <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, padding: 9, borderRadius: 9, marginBottom: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד (מוצגת דוגמה). ודאי שמפתח ה-API מוגדר ב-Vercel ושנעשה Redeploy, ושיש קרדיט בחשבון Anthropic.</div>}
                 <div style={{ fontSize: 11, color: C.sub, marginBottom: 10 }}>זוהו הפריטים הבאים. בדקי ותקני במידת הצורך:</div>
                 {photoResult.map((it, i) => (
                   <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, marginBottom: 8 }}>
@@ -889,11 +1071,11 @@ function AddModal({ state, close, commit, removeAndClose }) {
               )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
-              <button onClick={startMic} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brandBg, color: C.brand, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Mic size={18} /></button>
-              <input value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendAi()} placeholder="כתבי מה אכלת…" style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 13, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+              <button onClick={startMic} className={aiListening ? "spin-pulse" : ""} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: aiListening ? C.brand : C.brandBg, color: aiListening ? "#fff" : C.brand, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Mic size={18} /></button>
+              <input value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendAi()} placeholder={aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 13, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
               <button onClick={() => sendAi()} disabled={aiLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Send size={18} /></button>
             </div>
-            <div style={{ fontSize: 10, color: C.faint, marginTop: 8, textAlign: "center" }}>מיקרופון עובד בדפדפן תומך / בטלפון. כאן בתצוגה אפשר גם להקליד.</div>
+            <div style={{ fontSize: 10, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>
           </div>
         )}
         {step === "qty" && food && (
@@ -975,7 +1157,9 @@ export default function App() {
         ::-webkit-scrollbar{width:0;height:0}
         button{font-family:'Rubik',sans-serif}
         @keyframes spin{to{transform:rotate(360deg)}}
-        .spin{animation:spin 1s linear infinite}`}</style>
+        .spin{animation:spin 1s linear infinite}
+        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,93,121,0.5)}50%{box-shadow:0 0 0 8px rgba(212,93,121,0)}}
+        .spin-pulse{animation:pulse 1.2s ease-in-out infinite}`}</style>
       <div style={{ width: 390, maxWidth: "100%", height: 800, background: C.panel, borderRadius: 30, boxShadow: "0 12px 40px rgba(168,66,92,0.14)", border: `1px solid ${C.line}`, overflow: "hidden", display: "flex", flexDirection: "column", position: "relative" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 18px 4px", fontSize: 12, color: C.faint, flexShrink: 0 }}>
           <span>9:41</span><span style={{ fontSize: 11, color: C.brandD, fontWeight: 600 }}>MyPrime · v{VERSION}</span>
