@@ -194,7 +194,8 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.15";
+const VERSION = "0.16";
+const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
    PRIMITIVES
@@ -337,7 +338,10 @@ function Onboarding({ onFinish }) {
         <div style={{ display: "flex", gap: 6, margin: "6px 0 8px" }}>
           {[0, 1, 2].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
         </div>
-        <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginBottom: 12 }}>v{VERSION}</div>
+        <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginBottom: 6 }}>v{VERSION}</div>
+        <div style={{ textAlign: "center", marginBottom: 12 }}>
+          <button onClick={() => onFinish(draft)} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
+        </div>
 
         {step === 0 && (
           <>
@@ -402,11 +406,6 @@ function Onboarding({ onFinish }) {
               <div style={{ fontSize: 35, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 17 }}>קק״ל</span></div>
             </div>
 
-            <div style={{ fontSize: 13, color: C.sub, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.7, marginBottom: 12 }}>
-              <div style={{ display: "flex", gap: 6 }}><Target size={14} color={C.brand} style={{ flexShrink: 0, marginTop: 2 }} /><span><b style={{ color: C.ink }}>חלבון</b> — יעד מודגש של {PROTEIN_PER_KG} גרם לכל ק״ג משקל גוף (טווח מומלץ 1.5–1.7), חשוב לשמירה על מסת שריר. מעקב התזונה נפתח בשבוע 3 של התוכנית.</span></div>
-              <div style={{ display: "flex", gap: 6, marginTop: 7 }}><Droplet size={14} color={C.water} style={{ flexShrink: 0, marginTop: 2 }} /><span><b style={{ color: C.ink }}>מים</b> — יעד שתייה של 1.5–2 ליטר ביום.</span></div>
-            </div>
-
             {targets.floored && (
               <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 12, display: "flex", gap: 6 }}>
                 <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>הקצב שבחרת מהיר מהמומלץ עבור הנתונים שלך. היעד הוגבל ל־{KCAL_FLOOR} קק״ל לשמירה על בריאותך — שקלי קצב מתון יותר.</span>
@@ -443,7 +442,9 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
   const macroOpen = unlockedOn(profile.startDate, date, MACRO_UNLOCK);
   const waterOpen = unlockedOn(profile.startDate, date, WATER_UNLOCK);
   const glasses = waterByDate[date] || 0;
-  const days = Array.from({ length: 14 }, (_, i) => addDays(TODAY, i - 13));
+  const todayRef = useRef(null);
+  useEffect(() => { if (todayRef.current) todayRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, []);
+  const days = Array.from({ length: 15 }, (_, i) => addDays(TODAY, i - 10));
   return (
     <div style={{ padding: "8px 0 24px" }}>
       <div style={{ textAlign: "center", padding: "0 16px" }}>
@@ -454,11 +455,11 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "12px 16px 4px" }}>
         {days.map((d) => {
-          const sel = d === date; const has = log.some((e) => e.date === d); const dd = new Date(d);
+          const sel = d === date; const isToday = d === TODAY; const has = log.some((e) => e.date === d); const dd = new Date(d);
           return (
-            <button key={d} onClick={() => setDate(d)} style={{ flex: "0 0 auto", width: 48, border: "none", borderRadius: 12, padding: "8px 0", background: sel ? C.brand : C.bg, color: sel ? "#fff" : C.ink, cursor: "pointer", textAlign: "center" }}>
+            <button key={d} ref={isToday ? todayRef : null} onClick={() => setDate(d)} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, padding: "7px 0", background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: sel ? "#fff" : C.ink, cursor: "pointer", textAlign: "center" }}>
               <div style={{ fontSize: 13, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
-              <div style={{ fontSize: 17, fontWeight: 600, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
               <div style={{ width: 5, height: 5, borderRadius: "50%", margin: "0 auto", background: has ? (sel ? "#fff" : C.brand) : "transparent" }} />
             </button>
           );
@@ -657,7 +658,7 @@ async function analyzeMeal(base64, mediaType) {
 }
 
 async function aiNutritionChat(messages) {
-  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית. המשתמשת מספרת מה אכלה או מצרפת תמונה של הארוחה — אם צורפה תמונה, זהי את הפריטים שבה. נהלי שיחה קצרה מאוד: אם חסר מידע קריטי לחישוב (כמות או גודל מנה), שאלי שאלה אחת קצרה וברורה. כשיש מספיק מידע — סכמי. החזירי בכל תור JSON בלבד, בלי טקסט נוסף ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כאשר יש מספיק מידע החזירי done=true ובמערך items כל פריט במבנה {\"name\":\"שם בעברית\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} עם הערכות סבירות.";
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית. המשתמשת מספרת מה אכלה או מצרפת תמונה של הארוחה — אם צורפה תמונה, זהי את הפריטים שבה. נהלי שיחה קצרה מאוד: אם חסר מידע קריטי לחישוב (כמות או גודל מנה), שאלי שאלה אחת קצרה וברורה. כשיש מספיק מידע — סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי את הסיכום ושאלי בקצרה האם היא רוצה לעדכן כמויות או להוסיף עוד משהו לפני האישור. אם המשתמשת מבקשת שינוי או תוספת — החזירי שוב done=true עם רשימת items מעודכנת. החזירי בכל תור JSON בלבד, בלי טקסט נוסף ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} עם הערכות סבירות.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system, messages }),
@@ -922,7 +923,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
             {[{ ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", tag: "מומלץ", tagBg: C.brandBg, tagC: C.brandD, go: () => setStep("barcode") },
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר ומההיסטוריה", go: () => setStep("list") },
               { ic: Camera, t: "צילום ארוחה", s: "המהיר ביותר", tag: "מהיר", tagBg: C.infoBg, tagC: C.info, go: () => setStep("photo") },
-              { ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", tagBg: C.infoBg, tagC: C.info, go: () => setStep("ai") }].filter((o) => state.kind !== "food" || o.t !== "ספרי לי מה אכלת").map((o) => (
+              { ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", tagBg: C.infoBg, tagC: C.info, go: () => setStep("ai") }].map((o) => (
               <div key={o.t} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
                 <o.ic size={26} color={C.brand} />
                 <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{o.t}</div><div style={{ fontSize: 13, color: C.sub }}>{o.s}</div></div>
@@ -984,7 +985,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
                 <Btn onClick={startScan}>פתחי מצלמה לסריקה</Btn>
                 <div style={{ fontSize: 13, color: C.faint, margin: "16px 0 6px" }}>או הקלידי את מספר הברקוד</div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <input value={manualCode} onChange={(e) => setManualCode(e.target.value)} inputMode="numeric" placeholder="מספר ברקוד" style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+                  <input value={manualCode} onChange={(e) => setManualCode(e.target.value)} inputMode="numeric" placeholder="מספר ברקוד" style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
                   <button onClick={() => manualCode.trim() && lookupBarcode(manualCode.trim())} style={{ border: "none", background: C.brand, color: "#fff", borderRadius: 10, padding: "0 18px", cursor: "pointer", fontSize: 15, fontWeight: 500 }}>חפשי</button>
                 </div>
               </div>
@@ -1050,8 +1051,8 @@ function AddModal({ state, close, commit, removeAndClose }) {
               )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
-              <button onClick={startMic} className={aiListening ? "spin-pulse" : ""} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: aiListening ? C.brand : C.brandBg, color: aiListening ? "#fff" : C.brand, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Mic size={18} /></button>
-              <input value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendAi()} placeholder={aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+              <button onClick={startMic} disabled={aiLoading} className={aiListening ? "spin-pulse" : ""} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: aiListening ? C.brand : C.brandBg, color: aiListening ? "#fff" : C.brand, cursor: aiLoading ? "default" : "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Mic size={18} /></button>
+              <input value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendAi()} disabled={aiLoading} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel }} />
               <button onClick={() => sendAi()} disabled={aiLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Send size={18} /></button>
             </div>
             <div style={{ fontSize: 12, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>
@@ -1088,8 +1089,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
    ============================================================ */
 function EntryMenu({ onClose, onPick, waterOpen }) {
   const items = [
-    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד או צילום ארוחה" },
-    { id: "ai", ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)" },
+    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת" },
     { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי" },
     ...(waterOpen ? [{ id: "water", ic: Droplet, t: "הוספת מים", s: "כוס מים (250 מ\"ל)" }] : []),
     { id: "weight", ic: TrendingDown, t: "עדכון משקל", s: "" },
@@ -1183,23 +1183,29 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
 }
 
 export default function App() {
-  const [onboarded, setOnboarded] = useState(false);
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null };
+  const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
+  const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
-  const [profile, setProfile] = useState({ age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null });
-  const [log, setLog] = useState(INITIAL_LOG);
-  const [weights, setWeights] = useState(makeWeightSeed(72));
-  const [activityLog, setActivityLog] = useState([]);
-  const [waterByDate, setWaterByDate] = useState({});
+  const [profile, setProfile] = useState(saved?.profile || DEFAULT_PROFILE);
+  const [log, setLog] = useState(saved?.log || INITIAL_LOG);
+  const [weights, setWeights] = useState(saved?.weights || makeWeightSeed(72));
+  const [activityLog, setActivityLog] = useState(saved?.activityLog || []);
+  const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
-  const [showIntro, setShowIntro] = useState(true);
+  const [showIntro, setShowIntro] = useState(saved ? false : true);
   const [notes, setNotes] = useState([]);
 
   const targets = useMemo(() => computeTargets(profile), [profile]);
   const dailyTarget = profile.calorieOverride || targets.targetKcal;
   const programWeek = programWeekFor(profile.startDate, TODAY);
   const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate })); } catch (e) {}
+  }, [onboarded, profile, log, weights, activityLog, waterByDate]);
 
   const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null }); setWeights(makeWeightSeed(p.weightKg)); setOnboarded(true); };
   const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
@@ -1219,9 +1225,10 @@ export default function App() {
   const reportAddWeight = () => { const last = weights[weights.length - 1].kg; addWeightValue(Math.round((last - 0.2) * 10) / 10); };
   const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
   const resetDemo = () => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
     setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
     setLog(INITIAL_LOG); setWaterByDate({}); setActivityLog([]); setWeights(makeWeightSeed(72)); setSelectedDate(TODAY);
-    setProfile({ age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null });
+    setProfile(DEFAULT_PROFILE);
   };
   const onPickEntry = (id) => {
     if (id === "food") openAdd("food", null);
