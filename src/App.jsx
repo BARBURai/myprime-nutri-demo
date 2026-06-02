@@ -152,6 +152,16 @@ function programWeekFor(startDate, onDate) {
   if (diff < 0) return 0;
   return Math.floor(diff / 7) + 1;
 }
+function programDayNumber(startDate, onDate) {
+  if (!startDate) return 1;
+  return Math.floor((new Date(onDate) - new Date(startDate)) / 86400000) + 1;
+}
+function unlockedOn(startDate, onDate, u) {
+  return programDayNumber(startDate, onDate) >= (u.week - 1) * 7 + u.day;
+}
+const MACRO_UNLOCK = { week: 3, day: 4 };
+const WATER_UNLOCK = { week: 3, day: 2 };
+const FIBER_TARGET = 25;
 const seedEntry = (id, date, meal, foodId, g, source = "verified") => {
   const f = FOOD_BY_ID[foodId];
   return { id, date, meal, name: f.name, g, source, ...nutritionFor(f, g) };
@@ -184,7 +194,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.11";
+const VERSION = "0.13";
 
 /* ============================================================
    PRIMITIVES
@@ -392,10 +402,8 @@ function Onboarding({ onFinish }) {
               <div style={{ fontSize: 30, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 14 }}>קק״ל</span></div>
             </div>
 
-            <div style={{ marginBottom: 10 }}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>
-
             <div style={{ fontSize: 11, color: C.sub, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.7, marginBottom: 12 }}>
-              <div style={{ display: "flex", gap: 6 }}><Target size={14} color={C.brand} style={{ flexShrink: 0, marginTop: 2 }} /><span><b style={{ color: C.ink }}>חלבון</b> — יעד מודגש של {PROTEIN_PER_KG} גרם לכל ק״ג משקל גוף (טווח מומלץ 1.5–1.7), חשוב לשמירה על מסת שריר. נפתח למעקב בשבוע {PROTEIN_UNLOCK_WEEK} של התוכנית.</span></div>
+              <div style={{ display: "flex", gap: 6 }}><Target size={14} color={C.brand} style={{ flexShrink: 0, marginTop: 2 }} /><span><b style={{ color: C.ink }}>חלבון</b> — יעד מודגש של {PROTEIN_PER_KG} גרם לכל ק״ג משקל גוף (טווח מומלץ 1.5–1.7), חשוב לשמירה על מסת שריר. מעקב התזונה נפתח בשבוע 3 של התוכנית.</span></div>
               <div style={{ display: "flex", gap: 6, marginTop: 7 }}><Droplet size={14} color={C.water} style={{ flexShrink: 0, marginTop: 2 }} /><span><b style={{ color: C.ink }}>מים</b> — יעד שתייה של 1.5–2 ליטר ביום.</span></div>
             </div>
 
@@ -424,109 +432,90 @@ function Onboarding({ onFinish }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function HomeScreen({ targets, todayLog, activity, profile, openAdd, water, setWater }) {
-  const consumed = todayLog.reduce((s, e) => s + e.kcal, 0);
-  const week = programWeekFor(profile.startDate, TODAY);
-  const proteinLocked = week < PROTEIN_UNLOCK_WEEK;
-  const bonus = activityBonus(activity.stepsKcal, activity.workoutKcal, profile.returnPct);
-  const budget = targets.targetKcal + bonus;
-  const macros = todayLog.reduce((s, e) => ({ p: s.p + e.p, f: s.f + e.f, c: s.c + e.c }), { p: 0, f: 0, c: 0 });
-  const byMeal = (m) => todayLog.filter((e) => e.meal === m);
-  return (
-    <div style={{ padding: "8px 16px 16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <span style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>היום</span>
-        <span style={{ fontSize: 11, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 20 }}>{week >= 1 ? `שבוע ${week} בתוכנית` : "התוכנית טרם החלה"}</span>
-      </div>
-      <div style={{ fontSize: 12, color: C.faint, marginBottom: 8 }}>{prettyDate(TODAY)}</div>
-      <div style={{ display: "flex", justifyContent: "center" }}><Ring consumed={consumed} budget={budget} /></div>
-      <div style={{ display: "flex", justifyContent: "center", gap: 12, fontSize: 11, color: C.sub, margin: "4px 0 14px" }}>
-        <span>בסיס {targets.targetKcal.toLocaleString()}</span>
-        <span style={{ color: C.brandD }}>פעילות +{bonus}</span>
-        <span>נאכל {consumed.toLocaleString()}</span>
-      </div>
-
-      <div style={{ fontSize: 11, color: C.faint, marginBottom: 8 }}>תזונה</div>
-      <div style={{ marginBottom: 16 }}><MacroRow p={macros.p} f={macros.f} c={macros.c} tp={targets.protein} tf={targets.fat} tc={targets.carbs} proteinLocked={proteinLocked} /></div>
-
-      <WaterCard glasses={water} setGlasses={setWater} />
-
-      <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, marginBottom: 8 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 6, color: C.ink }}><Footprints size={16} color={C.info} /> {activity.steps.toLocaleString()} צעדים</span>
-          <span style={{ color: C.brandD, fontWeight: 500 }}>+{Math.round(activity.stepsKcal * profile.returnPct / 100)}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 6, color: C.ink }}><Dumbbell size={16} color={C.info} /> אימון כוח · 30 דק׳</span>
-          <span style={{ color: C.brandD, fontWeight: 500 }}>+{Math.round(activity.workoutKcal * profile.returnPct / 100)}</span>
-        </div>
-      </div>
-
-      <div style={{ fontSize: 11, color: C.faint, margin: "2px 0 4px" }}>ארוחות</div>
-      {MEALS.map((m) => {
-        const items = byMeal(m);
-        const kcal = items.reduce((s, e) => s + e.kcal, 0);
-        return (
-          <div key={m} onClick={() => openAdd(m)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, padding: "10px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 7, color: items.length ? C.ink : C.faint }}>{items.length ? <Check size={15} color={C.brand} /> : <Plus size={15} />}{m}</span>
-            <span style={{ color: C.faint }}>{kcal || ""}</span>
-          </div>
-        );
-      })}
-      <div style={{ marginTop: 14 }}><Btn onClick={() => openAdd(null)}>+ הוסף מזון</Btn></div>
-    </div>
-  );
-}
-
-function DiaryScreen({ log, date, setDate, targets, openAdd, editEntry, deleteEntry, startDate }) {
+function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, editEntry, deleteEntry }) {
   const dayLog = log.filter((e) => e.date === date);
-  const total = dayLog.reduce((s, e) => s + e.kcal, 0);
-  const diff = targets.targetKcal - total;
-  const weekDots = Array.from({ length: 5 }, (_, i) => addDays(date, i - 2));
+  const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
+  const dayAct = activityLog.filter((a) => a.date === date);
+  const actKcal = dayAct.reduce((s, a) => s + a.kcal, 0);
+  const budget = dailyTarget + actKcal;
+  const macros = dayLog.reduce((s, e) => ({ p: s.p + (e.p || 0), f: s.f + (e.f || 0), c: s.c + (e.c || 0), fib: s.fib + (e.fib || 0) }), { p: 0, f: 0, c: 0, fib: 0 });
+  const week = programWeekFor(profile.startDate, date);
+  const macroOpen = unlockedOn(profile.startDate, date, MACRO_UNLOCK);
+  const waterOpen = unlockedOn(profile.startDate, date, WATER_UNLOCK);
+  const glasses = waterByDate[date] || 0;
+  const days = Array.from({ length: 14 }, (_, i) => addDays(TODAY, i - 13));
   return (
-    <div style={{ padding: "8px 16px 16px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <button onClick={() => setDate(addDays(date, -1))} style={{ border: "none", background: C.panel, boxShadow: `inset 0 0 0 1px ${C.line}`, borderRadius: 9, width: 32, height: 32, cursor: "pointer", color: C.ink }}><ChevronRight size={18} /></button>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{prettyDate(date)}</div>
-          {relLabel(date) && <div style={{ fontSize: 11, color: C.faint }}>{relLabel(date)}</div>}
-          {programWeekFor(startDate, date) >= 1 && <div style={{ fontSize: 10, color: C.brandD }}>שבוע {programWeekFor(startDate, date)} בתוכנית</div>}
-        </div>
-        <button onClick={() => setDate(addDays(date, 1))} disabled={date >= TODAY} style={{ border: "none", background: C.panel, boxShadow: `inset 0 0 0 1px ${C.line}`, borderRadius: 9, width: 32, height: 32, cursor: date >= TODAY ? "default" : "pointer", color: date >= TODAY ? C.line : C.ink }}><ChevronLeft size={18} /></button>
+    <div style={{ padding: "8px 0 24px" }}>
+      <div style={{ textAlign: "center", padding: "0 16px" }}>
+        <div style={{ fontSize: 17, fontWeight: 600, color: C.ink }}>{prettyDate(date)}</div>
+        {relLabel(date) && <div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>{relLabel(date)}</div>}
+        {week >= 1 && <div style={{ fontSize: 11, color: C.brandD, marginTop: 2 }}>שבוע {week} בתוכנית</div>}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-        {weekDots.map((d) => {
-          const has = log.some((e) => e.date === d);
-          const sel = d === date;
+
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "12px 16px 4px" }}>
+        {days.map((d) => {
+          const sel = d === date; const has = log.some((e) => e.date === d); const dd = new Date(d);
           return (
-            <div key={d} onClick={() => d <= TODAY && setDate(d)} style={{ textAlign: "center", flex: 1, cursor: d <= TODAY ? "pointer" : "default" }}>
-              <div style={{ fontSize: 11, color: sel ? C.ink : C.faint, fontWeight: sel ? 500 : 400 }}>{HE_DAYS[new Date(d).getDay()]}</div>
-              <div style={{ width: 9, height: 9, borderRadius: "50%", margin: "5px auto 0", background: has ? (sel ? C.brandD : C.brand) : "transparent", boxShadow: has ? "none" : `inset 0 0 0 1px ${C.line}` }} />
-            </div>
+            <button key={d} onClick={() => setDate(d)} style={{ flex: "0 0 auto", width: 48, border: "none", borderRadius: 12, padding: "8px 0", background: sel ? C.brand : C.bg, color: sel ? "#fff" : C.ink, cursor: "pointer", textAlign: "center" }}>
+              <div style={{ fontSize: 11, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
+              <div style={{ width: 5, height: 5, borderRadius: "50%", margin: "0 auto", background: has ? (sel ? "#fff" : C.brand) : "transparent" }} />
+            </button>
           );
         })}
       </div>
-      <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <span style={{ fontSize: 12, color: C.sub }}>סך היום</span>
-          <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{total.toLocaleString()} / {targets.targetKcal.toLocaleString()}</span>
+
+      <div style={{ padding: "0 16px" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}><Ring consumed={consumed} budget={budget} /></div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 12, fontSize: 11, color: C.sub, margin: "4px 0 16px" }}>
+          <span>יעד {dailyTarget.toLocaleString()}</span>
+          {actKcal > 0 && <span style={{ color: C.brandD }}>פעילות +{actKcal}</span>}
+          <span>נאכל {consumed.toLocaleString()}</span>
         </div>
-        <div style={{ height: 7, background: C.line, borderRadius: 4, marginTop: 8 }}><div style={{ width: `${Math.min(100, Math.round(total / targets.targetKcal * 100))}%`, height: 7, background: total > targets.targetKcal ? C.amber : C.brand, borderRadius: 4 }} /></div>
-        <div style={{ fontSize: 10, color: diff >= 0 ? C.brandD : C.amber, marginTop: 6 }}>{diff >= 0 ? `${diff} קק״ל מתחת ליעד` : `${Math.abs(diff)} קק״ל מעל היעד`}</div>
-      </div>
-      <div style={{ fontSize: 11, color: C.faint, marginBottom: 2 }}>הקש על פריט לעריכה</div>
-      {dayLog.length === 0 && <div style={{ fontSize: 13, color: C.faint, padding: "16px 0", textAlign: "center" }}>אין רישומים ביום זה</div>}
-      {dayLog.map((e) => (
-        <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-          <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
-            <div style={{ fontSize: 13, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
-            <div style={{ fontSize: 11, color: C.faint }}>{e.meal} · {e.g} ג׳ · {e.kcal} קק״ל</div>
+
+        <div style={{ fontSize: 11, color: C.faint, marginBottom: 8 }}>תזונה</div>
+        {macroOpen ? (
+          <div style={{ display: "flex", gap: 7, marginBottom: 16 }}>
+            <MacroCard label="חלבון" value={macros.p} target={targets.protein} color={C.macroP} emphasized />
+            <MacroCard label="שומן" value={macros.f} target={targets.fat} color={C.macroF} />
+            <MacroCard label="פחמימות" value={macros.c} target={targets.carbs} color={C.macroC} />
+            <MacroCard label="סיבים" value={macros.fib} target={FIBER_TARGET} color={C.info} />
           </div>
-          <button onClick={() => editEntry(e)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Pencil size={15} /></button>
-          <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
-        </div>
-      ))}
-      <div style={{ marginTop: 14 }}><Btn variant="ghost" onClick={() => openAdd(null)}>+ הוסף לארוחה (גם בדיעבד)</Btn></div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, borderRadius: 12, padding: 12, marginBottom: 16, color: C.faint, fontSize: 12, lineHeight: 1.5 }}><Lock size={15} style={{ flexShrink: 0 }} /> מעקב תזונה (חלבון, שומן, פחמימות, סיבים) נפתח בשבוע 3</div>
+        )}
+
+        {waterOpen ? (
+          <WaterCard glasses={glasses} setGlasses={(n) => setWaterForDate(date, n)} />
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, borderRadius: 12, padding: 12, marginBottom: 16, color: C.faint, fontSize: 12 }}><Lock size={15} style={{ flexShrink: 0 }} /> מעקב מים נפתח בשבוע 3</div>
+        )}
+
+        {dayAct.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, color: C.faint, marginBottom: 2 }}>פעילות גופנית</div>
+            {dayAct.map((a) => (
+              <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: `1px solid ${C.line}`, fontSize: 13 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 7, color: C.ink }}><Dumbbell size={15} color={C.info} /> {a.name}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ color: C.brandD, fontWeight: 500 }}>+{a.kcal}</span><button onClick={() => deleteEntry(a.id, "activity")} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><Trash2 size={14} /></button></span>
+              </div>
+            ))}
+          </>
+        )}
+
+        <div style={{ fontSize: 11, color: C.faint, margin: "16px 0 2px" }}>מה שהוזן</div>
+        {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 13, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה — הקישי על הכפתור למטה</div>}
+        {dayLog.map((e) => (
+          <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+            <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
+              <div style={{ fontSize: 13, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
+              <div style={{ fontSize: 11, color: C.faint }}>{e.meal} · {e.g} ג׳ · {e.kcal} קק״ל</div>
+            </div>
+            <button onClick={() => editEntry(e)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Pencil size={15} /></button>
+            <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -751,7 +740,7 @@ function NotesFab({ notes, setNotes, screen }) {
   const copyAll = () => { try { navigator.clipboard.writeText(notes.map((n) => `• [${n.screen}] ${n.text}`).join("\n")); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) {} };
   return (
     <>
-      <button onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 70, insetInlineStart: 14, width: 46, height: 46, borderRadius: "50%", background: C.brand, color: "#fff", border: "none", boxShadow: "0 4px 14px rgba(168,66,92,0.4)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 15 }}>
+      <button onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 78, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
         <MessageCircle size={20} />
         {notes.length > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: C.ink, color: "#fff", fontSize: 10, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length}</span>}
       </button>
@@ -786,7 +775,7 @@ function NotesFab({ notes, setNotes, screen }) {
    ADD / EDIT MODAL
    ============================================================ */
 function AddModal({ state, close, commit, removeAndClose }) {
-  const [step, setStep] = useState(state.editEntry ? "qty" : (state.preMeal ? "list" : "method"));
+  const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
   const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || "בוקר");
   const [food, setFood] = useState(state.editEntry ? FOODS.find((f) => f.name === state.editEntry.name) || FOODS[0] : null);
   const [grams, setGrams] = useState(state.editEntry?.g || 100);
@@ -922,7 +911,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
             {[{ ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", tag: "מומלץ", tagBg: C.brandBg, tagC: C.brandD, go: () => setStep("barcode") },
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר ומההיסטוריה", go: () => setStep("list") },
               { ic: Camera, t: "צילום ארוחה", s: "המהיר ביותר", tag: "מהיר", tagBg: C.infoBg, tagC: C.info, go: () => setStep("photo") },
-              { ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", tagBg: C.infoBg, tagC: C.info, go: () => setStep("ai") }].map((o) => (
+              { ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", tagBg: C.infoBg, tagC: C.info, go: () => setStep("ai") }].filter((o) => state.kind !== "food" || o.t !== "ספרי לי מה אכלת").map((o) => (
               <div key={o.t} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
                 <o.ic size={26} color={C.brand} />
                 <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 500, color: C.ink }}>{o.t}</div><div style={{ fontSize: 11, color: C.sub }}>{o.s}</div></div>
@@ -1107,44 +1096,154 @@ function AddModal({ state, close, commit, removeAndClose }) {
 /* ============================================================
    ROOT APP
    ============================================================ */
+function EntryMenu({ onClose, onPick, waterOpen }) {
+  const items = [
+    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד או צילום ארוחה" },
+    { id: "ai", ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)" },
+    { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי" },
+    ...(waterOpen ? [{ id: "water", ic: Droplet, t: "הוספת מים", s: "כוס מים (250 מ\"ל)" }] : []),
+    { id: "weight", ic: TrendingDown, t: "עדכון משקל", s: "" },
+    { id: "calorie", ic: Target, t: "עדכון יעד קלורי ליום", s: "" },
+  ];
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 26 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>מה תרצי להזין?</span>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+        </div>
+        {items.map((o) => (
+          <div key={o.id} onClick={() => onPick(o.id)} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13, marginBottom: 8, cursor: "pointer" }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><o.ic size={19} color={C.brand} /></div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 500, color: C.ink }}>{o.t}</div>{o.s && <div style={{ fontSize: 11, color: C.sub }}>{o.s}</div>}</div>
+            <ChevronLeft size={18} color={C.faint} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SheetShell({ title, onClose, children }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 27 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{title}</span>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ActivityModal({ onClose, onAdd }) {
+  const presets = [
+    { name: "הליכה 30 דק׳", kcal: 150 },
+    { name: "ריצה 30 דק׳", kcal: 300 },
+    { name: "אימון כוח 45 דק׳", kcal: 220 },
+    { name: "יוגה / פילאטיס", kcal: 120 },
+  ];
+  const [name, setName] = useState("פעילות");
+  const [kcal, setKcal] = useState(150);
+  return (
+    <SheetShell title="פעילות גופנית" onClose={onClose}>
+      <div style={{ fontSize: 11, color: C.sub, marginBottom: 8 }}>בחרי פעילות מהירה</div>
+      {presets.map((p) => (
+        <div key={p.name} onClick={() => onAdd(p)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 8, cursor: "pointer" }}>
+          <span style={{ fontSize: 13, color: C.ink, display: "flex", alignItems: "center", gap: 7 }}><Dumbbell size={15} color={C.info} /> {p.name}</span>
+          <span style={{ fontSize: 12, color: C.brandD, fontWeight: 500 }}>+{p.kcal} קק״ל</span>
+        </div>
+      ))}
+      <div style={{ fontSize: 11, color: C.sub, margin: "12px 0 6px" }}>או מותאם אישית</div>
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם הפעילות" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 13, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontSize: 13, color: C.sub }}>קלוריות שנשרפו</span>
+        <Stepper value={kcal} set={(v) => setKcal(Math.max(0, v))} step={10} suffix="קק״ל" />
+      </div>
+      <Btn onClick={() => onAdd({ name, kcal })}>הוסף פעילות</Btn>
+    </SheetShell>
+  );
+}
+
+function WeightModal({ current, onClose, onAdd }) {
+  const [kg, setKg] = useState(current);
+  return (
+    <SheetShell title="עדכון משקל" onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", margin: "8px 0 18px" }}>
+        <Stepper value={kg} set={(v) => setKg(Math.max(30, v))} step={0.1} min={30} suffix="ק״ג" />
+      </div>
+      <Btn onClick={() => onAdd(Math.round(kg * 10) / 10)}>שמור משקל</Btn>
+    </SheetShell>
+  );
+}
+
+function CalorieGoalModal({ current, onClose, onAdd }) {
+  const [kcal, setKcal] = useState(current);
+  return (
+    <SheetShell title="עדכון יעד קלורי ליום" onClose={onClose}>
+      <div style={{ fontSize: 11, color: C.sub, marginBottom: 10, textAlign: "center", lineHeight: 1.6 }}>היעד היומי שלך לקלוריות. שינוי כאן דורס את הערך המחושב.</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", margin: "4px 0 18px" }}>
+        <Stepper value={kcal} set={(v) => setKcal(Math.max(KCAL_FLOOR, v))} step={10} min={KCAL_FLOOR} suffix="קק״ל" />
+      </div>
+      <Btn onClick={() => onAdd(kcal)}>שמור יעד</Btn>
+    </SheetShell>
+  );
+}
+
 export default function App() {
   const [onboarded, setOnboarded] = useState(false);
-  const [tab, setTab] = useState("home");
-  const [profile, setProfile] = useState({ age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY) });
+  const [tab, setTab] = useState("day");
+  const [profile, setProfile] = useState({ age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null });
   const [log, setLog] = useState(INITIAL_LOG);
   const [weights, setWeights] = useState(makeWeightSeed(72));
-  const [diaryDate, setDiaryDate] = useState(TODAY);
-  const [water, setWater] = useState(5);
+  const [activityLog, setActivityLog] = useState([]);
+  const [waterByDate, setWaterByDate] = useState({});
+  const [selectedDate, setSelectedDate] = useState(TODAY);
   const [modal, setModal] = useState(null);
+  const [sheet, setSheet] = useState(null);
   const [showIntro, setShowIntro] = useState(true);
   const [notes, setNotes] = useState([]);
-  const activity = { steps: 8420, stepsKcal: 220, workoutKcal: 180 };
 
   const targets = useMemo(() => computeTargets(profile), [profile]);
-  const todayLog = log.filter((e) => e.date === TODAY);
+  const dailyTarget = profile.calorieOverride || targets.targetKcal;
   const programWeek = programWeekFor(profile.startDate, TODAY);
+  const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
 
-  const finishOnboarding = (p) => { setProfile(p); setWeights(makeWeightSeed(p.weightKg)); setOnboarded(true); };
-  const openAdd = (preMeal) => setModal({ preMeal, editEntry: null });
-  const editEntry = (e) => setModal({ preMeal: null, editEntry: e });
-  const deleteEntry = (id) => setLog((l) => l.filter((e) => e.id !== id));
+  const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null }); setWeights(makeWeightSeed(p.weightKg)); setOnboarded(true); };
+  const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
+  const editEntry = (e) => setModal({ kind: "food", preMeal: null, editEntry: e });
+  const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
   const commit = (payload) => {
-    const date = modal?.editEntry ? modal.editEntry.date : (tab === "diary" ? diaryDate : TODAY);
+    const date = modal?.editEntry ? modal.editEntry.date : selectedDate;
     if (modal?.editEntry) setLog((l) => l.map((e) => e.id === modal.editEntry.id ? { ...e, ...payload, date } : e));
     else { const items = Array.isArray(payload) ? payload : [payload]; setLog((l) => [...l, ...items.map((p, i) => ({ id: "n" + Date.now() + i, date, ...p }))]); }
     setModal(null);
   };
-  const addRecipe = (r) => { setLog((l) => [...l, { id: "n" + Date.now(), date: TODAY, meal: "צהריים", name: r.name, g: 1, source: "verified", kcal: r.kcal, p: r.p, f: r.f, c: r.c }]); setTab("home"); };
-  const addWeight = () => { const last = weights[weights.length - 1].kg; const v = Math.round((last - 0.2) * 10) / 10; setWeights((w) => [...w.filter((x) => x.date !== TODAY), { date: TODAY, kg: v }]); };
+  const addRecipe = (r) => { setLog((l) => [...l, { id: "n" + Date.now(), date: selectedDate, meal: "צהריים", name: r.name, g: 1, source: "verified", kcal: r.kcal, p: r.p, f: r.f, c: r.c }]); setTab("day"); };
+  const addActivity = (a) => { setActivityLog((l) => [...l, { id: "a" + Date.now(), date: selectedDate, name: a.name, kcal: Math.round(a.kcal) }]); setSheet(null); };
+  const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
+  const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
+  const addWeightValue = (kg) => { setWeights((w) => [...w.filter((x) => x.date !== selectedDate), { date: selectedDate, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
+  const reportAddWeight = () => { const last = weights[weights.length - 1].kg; addWeightValue(Math.round((last - 0.2) * 10) / 10); };
+  const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
   const resetDemo = () => {
-    setOnboarded(false); setShowIntro(true); setTab("home");
-    setLog(INITIAL_LOG); setWater(5); setWeights(makeWeightSeed(72)); setDiaryDate(TODAY); setModal(null);
-    setProfile({ age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY) });
+    setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
+    setLog(INITIAL_LOG); setWaterByDate({}); setActivityLog([]); setWeights(makeWeightSeed(72)); setSelectedDate(TODAY);
+    setProfile({ age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null });
+  };
+  const onPickEntry = (id) => {
+    if (id === "food") openAdd("food", null);
+    else if (id === "ai") openAdd("ai", null);
+    else if (id === "activity") setSheet("activity");
+    else if (id === "water") addWaterGlass();
+    else if (id === "weight") setSheet("weight");
+    else if (id === "calorie") setSheet("calorie");
   };
 
   const tabs = [
-    { id: "home", ic: Home, label: "בית" },
-    { id: "diary", ic: BookOpen, label: "יומן" },
+    { id: "day", ic: Home, label: "היום" },
     { id: "report", ic: TrendingDown, label: "דוח" },
     { id: "recipes", ic: ChefHat, label: "מתכונים" },
     { id: "profile", ic: User, label: "פרופיל" },
@@ -1169,9 +1268,8 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "home" && <HomeScreen targets={targets} todayLog={todayLog} activity={activity} profile={profile} openAdd={openAdd} water={water} setWater={setWater} />}
-              {tab === "diary" && <DiaryScreen log={log} date={diaryDate} setDate={setDiaryDate} targets={targets} openAdd={openAdd} editEntry={editEntry} deleteEntry={deleteEntry} startDate={profile.startDate} />}
-              {tab === "report" && <ReportScreen weights={weights} addWeight={addWeight} log={log} targets={targets} programWeek={programWeek} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} />}
+              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} />}
             </div>
@@ -1181,6 +1279,15 @@ export default function App() {
                 return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", background: "transparent", cursor: "pointer", color: active ? C.brand : C.faint, fontWeight: active ? 500 : 400 }}><t.ic size={21} /><span style={{ fontSize: 11 }}>{t.label}</span></button>);
               })}
             </div>
+
+            {tab === "day" && !modal && !sheet && (
+              <button onClick={() => setSheet("menu")} style={{ position: "absolute", bottom: 74, insetInlineStart: 18, width: 58, height: 58, borderRadius: "50%", background: C.brand, color: "#fff", border: "none", boxShadow: "0 6px 18px rgba(168,66,92,0.45)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} /></button>
+            )}
+
+            {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} waterOpen={waterOpenToday} />}
+            {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} />}
+            {sheet === "weight" && <WeightModal current={weights[weights.length - 1].kg} onClose={() => setSheet(null)} onAdd={addWeightValue} />}
+            {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {modal && <AddModal state={modal} close={() => setModal(null)} commit={commit} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />}
           </>
         )}
