@@ -13,6 +13,7 @@ import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
 const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
 const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "#";
+const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || "";
 function getDeviceId() {
   try {
     let id = localStorage.getItem("myprime_device_id");
@@ -230,7 +231,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.30";
+const VERSION = "0.32";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -797,7 +798,7 @@ function extractAiJson(text) {
 }
 
 async function aiNutritionChat(messages) {
-  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') — אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה — אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב — אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת — החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') — אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה — אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) — שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב — אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת — החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system, messages }),
@@ -928,12 +929,27 @@ function IntroOverlay({ onClose }) {
   );
 }
 
-function NotesFab({ notes, setNotes, screen }) {
+function NotesFab({ notes, setNotes, screen, userName }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
   const add = () => { if (!text.trim()) return; setNotes((n) => [...n, { text: text.trim(), screen, t: new Date().toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) }]); setText(""); };
   const copyAll = () => { try { navigator.clipboard.writeText(notes.map((n) => `• [${n.screen}] ${n.text}`).join("\n")); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) {} };
+  const sendFeedback = async () => {
+    if (!notes.length || sending) return;
+    setSending(true);
+    let device = ""; try { device = localStorage.getItem("myprime_device_id") || ""; } catch (e) {}
+    try {
+      await fetch(FEEDBACK_URL, {
+        method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ device, name: userName || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
+      });
+      setSent(true); setTimeout(() => setSent(false), 2500); setNotes([]);
+    } catch (e) { alert("השליחה נכשלה — בדקי חיבור לאינטרנט ונסי שוב."); }
+    finally { setSending(false); }
+  };
   return (
     <>
       <button onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 78, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
@@ -957,7 +973,10 @@ function NotesFab({ notes, setNotes, screen }) {
                     <button onClick={() => setNotes((arr) => arr.filter((_, j) => j !== i))} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><Trash2 size={14} /></button>
                   </div>
                 ))}
-                <div style={{ marginTop: 12 }}><Btn variant="ghost" onClick={copyAll}><Copy size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {copied ? "הועתק!" : "העתיקי הכל לשליחה"}</Btn></div>
+                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {FEEDBACK_URL && <Btn onClick={sendFeedback} disabled={sending}><Send size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {sent ? "נשלח, תודה!" : sending ? "שולחת…" : "שלחי משוב לצוות MyPrime"}</Btn>}
+                  <Btn variant="ghost" onClick={copyAll}><Copy size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {copied ? "הועתק!" : "העתיקי הכל"}</Btn>
+                </div>
               </div>
             )}
           </div>
@@ -1082,7 +1101,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
   const scanControlsRef = useRef(null);
   const [scanState, setScanState] = useState("idle");
   const [manualCode, setManualCode] = useState("");
-  const stopScan = () => { try { scanControlsRef.current && scanControlsRef.current.stop(); } catch (e) {} scanControlsRef.current = null; };
+  const stopScan = () => { try { scanControlsRef.current && scanControlsRef.current(); } catch (e) {} scanControlsRef.current = null; };
   const lookupBarcode = async (code) => {
     setScanState("looking");
     try {
@@ -1097,22 +1116,47 @@ function AddModal({ state, close, commit, removeAndClose }) {
   const startScan = () => setScanState("scanning");
   useEffect(() => {
     if (scanState !== "scanning") return;
-    let cancelled = false;
+    let cancelled = false, raf = null, stream = null, zx = null;
+    const cleanup = () => {
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      try { zx && zx.stop(); } catch (e) {}
+      try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+      try { if (videoRef.current) videoRef.current.srcObject = null; } catch (e) {}
+    };
+    const onCode = (code) => { if (cancelled || !code) return; cleanup(); lookupBarcode(String(code)); };
     (async () => {
       try {
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.CODE_128, BarcodeFormat.ITF, BarcodeFormat.CODE_39]);
-        hints.set(DecodeHintType.TRY_HARDER, true);
-        const reader = new BrowserMultiFormatReader(hints);
-        const controls = await reader.decodeFromConstraints(
-          { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
-          videoRef.current,
-          (result) => { if (result) { stopScan(); lookupBarcode(result.getText()); } }
-        );
-        if (cancelled) controls.stop(); else scanControlsRef.current = controls;
-      } catch (e) { setScanState("error"); }
+        const video = videoRef.current;
+        if ("BarcodeDetector" in window) {
+          // Native path (reliable on Android/Chrome incl. Samsung).
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+          if (cancelled) { cleanup(); return; }
+          video.srcObject = stream;
+          await video.play().catch(() => {});
+          try { await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch (e) {}
+          let det;
+          try { det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "itf"] }); }
+          catch (e) { det = new window.BarcodeDetector(); }
+          const tick = async () => {
+            if (cancelled) return;
+            try { const codes = await det.detect(video); if (codes && codes.length) return onCode(codes[0].rawValue); } catch (e) {}
+            raf = requestAnimationFrame(tick);
+          };
+          raf = requestAnimationFrame(tick);
+        } else {
+          // Fallback: ZXing continuous decode (e.g. iOS Safari).
+          const hints = new Map();
+          hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.CODE_128, BarcodeFormat.ITF]);
+          hints.set(DecodeHintType.TRY_HARDER, true);
+          const reader = new BrowserMultiFormatReader(hints);
+          zx = await reader.decodeFromVideoDevice(undefined, video, (result) => { if (result) onCode(result.getText()); });
+          if (cancelled) cleanup();
+        }
+      } catch (e) { if (!cancelled) setScanState("error"); }
     })();
-    return () => { cancelled = true; stopScan(); };
+    scanControlsRef.current = cleanup;
+    return () => cleanup();
   }, [scanState]);
   const photoItems = [{ f: FOOD_BY_ID["rice"], g: 158 }, { f: FOOD_BY_ID["chk"], g: 120 }, { f: FOOD_BY_ID["sal"], g: 80 }];
   const filtered = query.trim() ? FOODS.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
@@ -1694,7 +1738,7 @@ export default function App() {
             {modal && <AddModal state={modal} close={() => setModal(null)} commit={commit} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />}
           </>
         )}
-        {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
+        {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {gate === "ok" && showIntro && <IntroOverlay onClose={() => setShowIntro(false)} />}
         {showExit && (
           <div onClick={() => setShowExit(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 50 }}>
