@@ -231,7 +231,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.36";
+const VERSION = "0.37";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1295,12 +1295,18 @@ function AddModal({ state, close, commit, removeAndClose }) {
         {step === "photo" && (
           <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
             <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Camera size={32} color={C.brand} /></div>
-            <div style={{ fontSize: 17, fontWeight: 500, color: C.ink, marginBottom: 6 }}>צלמי את הצלחת</div>
+            <div style={{ fontSize: 17, fontWeight: 500, color: C.ink, marginBottom: 6 }}>צלמי או העלי תמונה</div>
             <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>נפתח שיחה קצרה עם ה-AI — נזהה את הפריטים ונוכל לתקן כמויות יחד.</p>
-            <label style={{ display: "block" }}>
-              <input ref={fileRef} type="file" accept="image/*" onChange={onPhoto} style={{ display: "none" }} />
-              <span style={{ display: "block", background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer" }}>פתחי מצלמה / בחרי תמונה</span>
-            </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={{ display: "block" }}>
+                <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי עכשיו</span>
+              </label>
+              <label style={{ display: "block" }}>
+                <input ref={fileRef} type="file" accept="image/*" onChange={onPhoto} style={{ display: "none" }} />
+                <span style={{ display: "block", background: "transparent", color: C.brandD, borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 500, cursor: "pointer", boxShadow: `inset 0 0 0 1px ${C.line}` }}>העלי תמונה מהגלריה</span>
+              </label>
+            </div>
             <div style={{ fontSize: 12, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>הניתוח מבוצע ע״י בינה מלאכותית — ייתכן שתתבקשי להתחבר ל-Claude.</div>
           </div>
         )}
