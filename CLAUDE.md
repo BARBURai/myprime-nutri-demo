@@ -75,7 +75,7 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.54`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.57`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -87,3 +87,21 @@ The "מתכונים" tab now renders the real MyPrime recipe booklet instead of 
 - `RecipesScreen`: search box + filter chips (הכל / עתיר חלבון [p>=25] / דל פחמימות [c<=12]) + photo cards; tapping a card opens `RecipeDetail` (hero photo, prep/servings/difficulty chips, 4-stat nutrition strip, "הוסיפי מנה ליומן", ingredients with sub-headers, numbered steps, tips). Card "+" and detail button call `addRecipe`.
 - `addRecipe(r)` logs a serving (g:1, source "verified", explicit kcal/p/f/c) to `selectedDate` with a time-based meal; no longer force-switches to the day tab (screen shows a "נוסף ליומן" toast/confirmation instead).
 - To add/replace recipe images later: drop files in `public/recipes/` (GitHub), Vercel serves them.
+
+## v0.55 — Sweets tab + protein color
+- Protein color changed from teal (#2F9E8F) to strong purple `macroP:#7E4FB5`; added `proteinTrack:#EBE1F7` (soft purple) used as the ProteinRing track (was C.line). Recipe-card protein badge updated to the purple palette. Carbs stays mauve #A87BB5 (distinct).
+- New desserts feature "הפינה המתוקה": data in `src/sweets.js` (`export const SWEETS`, 12 items, same shape as recipes), photos in `public/sweets/<page>.jpg` (pages 3..14, extracted from the desserts PDF via pdfimages, largest portrait per page; page 9 grabbed manually — its photo is 1.44 ratio). Hebrew copy transcribed faithfully.
+- `RecipesScreen` generalized: now takes `items`/`title`/`subtitle` (default = RECIPES / "מתכונים"). Reused for sweets via `<RecipesScreen items={SWEETS} title="מתוקים" ... />`. `RecipeDetail` reused as-is.
+- Gating: `SWEETS_UNLOCK = { week: 3, day: 5 }` (program day 19). The "מתוקים" tab is conditionally added to `tabs` only when `unlockedOn(startDate, TODAY, SWEETS_UNLOCK)` — i.e. it does NOT appear at all before week 3 day 5 (no locked teaser), per Ron's request. Tab icon: Cookie. With 5 tabs the nav splits 2 (day, report) + FAB + 3 (recipes, sweets, profile).
+- To add/replace sweet images: drop files in `public/sweets/` (GitHub) → Vercel serves at `/sweets/<page>.jpg`.
+
+## v0.56 — Recipe logging fix + category filters
+- BUG FIX: recipes/sweets were logged as `g:1` with per-serving kcal, so the gram-based edit modal recomputed per100 = kcal*100 → astronomical values at 100 g. Recipe/sweet entries are now SERVING-based: `{ unit:"serving", servings, base:{kcal,p,f,c}, kcal/p/f/c = base*servings }`. Day totals already sum `e.kcal` (correct); editing now scales by servings, not grams. (Old g:1 recipe entries in localStorage still mis-edit — reset/delete them.)
+- New `RecipeAddModal` (SheetShell): opens on recipe "+" / "הוסיפי מנה ליומן" (add) and when tapping a serving entry in the journal (edit). Shows recipe name, meal chips, a servings stepper (step 0.5, min 0.5, default 1), a live 4-stat nutrition strip (base×servings), and "הוסף ליומן"/"עדכן" (+ "מחק פריט" when editing). PDF nutrition is per serving; the modal multiplies by the chosen number of servings.
+- Root wiring: `addRecipe(r) → setModal({kind:"recipe", recipe:r})`; `editEntry(e) → kind "recipe" if e.unit==="serving" else "food"`; `saveRecipe(payload, editId)` updates or appends (does NOT touch favorites). Modal render branches recipe vs AddModal. Day entry row shows "{servings} מנה/מנות" for serving entries.
+- Recipe/sweet filter chips changed from עתיר חלבון/דל פחמימות to NUTRITION CATEGORIES, derived dynamically from each item's new `cat` field (horizontal-scroll chips). Recipe cats: שייקים, ארוחות בוקר, מנות ראשונות, סלטים, מרקים, מנות עיקריות. Sweet cats: פנקייקים, מוסים ופודינג, עוגות, חטיפים, עוגיות וכדורים. `cat` lives in recipes.js/sweets.js.
+
+## v0.57 — + menu / method chooser / onboarding consent
+- The "+" menu (EntryMenu) already contains only מזון/פעילות/מים (no weight/calorie items); weight + daily-calorie editing live in ProfileScreen (משקל row + יעד קלורי block). Confirmed — no change needed there. (Dead WeightModal/CalorieGoalModal + onPickEntry weight/calorie cases remain, harmless.)
+- AddModal method chooser ("הוספת מזון") reordered: 1) ספרי לי מה אכלת (AI), 2) צילום ארוחה, 3) סריקת ברקוד (removed "מומלץ" tag), 4) האחרונים והמועדפים שלי, 5) חיפוש מזון (last). Restyled: each row a soft tinted background with a prominent 46px colored icon chip (white icon). Tints: AI=info, photo=amber, barcode=brand, recent=water, search=green(#E8F3EC/#4E9E76). Kept "חדש"/"מהיר" tags (now white chip w/ row color). NOTE: first-item assumption was AI — easy to swap if Ron meant another.
+- Onboarding consent: moved the "קראתי ואני מאשרת…" line + checkbox to the END (below the legal paragraph, above "בואי נתחיל", with a top divider). De-duplicated policy links — they now appear ONLY in the consent line; the long legal paragraph is plain text (no <a> links). (The separate privacy/cookie link pair in the food-add footer is unrelated and left as-is.)

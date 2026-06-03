@@ -3,12 +3,13 @@ import {
   Home, BookOpen, TrendingDown, ChefHat, User, Plus, Check, Search,
   Barcode, Camera, ChevronRight, ChevronLeft, Pencil, Trash2, Minus, X,
   Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet,
-  MessageCircle, Loader, Copy, Mic, Send, Lock, Clock,
+  MessageCircle, Loader, Copy, Mic, Send, Lock, Clock, Cookie,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
+import { SWEETS } from "./sweets";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -180,6 +181,7 @@ function unlockedOn(startDate, onDate, u) {
 }
 const MACRO_UNLOCK = { week: 3, day: 4 };
 const WATER_UNLOCK = { week: 3, day: 2 };
+const SWEETS_UNLOCK = { week: 3, day: 5 };
 const FIBER_TARGET = 25;
 const DIET_OPTIONS = [
   { id: "הכל", emoji: "🍽️" },
@@ -222,13 +224,13 @@ const C = {
   bg: "#FAF3F4", panel: "#FFFFFF", ink: "#3A2B30", sub: "#8B737A", faint: "#BBA7AC",
   line: "#F1E4E7",
   brand: "#D45D79", brandD: "#A8425C", brandBg: "#FBE9EE",
-  macroP: "#2F9E8F", macroF: "#E0986A", macroC: "#A87BB5",
+  macroP: "#7E4FB5", proteinTrack: "#EBE1F7", macroF: "#E0986A", macroC: "#A87BB5",
   amber: "#C77A3C", amberBg: "#FBEEDF",
   info: "#9C6BA6", infoBg: "#F2E7F3",
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.54";
+const VERSION = "0.57";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -258,7 +260,7 @@ function ProteinRing({ consumed, target, size = 124 }) {
   const done = target > 0 && consumed >= target;
   return (
     <svg width={size} height={size} viewBox="0 0 132 132">
-      <circle cx="66" cy="66" r={r} fill="none" stroke={C.line} strokeWidth="10" />
+      <circle cx="66" cy="66" r={r} fill="none" stroke={C.proteinTrack} strokeWidth="10" />
       <circle cx="66" cy="66" r={r} fill="none" stroke={C.macroP} strokeWidth="10"
         strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
         transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
@@ -492,17 +494,17 @@ function Onboarding({ onFinish, name }) {
               </div>
             )}
 
-            <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "4px 0 8px" }}>
-              <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
-              <span style={{ fontSize: 14, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
-            </div>
             <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.7 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
                 <Lock size={13} style={{ flexShrink: 0, marginTop: 2 }} />
                 <span>מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה.</span>
               </div>
-              <div style={{ marginTop: 6 }}>החברה עושה שימוש באפליקציה בהתאם להוראות <a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a>.</div>
-              <div style={{ marginTop: 6 }}>ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> של החברה, כפי שמופיעה באתר.</div>
+              <div style={{ marginTop: 6 }}>החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות.</div>
+              <div style={{ marginTop: 6 }}>ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.</div>
+            </div>
+            <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "12px 0 2px", marginTop: 12, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
+              <span style={{ fontSize: 14, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
             </div>
           </>
         )}
@@ -607,7 +609,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
             <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
               <div style={{ fontSize: 15, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
-              <div style={{ fontSize: 13, color: C.faint }}>{e.meal} · {e.g} {e.unit === "ml" ? "מ\"ל" : "ג׳"} · {e.kcal} קק״ל</div>
+              <div style={{ fontSize: 13, color: C.faint }}>{e.meal} · {e.unit === "serving" ? `${e.servings} ${e.servings === 1 ? "מנה" : "מנות"}` : `${e.g} ${e.unit === "ml" ? "מ\"ל" : "ג׳"}`} · {e.kcal} קק״ל</div>
             </div>
             <button onClick={() => editEntry(e)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Pencil size={15} /></button>
             <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
@@ -699,7 +701,6 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek }) {
 }
 
 function RecipeDetail({ r, onBack, onAdd }) {
-  const [added, setAdded] = useState(false);
   const stat = (label, value, color) => (
     <div style={{ flex: 1, textAlign: "center", padding: "8px 4px" }}>
       <div style={{ fontSize: 17, fontWeight: 700, color: color || C.ink }}>{value}</div>
@@ -732,11 +733,7 @@ function RecipeDetail({ r, onBack, onAdd }) {
           {stat("פחמ׳ (ג׳)", r.c, C.macroC)}
         </div>
 
-        {added ? (
-          <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 13, marginBottom: 16, fontSize: 15, fontWeight: 600, textAlign: "center" }}>✓ נוסף ליומן</div>
-        ) : (
-          <div style={{ marginBottom: 16 }}><Btn onClick={() => { onAdd(r); setAdded(true); }}><Plus size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> הוסיפי מנה ליומן</Btn></div>
-        )}
+        <div style={{ marginBottom: 16 }}><Btn onClick={() => onAdd(r)}><Plus size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> הוסיפי מנה ליומן</Btn></div>
 
         <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: "4px 0 8px" }}>מרכיבים</div>
         <div style={{ marginBottom: 18 }}>
@@ -771,58 +768,101 @@ function RecipeDetail({ r, onBack, onAdd }) {
   );
 }
 
-function RecipesScreen({ addRecipe }) {
+function RecipesScreen({ addRecipe, items = RECIPES, title = "מתכונים", subtitle = "חוברת המתכונים של מיי פריים — עשירים בחלבון, דלים בפחמימות ומשולבים מזונות אנטי-דלקתיים." }) {
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState("הכל");
   const [query, setQuery] = useState("");
-  const [toast, setToast] = useState(false);
 
   if (selected) {
     return <RecipeDetail r={selected} onBack={() => setSelected(null)} onAdd={addRecipe} />;
   }
 
-  const filtered = RECIPES.filter((r) => {
+  const cats = ["הכל", ...Array.from(new Set(items.map((r) => r.cat).filter(Boolean)))];
+  const filtered = items.filter((r) => {
     if (query && !r.name.includes(query)) return false;
-    if (filter === "עתיר חלבון") return r.p >= 25;
-    if (filter === "דל פחמימות") return r.c <= 12;
+    if (filter !== "הכל") return r.cat === filter;
     return true;
   });
-  const fchip = (t) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 20, cursor: "pointer", background: filter === t ? C.ink : "transparent", color: filter === t ? "#fff" : C.sub, boxShadow: filter === t ? "none" : `inset 0 0 0 1px ${C.line}` });
+  const fchip = (t) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 20, cursor: "pointer", whiteSpace: "nowrap", background: filter === t ? C.ink : "transparent", color: filter === t ? "#fff" : C.sub, boxShadow: filter === t ? "none" : `inset 0 0 0 1px ${C.line}` });
 
   return (
     <div style={{ padding: "8px 16px 16px", position: "relative" }}>
-      <Header title="מתכונים" />
-      <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>חוברת המתכונים של מיי פריים — עשירים בחלבון, דלים בפחמימות ומשולבים מזונות אנטי-דלקתיים.</div>
+      <Header title={title} />
+      <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>{subtitle}</div>
 
       <div style={{ position: "relative", marginBottom: 12 }}>
         <Search size={16} style={{ position: "absolute", insetInlineStart: 12, top: 12, color: C.faint }} />
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מתכון…" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 36px", fontSize: 14.5, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
       </div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-        {["הכל", "עתיר חלבון", "דל פחמימות"].map((t) => (<span key={t} onClick={() => setFilter(t)} style={fchip(t)}>{t}</span>))}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+        {cats.map((t) => (<span key={t} onClick={() => setFilter(t)} style={fchip(t)}>{t}</span>))}
       </div>
 
       {filtered.map((r) => (
         <div key={r.id} onClick={() => setSelected(r)} style={{ border: `1px solid ${C.line}`, borderRadius: 16, overflow: "hidden", marginBottom: 14, cursor: "pointer", background: C.panel, boxShadow: "0 1px 6px rgba(168,66,92,0.05)" }}>
           <div style={{ position: "relative" }}>
             <img src={r.img} alt={r.name} loading="lazy" style={{ width: "100%", height: 158, objectFit: "cover", display: "block" }} />
-            <button onClick={(e) => { e.stopPropagation(); addRecipe(r); setToast(true); setTimeout(() => setToast(false), 1600); }} style={{ position: "absolute", bottom: 10, insetInlineEnd: 10, width: 38, height: 38, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}><Plus size={20} /></button>
+            <button onClick={(e) => { e.stopPropagation(); addRecipe(r); }} style={{ position: "absolute", bottom: 10, insetInlineEnd: 10, width: 38, height: 38, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}><Plus size={20} /></button>
           </div>
           <div style={{ padding: "11px 13px 13px" }}>
             <div style={{ fontSize: 15.5, fontWeight: 600, color: C.ink, marginBottom: 7, lineHeight: 1.35 }}>{r.name}</div>
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
               <span style={{ fontSize: 12, color: C.brandD, background: C.brandBg, padding: "3px 9px", borderRadius: 12 }}>{r.kcal} קק״ל</span>
-              <span style={{ fontSize: 12, color: "#1f7a6e", background: "#E6F3F1", padding: "3px 9px", borderRadius: 12 }}>חלבון {r.p} ג׳</span>
+              <span style={{ fontSize: 12, color: C.macroP, background: C.proteinTrack, padding: "3px 9px", borderRadius: 12 }}>חלבון {r.p} ג׳</span>
               <span style={{ fontSize: 12, color: C.sub, background: C.bg, padding: "3px 9px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} /> {r.prep}</span>
             </div>
           </div>
         </div>
       ))}
       {filtered.length === 0 && <div style={{ fontSize: 14, color: C.faint, textAlign: "center", padding: 24 }}>לא נמצאו מתכונים תואמים.</div>}
-
-      {toast && <div style={{ position: "fixed", bottom: 86, insetInlineStart: "50%", transform: "translateX(-50%)", background: C.ink, color: "#fff", fontSize: 14, padding: "10px 18px", borderRadius: 20, boxShadow: "0 4px 16px rgba(0,0,0,0.25)", zIndex: 50 }}>✓ נוסף ליומן</div>}
     </div>
+  );
+}
+
+function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
+  const editing = !!editEntry;
+  const name = editing ? editEntry.name : recipe.name;
+  const base = editing ? (editEntry.base || { kcal: editEntry.kcal, p: editEntry.p, f: editEntry.f, c: editEntry.c }) : { kcal: recipe.kcal, p: recipe.p, f: recipe.f, c: recipe.c };
+  const hour = new Date().getHours();
+  const defMeal = hour < 11 ? "בוקר" : hour < 16 ? "צהריים" : hour < 21 ? "ערב" : "נשנושים";
+  const [meal, setMeal] = useState(editing ? editEntry.meal : defMeal);
+  const [servings, setServings] = useState(editing ? (editEntry.servings || 1) : 1);
+  const n = { kcal: Math.round(base.kcal * servings), p: Math.round(base.p * servings), f: Math.round(base.f * servings), c: Math.round(base.c * servings) };
+  const save = () => onSave({ meal, name, source: "verified", unit: "serving", servings, base, kcal: n.kcal, p: n.p, f: n.f, c: n.c }, editing ? editEntry.id : null);
+  const stat = (label, value, color) => (
+    <div style={{ flex: 1, textAlign: "center", padding: "8px 4px" }}>
+      <div style={{ fontSize: 17, fontWeight: 700, color }}>{value}</div>
+      <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+  return (
+    <SheetShell title={editing ? "עריכת מנה" : "הוספה ליומן"} onClose={onClose}>
+      <div style={{ fontSize: 16, fontWeight: 600, color: C.ink, marginBottom: 16, lineHeight: 1.35 }}>{name}</div>
+
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 7 }}>שיוך לארוחה</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 18 }}>
+        {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.brand : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+      </div>
+
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>כמות מנות</div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+        <Stepper value={servings} set={setServings} step={0.5} min={0.5} suffix={servings === 1 ? "מנה" : "מנות"} />
+      </div>
+
+      <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 18 }}>
+        {stat("קלוריות", n.kcal, C.brand)}
+        <div style={{ width: 1, background: C.line }} />
+        {stat("חלבון (ג׳)", n.p, C.macroP)}
+        <div style={{ width: 1, background: C.line }} />
+        {stat("שומן (ג׳)", n.f, C.macroF)}
+        <div style={{ width: 1, background: C.line }} />
+        {stat("פחמ׳ (ג׳)", n.c, C.macroC)}
+      </div>
+
+      <div style={{ marginBottom: editing ? 10 : 0 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> {editing ? "עדכן" : "הוסף ליומן"}</Btn></div>
+      {editing && <Btn variant="ghost" onClick={onDelete}>מחק פריט</Btn>}
+    </SheetShell>
   );
 }
 
@@ -880,8 +920,15 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
       <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.6, marginTop: 8 }}>הרגישויות שלך מוזנות ל-AI כדי להימנע מהמלצות בעייתיות. עדיין — בדקי רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
 
       <div style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12 }}>
-        <div style={{ fontSize: 13, color: C.brandD, marginBottom: 8 }}>יעד קלורי יומי</div>
-        <div style={{ fontSize: 26, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 15 }}>קק״ל</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <span style={{ fontSize: 13, color: C.brandD }}>יעד קלורי יומי</span>
+          {profile.calorieOverride
+            ? <span onClick={() => setProfile({ ...profile, calorieOverride: null })} style={{ fontSize: 12, color: C.brandD, textDecoration: "underline", cursor: "pointer" }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</span>
+            : <span style={{ fontSize: 12, color: C.sub }}>מומלץ</span>}
+        </div>
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <Mini value={profile.calorieOverride || targets.targetKcal} set={(v) => setProfile({ ...profile, calorieOverride: Math.max(1000, v) })} step={10} suffix="קק״ל" />
+        </div>
       </div>
       {programWeekFor(profile.startDate, TODAY) >= MACRO_UNLOCK.week && <MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline />}
       <div style={{ marginTop: 16 }}><Btn>שמור שינויים</Btn></div>
@@ -1358,15 +1405,15 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
         </div>
         {step === "method" && (
           <>
-            {[{ ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", tag: "מומלץ", tagBg: C.brandBg, tagC: C.brandD, go: () => setStep("barcode") },
-              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", go: () => setStep("list") },
-              { ic: Camera, t: "צילום ארוחה", s: "המהיר ביותר", tag: "מהיר", tagBg: C.infoBg, tagC: C.info, go: () => setStep("photo") },
-              { ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", tagBg: C.infoBg, tagC: C.info, go: () => setStep("ai") },
-              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת — בהקשה אחת", go: () => setStep("history") }].map((o) => (
-              <div key={o.t} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
-                <o.ic size={26} color={C.brand} />
-                <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{o.t}</div><div style={{ fontSize: 13, color: C.sub }}>{o.s}</div></div>
-                {o.tag && <span style={{ fontSize: 12, background: o.tagBg, color: o.tagC, padding: "3px 9px", borderRadius: 7 }}>{o.tag}</span>}
+            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", bg: C.infoBg, color: C.info, go: () => setStep("ai") },
+              { ic: Camera, t: "צילום ארוחה", s: "המהיר ביותר", tag: "מהיר", bg: C.amberBg, color: C.amber, go: () => setStep("photo") },
+              { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
+              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת — בהקשה אחת", bg: C.waterBg, color: C.water, go: () => setStep("history") },
+              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") }].map((o) => (
+              <div key={o.t} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
+                <div style={{ width: 46, height: 46, borderRadius: 13, background: o.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 3px 9px ${o.color}55` }}><o.ic size={23} color="#fff" strokeWidth={2.2} /></div>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 600, color: C.ink }}>{o.t}</div><div style={{ fontSize: 13, color: C.sub }}>{o.s}</div></div>
+                {o.tag && <span style={{ fontSize: 12, background: C.panel, color: o.color, padding: "3px 10px", borderRadius: 8, fontWeight: 500 }}>{o.tag}</span>}
               </div>
             ))}
             <div style={{ fontSize: 13, color: C.faint, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /> <span>ברקוד וחיפוש מדויקים יותר מצילום. בצילום נאשר את הכמות יחד.</span></div>
@@ -1570,8 +1617,6 @@ function EntryMenu({ onClose, onPick, waterOpen }) {
     { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת" },
     { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי" },
     ...(waterOpen ? [{ id: "water", ic: Droplet, t: "הוספת מים", s: "כוס מים (250 מ\"ל)" }] : []),
-    { id: "weight", ic: TrendingDown, t: "עדכון משקל", s: "" },
-    { id: "calorie", ic: Target, t: "עדכון יעד קלורי ליום", s: "" },
   ];
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 26 }} onClick={onClose}>
@@ -2032,7 +2077,7 @@ export default function App() {
 
   const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "" }); setWeights(makeWeightSeed(p.weightKg)); setOnboarded(true); };
   const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
-  const editEntry = (e) => setModal({ kind: "food", preMeal: null, editEntry: e });
+  const editEntry = (e) => setModal(e.unit === "serving" ? { kind: "recipe", recipe: null, editEntry: e } : { kind: "food", preMeal: null, editEntry: e });
   const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
   const commit = (payload) => {
     const date = modal?.editEntry ? modal.editEntry.date : selectedDate;
@@ -2056,7 +2101,12 @@ export default function App() {
     }
     setModal(null);
   };
-  const addRecipe = (r) => { const h = new Date().getHours(); const meal = h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; setLog((l) => [...l, { id: "n" + Date.now(), date: selectedDate, meal, name: r.name, g: 1, source: "verified", kcal: r.kcal, p: r.p, f: r.f, c: r.c }]); };
+  const addRecipe = (r) => setModal({ kind: "recipe", recipe: r, editEntry: null });
+  const saveRecipe = (payload, editId) => {
+    if (editId) setLog((l) => l.map((x) => x.id === editId ? { ...x, ...payload } : x));
+    else setLog((l) => [...l, { id: "n" + Date.now(), date: selectedDate, ...payload }]);
+    setModal(null);
+  };
   const addActivity = (a) => { setActivityLog((l) => [...l, { id: "a" + Date.now(), date: selectedDate, name: a.name, kcal: Math.round(a.kcal) }]); setSheet(null); };
   const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
@@ -2080,10 +2130,12 @@ export default function App() {
     else if (id === "calorie") setSheet("calorie");
   };
 
+  const sweetsOpen = unlockedOn(profile.startDate, TODAY, SWEETS_UNLOCK);
   const tabs = [
     { id: "day", ic: Home, label: "יומן" },
     { id: "report", ic: TrendingDown, label: "דוח" },
     { id: "recipes", ic: ChefHat, label: "מתכונים" },
+    ...(sweetsOpen ? [{ id: "sweets", ic: Cookie, label: "מתוקים" }] : []),
     { id: "profile", ic: User, label: "פרופיל" },
   ];
 
@@ -2121,6 +2173,7 @@ export default function App() {
               {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} />}
+              {tab === "sweets" && <RecipesScreen addRecipe={addRecipe} items={SWEETS} title="מתוקים" subtitle="הפינה המתוקה של מיי פריים — פינוקים מתוקים עם כמה שפחות סוכר, ועם חלבון לערך מוסף. כדאי להגביל לכמות שנקבעה מראש." />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>
@@ -2141,7 +2194,9 @@ export default function App() {
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
             {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
-            {modal && <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />}
+            {modal && (modal.kind === "recipe"
+              ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
+              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />)}
           </>
         )}
         {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
