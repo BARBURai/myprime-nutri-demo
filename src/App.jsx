@@ -231,7 +231,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.34";
+const VERSION = "0.36";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -822,13 +822,17 @@ async function aiMealChat(messages, ctx) {
   const proteinRule = ctx.proteinFocus
     ? "אם רלוונטי אפשר להזכיר חלבון בעדינות."
     : "חשוב מאוד: בשלב הזה של התוכנית אל תדגישי חלבון, מאקרו או גרמים — דברי על ארוחות מאוזנות, משביעות וקלות להכנה.";
+  const estimateRule = ctx.proteinFocus
+    ? "לכל רעיון הוסיפי בסוף השורה הערכה קצרה בסוגריים: קלוריות וגרמים של חלבון/שומן/פחמימה. למשל: (~350 קק״ל · חלבון 30 / שומן 12 / פחמ׳ 20). הדגישי שאלו הערכות מקורבות."
+    : "לכל רעיון אפשר להוסיף הערכת קלוריות מקורבת בלבד בסוגריים (למשל: ~350 קק״ל), בלי לפרט חלבון/שומן/פחמימה או גרמים.";
   const system =
     "את היועצת של MyPrime, מדברת עברית בגוף שני נקבה. הטון: חברה חמה ואכפתית שמדברת, לא משווקת שמוכרת — אישי, פשוט ומעודד. " +
     "המטרה: לעזור לה להחליט מה לאכול עכשיו, לפי מה שנשאר לה היום ומה שיש לה בבית. " +
     proteinRule + " " +
     "הציעי 2-3 רעיונות מעשיים, ים-תיכוניים וזמינים בישראל, שמתאימים לקלוריות שנותרו. שמרי על תשובות קצרות (2-4 משפטים). " +
+    estimateRule + " " +
     "תמיד סיימי בשאלה עדינה — מה היא חושבת, או אם יש לה את המצרכים. אם חסר לה מצרך (למשל אין סלמון) — הציעי מיד חלופה זמינה ופשוטה. " +
-    "אם היא רוצה לדבר עם בן אדם / מאמנת / מישהי מהצוות — הגיבי בחום, הרגיעי אותה שהיא לא לבד, והציעי להעביר את הפנייה לצוות MyPrime שיחזרו אליה. " +
+    "אל תפני אותה לדבר עם אדם, מאמנת או צוות, ואל תציעי ליצור קשר או להעביר פנייה לאף אחד — את כאן כדי לעזור עם האוכל והתזונה בלבד. " +
     "אל תיתני ייעוץ רפואי. החזירי טקסט רגיל בלבד (לא JSON, בלי סימוני קוד).";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -838,6 +842,27 @@ async function aiMealChat(messages, ctx) {
   if (!res.ok || data.error || !Array.isArray(data.content)) return { error: true, text: "" };
   const text = (data.content || []).map((i) => i.text || "").join("").trim();
   return { text };
+}
+
+/* Detect NEW dietary preferences / dislikes / sensitivities the user states mid-chat,
+   so we can offer to save them to her profile (with confirmation). */
+async function extractPreferences(userText, existing) {
+  try {
+    const sys = "המשתמשת כותבת לעוזרת תזונה. חלצי אך ורק העדפות תזונה חדשות, מאכלים שהיא לא אוהבת/לא רוצה, או רגישויות/אלרגיות שהיא מזכירה — שעדיין לא קיימים ברשימה הקיימת: "
+      + ((existing && existing.length) ? existing.join(", ") : "(ריק)")
+      + ". החזירי JSON בלבד, בלי טקסט נוסף ובלי סימוני קוד: {\"diet\":[],\"avoid\":[]}. diet = סגנונות תזונה בלבד (צמחוני/טבעוני/כשר/דל פחמימה/ים-תיכוני). avoid = מאכלים או רכיבים להימנע מהם (כולל רגישויות, אלרגיות, ולא-אוהבת). אם אין שום דבר חדש, החזירי {\"diet\":[],\"avoid\":[]}.";
+    const res = await fetch(AI_ENDPOINT, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 200, system: sys, messages: [{ role: "user", content: userText }] }),
+    });
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data.content)) return { diet: [], avoid: [] };
+    const raw = (data.content || []).map((i) => i.text || "").join("");
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) return { diet: [], avoid: [] };
+    const obj = JSON.parse(m[0]);
+    return { diet: Array.isArray(obj.diet) ? obj.diet : [], avoid: Array.isArray(obj.avoid) ? obj.avoid : [] };
+  } catch (e) { return { diet: [], avoid: [] }; }
 }
 
 async function searchIsraeliDB(q) {
@@ -1500,6 +1525,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
+  const [pending, setPending] = useState(null);
   const endRef = useRef(null);
   const inputRef = useRef(null);
   useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
@@ -1536,6 +1562,18 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     if (!text || loading) return;
     const next = [...msgs, { role: "user", content: text }];
     setMsgs(next); setInput(""); run(next);
+    const existing = [...diet, ...allergies, ...(dislikes ? dislikes.split(/[,،]/).map((s) => s.trim()).filter(Boolean) : [])];
+    extractPreferences(text, existing).then((p) => { if ((p.diet && p.diet.length) || (p.avoid && p.avoid.length)) setPending(p); });
+  };
+  const savePending = () => {
+    if (!pending) return;
+    const dietIds = DIET_OPTIONS.map((d) => d.id);
+    const newDiet = (pending.diet || []).filter((d) => dietIds.includes(d) && !diet.includes(d));
+    const newAllerg = (pending.avoid || []).filter((a) => SENSITIVITY_OPTIONS.includes(a) && !allergies.includes(a));
+    const restAvoid = (pending.avoid || []).filter((a) => !SENSITIVITY_OPTIONS.includes(a));
+    const newDislikes = [dislikes, ...restAvoid].filter(Boolean).join(", ");
+    setProfile({ ...profile, diet: [...diet, ...newDiet], allergies: [...allergies, ...newAllerg], dislikes: newDislikes });
+    setPending(null);
   };
 
   const visible = msgs.slice(1); // hide the synthetic opening prompt
@@ -1576,7 +1614,16 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
             <span onClick={() => sendText("תני לי בבקשה רעיון אחר")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>רעיון אחר</span>
             <span onClick={() => sendText("אין לי את המצרכים האלה בבית")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אין לי את זה</span>
-            <span onClick={() => sendText("אני רוצה לדבר עם מישהי מהצוות")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>לדבר עם מישהי</span>
+          </div>
+        )}
+
+        {pending && (
+          <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+            <div style={{ fontSize: 13, color: C.ink, marginBottom: 8, lineHeight: 1.5 }}>לשמור את זה להעדפות שלך לפעמים הבאות? <b>{[...(pending.diet || []), ...(pending.avoid || [])].join(", ")}</b></div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={savePending} style={{ border: "none", background: C.brand, color: "#fff", fontFamily: fontStack, fontSize: 13, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>שמרי</button>
+              <button onClick={() => setPending(null)} style={{ border: `1px solid ${C.line}`, background: "transparent", color: C.sub, fontFamily: fontStack, fontSize: 13, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>לא עכשיו</button>
+            </div>
           </div>
         )}
 
