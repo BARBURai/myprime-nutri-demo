@@ -228,7 +228,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.53";
+const VERSION = "0.54";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -985,6 +985,35 @@ async function extractPreferences(userText, existing) {
   } catch (e) { return { diet: [], avoid: [] }; }
 }
 
+// Immediate, offline detection of diet/sensitivity keywords so the "save to profile"
+// offer always appears even if the AI extraction is slow or fails.
+function localPrefs(text, existing) {
+  const t = text || "";
+  const ex = (existing || []).map((x) => String(x));
+  const diet = [];
+  const dietMap = [
+    ["צמחוני", /צמחונ/],
+    ["טבעוני", /טבעונ/],
+    ["כשר", /כשר/],
+    ["דל פחמימה", /דל[ת]? ?פחמימ|לואו ?קארב|low ?carb/i],
+    ["ים-תיכוני", /ים[- ]?תיכונ/],
+  ];
+  for (const [id, re] of dietMap) if (re.test(t) && !ex.includes(id)) diet.push(id);
+  const avoid = [];
+  const avoidMap = [
+    ["גלוטן", /גלוטן/],
+    ["חלב / לקטוז", /לקטוז|בלי חלב|ללא חלב|רגיש\S* לחלב/],
+    ["ביצים", /בלי ביצים|ללא ביצים|רגיש\S* לביצים/],
+    ["אגוזים", /אגוזים/],
+    ["בוטנים", /בוטנים/],
+    ["סויה", /סויה/],
+    ["דגים", /בלי דגים|ללא דגים|רגיש\S* לדג/],
+    ["שומשום", /שומשום/],
+  ];
+  for (const [id, re] of avoidMap) if (re.test(t) && !ex.includes(id)) avoid.push(id);
+  return { diet, avoid };
+}
+
 async function searchIsraeliDB(q) {
   const res = await fetch(`/api/il-food?q=${encodeURIComponent(q)}`);
   if (!res.ok) return [];
@@ -1735,7 +1764,13 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     const next = [...msgs, { role: "user", content: text }];
     setMsgs(next); setInput(""); run(next);
     const existing = [...diet, ...allergies, ...(dislikes ? dislikes.split(/[,،]/).map((s) => s.trim()).filter(Boolean) : [])];
-    extractPreferences(text, existing).then((p) => { if ((p.diet && p.diet.length) || (p.avoid && p.avoid.length)) setPending(p); });
+    const local = localPrefs(text, existing);
+    if (local.diet.length || local.avoid.length) setPending(local);
+    extractPreferences(text, existing).then((p) => {
+      const mDiet = [...new Set([...local.diet, ...((p.diet || []).filter((d) => !existing.includes(d)))])];
+      const mAvoid = [...new Set([...local.avoid, ...((p.avoid || []).filter((a) => !existing.includes(a)))])];
+      if (mDiet.length || mAvoid.length) setPending({ diet: mDiet, avoid: mAvoid });
+    });
   };
   const savePending = () => {
     if (!pending) return;
@@ -1802,6 +1837,12 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       ) : stage === "log" ? (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {visible.map((m, i) => (
+            <div key={"sug" + i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8, opacity: 0.5 }}>
+              <div style={{ maxWidth: "84%", fontSize: 14, lineHeight: 1.5, padding: "9px 12px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+            </div>
+          ))}
+          {visible.length > 0 && <div style={{ textAlign: "center", fontSize: 12, color: C.faint, margin: "2px 0 12px" }}>— מוסיפים ליומן —</div>}
           {logMsgs.slice(1).map((m, i) => (
             <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
               <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
@@ -2085,12 +2126,12 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", background: "transparent", cursor: "pointer", color: active ? C.brand : C.faint, fontWeight: active ? 500 : 400 }}><t.ic size={21} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 14px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
               })}
               <button onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
               {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", background: "transparent", cursor: "pointer", color: active ? C.brand : C.faint, fontWeight: active ? 500 : 400 }}><t.ic size={21} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 14px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
               })}
             </div>
 
