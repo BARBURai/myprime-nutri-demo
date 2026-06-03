@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { BrowserMultiFormatReader } from "@zxing/browser";
+import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -182,7 +183,15 @@ function unlockedOn(startDate, onDate, u) {
 const MACRO_UNLOCK = { week: 3, day: 4 };
 const WATER_UNLOCK = { week: 3, day: 2 };
 const FIBER_TARGET = 25;
-const DIET_OPTIONS = ["צמחוני", "טבעוני", "ללא גלוטן", "ללא לקטוז", "כשר", "דל פחמימה"];
+const DIET_OPTIONS = [
+  { id: "הכל", emoji: "🍽️" },
+  { id: "צמחוני", emoji: "🥗" },
+  { id: "טבעוני", emoji: "🌱" },
+  { id: "כשר", emoji: "✡️" },
+  { id: "דל פחמימה", emoji: "🥑" },
+  { id: "ים-תיכוני", emoji: "🫒" },
+];
+const SENSITIVITY_OPTIONS = ["גלוטן", "חלב / לקטוז", "ביצים", "אגוזים", "בוטנים", "סויה", "דגים", "שומשום"];
 function streakDays(log) {
   const has = (d) => log.some((e) => e.date === d);
   let n = 0, d = TODAY;
@@ -221,7 +230,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.24";
+const VERSION = "0.30";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -306,6 +315,7 @@ function Btn({ children, onClick, variant = "solid", disabled, style = {} }) {
 }
 function SrcBadge({ source }) {
   if (source === "estimated") return <span style={{ fontSize: 12, background: C.amberBg, color: C.amber, padding: "2px 7px", borderRadius: 5 }}>מוערך</span>;
+  if (source === "db") return <span style={{ fontSize: 12, background: "#E7F4EC", color: "#1E8449", padding: "2px 7px", borderRadius: 5 }}>מהמאגר</span>;
   return null;
 }
 function Header({ title, onBack }) {
@@ -338,8 +348,11 @@ function Onboarding({ onFinish, name }) {
   const [goalKg, setGoalKg] = useState(66);
   const [agree, setAgree] = useState(false);
   const [startDate, setStartDate] = useState(sundayOf(TODAY));
+  const [diet, setDiet] = useState([]);
+  const [allergies, setAllergies] = useState([]);
+  const [dislikes, setDislikes] = useState("");
 
-  const draft = { age, heightCm, weightKg, activity: "בינונית", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, diet: [], dislikes: "" };
+  const draft = { age, heightCm, weightKg, activity: "בינונית", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, diet, allergies, dislikes };
   const targets = computeTargets(draft);
   const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
@@ -354,7 +367,7 @@ function Onboarding({ onFinish, name }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "10px 20px 16px" }}>
         <div style={{ display: "flex", gap: 6, margin: "6px 0 8px" }}>
-          {[0, 1, 2].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
+          {[0, 1, 2, 3].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
         </div>
         <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginBottom: 6 }}>v{VERSION}</div>
         <div style={{ textAlign: "center", marginBottom: 12 }}>
@@ -398,6 +411,39 @@ function Onboarding({ onFinish, name }) {
         )}
 
         {step === 2 && (
+          <>
+            <span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>איך את אוכלת?</span>
+            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 16 }}>בחרי את סגנון התזונה שלך — אפשר לבחור יותר מאחד. זה יעזור לי להתאים לך המלצות.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 22 }}>
+              {DIET_OPTIONS.map((d) => {
+                const on = diet.includes(d.id);
+                return (
+                  <div key={d.id} onClick={() => setDiet(on ? diet.filter((x) => x !== d.id) : [...diet, d.id])} style={{ width: 92, textAlign: "center", cursor: "pointer" }}>
+                    <div style={{ width: 72, height: 72, borderRadius: "50%", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, background: on ? C.brandBg : C.bg, border: `2px solid ${on ? C.brand : C.line}`, transition: "all .15s" }}>{d.emoji}</div>
+                    <span style={{ fontSize: 14, color: on ? C.brandD : C.sub, fontWeight: on ? 600 : 400 }}>{d.id}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 4 }}>רגישויות ואלרגיות</div>
+            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>סמני מה שחשוב להימנע ממנו — אדאג שההמלצות יתחשבו בזה.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+              {SENSITIVITY_OPTIONS.map((s) => {
+                const on = allergies.includes(s);
+                return (<span key={s} onClick={() => setAllergies(on ? allergies.filter((x) => x !== s) : [...allergies, s])} style={{ fontSize: 14, padding: "7px 14px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+              })}
+            </div>
+            <input value={dislikes} onChange={(e) => setDislikes(e.target.value)} placeholder="עוד משהו? (למשל: בלי חריף, בלי קצף חלב)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
+
+            <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, background: C.bg, borderRadius: 10, padding: 10 }}>
+              <Info size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>אשתדל להתאים את ההמלצות לרגישויות שלך, אבל תמיד כדאי לבדוק רכיבים בעצמך. האפליקציה היא כלי עזר ולא תחליף לייעוץ רפואי — אם יש לך אלרגיה ממשית, אל תסתמכי רק עליה.</span>
+            </div>
+          </>
+        )}
+
+        {step === 3 && (
           <>
             <span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>התוכנית שלך</span>
             <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 12 }}>
@@ -444,7 +490,7 @@ function Onboarding({ onFinish, name }) {
 
       <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", gap: 10, alignItems: "center" }}>
         {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
-        {step < 2 ? (<Btn onClick={() => setStep(step + 1)}>המשך</Btn>) : (<Btn disabled={!agree} onClick={() => onFinish(draft)}>בואי נתחיל</Btn>)}
+        {step < 3 ? (<Btn onClick={() => setStep(step + 1)}>המשך</Btn>) : (<Btn disabled={!agree} onClick={() => onFinish(draft)}>בואי נתחיל</Btn>)}
       </div>
     </div>
   );
@@ -474,7 +520,7 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
         <div style={{ minWidth: 0 }}>
           {userName && userName.trim() && <div style={{ fontSize: 15, color: C.brandD, fontWeight: 600 }}>היי {userName.trim()} 👋</div>}
           <div style={{ fontSize: 14, color: C.sub, fontWeight: 500, marginTop: 1 }}>
-            {relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD }}> · שבוע {week}</span> : null}
+            {date !== TODAY && relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD }}> · שבוע {week}</span> : null}
           </div>
         </div>
         {streak > 0
@@ -488,10 +534,13 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
         {days.map((d) => {
           const sel = d === date; const isToday = d === TODAY; const has = log.some((e) => e.date === d); const dd = new Date(d);
           return (
-            <button key={d} ref={isToday ? todayRef : null} onClick={() => setDate(d)} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, padding: "7px 0", background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: sel ? "#fff" : C.ink, cursor: "pointer", textAlign: "center" }}>
-              <div style={{ fontSize: 13, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
-              <div style={{ fontSize: 17, fontWeight: 700, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
-              <div style={{ width: 5, height: 5, borderRadius: "50%", margin: "0 auto", background: has ? (sel ? "#fff" : C.brand) : "transparent" }} />
+            <button key={d} ref={isToday ? todayRef : null} onClick={() => setDate(d)} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, overflow: "hidden", padding: 0, background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: sel ? "#fff" : C.ink, cursor: "pointer", textAlign: "center" }}>
+              {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
+              <div style={{ padding: "7px 0" }}>
+                <div style={{ fontSize: 13, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
+                <div style={{ width: 5, height: 5, borderRadius: "50%", margin: "0 auto", background: has ? (sel ? "#fff" : C.brand) : "transparent" }} />
+              </div>
             </button>
           );
         })}
@@ -657,7 +706,7 @@ function RecipesScreen({ addRecipe }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, onReset }) {
+function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
   const Row = ({ label, children }) => (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 15, padding: "11px 0", borderTop: `1px solid ${C.line}` }}>
       <span style={{ color: C.sub }}>{label}</span>
@@ -676,8 +725,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset }) {
     <div style={{ padding: "8px 16px 16px" }}>
       <Header title="פרופיל" />
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>{(profile.name || "♥").trim().charAt(0)}</div>
-        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{profile.name || "משתמשת"}</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
+        <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>{((profile.name || userName || "").trim().charAt(0)) || "♥"}</div>
+        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
       </div>
       <Row label="גיל"><Mini value={profile.age} set={(v) => setProfile({ ...profile, age: Math.max(18, v) })} /></Row>
       <Row label="גובה"><Mini value={profile.heightCm} set={(v) => setProfile({ ...profile, heightCm: v })} suffix="ס״מ" /></Row>
@@ -693,20 +742,28 @@ function ProfileScreen({ profile, setProfile, targets, onReset }) {
       </Row>
       <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>את/ה כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
 
-      <div style={{ fontSize: 13, color: C.sub, marginTop: 18, marginBottom: 8 }}>העדפות תזונה (משמשות להמלצות)</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+      <div style={{ fontSize: 13, color: C.sub, marginTop: 18, marginBottom: 8 }}>סגנון תזונה (משמש להמלצות)</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
         {DIET_OPTIONS.map((d) => {
-          const on = (profile.diet || []).includes(d);
-          return (<span key={d} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d) : [...(profile.diet || []), d] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d}</span>);
+          const on = (profile.diet || []).includes(d.id);
+          return (<span key={d.id} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d.id) : [...(profile.diet || []), d.id] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
         })}
       </div>
-      <input value={profile.dislikes || ""} onChange={(e) => setProfile({ ...profile, dislikes: e.target.value })} placeholder="לא אוהבת / אלרגיות (למשל: בלי אגוזים, בלי דגים)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>רגישויות ואלרגיות (להימנע)</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        {SENSITIVITY_OPTIONS.map((s) => {
+          const on = (profile.allergies || []).includes(s);
+          return (<span key={s} onClick={() => setProfile({ ...profile, allergies: on ? (profile.allergies || []).filter((x) => x !== s) : [...(profile.allergies || []), s] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+        })}
+      </div>
+      <input value={profile.dislikes || ""} onChange={(e) => setProfile({ ...profile, dislikes: e.target.value })} placeholder="עוד משהו? (למשל: בלי חריף, בלי קצף חלב)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+      <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.6, marginTop: 8 }}>הרגישויות שלך מוזנות ל-AI כדי להימנע מהמלצות בעייתיות. עדיין — בדקי רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
 
       <div style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: C.brandD, marginBottom: 8 }}>יעד קלורי יומי</div>
         <div style={{ fontSize: 26, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 15 }}>קק״ל</span></div>
       </div>
-      <MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline />
+      {programWeekFor(profile.startDate, TODAY) >= MACRO_UNLOCK.week && <MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline />}
       <div style={{ marginTop: 16 }}><Btn>שמור שינויים</Btn></div>
       <div style={{ marginTop: 10 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
       <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
@@ -718,7 +775,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset }) {
    AI MEAL ANALYSIS (demo) — sends photo to Claude for estimation
    ============================================================ */
 async function analyzeMeal(base64, mediaType) {
-  const prompt = "בתמונה מופיעה ארוחה. זהה את פריטי המזון, והערך לכל פריט כמות בגרמים וערכים תזונתיים סבירים. החזר JSON בלבד, ללא טקסט נוסף וללא סימוני קוד, במבנה: {\"items\":[{\"name\":\"שם בעברית\",\"grams\":0,\"kcal\":0,\"protein\":0,\"fat\":0,\"carbs\":0}]}";
+  const prompt = "בתמונה מופיעה ארוחה או מוצר מזון. אם מופיעה תווית ערכים תזונתיים על האריזה — קרא את הערכים מהתווית (לפי הכמות שבאריזה, או ל-100 גרם) במקום לנחש. אחרת, זהה את פריטי המזון והערך לכל פריט כמות בגרמים וערכים תזונתיים סבירים. החזר JSON בלבד, ללא טקסט נוסף וללא סימוני קוד, במבנה: {\"items\":[{\"name\":\"שם בעברית\",\"grams\":0,\"kcal\":0,\"protein\":0,\"fat\":0,\"carbs\":0}]}";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: prompt }] }] }),
@@ -816,6 +873,41 @@ async function searchOpenFoodFacts(q) {
     if (out.length >= 12) break;
   }
   return out;
+}
+
+/* Reconcile AI-identified items against the product databases (by name).
+   Name search is fuzzier than a barcode (no unique id), so we only accept a
+   STRONG match; otherwise the AI estimate is kept. */
+function normName(s) { return String(s || "").replace(/["'.,()\[\]/–-]/g, " ").replace(/\s+/g, " ").trim().toLowerCase(); }
+function strongMatch(aiName, dbName) {
+  const a = normName(aiName), b = normName(dbName);
+  if (!a || !b) return false;
+  if (b.includes(a) || a.includes(b)) return true;
+  const at = new Set(a.split(" ").filter((w) => w.length >= 2));
+  const bt = b.split(" ").filter((w) => w.length >= 2);
+  let hit = 0; for (const w of bt) if (at.has(w)) hit++;
+  return at.size > 0 && hit >= Math.min(2, at.size);
+}
+async function lookupProduct(name) {
+  let results = [];
+  try { results = results.concat(await searchIsraeliDB(name)); } catch (e) {}
+  try { results = results.concat(await searchOpenFoodFacts(name)); } catch (e) {}
+  for (const r of results) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return r;
+  return null;
+}
+async function reconcileWithDb(items) {
+  return Promise.all((items || []).map(async (it) => {
+    try {
+      const m = await lookupProduct(it.name);
+      if (m) {
+        const scale = (it.grams || 100) / 100;
+        return { ...it, source: "db", matched: m.name,
+          kcal: Math.round(m.per100.kcal * scale), p: Math.round((m.per100.p || 0) * scale),
+          f: Math.round((m.per100.f || 0) * scale), c: Math.round((m.per100.c || 0) * scale) };
+      }
+    } catch (e) {}
+    return { ...it, source: "estimated" };
+  }));
 }
 
 function IntroOverlay({ onClose }) {
@@ -920,8 +1012,18 @@ function AddModal({ state, close, commit, removeAndClose }) {
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiDoneItems, setAiDoneItems] = useState(null);
+  const [reconciling, setReconciling] = useState(false);
+  const finishItems = (items) => {
+    setAiDoneItems(items.map((it) => ({ ...it, source: it.source || "estimated" })));
+    setReconciling(true);
+    reconcileWithDb(items).then((enriched) => setAiDoneItems(enriched)).catch(() => {}).finally(() => setReconciling(false));
+  };
   const recRef = useRef(null);
   const [aiListening, setAiListening] = useState(false);
+  const aiInputRef = useRef(null);
+  const aiEndRef = useRef(null);
+  useEffect(() => { const el = aiInputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [aiInput, step]);
+  useEffect(() => { aiEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [aiMsgs, aiLoading, aiDoneItems]);
   const sendAi = async (textArg) => {
     const text = (textArg != null ? textArg : aiInput).trim();
     if (!text || aiLoading) return;
@@ -933,7 +1035,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
       const r = await aiNutritionChat(apiMsgs);
       setAiApi([...apiMsgs, { role: "assistant", content: r.raw }]);
       setAiMsgs((m) => [...m, { role: "assistant", text: r.reply }]);
-      if (r.done && r.items.length) setAiDoneItems(r.items);
+      if (r.done && r.items.length) finishItems(r.items);
     } catch (e) {
       setAiMsgs((m) => [...m, { role: "assistant", text: "יש תקלה זמנית בחיבור ל-AI. נסי שוב, או הוסיפי דרך חיפוש." }]);
     } finally { setAiLoading(false); }
@@ -944,14 +1046,14 @@ function AddModal({ state, close, commit, removeAndClose }) {
     setAiMsgs((m) => [...m, { role: "user", text: "📷 תמונת הארוחה", img: `data:${mediaType};base64,${base64}` }]);
     const apiMsgs = [...aiApi, { role: "user", content: [
       { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-      { type: "text", text: "זוהי תמונת הארוחה שלי. זהי מה יש בה ועזרי לי להעריך כמויות וערכים." },
+      { type: "text", text: "זוהי תמונת הארוחה שלי. זהי מה יש בה ועזרי לי להעריך כמויות וערכים. אם זו אריזת מוצר עם תווית ערכים תזונתיים — קראי את הערכים מהתווית במקום לנחש." },
     ] }];
     setAiLoading(true);
     try {
       const r = await aiNutritionChat(apiMsgs);
       setAiApi([...apiMsgs, { role: "assistant", content: r.raw }]);
       setAiMsgs((m) => [...m, { role: "assistant", text: r.reply }]);
-      if (r.done && r.items.length) setAiDoneItems(r.items);
+      if (r.done && r.items.length) finishItems(r.items);
     } catch (e) {
       setAiMsgs((m) => [...m, { role: "assistant", text: "יש תקלה זמנית בחיבור ל-AI. נסי שוב." }]);
     } finally { setAiLoading(false); }
@@ -998,9 +1100,12 @@ function AddModal({ state, close, commit, removeAndClose }) {
     let cancelled = false;
     (async () => {
       try {
-        const reader = new BrowserMultiFormatReader();
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.CODE_128, BarcodeFormat.ITF, BarcodeFormat.CODE_39]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        const reader = new BrowserMultiFormatReader(hints);
         const controls = await reader.decodeFromConstraints(
-          { video: { facingMode: "environment" } },
+          { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } },
           videoRef.current,
           (result) => { if (result) { stopScan(); lookupBarcode(result.getText()); } }
         );
@@ -1124,7 +1229,7 @@ function AddModal({ state, close, commit, removeAndClose }) {
             <div style={{ fontSize: 17, fontWeight: 500, color: C.ink, marginBottom: 6 }}>צלמי את הצלחת</div>
             <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>נפתח שיחה קצרה עם ה-AI — נזהה את הפריטים ונוכל לתקן כמויות יחד.</p>
             <label style={{ display: "block" }}>
-              <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
+              <input ref={fileRef} type="file" accept="image/*" onChange={onPhoto} style={{ display: "none" }} />
               <span style={{ display: "block", background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer" }}>פתחי מצלמה / בחרי תמונה</span>
             </label>
             <div style={{ fontSize: 12, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>הניתוח מבוצע ע״י בינה מלאכותית — ייתכן שתתבקשי להתחבר ל-Claude.</div>
@@ -1146,20 +1251,24 @@ function AddModal({ state, close, commit, removeAndClose }) {
                 <div style={{ border: `1px solid ${C.brand}`, borderRadius: 12, padding: 10, marginTop: 6 }}>
                   {aiDoneItems.map((it, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
-                      <span style={{ fontSize: 15, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source="estimated" /></span>
+                      <span style={{ fontSize: 15, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source={it.source || "estimated"} /></span>
                       <span style={{ fontSize: 14, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
                     </div>
                   ))}
+                  {reconciling
+                    ? <div style={{ fontSize: 12, color: C.faint, padding: "6px 0" }}>בודקת מול מאגר המוצרים…</div>
+                    : <div style={{ fontSize: 11, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז — סריקת ברקוד היא המדויקת ביותר.</div>}
                   <div style={{ fontSize: 12, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
-                  <Btn onClick={() => commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })))}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ליומן</Btn>
+                  <Btn onClick={() => commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })))}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ליומן</Btn>
                   <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setAiDoneItems(null)}>אני רוצה לשנות</Btn></div>
                 </div>
               )}
+              <div ref={aiEndRef} />
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
               <button onClick={startMic} disabled={aiLoading} className={aiListening ? "spin-pulse" : ""} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: aiListening ? C.brand : C.brandBg, color: aiListening ? "#fff" : C.brand, cursor: aiLoading ? "default" : "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Mic size={18} /></button>
-              <input value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendAi()} disabled={aiLoading} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel }} />
+              <textarea ref={aiInputRef} value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }} disabled={aiLoading} rows={1} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
               <button onClick={() => sendAi()} disabled={aiLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Send size={18} /></button>
             </div>
             <div style={{ fontSize: 12, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>
@@ -1322,11 +1431,12 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
   );
 }
 
-function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, mealsHad, proteinFocus, onClose }) {
+function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, allergies, mealsHad, proteinFocus, onClose }) {
+  const avoidList = [...(allergies || []), ...(dislikes ? [dislikes] : [])].filter(Boolean);
   const seed = `הקשר: נשארו לי כ-${Math.max(0, Math.round(remainingKcal))} קלוריות להיום`
     + (proteinFocus && remainingProtein > 0 ? `, ונותרו כ-${Math.round(remainingProtein)} ג׳ חלבון ליעד` : "")
-    + (diet && diet.length ? `. העדפות: ${diet.join(", ")}` : "")
-    + (dislikes ? `. להימנע מ: ${dislikes}` : "")
+    + (diet && diet.length ? `. סגנון תזונה: ${diet.join(", ")}` : "")
+    + (avoidList.length ? `. חשוב מאוד — יש לי רגישות/אלרגיה, ואסור בשום אופן להציע לי מאכלים שמכילים: ${avoidList.join(", ")}. אם רעיון כולל אחד מהם, אל תציעי אותו בכלל.` : "")
     + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
     + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
   const [msgs, setMsgs] = useState([{ role: "user", content: seed }]);
@@ -1334,6 +1444,8 @@ function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, meals
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
   const endRef = useRef(null);
+  const inputRef = useRef(null);
+  useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
   const ctx = { proteinFocus };
 
   const run = async (history) => {
@@ -1377,8 +1489,8 @@ function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, meals
           </div>
         )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
-          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendText(input)} disabled={loading} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel }} />
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+          <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(input); } }} disabled={loading} rows={1} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
           <button onClick={() => sendText(input)} disabled={loading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 }}><Send size={18} /></button>
         </div>
       </div>
@@ -1406,7 +1518,7 @@ function StreakCheer({ streak, name, onClose }) {
 }
 
 export default function App() {
-  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, diet: [], dislikes: "", name: "" };
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
@@ -1425,6 +1537,28 @@ export default function App() {
   const [gateEmail, setGateEmail] = useState("");
   const [gateName, setGateName] = useState("");
   const [gateMsg, setGateMsg] = useState("");
+
+  // Android/Samsung hardware "back": intercept so the app doesn't close instantly.
+  // Back first closes an open sheet/modal; otherwise it asks whether to leave.
+  const [showExit, setShowExit] = useState(false);
+  const modalRef = useRef(modal); modalRef.current = modal;
+  const sheetRef = useRef(sheet); sheetRef.current = sheet;
+  const exitRef = useRef(showExit); exitRef.current = showExit;
+  const leavingRef = useRef(false);
+  useEffect(() => {
+    try { window.history.pushState({ mp: 1 }, ""); } catch (e) {}
+    const onPop = () => {
+      if (leavingRef.current) return;
+      if (modalRef.current) setModal(null);
+      else if (sheetRef.current) setSheet(null);
+      else if (exitRef.current) setShowExit(false);
+      else setShowExit(true);
+      try { window.history.pushState({ mp: 1 }, ""); } catch (e) {}
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const confirmExit = () => { leavingRef.current = true; setShowExit(false); try { window.history.go(-2); } catch (e) {} };
 
   const checkAccess = async (em, nm) => {
     setGate("checking"); setGateMsg("");
@@ -1537,7 +1671,7 @@ export default function App() {
               {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.panel, flexShrink: 0 }}>
               {tabs.slice(0, 2).map((t) => {
@@ -1555,13 +1689,25 @@ export default function App() {
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} />}
             {sheet === "weight" && <WeightModal current={weights[weights.length - 1].kg} onClose={() => setSheet(null)} onAdd={addWeightValue} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
-            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} diet={profile.diet} dislikes={profile.dislikes} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onClose={() => setSheet(null)} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} diet={profile.diet} dislikes={profile.dislikes} allergies={profile.allergies} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onClose={() => setSheet(null)} />}
             {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {modal && <AddModal state={modal} close={() => setModal(null)} commit={commit} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />}
           </>
         )}
         {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {gate === "ok" && showIntro && <IntroOverlay onClose={() => setShowIntro(false)} />}
+        {showExit && (
+          <div onClick={() => setShowExit(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 50 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+              <div style={{ fontSize: 19, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לצאת מ-MyPrime?</div>
+              <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>אפשר להישאר ולהמשיך בדיוק מאיפה שעצרת.</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <Btn onClick={() => setShowExit(false)}>להישאר</Btn>
+                <Btn variant="ghost" onClick={confirmExit}>לצאת</Btn>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
