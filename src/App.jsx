@@ -12,7 +12,8 @@ import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
 const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
-const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "#";
+const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a4%d7%a8%d7%98%d7%99%d7%95%d7%aa/";
+const COOKIE_URL = import.meta.env.VITE_COOKIE_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a7%d7%95%d7%a7%d7%99%d7%96/";
 const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || "";
 function getDeviceId() {
   try {
@@ -231,7 +232,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.45";
+const VERSION = "0.48";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -497,11 +498,15 @@ function Onboarding({ onFinish, name }) {
 
             <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "4px 0 8px" }}>
               <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
-              <span style={{ fontSize: 14, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>תנאי השימוש ומדיניות הפרטיות</a></span>
+              <span style={{ fontSize: 14, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
             </div>
-            <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 4 }}>
-              <Lock size={13} style={{ flexShrink: 0, marginTop: 2 }} />
-              <span>כל הנתונים שאת מזינה נשמרים רק במכשיר שלך, ואינם נשמרים בשרתי החברה.</span>
+            <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.7 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                <Lock size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה.</span>
+              </div>
+              <div style={{ marginTop: 6 }}>החברה עושה שימוש באפליקציה בהתאם להוראות <a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a>.</div>
+              <div style={{ marginTop: 6 }}>ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> של החברה, כפי שמופיעה באתר.</div>
             </div>
           </>
         )}
@@ -1037,6 +1042,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
   const [dbResults, setDbResults] = useState([]);
   const [dbSource, setDbSource] = useState("il");
   const [searching, setSearching] = useState(false);
+  const [listTab, setListTab] = useState(favorites && favorites.length ? "history" : "search");
   useEffect(() => {
     const q = query.trim();
     if (!q || step !== "list") { setDbResults([]); setSearching(false); return; }
@@ -1236,44 +1242,59 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
         )}
         {step === "list" && (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 12, color: C.faint }}>
-              <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" style={{ border: "none", outline: "none", fontSize: 15, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
-            </div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
               {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
             </div>
-            {!query && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 2px" }}>{favorites && favorites.length ? "האחרונים שלך" : "אחרונים"}</div>}
-            {!query && (favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
-              const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
-              return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              {[{ id: "search", label: "חיפוש" }, { id: "history", label: "אחרונים" }].map((t) => (
+                <button key={t.id} onClick={() => setListTab(t.id)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${listTab === t.id ? C.brand : C.line}`, background: listTab === t.id ? C.brandBg : "transparent", color: listTab === t.id ? C.brandD : C.sub, fontSize: 14, fontWeight: listTab === t.id ? 600 : 400, fontFamily: fontStack, cursor: "pointer" }}>{t.label}</button>
+              ))}
+            </div>
+
+            {listTab === "search" && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 4, color: C.faint }}>
+                  <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 15, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
                 </div>
-              );
-            })}
-            {query && filtered.length > 0 && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
-            {query && filtered.map((f) => {
-              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
-              return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
-                </div>
-              );
-            })}
-            {query && <div style={{ fontSize: 13, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
-            {query && dbResults.map((f) => {
-              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
-              return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
-                </div>
-              );
-            })}
-            {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 14, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
-            {!query && <div style={{ fontSize: 12, color: C.faint, marginTop: 10, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת מוסיפה עם הכמות האחרונה — בלי להזין שוב</span></div>}
+                {query && filtered.length > 0 && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
+                {query && filtered.map((f) => {
+                  const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+                  return (
+                    <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                      <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                      <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                    </div>
+                  );
+                })}
+                {query && <div style={{ fontSize: 13, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
+                {query && dbResults.map((f) => {
+                  const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+                  return (
+                    <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                      <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                      <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                    </div>
+                  );
+                })}
+                {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 14, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
+                {!query && <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
+              </>
+            )}
+
+            {listTab === "history" && (
+              <>
+                {(favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
+                  const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
+                  return (
+                    <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                      <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                      <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 12, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת על + מוסיפה עם הכמות האחרונה — בלי להזין שוב</span></div>
+              </>
+            )}
           </>
         )}
         {step === "barcode" && (
@@ -1554,7 +1575,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
           {msg && <div style={{ fontSize: 13, color: C.amber, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}
           <div style={{ fontSize: 12, color: C.faint, marginTop: 18, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, textAlign: "right" }}>
             <Lock size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-            <span>כל הנתונים שאת מזינה נשמרים רק במכשיר שלך, ואינם נשמרים בשרתי החברה. <a href={PRIVACY_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a></span>
+            <span>כל הנתונים שאת מזינה נשמרים רק במכשיר שלך, ואינם נשמרים בשרתי החברה. <a href={PRIVACY_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> · <a href={COOKIE_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
           </div>
         </>
       )}
@@ -1830,6 +1851,8 @@ export default function App() {
   const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
   const resetDemo = () => {
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
+    setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg("");
     setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
     setLog([]); setWaterByDate({}); setActivityLog([]); setWeights(makeWeightSeed(DEFAULT_PROFILE.weightKg)); setSelectedDate(TODAY);
     setProfile(DEFAULT_PROFILE);
