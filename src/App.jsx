@@ -230,7 +230,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.57";
+const VERSION = "0.58";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -768,7 +768,9 @@ function RecipeDetail({ r, onBack, onAdd }) {
   );
 }
 
-function RecipesScreen({ addRecipe, items = RECIPES, title = "מתכונים", subtitle = "חוברת המתכונים של מיי פריים — עשירים בחלבון, דלים בפחמימות ומשולבים מזונות אנטי-דלקתיים." }) {
+function RecipesScreen({ addRecipe, sweetsOpen }) {
+  const [section, setSection] = useState("recipes");
+  const [seenSweets, setSeenSweets] = useState(false);
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState("הכל");
   const [query, setQuery] = useState("");
@@ -776,6 +778,19 @@ function RecipesScreen({ addRecipe, items = RECIPES, title = "מתכונים", s
   if (selected) {
     return <RecipeDetail r={selected} onBack={() => setSelected(null)} onAdd={addRecipe} />;
   }
+
+  const isSweets = section === "sweets";
+  const items = isSweets ? SWEETS : RECIPES;
+  const subtitle = isSweets
+    ? "הפינה המתוקה של מיי פריים — פינוקים מתוקים עם כמה שפחות סוכר, ועם חלבון לערך מוסף. כדאי להגביל לכמות שנקבעה מראש."
+    : "חוברת המתכונים של מיי פריים — עשירים בחלבון, דלים בפחמימות ומשולבים מזונות אנטי-דלקתיים.";
+  const goSection = (s) => { setSection(s); setFilter("הכל"); setQuery(""); if (s === "sweets") setSeenSweets(true); };
+  const segBtn = (s, label, icon) => (
+    <button onClick={() => goSection(s)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 6px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, background: section === s ? C.panel : "transparent", color: section === s ? C.brandD : C.sub, boxShadow: section === s ? "0 1px 4px rgba(168,66,92,0.14)" : "none" }}>
+      {icon}{label}
+      {s === "sweets" && !seenSweets && <span style={{ position: "absolute", top: 2, insetInlineEnd: 8, fontSize: 10, fontWeight: 600, background: C.brand, color: "#fff", padding: "1px 6px", borderRadius: 8 }}>חדש</span>}
+    </button>
+  );
 
   const cats = ["הכל", ...Array.from(new Set(items.map((r) => r.cat).filter(Boolean)))];
   const filtered = items.filter((r) => {
@@ -787,12 +802,20 @@ function RecipesScreen({ addRecipe, items = RECIPES, title = "מתכונים", s
 
   return (
     <div style={{ padding: "8px 16px 16px", position: "relative" }}>
-      <Header title={title} />
+      <Header title={isSweets ? "מתוקים" : "מתכונים"} />
+
+      {sweetsOpen && (
+        <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
+          {segBtn("recipes", "מתכונים", <ChefHat size={17} />)}
+          {segBtn("sweets", "מתוקים", <Cookie size={17} />)}
+        </div>
+      )}
+
       <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>{subtitle}</div>
 
       <div style={{ position: "relative", marginBottom: 12 }}>
         <Search size={16} style={{ position: "absolute", insetInlineStart: 12, top: 12, color: C.faint }} />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מתכון…" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 36px", fontSize: 14.5, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isSweets ? "חיפוש מתוק…" : "חיפוש מתכון…"} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 36px", fontSize: 14.5, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
@@ -2135,7 +2158,6 @@ export default function App() {
     { id: "day", ic: Home, label: "יומן" },
     { id: "report", ic: TrendingDown, label: "דוח" },
     { id: "recipes", ic: ChefHat, label: "מתכונים" },
-    ...(sweetsOpen ? [{ id: "sweets", ic: Cookie, label: "מתוקים" }] : []),
     { id: "profile", ic: User, label: "פרופיל" },
   ];
 
@@ -2172,8 +2194,7 @@ export default function App() {
             <div style={{ flex: 1, overflowY: "auto" }}>
               {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} />}
-              {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} />}
-              {tab === "sweets" && <RecipesScreen addRecipe={addRecipe} items={SWEETS} title="מתוקים" subtitle="הפינה המתוקה של מיי פריים — פינוקים מתוקים עם כמה שפחות סוכר, ועם חלבון לערך מוסף. כדאי להגביל לכמות שנקבעה מראש." />}
+              {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>

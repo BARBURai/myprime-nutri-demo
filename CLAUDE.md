@@ -75,7 +75,7 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.57`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.58`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -105,3 +105,9 @@ The "מתכונים" tab now renders the real MyPrime recipe booklet instead of 
 - The "+" menu (EntryMenu) already contains only מזון/פעילות/מים (no weight/calorie items); weight + daily-calorie editing live in ProfileScreen (משקל row + יעד קלורי block). Confirmed — no change needed there. (Dead WeightModal/CalorieGoalModal + onPickEntry weight/calorie cases remain, harmless.)
 - AddModal method chooser ("הוספת מזון") reordered: 1) ספרי לי מה אכלת (AI), 2) צילום ארוחה, 3) סריקת ברקוד (removed "מומלץ" tag), 4) האחרונים והמועדפים שלי, 5) חיפוש מזון (last). Restyled: each row a soft tinted background with a prominent 46px colored icon chip (white icon). Tints: AI=info, photo=amber, barcode=brand, recent=water, search=green(#E8F3EC/#4E9E76). Kept "חדש"/"מהיר" tags (now white chip w/ row color). NOTE: first-item assumption was AI — easy to swap if Ron meant another.
 - Onboarding consent: moved the "קראתי ואני מאשרת…" line + checkbox to the END (below the legal paragraph, above "בואי נתחיל", with a top divider). De-duplicated policy links — they now appear ONLY in the consent line; the long legal paragraph is plain text (no <a> links). (The separate privacy/cookie link pair in the food-add footer is unrelated and left as-is.)
+
+## v0.58 — Sweets as a top toggle inside Recipes (not a bottom-nav tab)
+- Reverted the bottom-nav "מתוקים" tab from v0.55. The bottom nav is back to 4 tabs (day, report, recipes, profile).
+- Sweets now live INSIDE the Recipes screen as a top segmented toggle: "מתכונים | מתוקים" (pill segmented control, panel bg on active). RecipesScreen takes `sweetsOpen` and manages an internal `section` state ("recipes"/"sweets") switching dataset (RECIPES/SWEETS), subtitle, search placeholder, and category chips.
+- The "מתוקים" segment only renders when `sweetsOpen` (week 3 day 5 / program day 19). When it appears it shows a small "חדש" badge; the badge disappears once the user taps the מתוקים segment (local `seenSweets` state). Icons: ChefHat / Cookie.
+- RecipesScreen no longer takes items/title/subtitle props; it is self-contained. Rendered once: `<RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />`.
