@@ -231,7 +231,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.37";
+const VERSION = "0.39";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1130,11 +1130,12 @@ function AddModal({ state, close, commit, removeAndClose }) {
   const lookupBarcode = async (code) => {
     setScanState("looking");
     try {
-      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_he,brands,nutriments`);
+      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_he,generic_name,generic_name_he,brands,nutriments`);
       const d = await r.json();
       if (d.status !== 1 || !d.product) { setScanState("notfound"); return; }
       const p = d.product, n = p.nutriments || {};
-      const food = { id: "bc_" + code, name: (p.product_name_he || p.product_name || p.brands || "מוצר"), per100: { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) }, measures: [{ label: "100 ג׳", g: 100 }], def: 0 };
+      const name = (p.product_name_he || p.generic_name_he || p.product_name || p.generic_name || p.brands || "מוצר").trim();
+      const food = { id: "bc_" + code, name, per100: { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) }, measures: [{ label: "100 ג׳", g: 100 }], def: 0 };
       pickFood(food, 100);
     } catch (e) { setScanState("error"); }
   };
@@ -1153,13 +1154,19 @@ function AddModal({ state, close, commit, removeAndClose }) {
     (async () => {
       try {
         const video = videoRef.current;
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+        if (cancelled) { cleanup(); return; }
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+        try { await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch (e) {}
+
+        // Engine 1: native BarcodeDetector — only if actually supported. Some devices
+        // expose the class but support no formats, so verify via getSupportedFormats.
+        let nativeOk = false;
         if ("BarcodeDetector" in window) {
-          // Native path (reliable on Android/Chrome incl. Samsung).
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } });
-          if (cancelled) { cleanup(); return; }
-          video.srcObject = stream;
-          await video.play().catch(() => {});
-          try { await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch (e) {}
+          try { const f = await window.BarcodeDetector.getSupportedFormats(); nativeOk = Array.isArray(f) && f.length > 0; } catch (e) { nativeOk = false; }
+        }
+        if (nativeOk) {
           let det;
           try { det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "itf"] }); }
           catch (e) { det = new window.BarcodeDetector(); }
@@ -1169,15 +1176,17 @@ function AddModal({ state, close, commit, removeAndClose }) {
             raf = requestAnimationFrame(tick);
           };
           raf = requestAnimationFrame(tick);
-        } else {
-          // Fallback: ZXing continuous decode (e.g. iOS Safari).
+        }
+        // Engine 2: ZXing on the SAME video element, in parallel — covers devices where
+        // BarcodeDetector is missing or broken. First engine to read a code wins.
+        try {
           const hints = new Map();
           hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.CODE_128, BarcodeFormat.ITF]);
           hints.set(DecodeHintType.TRY_HARDER, true);
           const reader = new BrowserMultiFormatReader(hints);
-          zx = await reader.decodeFromVideoDevice(undefined, video, (result) => { if (result) onCode(result.getText()); });
-          if (cancelled) cleanup();
-        }
+          zx = await reader.decodeFromVideoElement(video, (result) => { if (result) onCode(result.getText()); });
+          if (cancelled) { try { zx.stop(); } catch (e) {} }
+        } catch (e) {}
       } catch (e) { if (!cancelled) setScanState("error"); }
     })();
     scanControlsRef.current = cleanup;
@@ -1270,9 +1279,19 @@ function AddModal({ state, close, commit, removeAndClose }) {
             )}
             {scanState === "scanning" && (
               <div style={{ textAlign: "center" }}>
-                <video ref={videoRef} style={{ width: "100%", borderRadius: 12, background: "#000", maxHeight: 320, objectFit: "cover" }} muted playsInline />
-                <div style={{ fontSize: 14, color: C.sub, marginTop: 10 }}>מכוונים את הברקוד למרכז…</div>
-                <div style={{ marginTop: 10 }}><Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>ביטול</Btn></div>
+                <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000" }}>
+                  <video ref={videoRef} style={{ width: "100%", display: "block", maxHeight: 320, objectFit: "cover" }} muted playsInline />
+                  <div style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ width: "80%", height: 92, border: "2px solid rgba(255,255,255,0.9)", borderRadius: 10, boxShadow: "0 0 0 9999px rgba(0,0,0,0.28)", position: "relative" }}>
+                      <div style={{ position: "absolute", top: "50%", left: 8, right: 8, height: 2, background: C.brand, transform: "translateY(-1px)" }} />
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 14, color: C.sub, marginTop: 10, lineHeight: 1.5 }}>מקמי את הברקוד בתוך המסגרת — ישר, ממלא את הרוחב, והחזיקי יציב לרגע</div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 10 }}>
+                  <Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>ביטול</Btn>
+                  <Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>להקליד מספר ידנית</Btn>
+                </div>
               </div>
             )}
             {scanState === "looking" && (
@@ -1351,6 +1370,12 @@ function AddModal({ state, close, commit, removeAndClose }) {
         )}
         {step === "qty" && food && (
           <>
+            {String(food.id || "").startsWith("bc_") && (
+              <>
+                <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>שם המוצר (אפשר לערוך)</div>
+                <input value={food.name} onChange={(e) => setFood({ ...food, name: e.target.value })} placeholder="שם המוצר" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
+              </>
+            )}
             <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>שיוך לארוחה</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
             <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>מידת בית</div>
