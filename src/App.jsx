@@ -8,6 +8,7 @@ import {
 import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { DecodeHintType, BarcodeFormat } from "@zxing/library";
+import { RECIPES } from "./recipes";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -136,11 +137,6 @@ const RECENT = [
   { foodId: "yog", g: 150 }, { foodId: "ban", g: 118 }, { foodId: "cof", g: 150 },
   { foodId: "chk", g: 120 }, { foodId: "oat", g: 60 }, { foodId: "cot", g: 100 },
 ];
-const RECIPES = [
-  { id: "r1", name: "קערת קינואה וירקות", kcal: 380, p: 22, f: 12, c: 48, mins: 20, tag: "עתיר חלבון" },
-  { id: "r2", name: "חביתת ירק וגבינה", kcal: 290, p: 24, f: 19, c: 6, mins: 12, tag: "דל פחמ׳" },
-  { id: "r3", name: "סלט עדשים וטחינה", kcal: 410, p: 18, f: 17, c: 44, mins: 25, tag: "עתיר חלבון" },
-];
 const MEALS = ["בוקר", "ביניים בוקר", "צהריים", "ביניים אחה״צ", "ערב", "נשנושים"];
 const HE_DAYS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 const HE_MONTHS = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
@@ -232,7 +228,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.51";
+const VERSION = "0.53";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -702,26 +698,130 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek }) {
   );
 }
 
-function RecipesScreen({ addRecipe }) {
+function RecipeDetail({ r, onBack, onAdd }) {
+  const [added, setAdded] = useState(false);
+  const stat = (label, value, color) => (
+    <div style={{ flex: 1, textAlign: "center", padding: "8px 4px" }}>
+      <div style={{ fontSize: 17, fontWeight: 700, color: color || C.ink }}>{value}</div>
+      <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>{label}</div>
+    </div>
+  );
   return (
-    <div style={{ padding: "8px 16px 16px" }}>
-      <Header title="מתכונים" />
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-        {["הכל", "דל פחמימות", "עתיר חלבון"].map((t, i) => (<span key={t} style={{ fontSize: 14, padding: "5px 12px", borderRadius: 20, background: i === 0 ? C.ink : "transparent", color: i === 0 ? "#fff" : C.sub, boxShadow: i === 0 ? "none" : `inset 0 0 0 1px ${C.line}` }}>{t}</span>))}
+    <div style={{ paddingBottom: 24 }}>
+      <div style={{ position: "relative" }}>
+        <img src={r.img} alt={r.name} style={{ width: "100%", height: 230, objectFit: "cover", display: "block" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0) 55%)" }} />
+        <button onClick={onBack} style={{ position: "absolute", top: 12, insetInlineStart: 12, width: 38, height: 38, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.92)", color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}><ChevronRight size={22} /></button>
+        <div style={{ position: "absolute", bottom: 12, insetInlineStart: 16, insetInlineEnd: 16, color: "#fff", fontSize: 22, fontWeight: 700, lineHeight: 1.3, textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}>{r.name}</div>
       </div>
-      {RECIPES.map((r) => (
-        <div key={r.id} style={{ border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 12 }}>
-          <div style={{ height: 84, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", color: C.faint }}><ChefHat size={26} /></div>
-          <div style={{ padding: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 500, color: C.ink, marginBottom: 5 }}>{r.name}</div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: C.sub }}>{r.kcal} קק״ל · חלבון {r.p} ג׳ · {r.mins} דק׳</span>
-              <button onClick={() => addRecipe(r)} style={{ width: 28, height: 28, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+
+      <div style={{ padding: "14px 16px 0" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <span style={{ fontSize: 13, color: C.brandD, background: C.brandBg, padding: "6px 12px", borderRadius: 16, display: "flex", alignItems: "center", gap: 5 }}><Clock size={14} /> {r.prep}</span>
+          <span style={{ fontSize: 13, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>מנות: {r.servings}</span>
+          <span style={{ fontSize: 13, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>קושי: {r.diff}</span>
+        </div>
+
+        <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 14 }}>
+          {stat("קלוריות", r.kcal, C.brand)}
+          <div style={{ width: 1, background: C.line }} />
+          {stat("חלבון (ג׳)", r.p, C.macroP)}
+          <div style={{ width: 1, background: C.line }} />
+          {stat("שומן (ג׳)", r.f, C.macroF)}
+          <div style={{ width: 1, background: C.line }} />
+          {stat("פחמ׳ (ג׳)", r.c, C.macroC)}
+        </div>
+
+        {added ? (
+          <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 13, marginBottom: 16, fontSize: 15, fontWeight: 600, textAlign: "center" }}>✓ נוסף ליומן</div>
+        ) : (
+          <div style={{ marginBottom: 16 }}><Btn onClick={() => { onAdd(r); setAdded(true); }}><Plus size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> הוסיפי מנה ליומן</Btn></div>
+        )}
+
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: "4px 0 8px" }}>מרכיבים</div>
+        <div style={{ marginBottom: 18 }}>
+          {r.ing.map((line, i) => {
+            const isHeader = line.trim().endsWith(":");
+            return isHeader
+              ? <div key={i} style={{ fontSize: 14, fontWeight: 700, color: C.brandD, margin: i === 0 ? "0 0 6px" : "12px 0 6px" }}>{line.replace(/:$/, "")}</div>
+              : <div key={i} style={{ display: "flex", gap: 9, fontSize: 14.5, color: C.ink, lineHeight: 1.5, marginBottom: 7 }}><span style={{ color: C.brand, marginTop: 7, width: 6, height: 6, borderRadius: "50%", background: C.brand, flexShrink: 0 }} /><span>{line}</span></div>;
+          })}
+        </div>
+
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: "4px 0 10px" }}>אופן ההכנה</div>
+        <div style={{ marginBottom: r.tips && r.tips.length ? 18 : 4 }}>
+          {r.steps.map((s, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+              <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</div>
+              <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.6, paddingTop: 2 }}>{s}</div>
+            </div>
+          ))}
+        </div>
+
+        {r.tips && r.tips.length > 0 && (
+          <div style={{ background: C.amberBg, borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, marginBottom: 7, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={15} /> טיפים ושדרוגים</div>
+            {r.tips.map((t, i) => (
+              <div key={i} style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.55, marginBottom: 6, display: "flex", gap: 8 }}><span style={{ color: C.amber }}>•</span><span>{t}</span></div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecipesScreen({ addRecipe }) {
+  const [selected, setSelected] = useState(null);
+  const [filter, setFilter] = useState("הכל");
+  const [query, setQuery] = useState("");
+  const [toast, setToast] = useState(false);
+
+  if (selected) {
+    return <RecipeDetail r={selected} onBack={() => setSelected(null)} onAdd={addRecipe} />;
+  }
+
+  const filtered = RECIPES.filter((r) => {
+    if (query && !r.name.includes(query)) return false;
+    if (filter === "עתיר חלבון") return r.p >= 25;
+    if (filter === "דל פחמימות") return r.c <= 12;
+    return true;
+  });
+  const fchip = (t) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 20, cursor: "pointer", background: filter === t ? C.ink : "transparent", color: filter === t ? "#fff" : C.sub, boxShadow: filter === t ? "none" : `inset 0 0 0 1px ${C.line}` });
+
+  return (
+    <div style={{ padding: "8px 16px 16px", position: "relative" }}>
+      <Header title="מתכונים" />
+      <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>חוברת המתכונים של מיי פריים — עשירים בחלבון, דלים בפחמימות ומשולבים מזונות אנטי-דלקתיים.</div>
+
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <Search size={16} style={{ position: "absolute", insetInlineStart: 12, top: 12, color: C.faint }} />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מתכון…" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 36px", fontSize: 14.5, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        {["הכל", "עתיר חלבון", "דל פחמימות"].map((t) => (<span key={t} onClick={() => setFilter(t)} style={fchip(t)}>{t}</span>))}
+      </div>
+
+      {filtered.map((r) => (
+        <div key={r.id} onClick={() => setSelected(r)} style={{ border: `1px solid ${C.line}`, borderRadius: 16, overflow: "hidden", marginBottom: 14, cursor: "pointer", background: C.panel, boxShadow: "0 1px 6px rgba(168,66,92,0.05)" }}>
+          <div style={{ position: "relative" }}>
+            <img src={r.img} alt={r.name} loading="lazy" style={{ width: "100%", height: 158, objectFit: "cover", display: "block" }} />
+            <button onClick={(e) => { e.stopPropagation(); addRecipe(r); setToast(true); setTimeout(() => setToast(false), 1600); }} style={{ position: "absolute", bottom: 10, insetInlineEnd: 10, width: 38, height: 38, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}><Plus size={20} /></button>
+          </div>
+          <div style={{ padding: "11px 13px 13px" }}>
+            <div style={{ fontSize: 15.5, fontWeight: 600, color: C.ink, marginBottom: 7, lineHeight: 1.35 }}>{r.name}</div>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: C.brandD, background: C.brandBg, padding: "3px 9px", borderRadius: 12 }}>{r.kcal} קק״ל</span>
+              <span style={{ fontSize: 12, color: "#1f7a6e", background: "#E6F3F1", padding: "3px 9px", borderRadius: 12 }}>חלבון {r.p} ג׳</span>
+              <span style={{ fontSize: 12, color: C.sub, background: C.bg, padding: "3px 9px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} /> {r.prep}</span>
             </div>
           </div>
         </div>
       ))}
-      <div style={{ fontSize: 13, color: C.faint, background: C.bg, padding: 10, borderRadius: 10, display: "flex", gap: 6, lineHeight: 1.6 }}><Info size={15} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הערכים מחושבים מהמרכיבים. + מוסיף מנה ליומן</span></div>
+      {filtered.length === 0 && <div style={{ fontSize: 14, color: C.faint, textAlign: "center", padding: 24 }}>לא נמצאו מתכונים תואמים.</div>}
+
+      {toast && <div style={{ position: "fixed", bottom: 86, insetInlineStart: "50%", transform: "translateX(-50%)", background: C.ink, color: "#fff", fontSize: 14, padding: "10px 18px", borderRadius: 20, boxShadow: "0 4px 16px rgba(0,0,0,0.25)", zIndex: 50 }}>✓ נוסף ליומן</div>}
     </div>
   );
 }
@@ -1915,7 +2015,7 @@ export default function App() {
     }
     setModal(null);
   };
-  const addRecipe = (r) => { setLog((l) => [...l, { id: "n" + Date.now(), date: selectedDate, meal: "צהריים", name: r.name, g: 1, source: "verified", kcal: r.kcal, p: r.p, f: r.f, c: r.c }]); setTab("day"); };
+  const addRecipe = (r) => { const h = new Date().getHours(); const meal = h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; setLog((l) => [...l, { id: "n" + Date.now(), date: selectedDate, meal, name: r.name, g: 1, source: "verified", kcal: r.kcal, p: r.p, f: r.f, c: r.c }]); };
   const addActivity = (a) => { setActivityLog((l) => [...l, { id: "a" + Date.now(), date: selectedDate, name: a.name, kcal: Math.round(a.kcal) }]); setSheet(null); };
   const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
@@ -1940,7 +2040,7 @@ export default function App() {
   };
 
   const tabs = [
-    { id: "day", ic: Home, label: "היום" },
+    { id: "day", ic: Home, label: "יומן" },
     { id: "report", ic: TrendingDown, label: "דוח" },
     { id: "recipes", ic: ChefHat, label: "מתכונים" },
     { id: "profile", ic: User, label: "פרופיל" },

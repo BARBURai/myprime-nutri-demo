@@ -75,7 +75,15 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.51`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.53`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
+
+## v0.53 — Recipe booklet (29 real MyPrime recipes)
+The "מתכונים" tab now renders the real MyPrime recipe booklet instead of placeholder data.
+- Recipe data lives in `src/recipes.js` (`export const RECIPES`), imported by `App.jsx`. Each recipe: `{id,page,name,img,prep,diff,servings,kcal,p,f,c,ing[],steps[],tips[]}`. Ingredient lines ending with ":" render as sub-headers. kcal/p/f/c are per serving (range midpoints) for logging. Hebrew copy is transcribed faithfully from the official PDF — do not alter without instruction.
+- Photos: `public/recipes/<page>.jpg` (4..32), extracted from the booklet PDF with `pdfimages` (largest portrait image per page), resized to max width 900 / JPEG q82 (~2.1MB total). Vite serves them at `/recipes/<page>.jpg`.
+- `RecipesScreen`: search box + filter chips (הכל / עתיר חלבון [p>=25] / דל פחמימות [c<=12]) + photo cards; tapping a card opens `RecipeDetail` (hero photo, prep/servings/difficulty chips, 4-stat nutrition strip, "הוסיפי מנה ליומן", ingredients with sub-headers, numbered steps, tips). Card "+" and detail button call `addRecipe`.
+- `addRecipe(r)` logs a serving (g:1, source "verified", explicit kcal/p/f/c) to `selectedDate` with a time-based meal; no longer force-switches to the day tab (screen shows a "נוסף ליומן" toast/confirmation instead).
+- To add/replace recipe images later: drop files in `public/recipes/` (GitHub), Vercel serves them.
