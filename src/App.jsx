@@ -231,7 +231,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.32";
+const VERSION = "0.34";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1387,31 +1387,50 @@ function SheetShell({ title, onClose, children }) {
   );
 }
 
-function ActivityModal({ onClose, onAdd }) {
-  const presets = [
-    { name: "הליכה 30 דק׳", kcal: 150 },
-    { name: "ריצה 30 דק׳", kcal: 300 },
-    { name: "אימון כוח 45 דק׳", kcal: 220 },
-    { name: "יוגה / פילאטיס", kcal: 120 },
+function ActivityModal({ onClose, onAdd, weightKg }) {
+  const acts = [
+    { name: "הליכה", met: 3.5 },
+    { name: "הליכה מהירה", met: 5 },
+    { name: "ריצה", met: 9.8 },
+    { name: "אימון כוח", met: 5 },
+    { name: "יוגה / פילאטיס", met: 3 },
+    { name: "אופניים", met: 7 },
+    { name: "שחייה", met: 7 },
+    { name: "אירובי / ריקוד", met: 6.5 },
   ];
-  const [name, setName] = useState("פעילות");
-  const [kcal, setKcal] = useState(150);
+  const INT = { "קלה": 3, "בינונית": 5, "גבוהה": 8 };
+  const [sel, setSel] = useState(0); // index, or -1 for custom
+  const [minutes, setMinutes] = useState(30);
+  const [customName, setCustomName] = useState("");
+  const [intensity, setIntensity] = useState("בינונית");
+  const met = sel >= 0 ? acts[sel].met : INT[intensity];
+  const baseName = sel >= 0 ? acts[sel].name : (customName.trim() || "פעילות");
+  const kcal = Math.round(met * 3.5 * (weightKg || 70) / 200 * minutes);
+  const chip = (on) => ({ fontSize: 14, padding: "7px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}`, display: "flex", alignItems: "center", gap: 6 });
   return (
     <SheetShell title="פעילות גופנית" onClose={onClose}>
-      <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>בחרי פעילות מהירה</div>
-      {presets.map((p) => (
-        <div key={p.name} onClick={() => onAdd(p)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 8, cursor: "pointer" }}>
-          <span style={{ fontSize: 15, color: C.ink, display: "flex", alignItems: "center", gap: 7 }}><Dumbbell size={15} color={C.info} /> {p.name}</span>
-          <span style={{ fontSize: 14, color: C.brandD, fontWeight: 500 }}>+{p.kcal} קק״ל</span>
-        </div>
-      ))}
-      <div style={{ fontSize: 13, color: C.sub, margin: "12px 0 6px" }}>או מותאם אישית</div>
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם הפעילות" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ fontSize: 15, color: C.sub }}>קלוריות שנשרפו</span>
-        <Stepper value={kcal} set={(v) => setKcal(Math.max(0, v))} step={10} suffix="קק״ל" />
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>בחרי פעילות</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        {acts.map((a, i) => (<span key={a.name} onClick={() => setSel(i)} style={chip(sel === i)}><Dumbbell size={14} /> {a.name}</span>))}
+        <span onClick={() => setSel(-1)} style={chip(sel === -1)}>אחר</span>
       </div>
-      <Btn onClick={() => onAdd({ name, kcal })}>הוסף פעילות</Btn>
+      {sel === -1 && (
+        <>
+          <input value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="שם הפעילות" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>עצימות</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>{Object.keys(INT).map((k) => (<span key={k} onClick={() => setIntensity(k)} style={chip(intensity === k)}>{k}</span>))}</div>
+        </>
+      )}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <span style={{ fontSize: 15, color: C.sub }}>כמה דקות?</span>
+        <Stepper value={minutes} set={(v) => setMinutes(Math.max(1, v))} step={5} suffix="דק׳" />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+        <span style={{ fontSize: 14, color: C.sub }}>נשרף בערך</span>
+        <span style={{ fontSize: 17, fontWeight: 600, color: C.brandD }}>{kcal} קק״ל</span>
+      </div>
+      <Btn onClick={() => onAdd({ name: `${baseName} ${minutes} דק׳`, kcal })}>הוסף פעילות</Btn>
+      <div style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 8 }}>הערכה לפי סוג הפעילות, המשקל שלך ({weightKg || 70} ק״ג) ומשך הזמן</div>
     </SheetShell>
   );
 }
@@ -1475,22 +1494,23 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
   );
 }
 
-function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, allergies, mealsHad, proteinFocus, onClose }) {
-  const avoidList = [...(allergies || []), ...(dislikes ? [dislikes] : [])].filter(Boolean);
-  const seed = `הקשר: נשארו לי כ-${Math.max(0, Math.round(remainingKcal))} קלוריות להיום`
-    + (proteinFocus && remainingProtein > 0 ? `, ונותרו כ-${Math.round(remainingProtein)} ג׳ חלבון ליעד` : "")
-    + (diet && diet.length ? `. סגנון תזונה: ${diet.join(", ")}` : "")
-    + (avoidList.length ? `. חשוב מאוד — יש לי רגישות/אלרגיה, ואסור בשום אופן להציע לי מאכלים שמכילים: ${avoidList.join(", ")}. אם רעיון כולל אחד מהם, אל תציעי אותו בכלל.` : "")
-    + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
-    + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
-  const [msgs, setMsgs] = useState([{ role: "user", content: seed }]);
+function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onClose }) {
+  const [stage, setStage] = useState("confirm");
+  const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
   const endRef = useRef(null);
   const inputRef = useRef(null);
   useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
   const ctx = { proteinFocus };
+
+  const diet = profile.diet || [];
+  const allergies = profile.allergies || [];
+  const dislikes = (profile.dislikes || "").trim();
+  const toggle = (key, val) => setProfile({ ...profile, [key]: (profile[key] || []).includes(val) ? (profile[key] || []).filter((x) => x !== val) : [...(profile[key] || []), val] });
+  const chip = (on) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
 
   const run = async (history) => {
     setLoading(true); setErr(false);
@@ -1499,8 +1519,17 @@ function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, aller
     if (r.error || !r.text) { setErr(true); return; }
     setMsgs([...history, { role: "assistant", content: r.text }]);
   };
-  useEffect(() => { run(msgs); /* eslint-disable-next-line */ }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
+  const startChat = () => {
+    const avoidList = [...allergies, ...(dislikes ? [dislikes] : [])].filter(Boolean);
+    const seed = `הקשר: נשארו לי כ-${Math.max(0, Math.round(remainingKcal))} קלוריות להיום`
+      + (proteinFocus && remainingProtein > 0 ? `, ונותרו כ-${Math.round(remainingProtein)} ג׳ חלבון ליעד` : "")
+      + (diet.length ? `. סגנון תזונה: ${diet.join(", ")}` : "")
+      + (avoidList.length ? `. חשוב מאוד — יש לי רגישות/אלרגיה, ואסור בשום אופן להציע לי מאכלים שמכילים: ${avoidList.join(", ")}. אם רעיון כולל אחד מהם, אל תציעי אותו בכלל, ותמיד הזכירי לי בעדינות לבדוק את רשימת הרכיבים המלאה לפני האכילה — כי לפעמים גם AI טועה.` : "")
+      + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
+      + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
+    const h = [{ role: "user", content: seed }];
+    setMsgs(h); setStage("chat"); run(h);
+  };
 
   const sendText = (t) => {
     const text = (t || "").trim();
@@ -1510,9 +1539,27 @@ function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, aller
   };
 
   const visible = msgs.slice(1); // hide the synthetic opening prompt
+  const hasAvoid = allergies.length > 0 || dislikes.length > 0;
 
   return (
     <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
+      {stage === "confirm" ? (
+        <div>
+          <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ — בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+            {DIET_OPTIONS.map((d) => (<span key={d.id} onClick={() => toggle("diet", d.id)} style={chip(diet.includes(d.id))}>{d.emoji} {d.id}</span>))}
+          </div>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות / אלרגיות</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
+            {SENSITIVITY_OPTIONS.map((s) => (<span key={s} onClick={() => toggle("allergies", s)} style={chip(allergies.includes(s))}>{s}</span>))}
+          </div>
+          <input value={profile.dislikes || ""} onChange={(e) => setProfile({ ...profile, dislikes: e.target.value })} placeholder="עוד משהו? (למשל: בלי חריף)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+          {!diet.length && !hasAvoid && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 0" }}>לא רשמת עדיין העדפות או רגישויות. אפשר לבחור עכשיו, או פשוט להמשיך.</div>}
+          {hasAvoid && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
+          <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
+        </div>
+      ) : (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
           {visible.map((m, i) => (
@@ -1538,6 +1585,7 @@ function RecommendModal({ remainingKcal, remainingProtein, diet, dislikes, aller
           <button onClick={() => sendText(input)} disabled={loading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 }}><Send size={18} /></button>
         </div>
       </div>
+      )}
     </SheetShell>
   );
 }
@@ -1730,10 +1778,10 @@ export default function App() {
             </div>
 
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} waterOpen={waterOpenToday} />}
-            {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} />}
+            {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal current={weights[weights.length - 1].kg} onClose={() => setSheet(null)} onAdd={addWeightValue} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
-            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} diet={profile.diet} dislikes={profile.dislikes} allergies={profile.allergies} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onClose={() => setSheet(null)} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onClose={() => setSheet(null)} />}
             {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {modal && <AddModal state={modal} close={() => setModal(null)} commit={commit} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />}
           </>
