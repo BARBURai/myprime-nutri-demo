@@ -225,13 +225,13 @@ const C = {
   bg: "#FAF3F4", panel: "#FFFFFF", ink: "#3A2B30", sub: "#8B737A", faint: "#BBA7AC",
   line: "#F1E4E7",
   brand: "#D45D79", brandD: "#A8425C", brandBg: "#FBE9EE",
-  macroP: "#D45D79", macroF: "#E0986A", macroC: "#A87BB5",
+  macroP: "#2F9E8F", macroF: "#E0986A", macroC: "#A87BB5",
   amber: "#C77A3C", amberBg: "#FBEEDF",
   info: "#9C6BA6", infoBg: "#F2E7F3",
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.43";
+const VERSION = "0.45";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -248,8 +248,9 @@ function Ring({ consumed, budget, size = 132 }) {
       <circle cx="66" cy="66" r={r} fill="none" stroke={over ? C.amber : C.brand} strokeWidth="10"
         strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
         transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-      <text x="66" y="62" textAnchor="middle" style={{ fontSize: 31, fontWeight: 600, fill: C.ink }}>{Math.abs(remaining).toLocaleString()}</text>
-      <text x="66" y="82" textAnchor="middle" style={{ fontSize: 13, fill: C.sub }}>{over ? "מעל היעד" : `נותרו מ־${Math.round(budget).toLocaleString()}`}</text>
+      <text x="66" y="56" textAnchor="middle" style={{ fontSize: 27, fontWeight: 700, fill: C.ink }}>{Math.abs(remaining).toLocaleString()}</text>
+      <text x="66" y="77" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: over ? C.amber : C.brand }}>קלוריות</text>
+      <text x="66" y="92" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{over ? "מעל היעד" : `מתוך ${Math.round(budget).toLocaleString()}`}</text>
     </svg>
   );
 }
@@ -264,17 +265,9 @@ function ProteinRing({ consumed, target, size = 124 }) {
       <circle cx="66" cy="66" r={r} fill="none" stroke={C.macroP} strokeWidth="10"
         strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
         transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-      {done ? (
-        <>
-          <text x="66" y="60" textAnchor="middle" style={{ fontSize: 21, fontWeight: 600, fill: C.macroP }}>הגעת ליעד</text>
-          <text x="66" y="82" textAnchor="middle" style={{ fontSize: 13, fill: C.sub }}>חלבון {Math.round(consumed)} ג׳</text>
-        </>
-      ) : (
-        <>
-          <text x="66" y="62" textAnchor="middle" style={{ fontSize: 31, fontWeight: 600, fill: C.ink }}>{remaining}<tspan style={{ fontSize: 15, fill: C.sub }}> ג׳</tspan></text>
-          <text x="66" y="82" textAnchor="middle" style={{ fontSize: 13, fill: C.sub }}>חלבון · מתוך {Math.round(target)}</text>
-        </>
-      )}
+      <text x="66" y="56" textAnchor="middle" style={{ fontSize: 27, fontWeight: 700, fill: C.ink }}>{remaining}<tspan style={{ fontSize: 14, fill: C.sub }}> ג׳</tspan></text>
+      <text x="66" y="77" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: C.macroP }}>חלבון</text>
+      <text x="66" y="92" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{done ? "הגעת ליעד!" : `מתוך ${Math.round(target)}`}</text>
     </svg>
   );
 }
@@ -525,7 +518,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, editEntry, deleteEntry, onRecommend, userName, onStreakTap }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, editEntry, deleteEntry, onRecommend, userName, onStreakTap }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -539,14 +532,14 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
   const todayRef = useRef(null);
   const streak = streakDays(log);
   useEffect(() => { if (todayRef.current) todayRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, []);
-  const days = Array.from({ length: 15 }, (_, i) => addDays(TODAY, i - 10));
+  const days = Array.from({ length: 15 }, (_, i) => addDays(today, i - 10));
   return (
     <div style={{ padding: "8px 0 24px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 16px 0", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           {userName && userName.trim() && <div style={{ fontSize: 15, color: C.brandD, fontWeight: 600 }}>היי {userName.trim()} 👋</div>}
           <div style={{ fontSize: 14, color: C.sub, fontWeight: 500, marginTop: 1 }}>
-            {date !== TODAY && relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD }}> · שבוע {week}</span> : null}
+            {date !== today && relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD }}> · שבוע {week}</span> : null}
           </div>
         </div>
         {streak > 0
@@ -558,7 +551,7 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "12px 16px 4px" }}>
         {days.map((d) => {
-          const sel = d === date; const isToday = d === TODAY; const isFuture = d > TODAY; const has = log.some((e) => e.date === d); const dd = new Date(d);
+          const sel = d === date; const isToday = d === today; const isFuture = d > today; const has = log.some((e) => e.date === d); const dd = new Date(d);
           return (
             <button key={d} ref={isToday ? todayRef : null} disabled={isFuture} onClick={() => { if (!isFuture) setDate(d); }} title={isFuture ? "יום עתידי — ייפתח בתאריך הזה" : undefined} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, overflow: "hidden", padding: 0, background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: isFuture ? C.faint : (sel ? "#fff" : C.ink), cursor: isFuture ? "default" : "pointer", opacity: isFuture ? 0.4 : 1, textAlign: "center" }}>
               {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
@@ -577,22 +570,19 @@ function DayScreen({ date, setDate, log, targets, dailyTarget, profile, activity
           <Ring consumed={consumed} budget={budget} size={macroOpen ? 124 : 132} />
           {macroOpen && <ProteinRing consumed={macros.p} target={targets.protein} size={124} />}
         </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 12, fontSize: 13, color: C.sub, margin: "4px 0 12px" }}>
-          <span>יעד {dailyTarget.toLocaleString()}</span>
-          {actKcal > 0 && <span style={{ color: C.brandD }}>פעילות +{actKcal}</span>}
-          {consumed > 0 && <span>נאכל {consumed.toLocaleString()}</span>}
-        </div>
+        {macroOpen ? (
+          <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", margin: "10px 0 14px" }}>
+            {[{ label: "שומן", v: macros.f, t: targets.fat, color: C.macroF }, { label: "פחמימות", v: macros.c, t: targets.carbs, color: C.macroC }, { label: "סיבים", v: macros.fib, t: FIBER_TARGET, color: C.info }].map((m, i) => (
+              <div key={m.label} style={{ flex: 1, textAlign: "center", padding: "5px 4px", borderInlineStart: i ? `1px solid ${C.line}` : "none" }}>
+                <div style={{ fontSize: 11.5, color: C.sub, display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: m.color }} />{m.label}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, marginTop: 1 }}>{m.v} / {m.t} ג׳</div>
+              </div>
+            ))}
+          </div>
+        ) : <div style={{ height: 12 }} />}
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <button onClick={onRecommend} style={{ border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 20, padding: "8px 18px", fontSize: 14, fontWeight: 500, fontFamily: fontStack, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}><Sparkles size={16} /> מה כדאי לאכול?</button>
         </div>
-
-        {macroOpen && (
-          <div style={{ display: "flex", justifyContent: "center", gap: 16, flexWrap: "wrap", fontSize: 13, color: C.sub, marginBottom: 16 }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: "50%", background: C.macroF }} /> שומן {macros.f} / {targets.fat} ג׳</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: "50%", background: C.macroC }} /> פחמימות {macros.c} / {targets.carbs} ג׳</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: "50%", background: C.info }} /> סיבים {macros.fib} / {FIBER_TARGET} ג׳</span>
-          </div>
-        )}
 
         {waterOpen && (
           <WaterCard glasses={glasses} setGlasses={(n) => setWaterForDate(date, n)} />
@@ -1727,6 +1717,14 @@ export default function App() {
   const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
   const [favorites, setFavorites] = useState(saved?.favorites || []);
   const [selectedDate, setSelectedDate] = useState(TODAY);
+  const [today, setToday] = useState(TODAY);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = ymd(new Date());
+      if (now !== today) { setToday(now); setSelectedDate((sd) => (sd === today ? now : sd)); }
+    }, 60000);
+    return () => clearInterval(id);
+  }, [today]);
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
   const [showIntro, setShowIntro] = useState(saved ? false : true);
@@ -1883,7 +1881,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
