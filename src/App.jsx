@@ -232,7 +232,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.49";
+const VERSION = "0.50";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1584,17 +1584,24 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
   );
 }
 
-function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onClose }) {
+function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose }) {
   const [stage, setStage] = useState("confirm");
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
   const [pending, setPending] = useState(null);
+  const [logMsgs, setLogMsgs] = useState([]);
+  const [logInput, setLogInput] = useState("");
+  const [logLoading, setLogLoading] = useState(false);
+  const [logErr, setLogErr] = useState(false);
+  const [logItems, setLogItems] = useState(null);
+  const [logMeal, setLogMeal] = useState("בוקר");
+  const [logged, setLogged] = useState(false);
   const endRef = useRef(null);
   const inputRef = useRef(null);
   useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading, logMsgs, logLoading, logItems, logged]);
   const ctx = { proteinFocus };
 
   const diet = profile.diet || [];
@@ -1641,6 +1648,36 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     setPending(null);
   };
 
+  const defaultMeal = () => { const h = new Date().getHours(); if (h < 11) return "בוקר"; if (h < 16) return "צהריים"; if (h < 21) return "ערב"; return "נשנושים"; };
+  const runLog = async (history) => {
+    setLogLoading(true); setLogErr(false);
+    const r = await aiNutritionChat(history.map((m) => ({ role: m.role, content: m.content })));
+    setLogLoading(false);
+    if (!r.reply && (!r.items || !r.items.length)) { setLogErr(true); return; }
+    setLogMsgs([...history, { role: "assistant", content: r.reply }]);
+    setLogItems(r.done && r.items && r.items.length ? r.items : null);
+  };
+  const startLog = () => {
+    const last = [...msgs].reverse().find((m) => m.role === "assistant");
+    const ctxText = last ? last.content : "";
+    const seed = "אני רוצה להוסיף ליומן משהו מתוך מה שהצעת לי. "
+      + (ctxText ? "ההצעות שלך היו: " + ctxText + " " : "")
+      + "אם לא ברור מה בדיוק אכלתי או באיזו כמות — שאלי אותי שאלה אחת בכל פעם, ואז סכמי לרישום.";
+    const h = [{ role: "user", content: seed }];
+    setLogMsgs(h); setLogItems(null); setLogged(false); setLogMeal(defaultMeal()); setStage("log"); runLog(h);
+  };
+  const sendLog = (t) => {
+    const text = (t || "").trim();
+    if (!text || logLoading) return;
+    const next = [...logMsgs, { role: "user", content: text }];
+    setLogMsgs(next); setLogInput(""); setLogItems(null); runLog(next);
+  };
+  const doLog = () => {
+    if (!logItems || !logItems.length) return;
+    onLog(logItems.map((it) => ({ meal: logMeal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })));
+    setLogged(true);
+  };
+
   const visible = msgs.slice(1); // hide the synthetic opening prompt
   const hasAvoid = allergies.length > 0 || dislikes.length > 0;
 
@@ -1662,6 +1699,43 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
           {hasAvoid && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
           <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
         </div>
+      ) : stage === "log" ? (
+      <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {logMsgs.slice(1).map((m, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+              <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+            </div>
+          ))}
+          {logLoading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 15, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>רושמת…</div></div>}
+          {logErr && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. נסי שוב.</div>}
+          {logItems && !logged && (
+            <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginTop: 4 }}>
+              {logItems.map((it, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, padding: "4px 0", color: C.ink }}>
+                  <span>{it.name} · {it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"}</span>
+                  <span style={{ color: C.sub }}>{it.kcal} קק״ל</span>
+                </div>
+              ))}
+              <div style={{ fontSize: 13, color: C.sub, margin: "10px 0 6px" }}>לאיזו ארוחה?</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {MEALS.map((m) => (<span key={m} onClick={() => setLogMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === logMeal ? C.brand : "transparent", color: m === logMeal ? "#fff" : C.sub, boxShadow: m === logMeal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+              </div>
+            </div>
+          )}
+          {logged && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 14, marginTop: 6, fontSize: 15, fontWeight: 600, textAlign: "center" }}>✓ נוסף ליומן (וגם למועדפים והאחרונים)</div>}
+          <div ref={endRef} />
+        </div>
+        {logItems && !logged && <div style={{ marginBottom: 8 }}><Btn onClick={doLog}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ל{logMeal}</Btn></div>}
+        {logged ? (
+          <Btn variant="ghost" onClick={onClose}>סגירה</Btn>
+        ) : (
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+            <textarea value={logInput} onChange={(e) => setLogInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendLog(logInput); } }} disabled={logLoading} rows={1} placeholder={logLoading ? "רגע…" : "תשובה / מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: logLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+            <button onClick={() => sendLog(logInput)} disabled={logLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: logLoading ? 0.5 : 1 }}><Send size={18} /></button>
+          </div>
+        )}
+      </div>
       ) : (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
@@ -1674,6 +1748,10 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
           {err && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
           <div ref={endRef} />
         </div>
+
+        {visible.length > 0 && !loading && (
+          <button onClick={startLog} style={{ width: "100%", marginBottom: 8, border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={17} /> אכלתי — הוסיפי ליומן</button>
+        )}
 
         {!loading && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
@@ -1904,7 +1982,7 @@ export default function App() {
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.panel, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.bg, boxShadow: "0 -2px 12px rgba(168,66,92,0.07)", flexShrink: 0 }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
                 return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", background: "transparent", cursor: "pointer", color: active ? C.brand : C.faint, fontWeight: active ? 500 : 400 }}><t.ic size={21} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
@@ -1920,7 +1998,7 @@ export default function App() {
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal current={weights[weights.length - 1].kg} onClose={() => setSheet(null)} onAdd={addWeightValue} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
-            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onClose={() => setSheet(null)} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
             {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {modal && <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />}
           </>
