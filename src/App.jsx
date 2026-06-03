@@ -3,7 +3,7 @@ import {
   Home, BookOpen, TrendingDown, ChefHat, User, Plus, Check, Search,
   Barcode, Camera, ChevronRight, ChevronLeft, Pencil, Trash2, Minus, X,
   Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet,
-  MessageCircle, Loader, Copy, Mic, Send, Lock,
+  MessageCircle, Loader, Copy, Mic, Send, Lock, Clock,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { BrowserMultiFormatReader } from "@zxing/browser";
@@ -232,7 +232,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.48";
+const VERSION = "0.49";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -850,6 +850,7 @@ async function aiMealChat(messages, ctx) {
     proteinRule + " " +
     "הציעי 2-3 רעיונות מעשיים, ים-תיכוניים וזמינים בישראל, שמתאימים לקלוריות שנותרו. שמרי על תשובות קצרות (2-4 משפטים). " +
     estimateRule + " " +
+    "בסיס הערכים: התבססי ככל האפשר על ערכי מאגר התזונה הלאומי של משרד הבריאות (\"צמרת\") עבור מזונות ישראליים, כדי שההערכות יהיו עקביות ומדויקות. " +
     "תמיד סיימי בשאלה עדינה — מה היא חושבת, או אם יש לה את המצרכים. אם חסר לה מצרך (למשל אין סלמון) — הציעי מיד חלופה זמינה ופשוטה. " +
     "אל תפני אותה לדבר עם אדם, מאמנת או צוות, ואל תציעי ליצור קשר או להעביר פנייה לאף אחד — את כאן כדי לעזור עם האוכל והתזונה בלבד. " +
     "אל תיתני ייעוץ רפואי. החזירי טקסט רגיל בלבד (לא JSON, בלי סימוני קוד).";
@@ -1042,7 +1043,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
   const [dbResults, setDbResults] = useState([]);
   const [dbSource, setDbSource] = useState("il");
   const [searching, setSearching] = useState(false);
-  const [listTab, setListTab] = useState(favorites && favorites.length ? "history" : "search");
+
   useEffect(() => {
     const q = query.trim();
     if (!q || step !== "list") { setDbResults([]); setSearching(false); return; }
@@ -1141,7 +1142,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
     rec.onend = () => setAiListening(false);
     try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
   };
-  const pickFood = (f, g) => { setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const [qtyOrigin, setQtyOrigin] = useState("list");
+  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
   const videoRef = useRef(null);
   const scanControlsRef = useRef(null);
   const [scanState, setScanState] = useState("idle");
@@ -1216,8 +1218,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
   const filtered = query.trim() ? FOODS.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
   const nut = food ? nutritionFor(food, grams) : null;
   const unitLabel = unitLabelFor(food?.unit);
-  const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
-  const back = step === "qty" && !state.editEntry ? () => setStep("list") : (step === "list" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
+  const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
+  const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "92%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", overflowY: "auto", fontFamily: fontStack }}>
@@ -1228,9 +1230,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
         {step === "method" && (
           <>
             {[{ ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", tag: "מומלץ", tagBg: C.brandBg, tagC: C.brandD, go: () => setStep("barcode") },
-              { ic: Search, t: "חיפוש מזון", s: "מהמאגר ומההיסטוריה", go: () => setStep("list") },
+              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", go: () => setStep("list") },
               { ic: Camera, t: "צילום ארוחה", s: "המהיר ביותר", tag: "מהיר", tagBg: C.infoBg, tagC: C.info, go: () => setStep("photo") },
-              { ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", tagBg: C.infoBg, tagC: C.info, go: () => setStep("ai") }].map((o) => (
+              { ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", tagBg: C.infoBg, tagC: C.info, go: () => setStep("ai") },
+              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת — בהקשה אחת", go: () => setStep("history") }].map((o) => (
               <div key={o.t} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
                 <o.ic size={26} color={C.brand} />
                 <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{o.t}</div><div style={{ fontSize: 13, color: C.sub }}>{o.s}</div></div>
@@ -1245,56 +1248,48 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
             <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
               {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
             </div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-              {[{ id: "search", label: "חיפוש" }, { id: "history", label: "אחרונים" }].map((t) => (
-                <button key={t.id} onClick={() => setListTab(t.id)} style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${listTab === t.id ? C.brand : C.line}`, background: listTab === t.id ? C.brandBg : "transparent", color: listTab === t.id ? C.brandD : C.sub, fontSize: 14, fontWeight: listTab === t.id ? 600 : 400, fontFamily: fontStack, cursor: "pointer" }}>{t.label}</button>
-              ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 4, color: C.faint }}>
+              <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 15, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
             </div>
-
-            {listTab === "search" && (
-              <>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 4, color: C.faint }}>
-                  <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 15, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+            {query && filtered.length > 0 && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
+            {query && filtered.map((f) => {
+              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
                 </div>
-                {query && filtered.length > 0 && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
-                {query && filtered.map((f) => {
-                  const g = f.measures[f.def].g; const n = nutritionFor(f, g);
-                  return (
-                    <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                      <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                      <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
-                    </div>
-                  );
-                })}
-                {query && <div style={{ fontSize: 13, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
-                {query && dbResults.map((f) => {
-                  const g = f.measures[f.def].g; const n = nutritionFor(f, g);
-                  return (
-                    <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                      <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                      <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
-                    </div>
-                  );
-                })}
-                {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 14, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
-                {!query && <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
-              </>
-            )}
-
-            {listTab === "history" && (
-              <>
-                {(favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
-                  const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
-                  return (
-                    <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                      <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                      <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
-                    </div>
-                  );
-                })}
-                <div style={{ fontSize: 12, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת על + מוסיפה עם הכמות האחרונה — בלי להזין שוב</span></div>
-              </>
-            )}
+              );
+            })}
+            {query && <div style={{ fontSize: 13, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
+            {query && dbResults.map((f) => {
+              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 14, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
+            {!query && <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
+          </>
+        )}
+        {step === "history" && (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+            </div>
+            {(favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
+              const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            <div style={{ fontSize: 12, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת על + מוסיפה עם הכמות האחרונה — בלי להזין שוב</span></div>
           </>
         )}
         {step === "barcode" && (
