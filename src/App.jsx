@@ -230,7 +230,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.58";
+const VERSION = "0.59";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -673,6 +673,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek }) {
           <div><div style={{ fontSize: 13, color: C.sub }}>משקל נוכחי</div><div style={{ fontSize: 28, fontWeight: 600, color: C.ink }}>{current} <span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></div></div>
           <span style={{ fontSize: 14, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 8, display: "flex", alignItems: "center", gap: 3 }}><ArrowDownRight size={14} /> {Math.abs(change)} ק״ג</span>
         </div>
+        <div style={{ fontSize: 12, color: C.faint, marginBottom: 2 }}>המשקל שהזנת בפועל לאורך זמן (לא תחזית)</div>
         <div style={{ height: 150, margin: "6px -6px 0" }}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
@@ -890,17 +891,21 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
 }
 
 function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
+  const [draft, setDraft] = useState(profile);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(profile);
+  const save = () => setProfile(draft);
+  const set = (patch) => setDraft({ ...draft, ...patch });
   const Row = ({ label, children }) => (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 15, padding: "11px 0", borderTop: `1px solid ${C.line}` }}>
       <span style={{ color: C.sub }}>{label}</span>
       <span style={{ fontWeight: 500, color: C.ink, display: "flex", alignItems: "center", gap: 8 }}>{children}</span>
     </div>
   );
-  const Mini = ({ value, set, step = 1, min = 0, suffix }) => (
+  const Mini = ({ value, set: setV, step = 1, min = 0, suffix }) => (
     <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <button onClick={() => set(Math.max(min, Math.round((value - step) * 10) / 10))} style={{ width: 26, height: 26, border: `1px solid ${C.line}`, borderRadius: 7, background: C.panel, cursor: "pointer", color: C.ink }}><Minus size={13} /></button>
+      <button onClick={() => setV(Math.max(min, Math.round((value - step) * 10) / 10))} style={{ width: 26, height: 26, border: `1px solid ${C.line}`, borderRadius: 7, background: C.panel, cursor: "pointer", color: C.ink }}><Minus size={13} /></button>
       <span style={{ minWidth: 56, textAlign: "center" }}>{value}{suffix ? ` ${suffix}` : ""}</span>
-      <button onClick={() => set(Math.round((value + step) * 10) / 10)} style={{ width: 26, height: 26, border: `1px solid ${C.line}`, borderRadius: 7, background: C.panel, cursor: "pointer", color: C.ink }}><Plus size={13} /></button>
+      <button onClick={() => setV(Math.round((value + step) * 10) / 10)} style={{ width: 26, height: 26, border: `1px solid ${C.line}`, borderRadius: 7, background: C.panel, cursor: "pointer", color: C.ink }}><Plus size={13} /></button>
     </span>
   );
   const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
@@ -909,53 +914,56 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
       <Header title="פרופיל" />
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>{((profile.name || userName || "").trim().charAt(0)) || "♥"}</div>
-        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
+        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(draft.weeklyRateG)}</div></div>
       </div>
-      <Row label="גיל"><Mini value={profile.age} set={(v) => setProfile({ ...profile, age: Math.max(18, v) })} /></Row>
-      <Row label="גובה"><Mini value={profile.heightCm} set={(v) => setProfile({ ...profile, heightCm: v })} suffix="ס״מ" /></Row>
-      <Row label="משקל"><Mini value={profile.weightKg} set={(v) => setProfile({ ...profile, weightKg: v })} step={0.5} suffix="ק״ג" /></Row>
-      <Row label="משקל יעד"><Mini value={profile.goalWeightKg} set={(v) => setProfile({ ...profile, goalWeightKg: v })} step={0.5} suffix="ק״ג" /></Row>
+      <Row label="גיל"><Mini value={draft.age} set={(v) => set({ age: Math.max(18, v) })} /></Row>
+      <Row label="גובה"><Mini value={draft.heightCm} set={(v) => set({ heightCm: v })} suffix="ס״מ" /></Row>
+      <Row label="משקל"><Mini value={draft.weightKg} set={(v) => set({ weightKg: v })} step={0.5} suffix="ק״ג" /></Row>
+      <Row label="משקל יעד"><Mini value={draft.goalWeightKg} set={(v) => set({ goalWeightKg: v })} step={0.5} suffix="ק״ג" /></Row>
       <Row label="קצב ירידה">
-        <button onClick={() => setProfile({ ...profile, weeklyRateG: cycle(RATE_OPTIONS, profile.weeklyRateG) })} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.ink, fontFamily: fontStack, fontSize: 15, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>{rateShort(profile.weeklyRateG)} <Pencil size={13} color={C.faint} /></button>
+        <button onClick={() => set({ weeklyRateG: cycle(RATE_OPTIONS, draft.weeklyRateG) })} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.ink, fontFamily: fontStack, fontSize: 15, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>{rateShort(draft.weeklyRateG)} <Pencil size={13} color={C.faint} /></button>
       </Row>
       <Row label="תחילת התוכנית">
-        <select value={profile.startDate} onChange={(e) => setProfile({ ...profile, startDate: e.target.value })} style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: "6px 8px", fontSize: 14, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
+        <select value={draft.startDate} onChange={(e) => set({ startDate: e.target.value })} style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: "6px 8px", fontSize: 14, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
           {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
         </select>
       </Row>
-      <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>את/ה כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(draft.startDate, TODAY)} בתוכנית.</div>
+
+      {dirty && <div style={{ marginTop: 12 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור שינויים</Btn></div>}
+
+      <div style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <span style={{ fontSize: 13, color: C.brandD }}>יעד קלורי יומי</span>
+          {draft.calorieOverride
+            ? <span onClick={() => set({ calorieOverride: null })} style={{ fontSize: 12, color: C.brandD, textDecoration: "underline", cursor: "pointer" }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</span>
+            : <span style={{ fontSize: 12, color: C.sub }}>מומלץ</span>}
+        </div>
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <Mini value={draft.calorieOverride || targets.targetKcal} set={(v) => set({ calorieOverride: Math.max(1000, v) })} step={10} suffix="קק״ל" />
+        </div>
+        {programWeekFor(draft.startDate, TODAY) >= MACRO_UNLOCK.week && <div style={{ marginTop: 12 }}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
+      </div>
 
       <div style={{ fontSize: 13, color: C.sub, marginTop: 18, marginBottom: 8 }}>סגנון תזונה (משמש להמלצות)</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
         {DIET_OPTIONS.map((d) => {
-          const on = (profile.diet || []).includes(d.id);
-          return (<span key={d.id} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d.id) : [...(profile.diet || []), d.id] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
+          const on = (draft.diet || []).includes(d.id);
+          return (<span key={d.id} onClick={() => set({ diet: on ? (draft.diet || []).filter((x) => x !== d.id) : [...(draft.diet || []), d.id] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
         })}
       </div>
       <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>רגישויות ואלרגיות (להימנע)</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
         {SENSITIVITY_OPTIONS.map((s) => {
-          const on = (profile.allergies || []).includes(s);
-          return (<span key={s} onClick={() => setProfile({ ...profile, allergies: on ? (profile.allergies || []).filter((x) => x !== s) : [...(profile.allergies || []), s] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+          const on = (draft.allergies || []).includes(s);
+          return (<span key={s} onClick={() => set({ allergies: on ? (draft.allergies || []).filter((x) => x !== s) : [...(draft.allergies || []), s] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
         })}
       </div>
-      <input value={profile.dislikes || ""} onChange={(e) => setProfile({ ...profile, dislikes: e.target.value })} placeholder="עוד משהו? (למשל: בלי חריף, בלי קצף חלב)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+      <input value={draft.dislikes || ""} onChange={(e) => set({ dislikes: e.target.value })} placeholder="עוד משהו? (למשל: בלי חריף, בלי קצף חלב)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
       <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.6, marginTop: 8 }}>הרגישויות שלך מוזנות ל-AI כדי להימנע מהמלצות בעייתיות. עדיין — בדקי רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
 
-      <div style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <span style={{ fontSize: 13, color: C.brandD }}>יעד קלורי יומי</span>
-          {profile.calorieOverride
-            ? <span onClick={() => setProfile({ ...profile, calorieOverride: null })} style={{ fontSize: 12, color: C.brandD, textDecoration: "underline", cursor: "pointer" }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</span>
-            : <span style={{ fontSize: 12, color: C.sub }}>מומלץ</span>}
-        </div>
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <Mini value={profile.calorieOverride || targets.targetKcal} set={(v) => setProfile({ ...profile, calorieOverride: Math.max(1000, v) })} step={10} suffix="קק״ל" />
-        </div>
-      </div>
-      {programWeekFor(profile.startDate, TODAY) >= MACRO_UNLOCK.week && <MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline />}
-      <div style={{ marginTop: 16 }}><Btn>שמור שינויים</Btn></div>
-      <div style={{ marginTop: 10 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
+      {dirty && <div style={{ marginTop: 16 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור שינויים</Btn></div>}
+      <div style={{ marginTop: dirty ? 10 : 16 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
       <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
     </div>
   );

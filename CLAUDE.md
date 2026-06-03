@@ -75,7 +75,7 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.58`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.59`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -111,3 +111,10 @@ The "מתכונים" tab now renders the real MyPrime recipe booklet instead of 
 - Sweets now live INSIDE the Recipes screen as a top segmented toggle: "מתכונים | מתוקים" (pill segmented control, panel bg on active). RecipesScreen takes `sweetsOpen` and manages an internal `section` state ("recipes"/"sweets") switching dataset (RECIPES/SWEETS), subtitle, search placeholder, and category chips.
 - The "מתוקים" segment only renders when `sweetsOpen` (week 3 day 5 / program day 19). When it appears it shows a small "חדש" badge; the badge disappears once the user taps the מתוקים segment (local `seenSweets` state). Icons: ChefHat / Cookie.
 - RecipesScreen no longer takes items/title/subtitle props; it is self-contained. Rendered once: `<RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />`.
+
+## v0.59 — Profile as a draft form + feminine wording + report graph clarity
+- All copy now feminine-only ("את כעת בשבוע X בתוכנית" — removed "את/ה"). App audience is women only.
+- ProfileScreen is now a DRAFT form: a local `draft` mirrors profile; every field/chip/dislikes/calorie edit updates `draft`, NOT the live profile. `dirty = JSON.stringify(draft)!==JSON.stringify(profile)`. A prominent "שמור שינויים" button appears ONLY when dirty — placed high (right under the "שבוע X" line) AND again above the reset button — and only on click does `setProfile(draft)` commit. The old always-present (dead, no-onClick) bottom save button was removed.
+- Moved the daily-calorie target + macros (protein/fat/carbs) block UP to directly under the "את כעת בשבוע X" line. MacroRow now lives inside that brandBg card (shown from week 3).
+- Report weight graph: added caption "המשקל שהזנת בפועל לאורך זמן (לא תחזית)" to make explicit it is ACTUAL logged weight, not a projection/target.
+- NOTE (answered, no code change): editing weight in Profile sets the baseline used for targets/projection only; it does NOT add a dated point to the report's actual-weight graph (that graph reflects weights logged via "+ הזיני משקל היום"). If Ron wants a Profile weight-save to also drop a dated measurement on the report graph, that's a separate wiring change (ProfileScreen would need an addWeight callback).
