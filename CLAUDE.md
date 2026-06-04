@@ -75,7 +75,7 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.65`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.70`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -179,3 +179,31 @@ Symptom: AI-estimated values are unrealistically low (e.g. grilled entrecote kca
 - **Steps modal:** typed only (text input, inputMode numeric, no 250 jumps), amber progress bar, note "לשינוי יעד הצעדים — אפשר בפרופיל. הזנה חוזרת היום מעדכנת את הערך." (stepsByDate setStepsForDate already overwrites per date.)
 - **Profile:** base data (גיל/גובה/משקל התחלתי/משקל יעד/קצב ירידה/תחילת התוכנית + week line) wrapped in a collapsible "נתוני בסיס" dropdown (ChevronDown, default CLOSED via `baseOpen`). Calorie goal stays a brandBg card. Step goal converted from EditRow to its own amberBg section card. Nutrition prefs (diet+sensitivities+dislikes+note) wrapped in a C.bg section card titled "העדפות תזונה" (chip unselected bg transparent→C.panel for contrast). Per-field edit modal unchanged.
 - VERSION 0.64→0.65 (App.jsx changed — re-upload src/App.jsx; usda.js unchanged since 0.63). KEEP qa harness in sync (aiNutritionChat prompt unchanged this version).
+
+## v0.66 — "+" on the calories ring (food + activity shortcut)
+- `Ring` now accepts an optional `onPlus` → renders the same bottom-center "+" badge (brand color) as MetricRing. Backward compatible (callers without onPlus get the plain svg).
+- Day screen: calories ring `onPlus={onAddCalorie}` (new DayScreen prop) → root `setSheet("caloriemenu")`.
+- `EntryMenu` gained a `mode` prop; `mode="calorie"` shows only [הוספת מזון (first), פעילות גופנית]. New sheet render `caloriemenu` uses it. onPickEntry already routes food/activity. The bottom FAB still opens the full menu (food/activity/recommend/weight).
+- VERSION 0.65→0.66 (App.jsx only).
+
+## v0.67 — sensitivities save/placement, intro update, start-date cap, no long dashes
+- **Free-text sensitivity input** moved to immediately after the "רגישויות ואלרגיות" heading (before the preset chips) in BOTH the profile prefs section and the onboarding allergies step, restyled prominent (1.5px C.brand border, not faint). Confirmed it persists to `profile.dislikes` (controlled input) and is ALREADY fed into the RecommendModal seed via `avoidList` (allergies + dislikes) with a strict no-suggest instruction. The bottom disclaimer note changed from C.faint to C.sub.
+- **Intro/welcome modal:** barcode no longer described as a demo-only mock (it works) - bullet now "אפשר לסרוק ברקוד של מוצר ולקבל ערכים מהמאגר"; added a bullet that steps/water/weight tracking appears by program progress.
+- **Program start date:** `listSundays()` loop capped at `i <= 0` (was `<= 2`) so the latest selectable start is the CURRENT week's Sunday - no future start dates.
+- **Long dashes removed:** all em-dashes and en-dashes in displayed text replaced with a short hyphen across App.jsx, recipes.js, sweets.js (standing rule: short dashes only). recipes.js/sweets.js changed only for this - re-upload all three this version.
+- VERSION 0.66->0.67.
+
+## v0.68 — consent text tidy, pescatarian diet option
+- Onboarding consent privacy block: merged the 3 separate paragraphs (one had a Lock icon in a flex column that caused a hanging indent) into ONE flowing right-aligned paragraph (textAlign right) with the Lock icon inline at the start (display inline, vertical-align). No more icon-induced indentation / ragged wrap.
+- DIET_OPTIONS: added "צמחוני + דגים" 🐟 (pescatarian) between צמחוני and טבעוני.
+- VERSION 0.67->0.68 (App.jsx only).
+- OPEN QUESTION raised with Ron: the report's "Adaptive TDEE" line (`adaptive = targets.tdee + (change<0 ? -40 : +40)`, line ~691) is a crude placeholder - it nudges the formula TDEE by a flat ±40 by weight-change SIGN only; it does NOT use logged intake or the magnitude of change, so "ההוצאה האמיתית שלך כוילה" overstates it. Pending Ron's choice: implement a real adaptive calc (expenditure = intake - weightChangeKg×7700, /days), reword honestly, or hide until enough data.
+
+## v0.69 — removed Adaptive TDEE line (kept as future task)
+- Per Ron: removed the report's "Adaptive TDEE" note + the unused `adaptive` const. Kept as a FUTURE TASK: implement a real adaptive-TDEE (expenditure = intake - weightChangeKg*7700, /days) once there's enough logged data, or revisit wording. (Target icon import may now be unused - harmless.)
+- VERSION 0.68->0.69 (App.jsx only).
+- DISCUSSION (calorie targets higher than other apps): root cause is the activity multiplier default `activity:"בינונית"` (×1.55 in ACTIVITY_FACTORS) in DEFAULT_PROFILE + onboarding draft. computeTargets = bmrMifflinWoman × factor - deficit. Most consumer apps default to sedentary (×1.2) and ADD exercise. Our app ALSO adds steps+activity to the daily budget, so ×1.55 DOUBLE-COUNTS activity. Proposed (pending Ron): default activity to "יושבני" (1.2). For demo profile 55kg/165/50yo/250g-wk: 1.55→1539 vs 1.2→~1129. NOT yet changed.
+
+## v0.70 — default activity to sedentary (calorie targets aligned with familiar apps)
+- Decision (Ron): keep the Mifflin-St Jeor formula, but change the DEFAULT activity level from "בינונית" (×1.55) to "יושבני" (×1.2). Rationale: the app already adds steps + logged activity to the daily budget, so a moderate baseline double-counted movement and pushed targets well above what users see in familiar apps. Changed in DEFAULT_PROFILE (line ~2214) and the onboarding draft (line ~427); computeTargets fallback `?? 1.55` -> `?? 1.2`. For the demo profile this drops the target by ~400 kcal into the expected range. (Harris-Benedict was considered and rejected - less accurate, and would have raised the number.)
+- VERSION 0.69->0.70 (App.jsx only).
