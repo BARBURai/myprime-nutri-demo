@@ -10,6 +10,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
+import { CHECKIN_GROUPS, activeTasks } from "./checkins";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -216,6 +217,50 @@ function streakDays(log) {
   while (has(d)) { n++; d = addDays(d, -1); }
   return n;
 }
+
+/* ============================================================
+   DAILY PROGRESS TRACKER (check-in module)
+   ============================================================ */
+// Master switch - set to false to hide the whole tracker everywhere.
+const TRACKER_ENABLED = true;
+const CHECKIN_UNLOCK = { week: 1, day: 3 };   // starts on day 3 of week 1
+const CHECKIN_REVEAL_HOUR = 19;               // today's report opens at 19:00
+const MEDAL_SRC = "/medals/medal.webp";
+function trophyForWeek(w) {
+  if (w >= 10) return "/medals/trophy-champion.webp";
+  return "/medals/trophy-" + Math.max(1, Math.min(9, w)) + ".webp";
+}
+// Pulls the values the app already tracks so she is not asked twice.
+function autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl) {
+  const steps = (stepsByDate && stepsByDate[date]) || 0;
+  const cups = Math.round((waterMlOf(waterByDate ? waterByDate[date] : 0) / (cupMl || DEFAULT_CUP_ML)) * 10) / 10;
+  const dayLog = (log || []).filter((e) => e.date === date);
+  const proteinHad = dayLog.reduce((s, e) => s + (e.p || 0), 0);
+  return {
+    steps: steps > 0 ? steps : null,
+    water: cups > 0 ? cups : null,
+    journal: dayLog.length > 0,
+    protein: !!(targets && targets.protein && proteinHad >= targets.protein),
+  };
+}
+// A day counts toward the streak when she filled at least one manual answer.
+function checkinStreak(checkins, today) {
+  let n = 0, d = today;
+  while (checkins && checkins[d] && Object.keys(checkins[d]).length > 0) { n++; d = addDays(d, -1); }
+  return n;
+}
+// Whether a task reads as "done" (a positive, for the warm count).
+function taskDone(task, answers, auto) {
+  if (task.auto) {
+    if (task.auto === "steps") return auto.steps != null;
+    if (task.auto === "water") return auto.water != null;
+    if (task.auto === "journal") return auto.journal;
+    if (task.auto === "protein") return auto.protein;
+  }
+  const v = answers[task.id];
+  if (task.type === "number") return v != null && v > 0;
+  return v === true;
+}
 const seedEntry = (id, date, meal, foodId, g, source = "verified") => {
   const f = FOOD_BY_ID[foodId];
   return { id, date, meal, name: f.name, g, source, ...nutritionFor(f, g) };
@@ -247,7 +292,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.86";
+const VERSION = "0.87";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -645,7 +690,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, stepGoal, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, userName, onStreakTap }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, stepGoal, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, userName, onStreakTap, checkins, onOpenCheckin }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -664,6 +709,13 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const targetCups = Math.round(WATER_TARGET_ML / cupMl);
   const todayRef = useRef(null);
   const streak = streakDays(log);
+  const cupMlD = profile.cupMl || DEFAULT_CUP_ML;
+  const checkinOpen = TRACKER_ENABLED && unlockedOn(profile.startDate, date, CHECKIN_UNLOCK);
+  const ciTasks = checkinOpen ? activeTasks(week) : [];
+  const ciAnswers = (checkins && checkins[date]) || {};
+  const ciAuto = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMlD);
+  const ciStreak = checkinStreak(checkins, today);
+  const ciLocked = date === today && new Date().getHours() < CHECKIN_REVEAL_HOUR;
   useEffect(() => { if (todayRef.current) todayRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, []);
   const days = Array.from({ length: 15 }, (_, i) => addDays(today, i - 10));
   return (
@@ -715,6 +767,8 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
             ))}
           </div>
         )}
+
+        {checkinOpen && <CheckinCard date={date} today={today} week={week} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} streak={ciStreak} locked={ciLocked} onOpen={onOpenCheckin} />}
 
         {dayAct.length > 0 && (
           <>
@@ -2374,6 +2428,83 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   );
 }
 
+function CheckinCard({ date, today, week, tasks, answers, auto, streak, locked, onOpen }) {
+  const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
+  const total = tasks.length;
+  const medals = Math.min(streak, 6);
+  return (
+    <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "12px 14px", margin: "0 0 16px", background: C.panel }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, display: "flex", alignItems: "center", gap: 7 }}><Sparkles size={16} color={C.brand} /> המעקב היומי שלי</span>
+        {streak > 0 && <span style={{ display: "flex", alignItems: "center", gap: 2 }}>{Array.from({ length: medals }).map((_, i) => <img key={i} src={MEDAL_SRC} alt="" width={20} height={20} style={{ display: "block" }} />)}</span>}
+      </div>
+      {locked ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, fontSize: 14, color: C.sub }}><Clock size={15} color={C.faint} /> הדוח של היום ייפתח ב-19:00. אפשר להשלים בכל שעה אחרי זה.</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 13.5, color: C.sub, marginTop: 6 }}>{done} מתוך {total} להיום{streak > 0 ? ` · ${streak} ימים ברצף` : ""}</div>
+          <div style={{ height: 6, background: C.line, borderRadius: 20, marginTop: 8, overflow: "hidden" }}><div style={{ width: total ? `${Math.round((done / total) * 100)}%` : "0%", height: "100%", background: C.brand, borderRadius: 20 }} /></div>
+          <button onClick={onOpen} style={{ marginTop: 12, width: "100%", border: "none", borderRadius: 10, padding: "11px", background: C.brand, color: "#fff", fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{done > 0 ? "להמשך המעקב של היום" : "פתחי את המעקב של היום"}</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CheckinModal({ tasks, answers, auto, setValue, onClose, onDone }) {
+  return (
+    <SheetShell title="המעקב היומי שלי" onClose={onClose}>
+      <div style={{ maxHeight: "58vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
+        {CHECKIN_GROUPS.map((g) => {
+          const items = tasks.filter((t) => t.group === g.id);
+          if (!items.length) return null;
+          return (
+            <div key={g.id}>
+              <div style={{ fontSize: 12.5, color: C.faint, margin: "12px 0 2px" }}>{g.label}</div>
+              {items.map((t) => {
+                const done = taskDone(t, answers, auto);
+                return (
+                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
+                    <span style={{ fontSize: 15, color: C.ink }}>{t.label}{t.optional ? <span style={{ color: C.faint, fontSize: 12 }}> (רשות)</span> : null}</span>
+                    {t.auto ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: done ? C.brandD : C.faint, background: done ? C.brandBg : "transparent", padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}>{done ? <Check size={14} /> : null}{t.auto === "steps" && auto.steps != null ? `${auto.steps.toLocaleString()} · ` : ""}{t.auto === "water" && auto.water != null ? `${auto.water} · ` : ""}אוטומטי</span>
+                    ) : t.type === "number" ? (
+                      <Stepper value={answers[t.id] || 0} set={(v) => setValue(t.id, v)} step={1} min={0} />
+                    ) : (
+                      <button onClick={() => setValue(t.id, answers[t.id] === true ? null : true)} aria-label={t.label} style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${answers[t.id] === true ? C.brand : C.line}`, background: answers[t.id] === true ? C.brand : C.panel, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{answers[t.id] === true ? <Check size={16} /> : null}</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={onDone} style={{ marginTop: 14, width: "100%", border: "none", borderRadius: 12, padding: "13px", background: C.brand, color: "#fff", fontSize: 16, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>סיימתי להיום</button>
+    </SheetShell>
+  );
+}
+
+function CheckinCheer({ streak, name, onClose }) {
+  const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
+  const medals = Math.min(Math.max(streak, 1), 6);
+  return (
+    <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        {Array.from({ length: 26 }).map((_, i) => (
+          <span key={i} style={{ position: "absolute", top: -12, left: `${(i * 3.9) % 100}%`, width: 8, height: 8, borderRadius: 2, background: colors[i % colors.length], animation: `confettiFall ${1 + (i % 5) * 0.15}s ease-out ${(i % 7) * 0.08}s forwards` }} />
+        ))}
+      </div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", textAlign: "center", maxWidth: 300, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 2, flexWrap: "wrap" }}>{Array.from({ length: medals }).map((_, i) => <img key={i} src={MEDAL_SRC} alt="" width={medals > 3 ? 44 : 56} height={medals > 3 ? 44 : 56} style={{ display: "block" }} />)}</div>
+        <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, marginTop: 10 }}>{streak > 1 ? `${streak} ימים ברצף!` : "מדליה ראשונה!"}</div>
+        <div style={{ fontSize: 14.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>עוד מדליה נכנסה לאוסף שלך{name && name.trim() ? `, ${name.trim()}` : ""}. אני כאן איתך בכל יום 💜<div style={{ marginTop: 2, color: C.faint, fontSize: 13 }}>ענת</div></div>
+        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות!</Btn></div>
+      </div>
+    </div>
+  );
+}
+
 function StreakCheer({ streak, name, onClose }) {
   const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
   return (
@@ -2404,6 +2535,7 @@ export default function App() {
   const [activityLog, setActivityLog] = useState(saved?.activityLog || []);
   const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
   const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
+  const [checkins, setCheckins] = useState(saved?.checkins || {});
   const [favorites, setFavorites] = useState(saved?.favorites || []);
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [today, setToday] = useState(TODAY);
@@ -2483,8 +2615,8 @@ export default function App() {
   const recMealsHad = recDayLog.map((e) => e.name).join(", ");
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites })); } catch (e) {}
-  }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites]);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, checkins })); } catch (e) {}
+  }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, checkins]);
 
   const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "" }); setWeights(initWeights(p.weightKg, p.startDate)); setOnboarded(true); };
   const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
@@ -2521,6 +2653,8 @@ export default function App() {
   const addActivity = (a) => { setActivityLog((l) => [...l, { id: "a" + Date.now(), date: selectedDate, name: a.name, kcal: Math.round(a.kcal) }]); setSheet(null); };
   const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
   const setStepsForDate = (date, n) => setStepsByDate((s) => ({ ...s, [date]: Math.max(0, Math.round(n || 0)) }));
+  const setCheckinValue = (date, taskId, value) => setCheckins((c) => { const day = { ...(c[date] || {}) }; if (value === null || value === undefined || value === "") delete day[taskId]; else day[taskId] = value; return { ...c, [date]: day }; });
+  const finishCheckin = () => { const has = checkins[selectedDate] && Object.keys(checkins[selectedDate]).length > 0; setSheet(selectedDate === today && has ? "checkinCheer" : null); };
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
   const setWeightForDate = (date, kg) => { setWeights((w) => [...w.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
   const reportAddWeight = () => setSheet("weight");
@@ -2531,6 +2665,7 @@ export default function App() {
     setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg("");
     setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
     setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate)); setSelectedDate(TODAY);
+    setCheckins({});
     setProfile(DEFAULT_PROFILE);
   };
   const onPickEntry = (id) => {
@@ -2583,7 +2718,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} stepGoal={stepGoal} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} stepGoal={stepGoal} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} stepGoal={stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
@@ -2609,6 +2744,8 @@ export default function App() {
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
             {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {sheet === "checkin" && <CheckinModal tasks={activeTasks(programWeekFor(profile.startDate, selectedDate))} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} onDone={finishCheckin} />}
+            {sheet === "checkinCheer" && <CheckinCheer streak={checkinStreak(checkins, today)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
               : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />)}
