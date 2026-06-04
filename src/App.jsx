@@ -36,6 +36,7 @@ const FAT_PER_KG = 0.9;
 const RATE_OPTIONS = [0, 250, 500];
 const UNDERWEIGHT_BMI = 18.5; // WHO: BMI<18.5 = תת-משקל
 function bmiOf(kg, heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? kg / (h * h) : 0; }
+function minHealthyKg(heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? Math.ceil(UNDERWEIGHT_BMI * h * h * 2) / 2 : 0; } // משקל מינימלי שעדיין BMI>=18.5, מעוגל ל-0.5 כלפי מעלה
 const WATER_TARGET_GLASSES = 8;    // 8 כוסות = 2 ליטר
 const WATER_MIN_GLASSES = 6;       // 6 כוסות = 1.5 ליטר
 const WATER_TARGET_ML = 2000;      // יעד מים קבוע: 2 ליטר
@@ -246,7 +247,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.84";
+const VERSION = "0.86";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -437,18 +438,16 @@ function Onboarding({ onFinish, name }) {
   const [confirmNoSens, setConfirmNoSens] = useState(false);
   const [confirmSens, setConfirmSens] = useState(false);
   const [ack, setAck] = useState(false);
-  const [goalWarn, setGoalWarn] = useState(false);
   const customSens = dislikes.split(",").map((s) => s.trim()).filter(Boolean);
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setDislikes([...customSens, t].join(", ")); setNewSens(""); };
   const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
   const hasSens = allergies.length > 0 || customSens.length > 0;
   const next = () => {
-    if (step === 1 && rate !== 0 && bmiOf(goalKg, heightCm) < UNDERWEIGHT_BMI) { setGoalWarn(true); return; }
     if (step === 2) { if (hasSens) setConfirmSens(true); else setConfirmNoSens(true); return; }
     setStep(step + 1);
   };
 
-  const draft = { age, heightCm, weightKg, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, stepGoal: 2000, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes };
+  const draft = { age, heightCm, weightKg: Math.max(minHealthyKg(heightCm), weightKg), activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : Math.max(minHealthyKg(heightCm), goalKg), returnPct: 50, startDate, stepGoal: 2000, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes };
   const targets = computeTargets(draft);
   const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
@@ -476,7 +475,8 @@ function Onboarding({ onFinish, name }) {
             <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
             <Field label="גיל"><Stepper value={age} set={(v) => setAge(Math.max(18, v))} min={18} /></Field>
             <Field label="גובה"><Stepper value={heightCm} set={setHeightCm} suffix="ס״מ" /></Field>
-            <Field label="משקל נוכחי"><Stepper value={weightKg} set={setWeightKg} step={0.5} suffix="ק״ג" /></Field>
+            <Field label="משקל נוכחי"><Stepper value={weightKg} set={(v) => setWeightKg(Math.max(minHealthyKg(heightCm), v))} step={0.5} suffix="ק״ג" /></Field>
+            <div style={{ fontSize: 12.5, color: C.faint, marginTop: -2, marginBottom: 4, lineHeight: 1.5 }}>לא ניתן להזין משקל נמוך מ-{minHealthyKg(heightCm)} ק״ג, הטווח הבריא לגובה שלך.</div>
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 17, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
               <select value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 17, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
@@ -506,7 +506,7 @@ function Onboarding({ onFinish, name }) {
                 </div>
               );
             })}
-            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalKg} set={(v) => setGoalKg(Math.min(weightKg - 0.5, v))} step={0.5} suffix="ק״ג" /></Field></div>)}
+            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalKg} set={(v) => setGoalKg(Math.max(minHealthyKg(heightCm), Math.min(weightKg - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 12.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightCm)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
           </>
         )}
 
@@ -623,10 +623,6 @@ function Onboarding({ onFinish, name }) {
         </div>
       )}
 
-      {goalWarn && (
-        <LowValueWarning message={GOAL_LOW_MSG} onContinue={() => { setGoalWarn(false); setStep(step + 1); }} onCancel={() => setGoalWarn(false)} />
-      )}
-
       {confirmSens && (
         <div onClick={() => { setConfirmSens(false); setAck(false); }} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
@@ -706,7 +702,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", gap: 10, marginTop: 10, marginBottom: 14 }}>
           <Ring consumed={consumed} budget={budget} size={130} onPlus={onAddCalorie} />
           {macroOpen && <ProteinRing consumed={macros.p} target={targets.protein} size={130} />}
-          {waterOpen && <MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} color={C.water} track={C.waterBg} label="כוסות" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={130} />}
+          {waterOpen && <MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={130} />}
           {stepsOpen && <MetricRing value={steps} goal={stepGoal} color={C.amber} track={C.amberBg} label="צעדים" sub={`מתוך ${stepGoal.toLocaleString()}`} onPlus={onEditSteps} size={130} />}
         </div>
         {macroOpen && (
@@ -1054,13 +1050,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
-  const [warn, setWarn] = useState(null);
-  const doCommit = () => { setProfile({ ...profile, [edit.key]: edit.value }); setEdit(null); setWarn(null); };
-  const commit = () => {
-    if (edit.key === "goalWeightKg" && bmiOf(edit.value, profile.heightCm) < UNDERWEIGHT_BMI) { setWarn(GOAL_LOW_MSG); return; }
-    if (edit.key === "calorieOverride" && edit.value <= KCAL_FLOOR) { setWarn(KCAL_LOW_MSG); return; }
-    doCommit();
-  };
+  const commit = () => { setProfile({ ...profile, [edit.key]: edit.value }); setEdit(null); };
   const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
   const startLabel = (listSundays().find((s) => s.value === profile.startDate) || {}).label || profile.startDate;
   const calNow = profile.calorieOverride || targets.targetKcal;
@@ -1089,8 +1079,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
           <div style={{ paddingBottom: 4 }}>
             <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
             <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
-            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: 30, suffix: "ק״ג", init: profile.weightKg })} />
-            <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: 30, suffix: "ק״ג", init: profile.goalWeightKg })} />
+            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.weightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
+            <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
             <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
             <EditRow label="תחילת התוכנית" display={startLabel} onClick={() => open({ key: "startDate", label: "תחילת התוכנית", type: "date", init: profile.startDate })} />
             <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
@@ -1157,15 +1147,18 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
             </div>
 
             {(edit.type === "num") && (
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
-                <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(edit.min || 0, v) })} step={edit.step} min={edit.min} suffix={edit.suffix} />
-              </div>
+              <>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: edit.hint ? 8 : 18 }}>
+                  <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(edit.min || 0, v) })} step={edit.step} min={edit.min} suffix={edit.suffix} />
+                </div>
+                {edit.hint && <div style={{ fontSize: 12.5, color: C.faint, textAlign: "center", marginBottom: 18, lineHeight: 1.5 }}>{edit.hint}</div>}
+              </>
             )}
 
             {edit.type === "calorie" && (
               <>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
-                  <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(1000, v) })} step={10} min={1000} suffix="קק״ל" />
+                  <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(KCAL_FLOOR, v) })} step={10} min={KCAL_FLOOR} suffix="קק״ל" />
                 </div>
                 <div onClick={() => { setProfile({ ...profile, calorieOverride: null }); setEdit(null); }} style={{ textAlign: "center", fontSize: 13, color: C.brandD, textDecoration: "underline", cursor: "pointer", marginBottom: 18 }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</div>
               </>
@@ -1197,8 +1190,6 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
           </div>
         </div>
       )}
-
-      {warn && <LowValueWarning message={warn} onContinue={doCommit} onCancel={() => setWarn(null)} />}
     </div>
   );
 }
@@ -2011,13 +2002,14 @@ function ActivityModal({ onClose, onAdd, weightKg }) {
   );
 }
 
-function WeightModal({ weights, today, minDate, onClose, onAdd }) {
+function WeightModal({ weights, today, minDate, heightCm, onClose, onAdd }) {
   const find = (d) => { const w = (weights || []).find((x) => x.date === d); return w ? w.kg : null; };
   const [date, setDate] = useState(today);
   const [kg, setKg] = useState(() => { const k = find(today); return k != null ? String(k) : ""; });
   const onDate = (d) => { setDate(d); const k = find(d); setKg(k != null ? String(k) : ""); };
   const num = parseFloat(kg);
   const valid = isFinite(num) && num >= 30 && num <= 400 && !!date;
+  const low = valid && bmiOf(num, heightCm) < UNDERWEIGHT_BMI;
   return (
     <SheetShell title="הזנת משקל" onClose={onClose}>
       <div style={{ margin: "2px 0 12px" }}>
@@ -2028,6 +2020,7 @@ function WeightModal({ weights, today, minDate, onClose, onAdd }) {
         <input type="text" inputMode="decimal" value={kg} autoFocus onChange={(e) => setKg(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="לדוגמה 71.5" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 24, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
         <div style={{ textAlign: "center", fontSize: 13, color: C.sub, marginTop: 6 }}>ק״ג</div>
       </div>
+      {low && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, borderRadius: 10, padding: 10, lineHeight: 1.6, marginBottom: 10, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>המשקל שהזנת נמוך מהטווח התקין (BMI מתחת ל-18.5). שווה להתייעץ עם איש מקצוע. אפשר כמובן לשמור את הערך.</span></div>}
       <Btn onClick={() => { if (valid) onAdd(Math.round(num * 10) / 10, date); }} style={{ opacity: valid ? 1 : 0.5 }}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
       <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>אפשר לבחור גם תאריך קודם. הזנה חוזרת לאותו תאריך מעדכנת את הערך.</div>
     </SheetShell>
@@ -2056,15 +2049,17 @@ function StepsModal({ current, goal, weightKg, onClose, onAdd }) {
   );
 }
 
-function WaterModal({ currentMl, cupMl, onClose, onSave }) {
-  const [ml, setMl] = useState(currentMl);
+function WaterModal({ currentMl, cupMl, onSetMl, onSetCup, onClose }) {
   const [cup, setCup] = useState(cupMl || DEFAULT_CUP_ML);
   const [free, setFree] = useState("");
   const safeCup = Math.max(100, cup || DEFAULT_CUP_ML);
+  const ml = currentMl || 0;
   const cups = Math.round((ml / safeCup) * 10) / 10;
   const targetCups = Math.round(WATER_TARGET_ML / safeCup);
   const frac = Math.max(0, Math.min(1, ml / WATER_TARGET_ML));
-  const addFree = () => { const n = parseInt(free, 10) || 0; if (n >= 50) { setMl(ml + n); setFree(""); } };
+  const add = (n) => onSetMl(Math.max(0, ml + n));
+  const setCupLive = (v) => { const c = Math.max(100, Math.min(1000, v)); setCup(c); onSetCup(c); };
+  const addFree = () => { const n = parseInt(free, 10) || 0; if (n >= 50) { add(n); setFree(""); } };
   return (
     <SheetShell title="עדכון מים" onClose={onClose}>
       <div style={{ textAlign: "center", margin: "2px 0 10px" }}>
@@ -2075,24 +2070,27 @@ function WaterModal({ currentMl, cupMl, onClose, onSave }) {
         <div style={{ width: `${frac * 100}%`, height: "100%", background: C.water, borderRadius: 6, transition: "width .3s" }} />
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <button onClick={() => setMl(ml + safeCup)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ כוס ({safeCup} מ"ל)</button>
-        <button onClick={() => setMl(ml + 500)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ חצי ליטר</button>
+        <button onClick={() => add(safeCup)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ כוס ({safeCup} מ"ל)</button>
+        <button onClick={() => add(500)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ חצי ליטר</button>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <button onClick={() => add(-safeCup)} disabled={ml <= 0} style={{ flex: 1, border: `1.5px solid ${ml <= 0 ? C.line : C.water}`, background: C.panel, color: ml <= 0 ? C.faint : C.water, borderRadius: 12, padding: "10px 8px", fontFamily: fontStack, fontSize: 14, fontWeight: 600, cursor: ml <= 0 ? "default" : "pointer", opacity: ml <= 0 ? 0.6 : 1 }}>- כוס (תיקון)</button>
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
         <input type="text" inputMode="numeric" value={free} onChange={(e) => setFree(e.target.value.replace(/[^0-9]/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFree(); } }} placeholder={'הוספת מ"ל חופשי (לפחות 50)'} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
         <button onClick={addFree} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.water, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
       </div>
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <button onClick={() => setMl(0)} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, textDecoration: "underline", cursor: "pointer", fontFamily: fontStack }}>איפוס היום</button>
+        <button onClick={() => onSetMl(0)} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, textDecoration: "underline", cursor: "pointer", fontFamily: fontStack }}>איפוס היום</button>
       </div>
-      <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+      <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: 14, color: C.ink }}>גודל כוס</span>
-          <Stepper value={safeCup} set={(v) => setCup(Math.max(100, Math.min(1000, v)))} step={10} suffix={'מ"ל'} />
+          <Stepper value={safeCup} set={setCupLive} step={10} suffix={'מ"ל'} />
         </div>
         <div style={{ fontSize: 12, color: C.faint, marginTop: 6 }}>היעד תמיד 2 ליטר; מספר הכוסות מתעדכן לפי גודל הכוס.</div>
       </div>
-      <Btn onClick={() => onSave(ml, safeCup)}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 10 }}>כל שינוי נשמר מיד. אפשר לסגור בכל רגע.</div>
     </SheetShell>
   );
 }
@@ -2109,22 +2107,6 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
     </SheetShell>
   );
 }
-
-function LowValueWarning({ message, onContinue, onCancel }) {
-  return (
-    <div onClick={onCancel} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
-        <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}><Info size={20} color={C.amber} /> שווה לשים לב</div>
-        <div style={{ fontSize: 14, color: C.ink, lineHeight: 1.6, marginBottom: 18 }}>{message}</div>
-        <Btn onClick={onContinue}>הבנתי, להמשיך</Btn>
-        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onCancel} style={{ color: C.sub }}>לשנות</Btn></div>
-      </div>
-    </div>
-  );
-}
-
-const GOAL_LOW_MSG = "משקל היעד שבחרת נמוך מהטווח התקין (BMI מתחת ל-18.5), אזור של תת-משקל. מומלץ להתייעץ עם איש מקצוע לפני שממשיכים. אפשר להמשיך אם בכל זאת תרצי - ההחלטה והאחריות שלך.";
-const KCAL_LOW_MSG = "יעד קלורי כה נמוך (סביב המינימום של 1,200 קק״ל) אינו מתאים לכולן ועלול להזיק לאורך זמן. מומלץ להתייעץ עם איש מקצוע. אפשר להמשיך אם בכל זאת תרצי - ההחלטה והאחריות שלך.";
 
 function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg }) {
   const deniedText = reason === "device_limit"
@@ -2621,9 +2603,9 @@ export default function App() {
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={stepGoal} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); }} />}
-            {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onClose={() => setSheet(null)} onSave={(ml, cup) => { setWaterForDate(selectedDate, ml); setProfile({ ...profile, cupMl: cup }); setSheet(null); }} />}
+            {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onSetMl={(ml) => setWaterForDate(selectedDate, ml)} onSetCup={(cup) => setProfile({ ...profile, cupMl: cup })} onClose={() => setSheet(null)} />}
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
-            {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
+            {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
             {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}

@@ -76,7 +76,7 @@ The AI features only work when deployed (or with the functions running), since t
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.84`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.86`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -299,3 +299,31 @@ Symptom: AI-estimated values are unrealistically low (e.g. grilled entrecote kca
   - NOT added: a popup for the onboarding "floored target" case - that already shows the amber note. Calorie target is otherwise floored at 1,200 in computeTargets.
   - NOTE for older users: WHO underweight line is 18.5, but in the elderly BMI<21 may already indicate undernutrition; left the trigger at 18.5 (universal underweight) - could be raised for older ages later if wanted.
 - VERSION 0.83->0.84 (App.jsx only). qa harness unaffected.
+
+## v0.85 - underweight protection extended to actual + starting weight
+- WeightModal (logging real weight) now takes a `heightCm` prop and shows an inline amber note (Info icon) whenever the entered value's BMI < 18.5. Non-blocking (a real measurement can always be saved) and REPEATED - it shows every time an underweight value is entered, not one-time (per Ron). Render passes `profile.heightCm`.
+- Starting / baseline weight protection (Ron: "is there protection if she sets a low starting weight?"):
+  - Onboarding: `next()` now warns on leaving step 0 if current weight BMI < 18.5 (LowValueWarning, message `STARTW_LOW_MSG`). Refactored the onboarding warning to a single `obWarn` (message string|null) state replacing the prior `goalWarn` boolean - both the step-0 (start weight) and step-1 (goal) warnings flow through it; onContinue advances the step, onCancel dismisses.
+  - ProfileScreen `commit`: added `weightKg` (baseline) underweight check -> `setWarn(STARTW_LOW_MSG)`.
+- New module const `STARTW_LOW_MSG` (sits with GOAL_LOW_MSG / KCAL_LOW_MSG). Note framing: actual/starting weight in underweight range is informational + points to a professional + lets her proceed (company not taking responsibility) - distinct from the goal case which discourages targeting an unhealthy weight.
+- Summary of all underweight triggers now: goal weight (onboarding step1 + profile), starting weight (onboarding step0 + profile baseline), actual logged weight (inline note, repeated), manual calorie override at/below 1,200 floor (profile).
+- Still open / discussed but NOT built: auto-switch from deficit to maintenance when actual weight reaches goal or enters underweight (Ron leaned toward the gentle-note path; the maintenance auto-switch was offered, not yet chosen). For older users the underweight line could be raised above 18.5 (elderly undernutrition ~BMI 21) - left at 18.5.
+- VERSION 0.84->0.85 (App.jsx only).
+
+## v0.86 - hard blocks for everything she SETS (weight/calorie) + live water update
+Ron's decision: things she SETS/CHOOSES (goal weight, starting weight, calorie target) must be HARD-BLOCKED from unhealthy values - she literally cannot enter them, like the 1,200 calorie floor. But the ACTUAL ongoing weigh-in stays a (repeated) note, never a block - blocking a real measurement would force a false number / lose the data. Underweight threshold verified WHO BMI<18.5 (also AHA/NIH); for the elderly BMI<21 can indicate undernutrition but the universal underweight line 18.5 is kept.
+
+Hard blocks (replaced the v0.84/0.85 LowValueWarning popups, which were removed entirely):
+- Helper `minHealthyKg(heightCm)` = lowest weight still giving BMI >= 18.5, rounded UP to 0.5.
+- Goal weight: onboarding Stepper clamps `Math.max(minHealthyKg(heightCm), Math.min(weightKg-0.5, v))` + faint hint; profile EditRow `min: minHealthyKg(profile.heightCm)` + `hint`.
+- Starting weight: onboarding "משקל נוכחי" Stepper clamps `Math.max(minHealthyKg(heightCm), v)` + caption; profile "משקל התחלתי" EditRow `min: minHealthyKg` + hint. Draft also clamps saved `weightKg` and `goalWeightKg` to `minHealthyKg` (covers the height-changed-after-weight edge).
+- Calorie: profile calorie editor Stepper min raised 1000 -> KCAL_FLOOR (1200); CalorieGoalModal already floored at 1200. So calorie is a true hard floor everywhere now (it was NOT before - the profile editor allowed down to 1000).
+- num-type edit modal renders an optional `edit.hint` line.
+- REMOVED: `LowValueWarning` component, `GOAL_LOW_MSG`/`KCAL_LOW_MSG`/`STARTW_LOW_MSG` consts, onboarding `obWarn` state+overlay+next() bmi checks, ProfileScreen `warn`/`doCommit`+commit checks+overlay. (They contradicted "can't enter": a popup that lets her continue.)
+- KEPT: WeightModal actual-weigh-in inline amber note (repeated, non-blocking) from v0.85 - this is the one place that stays a note.
+
+Live water update (WaterModal, sheet "water"):
+- Now LIVE: every action commits immediately (no "שמור"). Props changed `onSave(ml,cup)` -> `onSetMl(ml)` + `onSetCup(cup)`; removed local `ml` staging (uses `currentMl` prop directly, controlled); `cup` stays local but commits live via `onSetCup`. Close via the SheetShell X.
+- + כוס / + חצי ליטר / free-ml input (kept, Ron chose to keep it) all add immediately; new "- כוס (תיקון)" subtracts a cup (disabled at 0); "איפוס היום" zeroes immediately. Caption "כל שינוי נשמר מיד. אפשר לסגור בכל רגע."
+- Day-screen water ring label "כוסות" -> "כוסות מים".
+- VERSION 0.85->0.86 (App.jsx only). qa harness unaffected.
