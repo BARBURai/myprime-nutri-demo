@@ -1,252 +1,2576 @@
-# CLAUDE.md
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import {
+  Home, BookOpen, TrendingDown, ChefHat, User, Plus, Check, Search,
+  Barcode, Camera, ChevronRight, ChevronLeft, ChevronDown, Pencil, Trash2, Minus, X,
+  Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet,
+  MessageCircle, Loader, Copy, Mic, Send, Lock, Clock, Cookie,
+} from "lucide-react";
+import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import { DecodeHintType, BarcodeFormat } from "@zxing/library";
+import { RECIPES } from "./recipes";
+import { SWEETS } from "./sweets";
 
-This file provides guidance to Claude (Claude Code and chat) when working with code in this repository.
+// AI requests go through a server proxy that holds the API key (see /api/ai.js).
+const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
+const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
+const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a4%d7%a8%d7%98%d7%99%d7%95%d7%aa/";
+const COOKIE_URL = import.meta.env.VITE_COOKIE_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a7%d7%95%d7%a7%d7%99%d7%96/";
+const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || "";
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem("myprime_device_id");
+    if (!id) { id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(16).slice(2)); localStorage.setItem("myprime_device_id", id); }
+    return id;
+  } catch (e) { return "nodevice"; }
+}
 
-## Commands
+/* ============================================================
+   DOMAIN - pure logic, zero UI dependency (mirrors src/domain)
+   ============================================================ */
+const ACTIVITY_FACTORS = { "יושבני": 1.2, "קלה": 1.375, "בינונית": 1.55, "גבוהה": 1.725 };
+const KCAL_PER_KG = 7700;
+const KCAL_FLOOR = 1200;
+const PROTEIN_PER_KG = 1.6;        // טווח מומלץ 1.5-1.7
+const FAT_PER_KG = 0.9;
+const RATE_OPTIONS = [0, 250, 500, 750];
+const WATER_TARGET_GLASSES = 8;    // 8 כוסות = 2 ליטר
+const WATER_MIN_GLASSES = 6;       // 6 כוסות = 1.5 ליטר
+const WATER_TARGET_ML = 2000;      // יעד מים קבוע: 2 ליטר
+const DEFAULT_CUP_ML = 250;        // גודל כוס ברירת מחדל
+// מים נשמרים במ"ל. ערכים ישנים נשמרו כספירת כוסות (<= ~8); ממירים בקריאה (כוס = 250 מ"ל).
+function waterMlOf(v) { if (v == null) return 0; return v < 50 ? Math.round(v * 250) : v; }
 
-```bash
-npm install        # Install dependencies
-npm run dev        # Start dev server at http://localhost:5173
-npm run build      # Build for production (outputs to dist/)
-npm run preview    # Preview the production build
-```
+const rateLabel = (g) => (g === 0 ? "שמירה על המשקל" : `ירידה ${g} ג׳ בשבוע`);
+const rateShort = (g) => (g === 0 ? "שמירה" : `${g} ג׳/שבוע`);
 
-No test runner is configured.
+function bmrMifflinWoman(weightKg, heightCm, age) {
+  return 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
+}
+function dailyDeficit(weeklyRateG) {
+  return Math.round((weeklyRateG / 1000) * KCAL_PER_KG / 7);
+}
+function computeTargets(profile) {
+  const bmr = bmrMifflinWoman(profile.weightKg, profile.heightCm, profile.age);
+  // Sedentary baseline for everyone: the app adds steps + logged activity to the
+  // daily budget separately, so a higher multiplier would double-count movement.
+  // (No activity selector is exposed; this intentionally ignores any stored
+  // profile.activity, so legacy profiles update without needing a reset.)
+  const tdee = bmr * ACTIVITY_FACTORS["יושבני"];
+  const deficit = dailyDeficit(profile.weeklyRateG);
+  const raw = Math.round(tdee - deficit);
+  const targetKcal = Math.max(KCAL_FLOOR, raw);
+  const floored = raw < KCAL_FLOOR;
+  const protein = Math.round(PROTEIN_PER_KG * profile.weightKg);
+  const fat = Math.round(FAT_PER_KG * profile.weightKg);
+  const carbKcal = Math.max(0, targetKcal - protein * 4 - fat * 9);
+  const carbs = Math.round(carbKcal / 4);
+  return { bmr: Math.round(bmr), tdee: Math.round(tdee), deficit, targetKcal, floored, protein, fat, carbs };
+}
+// Estimated calories burned from steps, scaled by body weight (~0.04 kcal/step at 70kg).
+function stepsKcal(steps, weightKg) {
+  return Math.round((steps || 0) * 0.00055 * (weightKg || 70));
+}
+function projection(currentKg, goalKg, weeklyRateG) {
+  const rateKg = weeklyRateG / 1000;
+  if (rateKg <= 0 || goalKg >= currentKg) {
+    return { maintain: true, weeks: 0, data: [{ w: 0, kg: currentKg }, { w: 8, kg: currentKg }] };
+  }
+  const totalLoss = currentKg - goalKg;
+  const weeks = Math.ceil(totalLoss / rateKg);
+  const stepW = Math.max(1, Math.ceil(weeks / 14));
+  const ease = (t) => 1 - Math.pow(1 - t, 1.8); // ירידה מהירה בהתחלה, מתמתנת
+  const data = [];
+  for (let w = 0; w <= weeks; w += stepW) {
+    const kg = currentKg - totalLoss * ease(w / weeks);
+    data.push({ w, kg: Math.round(kg * 10) / 10 });
+  }
+  if (data[data.length - 1].w !== weeks) data.push({ w: weeks, kg: goalKg });
+  return { maintain: false, weeks, data };
+}
+function nutritionFor(food, grams) {
+  const k = grams / 100;
+  return {
+    kcal: Math.round(food.per100.kcal * k),
+    p: Math.round(food.per100.p * k),
+    f: Math.round(food.per100.f * k),
+    c: Math.round(food.per100.c * k),
+  };
+}
+function unitLabelFor(unit) { return unit === "ml" ? "מ\"ל" : "ג׳"; }
+function measuresForUnit(unit) {
+  return unit === "ml"
+    ? [{ label: "כוס", g: 250 }, { label: "פחית", g: 330 }, { label: "חצי ליטר", g: 500 }, { label: "בקבוק גדול", g: 1500 }]
+    : [{ label: "100 ג׳", g: 100 }, { label: "מנה קטנה", g: 80 }, { label: "מנה בינונית", g: 150 }, { label: "מנה גדולה", g: 250 }];
+}
+function foodFromEntry(e) {
+  const g = e.g || 100;
+  const per100 = { kcal: (e.kcal || 0) / g * 100, p: (e.p || 0) / g * 100, f: (e.f || 0) / g * 100, c: (e.c || 0) / g * 100 };
+  const unit = e.unit === "ml" ? "ml" : "g";
+  return { name: e.name, per100, unit, measures: measuresForUnit(unit) };
+}
+function activityBonus(stepsKcal, workoutKcal, returnPct) {
+  return Math.round((stepsKcal + workoutKcal) * (returnPct / 100));
+}
 
-## Architecture
+/* ============================================================
+   SEED DATA
+   ============================================================ */
+const FOODS = [
+  { id: "yog", name: "יוגורט יווני 5%", search: "יוגורט", per100: { kcal: 90, p: 9, f: 5, c: 4 }, measures: [{ label: "כף", g: 20 }, { label: "מיכל", g: 150 }, { label: "כוס", g: 245 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "ban", name: "בננה בינונית", search: "בננה בננות פרי", per100: { kcal: 89, p: 1.1, f: 0.3, c: 23 }, measures: [{ label: "יחידה", g: 118 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "chk", name: "חזה עוף בגריל", search: "עוף חזה פרגית", per100: { kcal: 165, p: 31, f: 3.6, c: 0 }, measures: [{ label: "מנה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "rice", name: "אורז לבן מבושל", search: "אורז", per100: { kcal: 130, p: 2.7, f: 0.3, c: 28 }, measures: [{ label: "כוס", g: 158 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "sal", name: "סלט ירקות", search: "סלט ירקות", per100: { kcal: 30, p: 1.3, f: 0.2, c: 6 }, measures: [{ label: "מנה", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "cot", name: "קוטג׳ 5%", search: "קוטג גבינה", per100: { kcal: 98, p: 11, f: 5, c: 3 }, measures: [{ label: "מנה", g: 100 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "oat", name: "דייסת שיבולת שועל", search: "שיבולת שועל קוואקר דייסה", per100: { kcal: 380, p: 13, f: 7, c: 67 }, measures: [{ label: "מנה", g: 60 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "cof", name: "קפה עם חלב", search: "קפה הפוך", per100: { kcal: 40, p: 2, f: 1.5, c: 4 }, measures: [{ label: "כוס", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "egg", name: "ביצה גדולה", search: "ביצים ביצה חביתה", per100: { kcal: 143, p: 13, f: 10, c: 1 }, measures: [{ label: "יחידה", g: 50 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "bread", name: "לחם פרוס", search: "לחם פרוסה טוסט", per100: { kcal: 265, p: 9, f: 3.2, c: 49 }, measures: [{ label: "פרוסה", g: 28 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "pita", name: "פיתה", search: "פיתה לחם", per100: { kcal: 275, p: 9, f: 1.2, c: 55 }, measures: [{ label: "פיתה", g: 60 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "pasta", name: "פסטה מבושלת", search: "פסטה מקרוני ספגטי", per100: { kcal: 158, p: 5.8, f: 0.9, c: 31 }, measures: [{ label: "כוס", g: 140 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "beef", name: "בשר בקר רזה", search: "בקר בשר סטייק", per100: { kcal: 250, p: 26, f: 15, c: 0 }, measures: [{ label: "מנה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "salmon", name: "סלמון אפוי", search: "סלמון דג", per100: { kcal: 206, p: 22, f: 13, c: 0 }, measures: [{ label: "מנה", g: 140 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "tuna", name: "טונה במים", search: "טונה דג", per100: { kcal: 116, p: 26, f: 1, c: 0 }, measures: [{ label: "קופסה", g: 140 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "wcheese", name: "גבינה לבנה 5%", search: "גבינה לבנה", per100: { kcal: 90, p: 9, f: 5, c: 4 }, measures: [{ label: "כף", g: 30 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "ycheese", name: "גבינה צהובה 28%", search: "גבינה צהובה", per100: { kcal: 350, p: 25, f: 28, c: 1 }, measures: [{ label: "פרוסה", g: 25 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "milk", name: "חלב 3%", search: "חלב", per100: { kcal: 60, p: 3.3, f: 3, c: 4.7 }, measures: [{ label: "כוס", g: 240 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "apple", name: "תפוח עץ", search: "תפוח פרי", per100: { kcal: 52, p: 0.3, f: 0.2, c: 14 }, measures: [{ label: "יחידה", g: 180 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "cuke", name: "מלפפון", search: "מלפפון ירק", per100: { kcal: 15, p: 0.7, f: 0.1, c: 3.6 }, measures: [{ label: "יחידה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "tomato", name: "עגבניה", search: "עגבניה עגבניות ירק", per100: { kcal: 18, p: 0.9, f: 0.2, c: 3.9 }, measures: [{ label: "יחידה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "avocado", name: "אבוקדו", search: "אבוקדו", per100: { kcal: 160, p: 2, f: 15, c: 9 }, measures: [{ label: "חצי", g: 100 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "tahini", name: "טחינה גולמית", search: "טחינה", per100: { kcal: 595, p: 17, f: 53, c: 21 }, measures: [{ label: "כף", g: 15 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "hummus", name: "חומוס (ממרח)", search: "חומוס", per100: { kcal: 177, p: 8, f: 10, c: 14 }, measures: [{ label: "כף", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "almond", name: "שקדים", search: "שקדים אגוזים", per100: { kcal: 579, p: 21, f: 50, c: 22 }, measures: [{ label: "חופן", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "potato", name: "תפוח אדמה מבושל", search: "תפוח אדמה תפוד", per100: { kcal: 87, p: 2, f: 0.1, c: 20 }, measures: [{ label: "בינוני", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "lentil", name: "עדשים מבושלות", search: "עדשים קטניות", per100: { kcal: 116, p: 9, f: 0.4, c: 20 }, measures: [{ label: "כוס", g: 198 }, { label: "100 ג׳", g: 100 }], def: 0 },
+];
+const FOOD_BY_ID = Object.fromEntries(FOODS.map((f) => [f.id, f]));
+const RECENT = [
+  { foodId: "yog", g: 150 }, { foodId: "ban", g: 118 }, { foodId: "cof", g: 150 },
+  { foodId: "chk", g: 120 }, { foodId: "oat", g: 60 }, { foodId: "cot", g: 100 },
+];
+const MEALS = ["בוקר", "ביניים בוקר", "צהריים", "ביניים אחה״צ", "ערב", "נשנושים"];
+const HE_DAYS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+const HE_MONTHS = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
 
-**Stack:** React 18 + Vite, deployed to Vercel (frontend + serverless functions). UI is Hebrew, right-to-left (`dir="rtl"` in `index.html`), styled entirely with inline styles + a small injected `<style>` block. **Responsive layout:** on desktop it renders as a centered phone mockup (~390×800 card, the `.phone-frame` class); on phones (`max-width: 440px`) it goes full-screen — the frame fills the viewport (`100dvh`, no border/shadow/radius) so the bottom nav bar stays pinned to the bottom of the screen, like a native app. The responsive switch is done with a CSS media query inside the injected `<style>` block (the `.app-outer` / `.phone-frame` classes), since inline styles can't hold media queries.
+function ymd(d) { return d.toISOString().slice(0, 10); }
+function addDays(dateStr, n) { const d = new Date(dateStr); d.setDate(d.getDate() + n); return ymd(d); }
+function relLabel(dateStr) {
+  const today = ymd(new Date());
+  if (dateStr === today) return "היום";
+  if (dateStr === addDays(today, -1)) return "אתמול";
+  return null;
+}
+function prettyDate(dateStr) {
+  const d = new Date(dateStr);
+  return `${HE_DAYS[d.getDay()]}, ${d.getDate()} ב${HE_MONTHS[d.getMonth()]}`;
+}
+const TODAY = ymd(new Date());
+function sundayOf(dateStr) { const d = new Date(dateStr); d.setDate(d.getDate() - d.getDay()); return ymd(d); }
+function listSundays() {
+  const base = sundayOf(TODAY);
+  const out = [];
+  for (let i = -8; i <= 0; i++) {
+    const v = addDays(base, i * 7);
+    const d = new Date(v);
+    out.push({ value: v, label: `יום ראשון, ${d.getDate()} ב${HE_MONTHS[d.getMonth()]}` });
+  }
+  return out;
+}
+function programWeekFor(startDate, onDate) {
+  if (!startDate) return 1;
+  const diff = Math.floor((new Date(onDate) - new Date(startDate)) / 86400000);
+  if (diff < 0) return 0;
+  return Math.floor(diff / 7) + 1;
+}
+function programDayNumber(startDate, onDate) {
+  if (!startDate) return 1;
+  return Math.floor((new Date(onDate) - new Date(startDate)) / 86400000) + 1;
+}
+function unlockedOn(startDate, onDate, u) {
+  return programDayNumber(startDate, onDate) >= (u.week - 1) * 7 + u.day;
+}
+const MACRO_UNLOCK = { week: 3, day: 4 };
+const WATER_UNLOCK = { week: 3, day: 2 };
+const SWEETS_UNLOCK = { week: 3, day: 5 };
+const STEPS_UNLOCK = { week: 1, day: 2 };
+const FIBER_TARGET = 25;
+const DIET_OPTIONS = [
+  { id: "הכל", emoji: "🍽️" },
+  { id: "צמחוני", emoji: "🥗" },
+  { id: "צמחוני + דגים", emoji: "🐟" },
+  { id: "טבעוני", emoji: "🌱" },
+  { id: "כשר", emoji: "✡️" },
+  { id: "דל פחמימה", emoji: "🥑" },
+  { id: "ים-תיכוני", emoji: "🫒" },
+];
+const SENSITIVITY_OPTIONS = ["גלוטן", "חלב / לקטוז", "ביצים", "אגוזים", "בוטנים", "סויה", "דגים", "שומשום"];
+function streakDays(log) {
+  const has = (d) => log.some((e) => e.date === d);
+  let n = 0, d = TODAY;
+  while (has(d)) { n++; d = addDays(d, -1); }
+  return n;
+}
+const seedEntry = (id, date, meal, foodId, g, source = "verified") => {
+  const f = FOOD_BY_ID[foodId];
+  return { id, date, meal, name: f.name, g, source, ...nutritionFor(f, g) };
+};
+const INITIAL_LOG = [
+  seedEntry("e1", TODAY, "בוקר", "oat", 60),
+  seedEntry("e2", TODAY, "בוקר", "cof", 150),
+  seedEntry("e3", TODAY, "ביניים בוקר", "ban", 118),
+  seedEntry("e4", TODAY, "צהריים", "chk", 120),
+  seedEntry("e5", TODAY, "צהריים", "rice", 158),
+  seedEntry("e6", addDays(TODAY, -1), "בוקר", "oat", 60),
+  seedEntry("e7", addDays(TODAY, -1), "צהריים", "chk", 140),
+  seedEntry("e8", addDays(TODAY, -1), "ערב", "cot", 100),
+];
+function initWeights(currentKg, startDate) {
+  return [{ date: startDate, kg: Math.round(currentKg * 10) / 10 }];
+}
 
-### Frontend
-Nearly all frontend logic lives in a single file: `src/App.jsx` (~1,570 lines). It is a **monolithic** component file — no component library, no state-management framework; everything uses React `useState` / `useEffect` / `useMemo`. `src/main.jsx` just mounts it.
+/* ============================================================
+   THEME - feminine rose palette
+   ============================================================ */
+const C = {
+  bg: "#FAF3F4", panel: "#FFFFFF", ink: "#3A2B30", sub: "#8B737A", faint: "#BBA7AC",
+  line: "#F1E4E7",
+  brand: "#D45D79", brandD: "#A8425C", brandBg: "#FBE9EE",
+  macroP: "#7E4FB5", proteinTrack: "#EBE1F7", macroF: "#E0986A", macroC: "#A87BB5",
+  amber: "#C77A3C", amberBg: "#FBEEDF",
+  info: "#9C6BA6", infoBg: "#F2E7F3",
+  water: "#7E8DD6", waterBg: "#EBEDF8",
+};
+const fontStack = "'Rubik', system-ui, sans-serif";
+const VERSION = "0.78";
+const STORAGE_KEY = "myprime_demo_state_v1";
 
-Key sections inside `src/App.jsx` (top to bottom):
-- **DOMAIN** — pure nutrition logic: `computeTargets` (Mifflin-St Jeor BMR for women, TDEE, deficit, protein/fat/carb targets), `projection`, `nutritionFor`, `programWeekFor`, `programDayNumber`, `unlockedOn`, `streakDays`.
-- **SEED DATA** — `FOODS` (Israeli staples, per-100g macros), `RECIPES`, `MEALS`, `INITIAL_LOG`, `makeWeightSeed`.
-- **THEME** — the `C` color object (feminine rose palette) and `fontStack` (Rubik). `VERSION` constant lives here.
-- **PRIMITIVES** — `Ring`, `MacroCard`, `MacroRow`, `WaterCard`, `Btn`, `Header`, `Stepper`.
-- **ONBOARDING** — `Onboarding`.
-- **SCREENS** — `DayScreen` (the "today" home screen), `ReportScreen` (weight + calorie-adherence charts), `RecipesScreen`, `ProfileScreen`.
-- **AI FUNCTIONS** — `analyzeMeal` (photo → items), `aiNutritionChat` (logging-by-chat), `aiMealChat` ("what should I eat?" conversational helper), `searchIsraeliDB`.
-- **MODALS / SHEETS** — `EntryMenu`, `SheetShell`, `ActivityModal`, `WeightModal`, `CalorieGoalModal`, `AccessGate`, `AddModal`, `RecommendModal`, `StreakCheer`, `IntroOverlay`, `NotesFab`.
-- **ROOT** — `export default function App()` (near the bottom): all state, persistence, and wiring of screens + modals.
+/* ============================================================
+   PRIMITIVES
+   ============================================================ */
+function Ring({ consumed, budget, size = 132, onPlus }) {
+  const r = 54, circ = 2 * Math.PI * r;
+  const frac = Math.max(0, Math.min(1, budget > 0 ? consumed / budget : 0));
+  const remaining = Math.round(budget - consumed);
+  const over = remaining < 0;
+  const svg = (
+    <svg width={size} height={size} viewBox="0 0 132 132">
+      <circle cx="66" cy="66" r={r} fill="none" stroke={C.line} strokeWidth="10" />
+      <circle cx="66" cy="66" r={r} fill="none" stroke={over ? C.amber : C.brand} strokeWidth="10"
+        strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
+        transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+      <text x="66" y="56" textAnchor="middle" style={{ fontSize: 27, fontWeight: 700, fill: C.ink }}>{Math.abs(remaining).toLocaleString()}</text>
+      <text x="66" y="77" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: over ? C.amber : C.brand }}>קלוריות</text>
+      <text x="66" y="92" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{over ? "מעל היעד" : `מתוך ${Math.round(budget).toLocaleString()}`}</text>
+    </svg>
+  );
+  if (!onPlus) return svg;
+  return (
+    <div style={{ position: "relative", width: size, height: size }}>
+      {svg}
+      <button onClick={onPlus} aria-label="הוספה לתקציב" style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 30, height: 30, borderRadius: "50%", background: C.brand, color: "#fff", border: `2px solid ${C.panel}`, boxShadow: "0 2px 6px rgba(0,0,0,0.18)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={17} /></button>
+    </div>
+  );
+}
+function ProteinRing({ consumed, target, size = 124 }) {
+  const r = 54, circ = 2 * Math.PI * r;
+  const frac = Math.max(0, Math.min(1, target > 0 ? consumed / target : 0));
+  const remaining = Math.max(0, Math.round(target - consumed));
+  const done = target > 0 && consumed >= target;
+  return (
+    <svg width={size} height={size} viewBox="0 0 132 132">
+      <circle cx="66" cy="66" r={r} fill="none" stroke={C.proteinTrack} strokeWidth="10" />
+      <circle cx="66" cy="66" r={r} fill="none" stroke={C.macroP} strokeWidth="10"
+        strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
+        transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+      <text x="66" y="56" textAnchor="middle" style={{ fontSize: 27, fontWeight: 700, fill: C.ink }}>{remaining}<tspan style={{ fontSize: 14, fill: C.sub }}> ג׳</tspan></text>
+      <text x="66" y="77" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: C.macroP }}>חלבון</text>
+      <text x="66" y="92" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{done ? "הגעת ליעד!" : `מתוך ${Math.round(target)}`}</text>
+    </svg>
+  );
+}
+function MetricRing({ value, goal, color, track, label, sub, onPlus, size = 130, bigText }) {
+  const r = 54, circ = 2 * Math.PI * r;
+  const frac = Math.max(0, Math.min(1, goal > 0 ? value / goal : 0));
+  const done = goal > 0 && value >= goal;
+  return (
+    <div style={{ position: "relative", width: size, height: size }}>
+      <svg width={size} height={size} viewBox="0 0 132 132">
+        <circle cx="66" cy="66" r={r} fill="none" stroke={track} strokeWidth="10" />
+        <circle cx="66" cy="66" r={r} fill="none" stroke={color} strokeWidth="10"
+          strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
+          transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+        <text x="66" y="54" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{bigText != null ? bigText : value.toLocaleString()}</text>
+        <text x="66" y="75" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: color }}>{label}</text>
+        <text x="66" y="89" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{done ? "הגעת ליעד!" : sub}</text>
+      </svg>
+      {onPlus && (
+        <button onClick={onPlus} aria-label={`עדכון ${label}`} style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 30, height: 30, borderRadius: "50%", background: color, color: "#fff", border: `2px solid ${C.panel}`, boxShadow: "0 2px 6px rgba(0,0,0,0.18)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={17} /></button>
+      )}
+    </div>
+  );
+}
+function MacroCard({ label, value, target, color, emphasized, headline }) {
+  const pct = target ? Math.max(0, Math.min(100, Math.round((value / target) * 100))) : 0;
+  return (
+    <div style={{ flex: 1, background: emphasized ? C.brandBg : C.bg, border: `1px solid ${emphasized ? C.brand : "transparent"}`, borderRadius: 12, padding: "10px 9px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 7 }}>
+        <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0 }} />
+        <span style={{ fontSize: 14, color: emphasized ? C.brandD : C.sub, fontWeight: emphasized ? 600 : 400 }}>{label}</span>
+      </div>
+      {headline ? (
+        <div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{target}<span style={{ fontSize: 13, color: C.sub, fontWeight: 400 }}> ג׳</span></div>
+      ) : (
+        <>
+          <div style={{ fontSize: 17, fontWeight: 600, color: C.ink }}>{value}<span style={{ fontSize: 12, color: C.faint, fontWeight: 400 }}> / {target} ג׳</span></div>
+          <div style={{ height: 5, background: C.line, borderRadius: 3, marginTop: 7 }}><div style={{ width: `${pct}%`, height: 5, background: color, borderRadius: 3, transition: "width .4s" }} /></div>
+        </>
+      )}
+    </div>
+  );
+}
+function MacroRow({ p, f, c, tp, tf, tc, headline }) {
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <MacroCard label="חלבון" value={p} target={tp} color={C.macroP} emphasized headline={headline} />
+      <MacroCard label="שומן" value={f} target={tf} color={C.macroF} headline={headline} />
+      <MacroCard label="פחמימות" value={c} target={tc} color={C.macroC} headline={headline} />
+    </div>
+  );
+}
+function WaterCard({ glasses, setGlasses }) {
+  const liters = (glasses * 0.25).toString();
+  return (
+    <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 15, color: C.ink, fontWeight: 500 }}><Droplet size={16} color={C.water} /> מים</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{liters} / 2 ליטר</span>
+      </div>
+      <div style={{ display: "flex", gap: 5 }}>
+        {Array.from({ length: WATER_TARGET_GLASSES }).map((_, i) => {
+          const filled = i < glasses;
+          return (
+            <button key={i} onClick={() => setGlasses(filled && i === glasses - 1 ? i : i + 1)}
+              style={{ flex: 1, height: 32, borderRadius: 8, border: `1px solid ${filled ? C.water : C.line}`, background: filled ? C.waterBg : "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Droplet size={15} color={filled ? C.water : C.faint} fill={filled ? C.water : "none"} />
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 12, color: C.faint, marginTop: 8 }}>מומלץ {WATER_MIN_GLASSES}-{WATER_TARGET_GLASSES} כוסות ביום (1.5-2 ליטר)</div>
+    </div>
+  );
+}
 
-### Navigation (bottom bar)
-The bottom nav bar holds four tabs (`tabs` array: היום / דוח / מתכונים / פרופיל) split two-and-two around a **raised circular "+" action button** in the center. The "+" is the brand-gradient circle (class `fab-center`, a gentle float + glow animation) and opens the entry menu (`setSheet("menu")`). It is part of the bar and persistent across all tabs. All sheets/modals render as full-screen overlays (`position: absolute; inset: 0`) above the bar, so the "+" never collides with them.
+function StepsCard({ steps, goal, kcal, onEdit }) {
+  const frac = Math.max(0, Math.min(1, goal > 0 ? steps / goal : 0));
+  return (
+    <div onClick={onEdit} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 16, cursor: "pointer" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 15, color: C.ink, fontWeight: 500 }}><Footprints size={16} color={C.brand} /> צעדים</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{steps.toLocaleString()} / {goal.toLocaleString()}</span>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: C.brandBg, overflow: "hidden" }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: C.brand, borderRadius: 6, transition: "width .4s" }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+        <span style={{ fontSize: 12, color: C.faint }}>הקישי לעדכון · נוסף לתקציב: +{kcal} קק״ל</span>
+        <span style={{ fontSize: 12, color: C.brandD, display: "flex", alignItems: "center", gap: 4 }}><Pencil size={12} /> עדכון</span>
+      </div>
+    </div>
+  );
+}
+function Btn({ children, onClick, variant = "solid", disabled, style = {} }) {
+  const base = { width: "100%", border: "none", borderRadius: 12, padding: "12px", fontSize: 17, fontWeight: 500, cursor: disabled ? "default" : "pointer", fontFamily: fontStack, transition: "transform .08s, opacity .15s" };
+  const variants = { solid: { background: C.brand, color: "#fff" }, ghost: { background: "transparent", color: C.ink, border: `1px solid ${C.line}` } };
+  return (
+    <button onClick={disabled ? undefined : onClick} style={{ ...base, ...variants[variant], opacity: disabled ? 0.45 : 1, ...style }}
+      onMouseDown={(e) => !disabled && (e.currentTarget.style.transform = "scale(0.98)")}
+      onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}>{children}</button>
+  );
+}
+function SrcBadge({ source }) {
+  if (source === "estimated") return <span style={{ fontSize: 12, background: C.amberBg, color: C.amber, padding: "2px 7px", borderRadius: 5 }}>מוערך</span>;
+  if (source === "db") return <span style={{ fontSize: 12, background: "#E7F4EC", color: "#1E8449", padding: "2px 7px", borderRadius: 5 }}>מהמאגר</span>;
+  if (source === "usda") return <span style={{ fontSize: 12, background: "#EEF4FB", color: "#2D6CB5", padding: "2px 7px", borderRadius: 5 }}>USDA</span>;
+  return null;
+}
+function Header({ title, onBack }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+      {onBack && <button onClick={onBack} style={{ border: "none", background: "transparent", cursor: "pointer", padding: 4, color: C.sub }}><ChevronRight size={22} /></button>}
+      <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{title}</span>
+    </div>
+  );
+}
+function Stepper({ value, set, step = 1, min = 0, suffix }) {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <button onClick={() => set(Math.max(min, Math.round((value - step) * 10) / 10))} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Minus size={15} /></button>
+      <span style={{ minWidth: 78, textAlign: "center", fontSize: 21, fontWeight: 600, color: C.ink }}>{value}{suffix ? <span style={{ fontSize: 14, color: C.sub, fontWeight: 400 }}> {suffix}</span> : null}</span>
+      <button onClick={() => set(Math.round((value + step) * 10) / 10)} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Plus size={15} /></button>
+    </span>
+  );
+}
 
-### Persistence
-State is saved to `localStorage` under the key `myprime_demo_state_v1` (profile, log, weights, activityLog, waterByDate). A device id is stored separately as `myprime_device_id`.
+/* ============================================================
+   ONBOARDING
+   ============================================================ */
+function Onboarding({ onFinish, name }) {
+  const [step, setStep] = useState(0);
+  const [age, setAge] = useState(50);
+  const [heightCm, setHeightCm] = useState(165);
+  const [weightKg, setWeightKg] = useState(72);
+  const [rate, setRate] = useState(250);
+  const [goalKg, setGoalKg] = useState(66);
+  const [agree, setAgree] = useState(false);
+  const [startDate, setStartDate] = useState(sundayOf(TODAY));
+  const [diet, setDiet] = useState([]);
+  const [allergies, setAllergies] = useState([]);
+  const [dislikes, setDislikes] = useState("");
+  const [newSens, setNewSens] = useState("");
+  const [confirmNoSens, setConfirmNoSens] = useState(false);
+  const customSens = dislikes.split(",").map((s) => s.trim()).filter(Boolean);
+  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setDislikes([...customSens, t].join(", ")); setNewSens(""); };
+  const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
+  const hasSens = allergies.length > 0 || customSens.length > 0;
+  const next = () => { if (step === 2 && !hasSens) { setConfirmNoSens(true); return; } setStep(step + 1); };
 
-### Feature unlock system (time-gated)
-Trackers are gated by program week, computed from `profile.startDate`:
-- `MACRO_UNLOCK = { week: 3, day: 4 }` — nutrition macros (protein/fat/carbs/fiber).
-- `WATER_UNLOCK = { week: 3, day: 2 }` — water tracker.
-- `unlockedOn(startDate, onDate, u)` decides whether a tracker is open on a given date.
+  const draft = { age, heightCm, weightKg, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, stepGoal: 2000, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes };
+  const targets = computeTargets(draft);
+  const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
+  const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
 
-**Product rule:** before a tracker's week, it must **not appear at all** — not shown as "locked", just absent from the screen. Protein focus / macros are only relevant **from week 3**. The whole codebase follows this single rule (hidden before week 3, never "locked"). The previous leftover `PROTEIN_UNLOCK_WEEK = 2` constant and the "locked" mode in `MacroCard` (text "ייפתח בשבוע 2") were removed in v0.23. This rule also applies in `ProfileScreen`: the macro row (protein/fat/carbs) is gated by `programWeekFor(startDate, TODAY) >= MACRO_UNLOCK.week` (v0.28) — only the daily calorie target shows before week 3. The day strip marks the current day with a different-shade top band labeled "היום" (so the header no longer prefixes "היום"). `ProfileScreen` shows the real name via a `userName` prop (`profile.name || gateName`), not the "משתמשת" placeholder.
+  const Field = ({ label, children }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
+      <span style={{ fontSize: 17, color: C.ink }}>{label}</span>{children}
+    </div>
+  );
 
-### Android back button
-The root `App` intercepts the hardware/gesture back button (Samsung/Android) via the History API: on mount it pushes a synthetic history state and listens for `popstate`. A back press first closes an open sheet/modal; if none is open it shows an exit-confirm overlay (`showExit`) with "להישאר" / "לצאת". "להישאר" dismisses it; "לצאת" sets a guard and calls `history.go(-2)` to leave (a browser tab/PWA can't be force-closed by JS, so on a standalone PWA the OS performs the actual close at the history root). Sheets/modals are tracked through refs (`modalRef` / `sheetRef` / `exitRef`) so the single mount-time listener always reads current state.
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "10px 20px 16px" }}>
+        <div style={{ display: "flex", gap: 6, margin: "6px 0 8px" }}>
+          {[0, 1, 2, 3].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
+        </div>
+        <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginBottom: 6 }}>v{VERSION}</div>
+        <div style={{ textAlign: "center", marginBottom: 12 }}>
+          <button onClick={() => onFinish(draft)} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
+        </div>
 
-### Chat inputs
-Both AI chats — the meal-logging chat in `AddModal` (step `"ai"`) and `RecommendModal` ("מה כדאי לאכול") — use an auto-growing `<textarea>` (not a single-line input) so long dictated/typed text stays visible (grows up to ~96px, then scrolls). Enter sends, Shift+Enter inserts a newline. Both message lists auto-scroll to the latest message via an end-anchor ref + `scrollIntoView`.
+        {step === 0 && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>{name && name.trim() ? `היי ${name.trim()}, נעים להכיר!` : "נעים להכיר"}</span></div>
+            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
+            <Field label="גיל"><Stepper value={age} set={(v) => setAge(Math.max(18, v))} min={18} /></Field>
+            <Field label="גובה"><Stepper value={heightCm} set={setHeightCm} suffix="ס״מ" /></Field>
+            <Field label="משקל נוכחי"><Stepper value={weightKg} set={setWeightKg} step={0.5} suffix="ק״ג" /></Field>
+            <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 17, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
+              <select value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 17, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
+                {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
+              </select>
+              <div style={{ fontSize: 13, color: C.faint, marginTop: 6 }}>התוכנית מתחילה בימי ראשון בלבד.</div>
+            </div>
+            <p style={{ fontSize: 13, color: C.faint, marginTop: 14, lineHeight: 1.6 }}>התוכנית מותאמת לנשים, ולכן אין צורך בשאלת מין.</p>
+          </>
+        )}
 
-### Diet style & sensitivities
-Collected during onboarding (step 2, "איך את אוכלת?") and editable later in `ProfileScreen`. Two **separate** concepts, intentionally not mixed:
-- `profile.diet` (array of ids from `DIET_OPTIONS`, objects `{id, emoji}`: הכל / צמחוני / טבעוני / כשר / דל פחמימה / ים-תיכוני) — a *style* preference, shown as selectable emoji circles in onboarding.
-- `profile.allergies` (array from `SENSITIVITY_OPTIONS`: גלוטן / חלב-לקטוז / ביצים / אגוזים / בוטנים / סויה / דגים / שומשום) plus `profile.dislikes` (free text "other") — things to *avoid*.
+        {step === 1 && (
+          <>
+            <span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>מה המטרה שלך?</span>
+            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 14 }}>בחרי קצב ירידה שבועי. קצב מתון נשמר לאורך זמן וטוב יותר לשמירה על מסת שריר.</p>
+            {RATE_OPTIONS.map((g) => {
+              const sel = rate === g;
+              return (
+                <div key={g} onClick={() => setRate(g)} style={{ display: "flex", alignItems: "center", gap: 10, border: `1px solid ${sel ? C.brand : C.line}`, background: sel ? C.brandBg : "transparent", borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${sel ? C.brand : C.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{sel && <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.brand }} />}</div>
+                  <span style={{ flex: 1, fontSize: 17, fontWeight: 500, color: C.ink }}>{rateLabel(g)}</span>
+                  {g === 250 && <span style={{ fontSize: 12, background: C.brand, color: "#fff", padding: "3px 9px", borderRadius: 7 }}>מומלץ</span>}
+                </div>
+              );
+            })}
+            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalKg} set={(v) => setGoalKg(Math.min(weightKg - 0.5, v))} step={0.5} suffix="ק״ג" /></Field></div>)}
+          </>
+        )}
 
-These feed the AI suggestion chat (`RecommendModal`): the seed prompt lists the diet style and, critically, injects allergies+dislikes as a **hard "never suggest" rule** (not a soft preference). **Safety stance:** this is best-effort risk reduction, never a guarantee — an onboarding + profile disclaimer makes clear the app is a coaching aid, not a medical allergy-safety tool, and the user must verify ingredients herself. Do not position the app as "safe for allergies." Existing stored profiles may predate `allergies`, so always read it defensively (`profile.allergies || []`). As of v0.33, `RecommendModal` opens with a **confirm stage**: it shows the diet style + sensitivities (editable inline, persisted to the profile via `setProfile`; "none recorded" hint when empty), and only on "קבלי המלצות" builds the seed and starts the chat — a double-check that reduces wrong-context errors. When sensitivities exist, the seed instructs the assistant to always end with a gentle reminder to verify the full ingredient list, and the confirm stage shows the same caution. As of v0.35 there is **no human-handoff path anywhere** in the app (testers use their program group, not the app): the "talk to someone" quick-reply was removed and the `aiMealChat` prompt now explicitly instructs the assistant not to offer human contact or forward requests; the QA harness verifies that offering human contact is a failure. `ActivityModal` (v0.34) computes burned calories with the MET formula `MET × 3.5 × weightKg ÷ 200 × minutes` — a chosen activity's MET (or a custom "אחר" intensity) × a minutes stepper × the user's body weight, instead of fixed presets. As of v0.36: (1) each meal suggestion includes an inline estimate — kcal + protein/fat/carbs from week 3, kcal-only before week 3 (`estimateRule`, gated by `proteinFocus`, synced in the QA harness); (2) when the user states a new preference/dislike/sensitivity mid-chat, `extractPreferences()` (a small AI call to `/api/ai`) detects it and `RecommendModal` shows a "save to your preferences?" banner — on confirm, diet styles → `profile.diet`, known sensitivities → `profile.allergies`, the rest → appended to `profile.dislikes` (persisted). **Persistence note:** the profile lives in `localStorage` (per device/browser); chat history is ephemeral and is *not* persisted, which is why only saved-to-profile preferences survive across sessions, and why a new device starts fresh (gate + onboarding) — true cross-device sync would require server-side profile storage. As of v0.41, committing food entries upserts them into a persisted `favorites` list (per-100g derived from the logged item, deduped by name, newest first, capped 20); the AddModal search step's "אחרונים/האחרונים שלך" section renders real favorites (falling back to the demo `RECENT` only when empty) for one-tap re-adding at the last-used quantity. As of v0.42, when macros unlock (week 3), the day view shows the calorie `Ring` and a matching `ProteinRing` (same style, `C.macroP` color, positive "reached goal" semantics) side by side, with a small one-line fat/carbs/fiber summary beneath — replacing the previous four `MacroCard`s. As of v0.43, future days in the day strip (`d > TODAY`) are disabled and dimmed (opacity 0.4, not clickable); each day becomes fillable once its date arrives. As of v0.44 the root keeps a reactive `today` (a 60s interval re-checks `ymd(new Date())`), passed to `DayScreen`, so the next day unlocks automatically at midnight without a reload (and the view advances if it was on the old today). As of v0.45: `macroP` is a distinct teal (`#2F9E8F`) so the protein ring no longer matches the pink calorie ring; each ring carries a **bold macro name inside it** (`קלוריות` in brand color / `חלבון` in teal) plus the remaining number and a small `מתוך {target}` line; the redundant "יעד/נאכל" sub-line was removed; and fat/carbs/fiber now render as a **compact 2-row table** (label row / value row, thin column dividers) directly beneath the rings, kept short so it doesn't push content down. As of v0.46, `PRIVACY_URL`/`COOKIE_URL` default to the real MyPrime policy pages and both are linked in the onboarding consent and the AccessGate note; `resetDemo` now also resets the access gate (`setGate("form")`, clears name/email, removes `myprime_access_email`) so "restart demo" returns to the name+email screen instead of skipping straight to onboarding. As of v0.47, the AddModal search step (`step === "list"`) is split into two tabs — **"חיפוש"** (the search box + local/`il`/OFF results) and **"אחרונים"** (the favorites/recents history) — with the meal-target chips shared above both; `listTab` defaults to history when favorites exist, else search. Note: search still queries the Israeli national DB first (`/api/il-food`) and only falls back to OFF when it returns nothing; that dataset (data.gov.il `nutrition-database` = the MoH "צמרת" DB, ~4,500 foods) is published as downloadable CSV (last updated 2022), not a live datastore, so `datastore_search` returns empty. As of v0.48, `api/il-food.js` was rewritten to **download the CSV resource(s) directly, decode (utf-8/windows-1255), parse, and cache them in module scope**, then substring-search the Hebrew names (the existing `normalize()` already targets the real צמרת column codes `shmmitzrach`/`food_energy`/`protein`/`total_fat`/`carbohydrates`, with Hebrew-substring fallback). It still tries `datastore_search` first. This runs on Vercel's open network (the sandbox can't reach data.gov.il, so it was NOT testable here). **Open task: verify on the deployed site** — hit `/api/il-food?q=חומוס&debug=1`, which returns the resource list + CSV headers + parsed count; if the field mapping is off, adjust `normalize()` keys from those headers. Also v0.48: the onboarding final step shows MyPrime's legal disclosure ("מיי פריים ה.ד.ס בע"מ … אינה אוספת מידע אישי …", cookie-policy + privacy-policy usage clauses) with both policy links. As of v0.49, the v0.47 in-search tabs were removed: the **"חיפוש מזון" method screen is search-only**, and recents/favorites became their **own bottom entry in the method chooser** ("האחרונים והמועדפים שלי", `Clock` icon → `step === "history"`), positioned last as the lowest-priority option; the qty screen's back button returns to its origin step (`qtyOrigin`). Also v0.49: the meal-suggestion prompt (`aiMealChat`, mirrored in the QA harness) now instructs the assistant to base nutrition estimates on the Israeli national DB ("צמרת") values for Israeli foods — prompt-level grounding (the *logging* path already reconciles named items against `/api/il-food` via `reconcileWithDb`, so logged foods use real Israeli DB values now that the endpoint works). As of v0.50: the bottom nav bar is tinted (`C.brandBg` as of v0.51, up from a too-faint `C.bg`) with a soft top shadow so it reads as a bar; and `RecommendModal` ("מה כדאי לאכול?") gained an always-available **"אכלתי — הוסיפי ליומן"** button on each suggestion — it opens a `"log"` sub-stage that runs `aiNutritionChat` (asks clarifying questions if needed, e.g. which idea / how much), and once it returns items shows them + meal chips + a confirm that calls `onLog` (= root `commit`, which logs **and** upserts favorites/recents). `RecommendModal` now takes an `onLog` prop.
+        {step === 2 && (
+          <>
+            <span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>איך את אוכלת?</span>
+            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 16 }}>בחרי את סגנון התזונה שלך - אפשר לבחור יותר מאחד. זה יעזור לי להתאים לך המלצות.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 22 }}>
+              {DIET_OPTIONS.map((d) => {
+                const on = diet.includes(d.id);
+                return (
+                  <div key={d.id} onClick={() => setDiet(on ? diet.filter((x) => x !== d.id) : [...diet, d.id])} style={{ width: 92, textAlign: "center", cursor: "pointer" }}>
+                    <div style={{ width: 72, height: 72, borderRadius: "50%", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, background: on ? C.brandBg : C.bg, border: `2px solid ${on ? C.brand : C.line}`, transition: "all .15s" }}>{d.emoji}</div>
+                    <span style={{ fontSize: 14, color: on ? C.brandD : C.sub, fontWeight: on ? 600 : 400 }}>{d.id}</span>
+                  </div>
+                );
+              })}
+            </div>
 
-### Backend (Vercel serverless functions in `api/`)
-- `api/ai.js` — proxy to the Anthropic Messages API. Requires env var `ANTHROPIC_API_KEY`; optional `AI_MODEL` (defaults to a current Sonnet model). The frontend calls it via `AI_ENDPOINT` (`/api/ai`, overridable with `VITE_AI_ENDPOINT`). The proxy overrides the model server-side, so the model string sent from the client is not authoritative.
-- `api/access.js` — access gate: checks an email against the program participant list (`ACCESS_ENDPOINT` / `/api/access`).
-- `api/il-food.js` — Israeli food database lookup (`/api/il-food?q=...`); downloads + caches the MoH "צמרת" CSV from data.gov.il and substring-searches names (datastore fast-path + `?debug=1` diagnostic). See the v0.48 note above.
+            <div style={{ fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 4 }}>רגישויות ואלרגיות</div>
+            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>סמני וכתבי מה שחשוב להימנע ממנו, ואדאג שההמלצות יתחשבו בזה.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+              {SENSITIVITY_OPTIONS.map((s) => {
+                const on = allergies.includes(s);
+                return (<span key={s} onClick={() => setAllergies(on ? allergies.filter((x) => x !== s) : [...allergies, s])} style={{ fontSize: 14, padding: "7px 14px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+              })}
+            </div>
 
-Barcode scanning (in `AddModal`) — as of v0.38 — opens the rear camera once (`getUserMedia`, ideal 1920×1080, best-effort `focusMode: continuous`) and runs **two decoders in parallel on the same `<video>`**: native `BarcodeDetector` (only if `getSupportedFormats()` returns a non-empty list — some devices expose the class but support nothing) via a `requestAnimationFrame` `detect()` loop, **and** `@zxing/browser`'s `decodeFromVideoElement` with retail format hints + `TRY_HARDER`. First engine to read a code wins (`onCode` is guarded + idempotent). A dimmed aiming frame with a center line overlays the video. `stopScan` runs a stored cleanup (rAF loop, ZXing controls, camera tracks). A successful scan looks the code up on Open Food Facts; manual numeric entry is available both before scanning and via "להקליד מספר ידנית" during scanning. **Open Food Facts is a global, crowd-sourced DB** — many Israeli products have English/partial names or aren't listed, so (v0.39) `lookupBarcode` prefers Hebrew fields (`product_name_he` → `generic_name_he` → `product_name` → …) and the qty step shows an **editable name field for barcode items** (`food.id` starting `bc_`) so the user can correct an English/wrong name before adding. There is no good free Israeli barcode→nutrition API; the Israeli DB (`/api/il-food`) is name-search only. **FoodsDictionary was contacted and confirmed they do not offer an API** — so the interim stack (Open Food Facts barcode + editable name + label-photo fallback + `/api/il-food` name search) stands; do not re-propose FoodsDictionary as a data source. As of v0.40, when a scanned barcode isn't found, the "notfound" state offers a **"צלמי את התווית התזונתית"** button (camera `capture`) that routes the photo through `onPhoto → sendAiImage` so the AI reads the values straight off the nutrition label — the accurate fallback for products missing from Open Food Facts. (v0.29 `decodeFromConstraints` then v0.31 single-engine BarcodeDetector failed to detect on the target Samsung device — hence the parallel rewrite; coverage/detection still varies with camera focus and product listing.) Note: photo analysis (`analyzeMeal`) only *estimates* nutrition from appearance and is unreliable for packaged products — the barcode is the accurate path for those. As of v0.29 the photo prompt also reads an on-package nutrition label when one is visible. **Photo flow internals:** the live path is `onPhoto → sendAiImage → aiNutritionChat` (image sent into the logging chat); the standalone `analyzeMeal()` function exists but is **unused** (dead code). The photo step (v0.37) offers two explicit inputs — "צלמי עכשיו" (`capture="environment"`, opens the camera) and "העלי תמונה מהגלריה" (no `capture`), both calling `onPhoto`. v0.30 adds a **hybrid reconciliation**: after the AI identifies items (photo or text logging), `reconcileWithDb()` searches the product DBs (`searchIsraeliDB` + `searchOpenFoodFacts`) by item name and, only on a **strong** name match (`strongMatch`), replaces the AI's estimated values with the DB's real per-100g values scaled to the item's grams, tagging the item `source:"db"` (badge "מהמאגר") vs `source:"estimated"` (badge "מוערך", via `SrcBadge`). Name search is fuzzier than a barcode (no unique id), so unmatched items keep the estimate; the barcode remains the accurate path for packaged products. As of v0.31 the logging prompt (`aiNutritionChat`) also asks about typical accompaniments (e.g. oats/cereal → milk/yogurt + which kind; coffee → milk/sugar) and returns each component as a separate item, so the whole thing is logged at once.
+            <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 12 }}>
+              <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>אשתדל להתאים את ההמלצות לרגישויות שלך, אבל תמיד כדאי לבדוק רכיבים בעצמך. האפליקציה היא כלי עזר ולא תחליף לייעוץ רפואי. אם יש לך אלרגיה ממשית, אל תסתמכי רק עליה.</span>
+            </div>
 
-The AI features only work when deployed (or with the functions running), since they depend on `/api/*`. In a plain local `npm run dev` they may not respond — that is expected.
+            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+              <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+              <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+            </div>
+            {customSens.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {customSens.map((s) => (
+                  <span key={s} style={{ fontSize: 14, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {s}
+                    <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        )}
 
-### Beta feedback (`feedback/`)The notes panel (`NotesFab`, "הערות לדמו") lets testers jot screen-tagged notes. As of v0.32, when `VITE_FEEDBACK_URL` is set it shows a "שלחי משוב לצוות MyPrime" button that POSTs all notes (with device id, app version, tester name, timestamp, per-note screen) to a Google Apps Script web app, which appends one row per note to a "Feedback" sheet. The POST uses `mode:"no-cors"` + `text/plain` (fire-and-forget, avoids CORS preflight). `feedback/Code.gs` is the Apps Script; `feedback/README.md` has the one-time setup (create Sheet → Apps Script → deploy as web app "Anyone" → set `VITE_FEEDBACK_URL` in Vercel → redeploy). Clipboard copy remains as a fallback when no URL is configured.
+        {step === 3 && (
+          <>
+            <span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>התוכנית שלך</span>
+            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 12 }}>
+              {proj.maintain ? "תוכנית לשמירה על המשקל הנוכחי." : `בקצב של ${rate} ג׳ בשבוע, תגיעי ל־${goalKg} ק״ג בעוד כ־${proj.weeks} שבועות.`}
+            </p>
 
-### Testing / QA (`qa/`)
-`qa/run-qa.mjs` is a standalone Node (18+) harness that evaluates the **AI layer only**. It generates a broad scenario matrix (adversarial allergy/diet baits, neutral suggestion-with-allergy, suggestions across profiles, the week-3 protein-gating rule, safety/extreme + medical-condition requests, brand-voice/no-shaming probes, verifying NO human-handoff is offered, off-topic, and meal-logging format/accuracy — ~83 text scenarios) plus optional meal-photo tests driven by `qa/images/manifest.json` (user supplies real plate photos + ground truth; analyzed via the verbatim `analyzeMeal` prompt, checked for expected items + plausible total kcal), runs each through the **same prompts the app uses** (the `aiMealChat`/`aiNutritionChat`/`analyzeMeal` strings and the RecommendModal seed are copied verbatim — `KEEP IN SYNC` if those change in `App.jsx`), then grades each answer with an LLM rubric plus an independent allergen keyword heuristic and rule-based logging/photo-JSON checks. It writes `qa/report.html` + `qa/results.json`. Run with `QA_BASE_URL="https://<app>.vercel.app" node qa/run-qa.mjs` (hits the deployed `/api/ai`, no key needed) or `ANTHROPIC_API_KEY=... node qa/run-qa.mjs`. See `qa/README.md`. This does **not** cover product-data accuracy (FOODS vs ground truth) or functional/device testing, and LLM grading is fallible — human-review all critical fails. There is still no automated test runner for the app itself.
+            <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "14px 10px 6px", marginBottom: 12 }}>
+              <div style={{ height: 150 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={projData} margin={{ top: 6, right: 10, left: 10, bottom: 0 }}>
+                    <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.brand} stopOpacity={0.2} /><stop offset="100%" stopColor={C.brand} stopOpacity={0} /></linearGradient></defs>
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} />
+                    <YAxis domain={["dataMin - 1", "dataMax + 1"]} hide />
+                    <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v} ק״ג`, "משקל צפוי"]} labelFormatter={(l) => `שבוע ${l}`} />
+                    <Area type="monotone" dataKey="kg" stroke={C.brand} strokeWidth={2.5} fill="url(#pg)" dot={{ r: 2.5, fill: C.brand }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ textAlign: "center", fontSize: 12, color: C.faint, paddingBottom: 6 }}>תחזית לפי שבועות</div>
+            </div>
 
-## Working rules (owner preferences — important)
+            <div style={{ background: C.brandBg, borderRadius: 14, padding: 14, marginBottom: 12, textAlign: "center" }}>
+              <div style={{ fontSize: 13, color: C.brandD, marginBottom: 4 }}>יעד קלורי יומי מומלץ</div>
+              <div style={{ fontSize: 35, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 17 }}>קק״ל</span></div>
+            </div>
 
-- **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **ZIP = CHANGED FILES ONLY (owner request, from v0.76 on).** The zip must contain ONLY the files/folders that changed since the previously delivered version, each at its real repo path (e.g. `myprime-nutrition-demo/src/App.jsx`, `myprime-nutrition-demo/CLAUDE.md`) so he can drop them straight into the repo. Do NOT include unchanged heavy folders - especially `public/` (the recipe/sweet images, ~2MB) - there is no point re-uploading them. Most turns this means the zip holds just `src/App.jsx` (+ `CLAUDE.md`, and `api/*.js`/`feedback/Code.gs` only when those change). Still also deliver the standalone `src/App.jsx` file alongside the zip, and state the version in chat + which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.77`.
-- **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
-- **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
-- **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
+            {targets.floored && (
+              <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 12, display: "flex", gap: 6 }}>
+                <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>הקצב שבחרת מהיר מהמומלץ עבור הנתונים שלך. היעד הוגבל ל־{KCAL_FLOOR} קק״ל לשמירה על בריאותך - שקלי קצב מתון יותר.</span>
+              </div>
+            )}
 
-## v0.53 — Recipe booklet (29 real MyPrime recipes)
-The "מתכונים" tab now renders the real MyPrime recipe booklet instead of placeholder data.
-- Recipe data lives in `src/recipes.js` (`export const RECIPES`), imported by `App.jsx`. Each recipe: `{id,page,name,img,prep,diff,servings,kcal,p,f,c,ing[],steps[],tips[]}`. Ingredient lines ending with ":" render as sub-headers. kcal/p/f/c are per serving (range midpoints) for logging. Hebrew copy is transcribed faithfully from the official PDF — do not alter without instruction.
-- Photos: `public/recipes/<page>.jpg` (4..32), extracted from the booklet PDF with `pdfimages` (largest portrait image per page), resized to max width 900 / JPEG q82 (~2.1MB total). Vite serves them at `/recipes/<page>.jpg`.
-- `RecipesScreen`: search box + filter chips (הכל / עתיר חלבון [p>=25] / דל פחמימות [c<=12]) + photo cards; tapping a card opens `RecipeDetail` (hero photo, prep/servings/difficulty chips, 4-stat nutrition strip, "הוסיפי מנה ליומן", ingredients with sub-headers, numbered steps, tips). Card "+" and detail button call `addRecipe`.
-- `addRecipe(r)` logs a serving (g:1, source "verified", explicit kcal/p/f/c) to `selectedDate` with a time-based meal; no longer force-switches to the day tab (screen shows a "נוסף ליומן" toast/confirmation instead).
-- To add/replace recipe images later: drop files in `public/recipes/` (GitHub), Vercel serves them.
+            <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.7, textAlign: "right" }}>
+              <Lock size={13} style={{ display: "inline", verticalAlign: "-2px", marginInlineEnd: 5 }} />
+              מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
+            </div>
+            <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "12px 0 2px", marginTop: 12, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
+              <span style={{ fontSize: 14, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
+            </div>
+          </>
+        )}
+      </div>
 
-## v0.55 — Sweets tab + protein color
-- Protein color changed from teal (#2F9E8F) to strong purple `macroP:#7E4FB5`; added `proteinTrack:#EBE1F7` (soft purple) used as the ProteinRing track (was C.line). Recipe-card protein badge updated to the purple palette. Carbs stays mauve #A87BB5 (distinct).
-- New desserts feature "הפינה המתוקה": data in `src/sweets.js` (`export const SWEETS`, 12 items, same shape as recipes), photos in `public/sweets/<page>.jpg` (pages 3..14, extracted from the desserts PDF via pdfimages, largest portrait per page; page 9 grabbed manually — its photo is 1.44 ratio). Hebrew copy transcribed faithfully.
-- `RecipesScreen` generalized: now takes `items`/`title`/`subtitle` (default = RECIPES / "מתכונים"). Reused for sweets via `<RecipesScreen items={SWEETS} title="מתוקים" ... />`. `RecipeDetail` reused as-is.
-- Gating: `SWEETS_UNLOCK = { week: 3, day: 5 }` (program day 19). The "מתוקים" tab is conditionally added to `tabs` only when `unlockedOn(startDate, TODAY, SWEETS_UNLOCK)` — i.e. it does NOT appear at all before week 3 day 5 (no locked teaser), per Ron's request. Tab icon: Cookie. With 5 tabs the nav splits 2 (day, report) + FAB + 3 (recipes, sweets, profile).
-- To add/replace sweet images: drop files in `public/sweets/` (GitHub) → Vercel serves at `/sweets/<page>.jpg`.
+      <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", gap: 10, alignItems: "center" }}>
+        {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
+        {step < 3 ? (<Btn onClick={next}>המשך</Btn>) : (<Btn disabled={!agree} onClick={() => onFinish(draft)}>בואי נתחיל</Btn>)}
+      </div>
 
-## v0.56 — Recipe logging fix + category filters
-- BUG FIX: recipes/sweets were logged as `g:1` with per-serving kcal, so the gram-based edit modal recomputed per100 = kcal*100 → astronomical values at 100 g. Recipe/sweet entries are now SERVING-based: `{ unit:"serving", servings, base:{kcal,p,f,c}, kcal/p/f/c = base*servings }`. Day totals already sum `e.kcal` (correct); editing now scales by servings, not grams. (Old g:1 recipe entries in localStorage still mis-edit — reset/delete them.)
-- New `RecipeAddModal` (SheetShell): opens on recipe "+" / "הוסיפי מנה ליומן" (add) and when tapping a serving entry in the journal (edit). Shows recipe name, meal chips, a servings stepper (step 0.5, min 0.5, default 1), a live 4-stat nutrition strip (base×servings), and "הוסף ליומן"/"עדכן" (+ "מחק פריט" when editing). PDF nutrition is per serving; the modal multiplies by the chosen number of servings.
-- Root wiring: `addRecipe(r) → setModal({kind:"recipe", recipe:r})`; `editEntry(e) → kind "recipe" if e.unit==="serving" else "food"`; `saveRecipe(payload, editId)` updates or appends (does NOT touch favorites). Modal render branches recipe vs AddModal. Day entry row shows "{servings} מנה/מנות" for serving entries.
-- Recipe/sweet filter chips changed from עתיר חלבון/דל פחמימות to NUTRITION CATEGORIES, derived dynamically from each item's new `cat` field (horizontal-scroll chips). Recipe cats: שייקים, ארוחות בוקר, מנות ראשונות, סלטים, מרקים, מנות עיקריות. Sweet cats: פנקייקים, מוסים ופודינג, עוגות, חטיפים, עוגיות וכדורים. `cat` lives in recipes.js/sweets.js.
+      {confirmNoSens && (
+        <div onClick={() => setConfirmNoSens(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
+            <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לא סימנת שום רגישות או אלרגיה</div>
+            <div style={{ fontSize: 15, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>האם את בטוחה?</div>
+            <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 18 }}>
+              <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>אשתדל להתאים את ההמלצות לרגישויות שלך, אבל תמיד כדאי לבדוק רכיבים בעצמך. האפליקציה היא כלי עזר ולא תחליף לייעוץ רפואי. אם יש לך אלרגיה ממשית, אל תסתמכי רק עליה.</span>
+            </div>
+            <Btn onClick={() => { setConfirmNoSens(false); setStep(step + 1); }}>כן, אפשר להמשיך</Btn>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmNoSens(false)} style={{ color: C.sub }}>חזרה לסמן רגישויות</Btn></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-## v0.57 — + menu / method chooser / onboarding consent
-- The "+" menu (EntryMenu) already contains only מזון/פעילות/מים (no weight/calorie items); weight + daily-calorie editing live in ProfileScreen (משקל row + יעד קלורי block). Confirmed — no change needed there. (Dead WeightModal/CalorieGoalModal + onPickEntry weight/calorie cases remain, harmless.)
-- AddModal method chooser ("הוספת מזון") reordered: 1) ספרי לי מה אכלת (AI), 2) צילום ארוחה, 3) סריקת ברקוד (removed "מומלץ" tag), 4) האחרונים והמועדפים שלי, 5) חיפוש מזון (last). Restyled: each row a soft tinted background with a prominent 46px colored icon chip (white icon). Tints: AI=info, photo=amber, barcode=brand, recent=water, search=green(#E8F3EC/#4E9E76). Kept "חדש"/"מהיר" tags (now white chip w/ row color). NOTE: first-item assumption was AI — easy to swap if Ron meant another.
-- Onboarding consent: moved the "קראתי ואני מאשרת…" line + checkbox to the END (below the legal paragraph, above "בואי נתחיל", with a top divider). De-duplicated policy links — they now appear ONLY in the consent line; the long legal paragraph is plain text (no <a> links). (The separate privacy/cookie link pair in the food-add footer is unrelated and left as-is.)
+/* ============================================================
+   SCREENS
+   ============================================================ */
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, stepGoal, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, userName, onStreakTap }) {
+  const dayLog = log.filter((e) => e.date === date);
+  const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
+  const dayAct = activityLog.filter((a) => a.date === date);
+  const actKcal = dayAct.reduce((s, a) => s + a.kcal, 0);
+  const stepsOpen = unlockedOn(profile.startDate, date, STEPS_UNLOCK);
+  const steps = (stepsByDate && stepsByDate[date]) || 0;
+  const stepKcal = stepsOpen ? stepsKcal(steps, profile.weightKg) : 0;
+  const budget = dailyTarget + actKcal + stepKcal;
+  const macros = dayLog.reduce((s, e) => ({ p: s.p + (e.p || 0), f: s.f + (e.f || 0), c: s.c + (e.c || 0), fib: s.fib + (e.fib || 0) }), { p: 0, f: 0, c: 0, fib: 0 });
+  const week = programWeekFor(profile.startDate, date);
+  const macroOpen = unlockedOn(profile.startDate, date, MACRO_UNLOCK);
+  const waterOpen = unlockedOn(profile.startDate, date, WATER_UNLOCK);
+  const cupMl = profile.cupMl || DEFAULT_CUP_ML;
+  const waterMl = waterMlOf(waterByDate[date]);
+  const waterCups = Math.round((waterMl / cupMl) * 10) / 10;
+  const targetCups = Math.round(WATER_TARGET_ML / cupMl);
+  const todayRef = useRef(null);
+  const streak = streakDays(log);
+  useEffect(() => { if (todayRef.current) todayRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, []);
+  const days = Array.from({ length: 15 }, (_, i) => addDays(today, i - 10));
+  return (
+    <div style={{ padding: "8px 0 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 16px 0", gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          {userName && userName.trim() && <div style={{ fontSize: 15, color: C.brandD, fontWeight: 600 }}>היי {userName.trim()} 👋</div>}
+          <div style={{ fontSize: 14, color: C.sub, fontWeight: 500, marginTop: 1 }}>
+            {date !== today && relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD }}> · שבוע {week}</span> : null}
+          </div>
+        </div>
+        {streak > 0
+          ? <button onClick={onStreakTap} className="streak-pill" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.amber}, ${C.brand})`, color: "#fff", border: "none", borderRadius: 18, padding: "7px 14px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(199,122,60,0.35)", fontFamily: fontStack }}>
+              <span style={{ display: "inline-block", animation: "flameFlicker 1s ease-in-out infinite" }}>🔥</span> {streak} ימים ברצף
+            </button>
+          : <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, color: C.faint, fontSize: 13 }}>🔥 מלאי משהו להתחיל רצף</span>}
+      </div>
 
-## v0.58 — Sweets as a top toggle inside Recipes (not a bottom-nav tab)
-- Reverted the bottom-nav "מתוקים" tab from v0.55. The bottom nav is back to 4 tabs (day, report, recipes, profile).
-- Sweets now live INSIDE the Recipes screen as a top segmented toggle: "מתכונים | מתוקים" (pill segmented control, panel bg on active). RecipesScreen takes `sweetsOpen` and manages an internal `section` state ("recipes"/"sweets") switching dataset (RECIPES/SWEETS), subtitle, search placeholder, and category chips.
-- The "מתוקים" segment only renders when `sweetsOpen` (week 3 day 5 / program day 19). When it appears it shows a small "חדש" badge; the badge disappears once the user taps the מתוקים segment (local `seenSweets` state). Icons: ChefHat / Cookie.
-- RecipesScreen no longer takes items/title/subtitle props; it is self-contained. Rendered once: `<RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />`.
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "12px 16px 4px" }}>
+        {days.map((d) => {
+          const sel = d === date; const isToday = d === today; const isFuture = d > today; const has = log.some((e) => e.date === d); const dd = new Date(d);
+          return (
+            <button key={d} ref={isToday ? todayRef : null} disabled={isFuture} onClick={() => { if (!isFuture) setDate(d); }} title={isFuture ? "יום עתידי - ייפתח בתאריך הזה" : undefined} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, overflow: "hidden", padding: 0, background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: isFuture ? C.faint : (sel ? "#fff" : C.ink), cursor: isFuture ? "default" : "pointer", opacity: isFuture ? 0.4 : 1, textAlign: "center" }}>
+              {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
+              <div style={{ padding: "7px 0" }}>
+                <div style={{ fontSize: 13, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
+                <div style={{ width: 5, height: 5, borderRadius: "50%", margin: "0 auto", background: has ? (sel ? "#fff" : C.brand) : "transparent" }} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
-## v0.59 — Profile as a draft form + feminine wording + report graph clarity
-- All copy now feminine-only ("את כעת בשבוע X בתוכנית" — removed "את/ה"). App audience is women only.
-- ProfileScreen is now a DRAFT form: a local `draft` mirrors profile; every field/chip/dislikes/calorie edit updates `draft`, NOT the live profile. `dirty = JSON.stringify(draft)!==JSON.stringify(profile)`. A prominent "שמור שינויים" button appears ONLY when dirty — placed high (right under the "שבוע X" line) AND again above the reset button — and only on click does `setProfile(draft)` commit. The old always-present (dead, no-onClick) bottom save button was removed.
-- Moved the daily-calorie target + macros (protein/fat/carbs) block UP to directly under the "את כעת בשבוע X" line. MacroRow now lives inside that brandBg card (shown from week 3).
-- Report weight graph: added caption "המשקל שהזנת בפועל לאורך זמן (לא תחזית)" to make explicit it is ACTUAL logged weight, not a projection/target.
-- NOTE (answered, no code change): editing weight in Profile sets the baseline used for targets/projection only; it does NOT add a dated point to the report's actual-weight graph (that graph reflects weights logged via "+ הזיני משקל היום"). If Ron wants a Profile weight-save to also drop a dated measurement on the report graph, that's a separate wiring change (ProfileScreen would need an addWeight callback).
+      <div style={{ padding: "0 16px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", gap: 10, marginTop: 10, marginBottom: 14 }}>
+          <Ring consumed={consumed} budget={budget} size={130} onPlus={onAddCalorie} />
+          {macroOpen && <ProteinRing consumed={macros.p} target={targets.protein} size={130} />}
+          {waterOpen && <MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} color={C.water} track={C.waterBg} label="כוסות" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={130} />}
+          {stepsOpen && <MetricRing value={steps} goal={stepGoal} color={C.amber} track={C.amberBg} label="צעדים" sub={`מתוך ${stepGoal.toLocaleString()}`} onPlus={onEditSteps} size={130} />}
+        </div>
+        {macroOpen && (
+          <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", margin: "0 0 16px" }}>
+            {[{ label: "שומן", v: macros.f, t: targets.fat, color: C.macroF }, { label: "פחמימות", v: macros.c, t: targets.carbs, color: C.macroC }, { label: "סיבים", v: macros.fib, t: FIBER_TARGET, color: C.info }].map((m, i) => (
+              <div key={m.label} style={{ flex: 1, textAlign: "center", padding: "5px 4px", borderInlineStart: i ? `1px solid ${C.line}` : "none" }}>
+                <div style={{ fontSize: 11.5, color: C.sub, display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: m.color }} />{m.label}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, marginTop: 1 }}>{m.v} / {m.t} ג׳</div>
+              </div>
+            ))}
+          </div>
+        )}
 
-## OPEN — to work on next session (saved, not yet implemented)
-### 1. Weight model rework (analysis done v0.59 turn)
-Two unsynced sources: `profile.weightKg` (baseline → computeTargets) vs `weights[]` (report graph). Problems: editing profile weight doesn't touch the graph & vice-versa (two different "current weight"); graph is SEEDED with fabricated 24-day loss history (makeWeightSeed); "+ הזיני משקל היום" auto-logs `last-0.2` instead of asking (the real WeightModal is now orphaned — sheet "weight" no longer reachable); addWeightValue logs to selectedDate not necessarily today; report "Adaptive TDEE" is derived (tdee±40). Direction to decide: single source of truth (weights[] = log; current = last; profile.weightKg derived/synced); profile weight-save = log a dated measurement + update baseline; drop fabricated seed (start from one onboarding point); make "הזיני משקל היום" open WeightModal (ask a value).
+        {dayAct.length > 0 && (
+          <>
+            <div style={{ fontSize: 13, color: C.faint, marginBottom: 2 }}>פעילות גופנית</div>
+            {dayAct.map((a) => (
+              <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: `1px solid ${C.line}`, fontSize: 15 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 7, color: C.ink }}><Dumbbell size={15} color={C.info} /> {a.name}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ color: C.brandD, fontWeight: 500 }}>+{a.kcal}</span><button onClick={() => deleteEntry(a.id, "activity")} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><Trash2 size={14} /></button></span>
+              </div>
+            ))}
+          </>
+        )}
 
-### 2. Food-data accuracy — web-grounded nutrition (NEW, Ron flagged)
-Symptom: AI-estimated values are unrealistically low (e.g. grilled entrecote kcal/100g too low; Google AI overview shows ~260–350 kcal/100g, citing fuder.co.il / FoodsDictionary). Root cause: `api/ai.js` is a bare proxy to Anthropic Messages with NO tools — nutrition estimates come purely from model priors (no grounding); the "חיפוש מזון" path uses צמרת CSV (2022) + Open Food Facts, where a cut like "אנטריקוט" may be a lean/raw entry → reads low. Fix direction (feasible): enable Anthropic server-side `web_search` tool in the AI-estimation path (aiNutritionChat) so the model grounds values in the web like Gemini does; prompt it to prefer authoritative sources (USDA FoodData Central, משרד הבריאות/צמרת, FoodsDictionary, fuder), return per-100g + range + note cut/prep. Considerations: latency+cost (only on the AI path, add caching per food); don't hard-scrape one site (ToS) — let the model search & weigh sources; keep the exact barcode/DB path for packaged items, use web grounding mainly for cooked/restaurant dishes.
+        <div style={{ fontSize: 13, color: C.faint, margin: "16px 0 2px" }}>מה שהוזן</div>
+        {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 15, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה - הקישי על כפתור ה־+ להוספה</div>}
+        {dayLog.map((e) => (
+          <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+            <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
+              <div style={{ fontSize: 15, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
+              <div style={{ fontSize: 13, color: C.faint }}>{e.meal} · {e.unit === "serving" ? `${e.servings} ${e.servings === 1 ? "מנה" : "מנות"}` : `${e.g} ${e.unit === "ml" ? "מ\"ל" : "ג׳"}`} · {e.kcal} קק״ל</div>
+            </div>
+            <button onClick={() => editEntry(e)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Pencil size={15} /></button>
+            <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-## v0.60 — Steps tracking (manual now, auto-ready for the app stage)
-- New metric: daily steps with a goal. Data: `profile.stepGoal` (default 8000, in DEFAULT_PROFILE + onboarding draft, read defensively `|| 8000`) and `stepsByDate{date:count}` (persisted in localStorage, reset in resetDemo). Single source/getter pattern: UI reads `stepsByDate[date]`; `setStepsForDate(date,n)` writes. Future auto-sync (HealthKit/Health Connect) will write to the same store — UI unchanged. A disabled "התחברות לאפליקציית הבריאות · זמין באפליקציה" button sits in StepsModal as the placeholder slot.
-- Gating: `STEPS_UNLOCK = { week: 1, day: 2 }` (program day 2). Card/menu/graph appear from then.
-- Calories: steps ADD to the daily calorie budget like activity. `stepsKcal(steps, weightKg) = round(steps * 0.00055 * weightKg)` (~0.04 kcal/step at 70kg; ~317 kcal for 8000 @72kg). DayScreen `budget = dailyTarget + actKcal + stepKcal`. Double-count handling: steps cover everyday walking; "פעילות גופנית" is for dedicated workouts (StepsCard notes the budget bump). Coefficient 0.00055 easy to tune.
-- UI: `StepsCard` (progress bar, steps/goal, +kcal, tap-to-edit) on the Day screen (before WaterCard); a steps BarChart (14 days, goal ReferenceLine, bars colored brand when ≥goal else proteinTrack) on the Report screen with "+ עדכון צעדים להיום"; `StepsModal` sheet (Stepper step 250, live kcal preview) opened from the card, the report button, and a new "עדכון צעדים" item in the "+" menu (EntryMenu gated by `stepsOpen`). Goal set in Profile (Footprints row, Mini stepper step 500, in the draft form — saved with "שמור שינויים").
-- Icons: Footprints. Components are self-contained (StepsCard/StepsModal); no patches.
+function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDate = {}, stepGoal = 2000, stepsOpen, today = TODAY, onEditSteps }) {
+  const data = weights.map((w) => ({ ...w, label: `${new Date(w.date).getDate()}/${new Date(w.date).getMonth() + 1}` }));
+  const change = Math.round((weights[weights.length - 1].kg - weights[0].kg) * 10) / 10;
+  const current = weights[weights.length - 1].kg;
+  const calByDate = {};
+  log.forEach((e) => { calByDate[e.date] = (calByDate[e.date] || 0) + e.kcal; });
+  const goalKcal = targets.targetKcal;
+  const calSeries = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(TODAY, i - 6);
+    const dd = new Date(d);
+    return { label: `${dd.getDate()}/${dd.getMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
+  });
+  const loggedDays = calSeries.filter((x) => x.kcal > 0);
+  const metDays = loggedDays.filter((x) => x.kcal <= goalKcal).length;
+  const daysOnTarget = `${metDays}/${loggedDays.length}`;
+  const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
+  const proteinFocus = programWeek >= MACRO_UNLOCK.week;
+  return (
+    <div style={{ padding: "8px 16px 16px" }}>
+      <Header title="דוח והתקדמות" />
+      <div style={{ marginBottom: 12 }}><span style={{ fontSize: 13, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 20 }}>שבוע {programWeek} בתוכנית</span></div>
+      <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+          <Target size={16} color={C.brand} />
+          <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>עמידה ביעד הקלורי</span>
+        </div>
+        <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>
+          {loggedDays.length > 0
+            ? <>עמדת ביעד <b style={{ color: C.brandD }}>{metDays} מתוך {loggedDays.length}</b> הימים האחרונים 🎯</>
+            : "עדיין אין נתוני אכילה לשבוע הזה"}
+        </div>
+        {loggedDays.length > 0 && (
+          <div style={{ height: 140, margin: "0 -6px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={calSeries} margin={{ top: 12, right: 8, left: 8, bottom: 0 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, Math.round(maxCal * 1.15)]} hide />
+                <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
+                <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 11, fill: C.brandD }} />
+                <Bar dataKey="kcal" radius={[6, 6, 0, 0]}>
+                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : d.kcal <= goalKcal ? C.brand : C.amber} />))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+      <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+          <div><div style={{ fontSize: 13, color: C.sub }}>משקל נוכחי</div><div style={{ fontSize: 28, fontWeight: 600, color: C.ink }}>{current} <span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></div></div>
+          <span style={{ fontSize: 14, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 8, display: "flex", alignItems: "center", gap: 3 }}><ArrowDownRight size={14} /> {Math.abs(change)} ק״ג</span>
+        </div>
+        <div style={{ fontSize: 12, color: C.faint, marginBottom: 2 }}>המשקל שהזנת בפועל לאורך זמן (לא תחזית)</div>
+        <div style={{ height: 150, margin: "6px -6px 0" }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
+              <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.brand} stopOpacity={0.2} /><stop offset="100%" stopColor={C.brand} stopOpacity={0} /></linearGradient></defs>
+              <XAxis dataKey="label" tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} />
+              <YAxis domain={["dataMin - 0.5", "dataMax + 0.5"]} hide />
+              <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v} ק״ג`, "משקל"]} labelFormatter={() => ""} />
+              <Area type="monotone" dataKey="kg" stroke={C.brand} strokeWidth={2.5} fill="url(#wg)" dot={{ r: 3, fill: C.brand }} activeDot={{ r: 5, fill: C.brandD }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={addWeight} style={{ padding: "9px" }}>+ הזיני משקל היום</Btn></div>
+      </div>
 
-## v0.61 — USDA FoodData Central as a generic-food data layer
-- New serverless proxy `api/usda.js` → FDC `foods/search`. Reads per-100g nutrients 208(kcal)/203(protein)/204(fat)/205(carbs), prefers generic data types (Foundation > SR Legacy > Survey FNDDS > Branded), returns `{items:[{name,brand,dataType,kcal,p,f,c}]}`. Supports `?debug=1`. **Needs a free `USDA_API_KEY` in Vercel env** (https://fdc.nal.usda.gov/api-key-signup.html); falls back to DEMO_KEY (rate-limited).
-- Client: `searchUSDA(q)` (English query) + `translateFoodToEnglish(q)` (tiny AI call, Hebrew→short English term).
-- AI logging path (the main accuracy win): `aiNutritionChat` prompt now asks for an English `en` query per item; parsed items carry `en`. `lookupProduct(name, en)` priority = Israeli DB (Hebrew) → USDA (en) → Open Food Facts; `reconcileWithDb` tags source `"db"`/`"usda"` and scales per-100g by grams. So generic cooked foods ("steak", "rice", …) now get real USDA values instead of the model's guess.
-- Manual search ("חיפוש מזון"): USDA added as a fallback — if צמרת and OFF both return nothing, translate the Hebrew query to English and query USDA (source label "USDA FoodData Central · ערכים גנריים").
-- SrcBadge: added a blue "USDA" badge (#EEF4FB / #2D6CB5) alongside "מהמאגר"/"מוערך".
-- **CANNOT be tested in the sandbox** (api.nal.usda.gov is outside the allowlist) — verify on the live site via `/api/usda?q=grilled%20ribeye%20steak&debug=1`; expect one tuning round (coefficient/field mapping) after deploy.
-- **QA harness note:** `aiNutritionChat` prompt changed (added `en`) — `qa/run-qa.mjs` mirrors prompts verbatim; KEEP IN SYNC before relying on QA.
+      {stepsOpen && (() => {
+        const sData = Array.from({ length: 14 }, (_, i) => {
+          const d = addDays(today, -13 + i);
+          return { label: `${new Date(d).getDate()}/${new Date(d).getMonth() + 1}`, steps: stepsByDate[d] || 0 };
+        });
+        const stepsToday = stepsByDate[today] || 0;
+        const maxStep = Math.max(stepGoal, ...sData.map((x) => x.steps));
+        return (
+          <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+              <div><div style={{ fontSize: 13, color: C.sub }}>צעדים היום</div><div style={{ fontSize: 28, fontWeight: 600, color: C.ink }}>{stepsToday.toLocaleString()}</div></div>
+              <span style={{ fontSize: 14, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 8 }}>יעד {stepGoal.toLocaleString()}</span>
+            </div>
+            <div style={{ fontSize: 12, color: C.faint, marginBottom: 2 }}>צעדים יומיים - 14 הימים האחרונים</div>
+            <div style={{ height: 150, margin: "6px -6px 0" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={sData} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} interval={1} />
+                  <YAxis domain={[0, maxStep]} hide />
+                  <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${Number(v).toLocaleString()} צעדים`, ""]} labelFormatter={(l) => l} />
+                  <ReferenceLine y={stepGoal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד`, position: "insideTopRight", fontSize: 11, fill: C.brandD }} />
+                  <Bar dataKey="steps" radius={[4, 4, 0, 0]}>
+                    {sData.map((d, i) => (<Cell key={i} fill={d.steps === 0 ? C.line : d.steps >= stepGoal ? C.brand : C.proteinTrack} />))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onEditSteps} style={{ padding: "9px" }}>+ עדכון צעדים להיום</Btn></div>
+          </div>
+        );
+      })()}
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>ימים ביעד</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div></div>
+        {proteinFocus
+          ? <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>יעד חלבון</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{targets.protein} ג׳</div></div>
+          : <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>ירידה מתחילת המעקב</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{Math.abs(change)} ק״ג</div></div>}
+      </div>
+    </div>
+  );
+}
 
-## v0.61 — USDA FoodData Central grounding (generic foods)
-- Full USDA integration is now in place (most client wiring already existed from a prior in-progress pass): `api/usda.js` proxy to FDC `foods/search` (reads nutrient numbers 208 kcal / 203 protein / 204 fat / 205 carb per-100g, prefers Foundation > SR Legacy > Survey > Branded, `?debug=1` supported, key from `USDA_API_KEY` env, DEMO_KEY fallback). Client: `searchUSDA()`, `translateFoodToEnglish()` (tiny AI call, Hebrew→English), `lookupProduct(name,en)` layered Israeli→USDA→OFF, `reconcileWithDb` passes `it.en`, `SrcBadge` "usda" (blue), `aiNutritionChat` prompt emits per-item `en`, manual-search effect falls back to translate+USDA when צמרת & OFF are empty (source label "USDA FoodData Central · ערכים גנריים").
-- Layering: barcode/צמרת/OFF for packaged & Israeli; USDA for generic cooked foods (English-normalized); AI estimate only when nothing matches.
-- **Deploy requirement (IMPORTANT):** this is the first change that needs files BEYOND `src/App.jsx`. Ron must upload **`api/usda.js`** to the repo's `api/` folder and add a free **`USDA_API_KEY`** env var in Vercel (api.data.gov / fdc.nal.usda.gov/api-key-signup) then redeploy. Verify on the live site: `/api/usda?q=grilled%20ribeye%20steak&debug=1` (should return items with realistic kcal). NOT testable in the sandbox (network blocked to api.nal.usda.gov) — expect one tuning round after deploy.
-- KEEP qa harness prompts in sync — `aiNutritionChat` now includes the `en` field instruction.
+function RecipeDetail({ r, onBack, onAdd }) {
+  const stat = (label, value, color) => (
+    <div style={{ flex: 1, textAlign: "center", padding: "8px 4px" }}>
+      <div style={{ fontSize: 17, fontWeight: 700, color: color || C.ink }}>{value}</div>
+      <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+  return (
+    <div style={{ paddingBottom: 24 }}>
+      <div style={{ position: "relative" }}>
+        <img src={r.img} alt={r.name} style={{ width: "100%", height: 230, objectFit: "cover", display: "block" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0) 55%)" }} />
+        <button onClick={onBack} style={{ position: "absolute", top: 12, insetInlineStart: 12, width: 38, height: 38, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.92)", color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}><ChevronRight size={22} /></button>
+        <div style={{ position: "absolute", bottom: 12, insetInlineStart: 16, insetInlineEnd: 16, color: "#fff", fontSize: 22, fontWeight: 700, lineHeight: 1.3, textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}>{r.name}</div>
+      </div>
 
-## v0.61 — USDA FoodData Central as the generic-food data layer
-- New serverless proxy `api/usda.js` → FDC `foods/search`. Reads per-100g nutrients (208 kcal / 203 protein / 204 fat / 205 carb), prefers generic data types (Foundation > SR Legacy > Survey FNDDS > Branded), returns `{items:[{name,brand,dataType,kcal,p,f,c}]}`. Key from env `USDA_API_KEY` (free at fdc.nal.usda.gov/api-key-signup.html), falls back to DEMO_KEY. Debug: `/api/usda?q=grilled%20ribeye%20steak&debug=1`.
-- Client: `searchUSDA(q)` (same {per100,measures} shape as IL/OFF). `translateFoodToEnglish(q)` = tiny AI call (Hebrew→short English query) used for the manual-search fallback. AI logging path gets English directly: `aiNutritionChat` prompt now asks for a per-item `en` field, parsed items carry `it.en`.
-- Layered lookup `lookupProduct(name, en)`: (1) Israeli צמרת by Hebrew name → source "db"; (2) USDA by English `en` → source "usda"; (3) Open Food Facts → source "db". `reconcileWithDb` passes `it.en`, scales per-100g by grams, tags source. Manual search (`step==="list"`): Israeli → OFF → (translate) USDA fallback.
-- `SrcBadge` has a "usda" case (blue "USDA"). Barcode/צמרת/OFF stay the exact path for packaged/Israeli; USDA covers generic cooked foods; AI estimate only when nothing matches.
-- **Deploy:** add `USDA_API_KEY` to Vercel env; upload the new `api/usda.js` + `src/App.jsx`. **Not testable in this sandbox** (api.nal.usda.gov is outside the allowlist) — verify on the live site with the debug URL; expect maybe one tuning round (nutrient-number/dataType mapping) after first deploy.
-- **KEEP QA HARNESS IN SYNC:** `aiNutritionChat` system prompt changed (added the `en` field) — mirror it in `qa/run-qa.mjs` if/when the harness covers the logging prompt.
+      <div style={{ padding: "14px 16px 0" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <span style={{ fontSize: 13, color: C.brandD, background: C.brandBg, padding: "6px 12px", borderRadius: 16, display: "flex", alignItems: "center", gap: 5 }}><Clock size={14} /> {r.prep}</span>
+          <span style={{ fontSize: 13, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>מנות: {r.servings}</span>
+          <span style={{ fontSize: 13, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>קושי: {r.diff}</span>
+        </div>
 
-## v0.62 — Profile = per-field tap-to-edit (no global save); step default 2000
-- Step-goal default changed 8000 → 2000 (DEFAULT_PROFILE, onboarding draft, fallbacks, ReportScreen default).
-- ProfileScreen reworked per Ron's clarification (example screenshots were functionality-only, not design): removed the global draft + "שמור שינויים" button. Each value field (גיל / גובה / משקל / משקל יעד / קצב ירידה / תחילת התוכנית / יעד קלורי / יעד צעדים) is now a tappable EditRow showing its value; tapping opens a small centered edit modal (our theme, not the example's look) with the right control (Stepper for numbers, option buttons for rate, select for start date, Stepper + "אפסי למומלץ" for calorie) and its own "שמור" — only on save does `setProfile` commit that one field. Modal is a self-contained `position:fixed` centered overlay (zIndex 60) inside ProfileScreen.
-- Diet/sensitivities chips + dislikes text now apply immediately (no draft), so no resync conflict.
-- Calorie card + step-goal row open their editors on tap; MacroRow still shown in the calorie card from week 3 (its tap is stopPropagation so it doesn't open the editor).
+        <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 14 }}>
+          {stat("קלוריות", r.kcal, C.brand)}
+          <div style={{ width: 1, background: C.line }} />
+          {stat("חלבון (ג׳)", r.p, C.macroP)}
+          <div style={{ width: 1, background: C.line }} />
+          {stat("שומן (ג׳)", r.f, C.macroF)}
+          <div style={{ width: 1, background: C.line }} />
+          {stat("פחמ׳ (ג׳)", r.c, C.macroC)}
+        </div>
 
-## v0.63 — USDA ranking tweak (demote raw on cooked queries)
-- `api/usda.js`: added `rankScore(f, q)` used for sorting. Primary key still data type (Foundation>SR Legacy>Survey>Branded); additionally, when the query contains a cooking word (grill/cook/roast/bake/fry/boil/broil/steam/saute/sear/poach) any result whose name matches `\braw\b` is pushed down (+5). So a "grilled X" query no longer surfaces raw X.
-- Deliberately did NOT penalize "separable lean only": simulation showed it crosses between different foods and can promote a wrong unpenalized cut (e.g. a sirloin) above the correct ribeye; lean values are accurate anyway, and client `strongMatch` guards the final pick. Verified on the real "grilled ribeye steak" result set — cooked ribeye stays #1, raw entries sink.
-- App VERSION bumped 0.62→0.63 (UI label only; the functional change is api/usda.js — re-upload both api/usda.js and src/App.jsx).
+        <div style={{ marginBottom: 16 }}><Btn onClick={() => onAdd(r)}><Plus size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> הוסיפי מנה ליומן</Btn></div>
 
-## v0.64 — AI logging: wait for DB before showing values; respect exact quantity
-- The "ספרי לי מה אכלת" summary no longer shows the AI's estimated values first and then swaps them. `finishItems` now sets `aiDoneItems=null` + `reconciling=true`, runs `reconcileWithDb`, and only sets the items AFTER the DB lookup (Israeli/USDA/OFF) completes. While checking, a loader card "בודקת ערכים במאגרי המזון…" shows; values/badges appear once, final. On reconcile error, falls back to estimated items.
-- `aiNutritionChat` prompt: added an explicit instruction to use the user's stated quantity EXACTLY (e.g. "200 גרם") and not substitute a typical portion — addresses a report where "200 גרם" was logged as 400g (the gram value comes straight from the model; reconcile/commit never alter `grams`, confirmed). If it recurs, capture the exact chat to confirm it's model output vs. anything else.
-- VERSION 0.63→0.64 (App.jsx changed; re-upload src/App.jsx). KEEP qa harness prompt in sync (aiNutritionChat prompt changed again).
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: "4px 0 8px" }}>מרכיבים</div>
+        <div style={{ marginBottom: 18 }}>
+          {r.ing.map((line, i) => {
+            const isHeader = line.trim().endsWith(":");
+            return isHeader
+              ? <div key={i} style={{ fontSize: 14, fontWeight: 700, color: C.brandD, margin: i === 0 ? "0 0 6px" : "12px 0 6px" }}>{line.replace(/:$/, "")}</div>
+              : <div key={i} style={{ display: "flex", gap: 9, fontSize: 14.5, color: C.ink, lineHeight: 1.5, marginBottom: 7 }}><span style={{ color: C.brand, marginTop: 7, width: 6, height: 6, borderRadius: "50%", background: C.brand, flexShrink: 0 }} /><span>{line}</span></div>;
+          })}
+        </div>
 
-## v0.65 — Day-screen rings (2x2), + menu rework, weight model, profile sections
-- **Day screen — 4 rings (2x2, responsive flex-wrap):** calories (always), protein (macroOpen/wk3), water (waterOpen), steps (stepsOpen). New generic `MetricRing` (value/goal/color/track/label/sub + optional `onPlus` overlay button in the ring color). Water ring `+` adds a glass (min(8,glasses+1), no decrement — resets daily); steps ring `+` opens StepsModal. Colors: calories brand pink, protein purple, water blue (#7E8DD6/#EBEDF8), steps amber (#C77A3C/#FBEEDF). Removed the "מה כדאי לאכול?" button and the old StepsCard/WaterCard renders from the day screen (component defs left in file, now unused — harmless).
-- **+ menu (EntryMenu):** now הוספת מזון · פעילות גופנית · מה כדאי לאכול (id "recommend") · הזיני משקל היום (id "weight"). Removed steps/water items (now on the rings). onPickEntry: added `recommend` → setSheet("recommend"). EntryMenu call no longer passes waterOpen/stepsOpen.
-- **Weight model:** profile "משקל" → **"משקל התחלתי"** (baseline for targets). New `logWeightToday(kg)` upserts TODAY (filters existing today entry, re-adds) so re-entry overwrites. WeightModal is now **typed only** (text input, inputMode decimal, validates 30–400, no +/-), title "הזיני משקל היום", note about overwrite. Report's weight button (`reportAddWeight`) now opens the weight sheet instead of auto −0.2. Weight sheet current = today's value or last.
-- **Steps modal:** typed only (text input, inputMode numeric, no 250 jumps), amber progress bar, note "לשינוי יעד הצעדים — אפשר בפרופיל. הזנה חוזרת היום מעדכנת את הערך." (stepsByDate setStepsForDate already overwrites per date.)
-- **Profile:** base data (גיל/גובה/משקל התחלתי/משקל יעד/קצב ירידה/תחילת התוכנית + week line) wrapped in a collapsible "נתוני בסיס" dropdown (ChevronDown, default CLOSED via `baseOpen`). Calorie goal stays a brandBg card. Step goal converted from EditRow to its own amberBg section card. Nutrition prefs (diet+sensitivities+dislikes+note) wrapped in a C.bg section card titled "העדפות תזונה" (chip unselected bg transparent→C.panel for contrast). Per-field edit modal unchanged.
-- VERSION 0.64→0.65 (App.jsx changed — re-upload src/App.jsx; usda.js unchanged since 0.63). KEEP qa harness in sync (aiNutritionChat prompt unchanged this version).
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: "4px 0 10px" }}>אופן ההכנה</div>
+        <div style={{ marginBottom: r.tips && r.tips.length ? 18 : 4 }}>
+          {r.steps.map((s, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+              <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</div>
+              <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.6, paddingTop: 2 }}>{s}</div>
+            </div>
+          ))}
+        </div>
 
-## v0.66 — "+" on the calories ring (food + activity shortcut)
-- `Ring` now accepts an optional `onPlus` → renders the same bottom-center "+" badge (brand color) as MetricRing. Backward compatible (callers without onPlus get the plain svg).
-- Day screen: calories ring `onPlus={onAddCalorie}` (new DayScreen prop) → root `setSheet("caloriemenu")`.
-- `EntryMenu` gained a `mode` prop; `mode="calorie"` shows only [הוספת מזון (first), פעילות גופנית]. New sheet render `caloriemenu` uses it. onPickEntry already routes food/activity. The bottom FAB still opens the full menu (food/activity/recommend/weight).
-- VERSION 0.65→0.66 (App.jsx only).
+        {r.tips && r.tips.length > 0 && (
+          <div style={{ background: C.amberBg, borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, marginBottom: 7, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={15} /> טיפים ושדרוגים</div>
+            {r.tips.map((t, i) => (
+              <div key={i} style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.55, marginBottom: 6, display: "flex", gap: 8 }}><span style={{ color: C.amber }}>•</span><span>{t}</span></div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-## v0.67 — sensitivities save/placement, intro update, start-date cap, no long dashes
-- **Free-text sensitivity input** moved to immediately after the "רגישויות ואלרגיות" heading (before the preset chips) in BOTH the profile prefs section and the onboarding allergies step, restyled prominent (1.5px C.brand border, not faint). Confirmed it persists to `profile.dislikes` (controlled input) and is ALREADY fed into the RecommendModal seed via `avoidList` (allergies + dislikes) with a strict no-suggest instruction. The bottom disclaimer note changed from C.faint to C.sub.
-- **Intro/welcome modal:** barcode no longer described as a demo-only mock (it works) - bullet now "אפשר לסרוק ברקוד של מוצר ולקבל ערכים מהמאגר"; added a bullet that steps/water/weight tracking appears by program progress.
-- **Program start date:** `listSundays()` loop capped at `i <= 0` (was `<= 2`) so the latest selectable start is the CURRENT week's Sunday - no future start dates.
-- **Long dashes removed:** all em-dashes and en-dashes in displayed text replaced with a short hyphen across App.jsx, recipes.js, sweets.js (standing rule: short dashes only). recipes.js/sweets.js changed only for this - re-upload all three this version.
-- VERSION 0.66->0.67.
+function RecipesScreen({ addRecipe, sweetsOpen }) {
+  const [section, setSection] = useState("recipes");
+  const [seenSweets, setSeenSweets] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [filter, setFilter] = useState("הכל");
+  const [query, setQuery] = useState("");
 
-## v0.68 — consent text tidy, pescatarian diet option
-- Onboarding consent privacy block: merged the 3 separate paragraphs (one had a Lock icon in a flex column that caused a hanging indent) into ONE flowing right-aligned paragraph (textAlign right) with the Lock icon inline at the start (display inline, vertical-align). No more icon-induced indentation / ragged wrap.
-- DIET_OPTIONS: added "צמחוני + דגים" 🐟 (pescatarian) between צמחוני and טבעוני.
-- VERSION 0.67->0.68 (App.jsx only).
-- OPEN QUESTION raised with Ron: the report's "Adaptive TDEE" line (`adaptive = targets.tdee + (change<0 ? -40 : +40)`, line ~691) is a crude placeholder - it nudges the formula TDEE by a flat ±40 by weight-change SIGN only; it does NOT use logged intake or the magnitude of change, so "ההוצאה האמיתית שלך כוילה" overstates it. Pending Ron's choice: implement a real adaptive calc (expenditure = intake - weightChangeKg×7700, /days), reword honestly, or hide until enough data.
+  if (selected) {
+    return <RecipeDetail r={selected} onBack={() => setSelected(null)} onAdd={addRecipe} />;
+  }
 
-## v0.69 — removed Adaptive TDEE line (kept as future task)
-- Per Ron: removed the report's "Adaptive TDEE" note + the unused `adaptive` const. Kept as a FUTURE TASK: implement a real adaptive-TDEE (expenditure = intake - weightChangeKg*7700, /days) once there's enough logged data, or revisit wording. (Target icon import may now be unused - harmless.)
-- VERSION 0.68->0.69 (App.jsx only).
-- DISCUSSION (calorie targets higher than other apps): root cause is the activity multiplier default `activity:"בינונית"` (×1.55 in ACTIVITY_FACTORS) in DEFAULT_PROFILE + onboarding draft. computeTargets = bmrMifflinWoman × factor - deficit. Most consumer apps default to sedentary (×1.2) and ADD exercise. Our app ALSO adds steps+activity to the daily budget, so ×1.55 DOUBLE-COUNTS activity. Proposed (pending Ron): default activity to "יושבני" (1.2). For demo profile 55kg/165/50yo/250g-wk: 1.55→1539 vs 1.2→~1129. NOT yet changed.
+  const isSweets = section === "sweets";
+  const items = isSweets ? SWEETS : RECIPES;
+  const subtitle = isSweets
+    ? "הפינה המתוקה של מיי פריים - פינוקים מתוקים עם כמה שפחות סוכר, ועם חלבון לערך מוסף. כדאי להגביל לכמות שנקבעה מראש."
+    : "חוברת המתכונים של מיי פריים - עשירים בחלבון, דלים בפחמימות ומשולבים מזונות אנטי-דלקתיים.";
+  const goSection = (s) => { setSection(s); setFilter("הכל"); setQuery(""); if (s === "sweets") setSeenSweets(true); };
+  const segBtn = (s, label, icon) => (
+    <button onClick={() => goSection(s)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 6px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, background: section === s ? C.panel : "transparent", color: section === s ? C.brandD : C.sub, boxShadow: section === s ? "0 1px 4px rgba(168,66,92,0.14)" : "none" }}>
+      {icon}{label}
+      {s === "sweets" && !seenSweets && <span style={{ position: "absolute", top: 2, insetInlineEnd: 8, fontSize: 10, fontWeight: 600, background: C.brand, color: "#fff", padding: "1px 6px", borderRadius: 8 }}>חדש</span>}
+    </button>
+  );
 
-## v0.70 — default activity to sedentary (calorie targets aligned with familiar apps)
-- Decision (Ron): keep the Mifflin-St Jeor formula, but change the DEFAULT activity level from "בינונית" (×1.55) to "יושבני" (×1.2). Rationale: the app already adds steps + logged activity to the daily budget, so a moderate baseline double-counted movement and pushed targets well above what users see in familiar apps. Changed in DEFAULT_PROFILE (line ~2214) and the onboarding draft (line ~427); computeTargets fallback `?? 1.55` -> `?? 1.2`. For the demo profile this drops the target by ~400 kcal into the expected range. (Harris-Benedict was considered and rejected - less accurate, and would have raised the number.)
-- VERSION 0.69->0.70 (App.jsx only).
+  const cats = ["הכל", ...Array.from(new Set(items.map((r) => r.cat).filter(Boolean)))];
+  const filtered = items.filter((r) => {
+    if (query && !r.name.includes(query)) return false;
+    if (filter !== "הכל") return r.cat === filter;
+    return true;
+  });
+  const fchip = (t) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 20, cursor: "pointer", whiteSpace: "nowrap", background: filter === t ? C.ink : "transparent", color: filter === t ? "#fff" : C.sub, boxShadow: filter === t ? "none" : `inset 0 0 0 1px ${C.line}` });
 
-## v0.71 — HOTFIX: build break from v0.67 dash cleanup
-- The v0.67 global em/en-dash -> hyphen replacement hit a regex character class inside `normName` (line ~1288). The original class `["'.,()\[\]/–-]` contained an en-dash; replacing it produced `["'.,()\[\]/--]`, and the adjacent `/--` was parsed as an out-of-order range (`/` to `-`), breaking `vite build` (rollup: "Range out of order in character class"). Fixed to a single trailing hyphen: `["'.,()\[\]/-]`. Verified: no other regex char-classes contain non-edge hyphens (only valid `0-9` digit classes remain), no `--` sequences anywhere.
-- LESSON for future bulk text edits: never blanket-replace characters that may appear inside regex literals; exclude/inspect regexes first.
-- VERSION 0.70->0.71 (App.jsx only).
+  return (
+    <div style={{ padding: "8px 16px 16px", position: "relative" }}>
+      <Header title={isSweets ? "מתוקים" : "מתכונים"} />
 
-## v0.72 — force sedentary for ALL profiles (fix: legacy profiles still showed high target)
-- v0.70 only changed the DEFAULT activity for new profiles/onboarding; existing profiles in localStorage kept activity="בינונית" (×1.55) and still showed ~1,500. computeTargets now uses ACTIVITY_FACTORS["יושבני"] (1.2) directly, ignoring stored profile.activity, so legacy profiles recompute to the lower target without a reset. (If a user-facing activity selector is added later, revert to reading profile.activity.)
-- VERSION 0.71->0.72 (App.jsx only).
+      {sweetsOpen && (
+        <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
+          {segBtn("recipes", "מתכונים", <ChefHat size={17} />)}
+          {segBtn("sweets", "מתוקים", <Cookie size={17} />)}
+        </div>
+      )}
 
-## v0.73 — profile sensitivities section reordered + custom-sensitivity chips
-- ProfileScreen "רגישויות ואלרגיות" subsection reordered to: (1) heading "רגישויות ואלרגיות (להימנע)"; (2) the explanatory note moved to right after the heading and made readable (C.ink, was faint gray); (3) preset sensitivity chips; (4) new "רגישויות נוספות" labelled free-text input WITH an add mechanism - Enter key and a "+" button (Plus icon) - that commits each entry as a removable brand-colored chip (X icon to remove).
-- Custom sensitivities are stored in profile.dislikes as a comma-separated list (state newSens + helpers customSens/addSens/removeSens). This is the SAME field RecommendModal already feeds into avoidList (line ~2042), so custom entries flow into "מה כדאי לאכול" with the strict "never suggest foods containing these" instruction. Confirmed wired.
-- Removed the old single free-text dislikes input from the profile (replaced by the chip-add input). Onboarding allergies step left unchanged (not in scope).
-- VERSION 0.72->0.73 (App.jsx only).
+      <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>{subtitle}</div>
 
-## v0.74 — brand border around the profile calorie-goal card
-- ProfileScreen calorie-goal card (line ~1018) gained `border: 1.5px solid C.brand` (matching the emphasized protein MacroCard's brand outline) so the whole "יעד קלורי יומי" card now has a surrounding pink frame like the protein card. Background stays C.brandBg.
-- VERSION 0.73->0.74 (App.jsx only).
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <Search size={16} style={{ position: "absolute", insetInlineStart: 12, top: 12, color: C.faint }} />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isSweets ? "חיפוש מתוק…" : "חיפוש מתכון…"} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 36px", fontSize: 14.5, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+      </div>
 
-## v0.75 - RecommendModal: custom-sensitivity chips + add button + brand frame
-- The "מה כדאי לאכול?" confirm stage previously had only a PLAIN single free-text input bound directly to `profile.dislikes` (faint C.line border) - it did NOT render existing custom sensitivities as chips and had no add button. So a "בלי חריף" saved in the profile showed as raw text only, and there was no way to add+sync a new one from this screen.
-- Ported the exact v0.73 profile chip-add pattern into `RecommendModal`: new local `newSens` state + `customSens` (profile.dislikes comma-split) + `addSens`/`removeSens` (same helpers as ProfileScreen, writing back to `profile.dislikes` via `setProfile`). Replaced the plain input with: label "רגישויות נוספות" -> brand-bordered input (Enter to add) + a "+" (Plus) button -> existing customSens rendered as removable brand chips (X to remove). Because it persists to `profile.dislikes`, entries now (a) show as chips here AND in the profile, (b) flow into `avoidList`/the seed prompt, and (c) survive across sessions/future chats. `avoidList`/`hasAvoid`/`startChat` unchanged (still read the same comma-separated `profile.dislikes` string).
-- Added a `1.5px solid C.brand` rounded frame (radius 14, padding 14) around the ENTIRE confirm-stage content (the part Ron screenshotted). NOTE: v0.74 had put the brand border on the PROFILE calorie-goal card; that border is LEFT in place (matches the protein card, not removed). If Ron meant the frame should sit only around the sensitivities block, or around the whole sheet incl. the title bar, it is a one-line move.
-- VERSION 0.74->0.75 (App.jsx only). qa harness unaffected (no prompt change).
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+        {cats.map((t) => (<span key={t} onClick={() => setFilter(t)} style={fchip(t)}>{t}</span>))}
+      </div>
 
-## v0.76 - red frame moved to the PROFILE calorie headline (where Ron actually meant); steps "0" fixed; reverted the v0.75 RecommendModal frame
-- FRAME (settled at last): the red/brand frame Ron wanted was NEVER in RecommendModal and NOT the whole calorie card - it is around the calorie-TARGET HEADLINE row inside the ProfileScreen calorie card (he sent a hand-marked screenshot looping just the "יעד קלורי יומי / 1,200 קק"ל (מומלץ)" line, excluding the macro row below). Implemented: the calorie card (line ~1018) lost its faint full-card `1.5px C.brand` border (added in v0.74, too low-contrast to notice and wrong scope); the headline row now has its own prominent box: `2px solid C.brand`, radius 10, padding 9/11, white background - clearly visible against the brandBg card, matching his drawing. MacroRow stays below, outside the frame.
-- Reverted the v0.75 RecommendModal confirm-stage frame (that was based on a misread of which screenshot he meant). The v0.75 custom-sensitivity CHIPS + add button in RecommendModal STAY - those were correct and unrelated to the frame.
-- STEPS "0": `StepsModal` init was `useState(current != null ? String(current) : "")`; since `current` is passed as `stepsByDate[date] || 0` it was always a number, so the field always showed "0" that had to be deleted before typing. Changed to `useState(current ? String(current) : "")` - 0/empty now shows the placeholder "לדוגמה 6500", a real saved value still pre-fills.
-- VERSION 0.75->0.76 (App.jsx only). qa harness unaffected.
-- PENDING (agreed plan, not yet coded): water entry rework - tapping the water "+" should open a small modal to add either a כוס or מ"ל, with a configurable cup size. Today the water ring `+` just increments glass count by 1 (capped 8); `waterByDate[date]` stores a GLASS COUNT. Plan to discuss/confirm: store water in ML per date (migrate existing glass counts x cupMl on read), add `profile.cupMl` (default 250), target = 2000 ml; the ring shows ml as glasses = round(ml/cupMl) of round(2000/cupMl); the "+" opens WaterModal (add chip: כוס / חצי ליטר / מ"ל typed) + a "גודל כוס" field saved to profile. WATER_UNLOCK gating unchanged.
+      {filtered.map((r) => (
+        <div key={r.id} onClick={() => setSelected(r)} style={{ border: `1px solid ${C.line}`, borderRadius: 16, overflow: "hidden", marginBottom: 14, cursor: "pointer", background: C.panel, boxShadow: "0 1px 6px rgba(168,66,92,0.05)" }}>
+          <div style={{ position: "relative" }}>
+            <img src={r.img} alt={r.name} loading="lazy" style={{ width: "100%", height: 158, objectFit: "cover", display: "block" }} />
+            <button onClick={(e) => { e.stopPropagation(); addRecipe(r); }} style={{ position: "absolute", bottom: 10, insetInlineEnd: 10, width: 38, height: 38, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}><Plus size={20} /></button>
+          </div>
+          <div style={{ padding: "11px 13px 13px" }}>
+            <div style={{ fontSize: 15.5, fontWeight: 600, color: C.ink, marginBottom: 7, lineHeight: 1.35 }}>{r.name}</div>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: C.brandD, background: C.brandBg, padding: "3px 9px", borderRadius: 12 }}>{r.kcal} קק״ל</span>
+              <span style={{ fontSize: 12, color: C.macroP, background: C.proteinTrack, padding: "3px 9px", borderRadius: 12 }}>חלבון {r.p} ג׳</span>
+              <span style={{ fontSize: 12, color: C.sub, background: C.bg, padding: "3px 9px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} /> {r.prep}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+      {filtered.length === 0 && <div style={{ fontSize: 14, color: C.faint, textAlign: "center", padding: 24 }}>לא נמצאו מתכונים תואמים.</div>}
+    </div>
+  );
+}
 
-## v0.77 - onboarding sensitivities rework (chip-add + safety confirm) + weight chart shows only entered points
-- ONBOARDING step 2 ("איך את אוכלת?" / רגישויות) reworked to match profile + RecommendModal:
-  - Order is now: heading -> sub-note -> preset SENSITIVITY_OPTIONS chips -> the disclaimer note (MOVED UP from the bottom, now C.ink black/clear, no tinted box) -> "רגישויות נוספות" label -> chip-add input + "+" (Plus) button (Enter or "+" commits) -> removable brand chips. Previously this step had only a PLAIN single free-text `dislikes` input with NO add button (so custom sensitivities could not really be committed/seen as chips here), and the disclaimer sat at the bottom in a faint C.bg box.
-  - Local helpers added to `Onboarding`: `newSens` state, `customSens` (dislikes comma-split), `addSens`/`removeSens` (write the local `dislikes` string, which already flows into the created profile via `draft`). Same pattern as ProfileScreen, but operating on onboarding-local state since the profile does not exist yet.
-  - SAFETY CONFIRM: new `hasSens` (allergies or customSens) + `confirmNoSens` state + `next()` handler. The step-2 "המשך" now goes through `next()`; if NO sensitivity/allergy is marked it opens a centered confirm overlay "לא סימנת שום רגישות או אלרגיה / האם את בטוחה?" that repeats the same check-ingredients-yourself disclaimer, with "כן, אפשר להמשיך" (advances) and "חזרה לסמן רגישויות" (dismiss). The "דלג ישר לדמו" skip link still bypasses (deliberate). Steps 0/1/other still advance normally.
-- WEIGHT CHART (report) now shows ONLY weights the user actually entered. Removed `makeWeightSeed` (the fabricated 7-point/24-day loss history) and replaced with `initWeights(currentKg, startDate)` = a SINGLE starting point `[{date: startDate, kg}]`. Used in the weights initial state, `finishOnboarding` (p.weightKg @ p.startDate), and `resetDemo`. The report weight Area chart now starts at that one point and grows only as she logs weights via "הזיני משקל היום"; the change badge reads 0 until a second weight exists. ReportScreen already reads weights[0]/weights[last] defensively so a 1-point array is fine.
-  - **Existing testers:** old fabricated points persist in their `localStorage` `weights` (loaded via `saved?.weights`); they must RESET THE DEMO once to clear them. New onboarding/reset start clean.
-- VERSION 0.76->0.77 (App.jsx only). qa harness unaffected.
-- STILL PENDING owner approval (not coded): the water entry rework (כוס/מ"ל + configurable cup size) proposed before v0.76.
+function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
+  const editing = !!editEntry;
+  const name = editing ? editEntry.name : recipe.name;
+  const base = editing ? (editEntry.base || { kcal: editEntry.kcal, p: editEntry.p, f: editEntry.f, c: editEntry.c }) : { kcal: recipe.kcal, p: recipe.p, f: recipe.f, c: recipe.c };
+  const hour = new Date().getHours();
+  const defMeal = hour < 11 ? "בוקר" : hour < 16 ? "צהריים" : hour < 21 ? "ערב" : "נשנושים";
+  const [meal, setMeal] = useState(editing ? editEntry.meal : defMeal);
+  const [servings, setServings] = useState(editing ? (editEntry.servings || 1) : 1);
+  const n = { kcal: Math.round(base.kcal * servings), p: Math.round(base.p * servings), f: Math.round(base.f * servings), c: Math.round(base.c * servings) };
+  const save = () => onSave({ meal, name, source: "verified", unit: "serving", servings, base, kcal: n.kcal, p: n.p, f: n.f, c: n.c }, editing ? editEntry.id : null);
+  const stat = (label, value, color) => (
+    <div style={{ flex: 1, textAlign: "center", padding: "8px 4px" }}>
+      <div style={{ fontSize: 17, fontWeight: 700, color }}>{value}</div>
+      <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+  return (
+    <SheetShell title={editing ? "עריכת מנה" : "הוספה ליומן"} onClose={onClose}>
+      <div style={{ fontSize: 16, fontWeight: 600, color: C.ink, marginBottom: 16, lineHeight: 1.35 }}>{name}</div>
+
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 7 }}>שיוך לארוחה</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 18 }}>
+        {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.brand : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+      </div>
+
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>כמות מנות</div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+        <Stepper value={servings} set={setServings} step={0.5} min={0.5} suffix={servings === 1 ? "מנה" : "מנות"} />
+      </div>
+
+      <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 18 }}>
+        {stat("קלוריות", n.kcal, C.brand)}
+        <div style={{ width: 1, background: C.line }} />
+        {stat("חלבון (ג׳)", n.p, C.macroP)}
+        <div style={{ width: 1, background: C.line }} />
+        {stat("שומן (ג׳)", n.f, C.macroF)}
+        <div style={{ width: 1, background: C.line }} />
+        {stat("פחמ׳ (ג׳)", n.c, C.macroC)}
+      </div>
+
+      <div style={{ marginBottom: editing ? 10 : 0 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> {editing ? "עדכן" : "הוסף ליומן"}</Btn></div>
+      {editing && <Btn variant="ghost" onClick={onDelete}>מחק פריט</Btn>}
+    </SheetShell>
+  );
+}
+
+function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
+  const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
+  const [baseOpen, setBaseOpen] = useState(false);
+  const [newSens, setNewSens] = useState("");
+  const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
+  const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
+  const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
+  const commit = () => { setProfile({ ...profile, [edit.key]: edit.value }); setEdit(null); };
+  const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
+  const startLabel = (listSundays().find((s) => s.value === profile.startDate) || {}).label || profile.startDate;
+  const calNow = profile.calorieOverride || targets.targetKcal;
+
+  const EditRow = ({ label, display, onClick }) => (
+    <div onClick={onClick} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 15, padding: "12px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+      <span style={{ color: C.sub }}>{label}</span>
+      <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{display} <Pencil size={13} color={C.faint} /></span>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "8px 16px 16px" }}>
+      <Header title="פרופיל" />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>{((profile.name || userName || "").trim().charAt(0)) || "♥"}</div>
+        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
+      </div>
+
+      <div style={{ borderTop: `1px solid ${C.line}` }}>
+        <div onClick={() => setBaseOpen(!baseOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", cursor: "pointer" }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>נתוני בסיס</span>
+          <ChevronDown size={20} color={C.sub} style={{ transform: baseOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+        </div>
+        {baseOpen && (
+          <div style={{ paddingBottom: 4 }}>
+            <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
+            <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
+            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: 30, suffix: "ק״ג", init: profile.weightKg })} />
+            <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: 30, suffix: "ק״ג", init: profile.goalWeightKg })} />
+            <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
+            <EditRow label="תחילת התוכנית" display={startLabel} onClick={() => open({ key: "startDate", label: "תחילת התוכנית", type: "date", init: profile.startDate })} />
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
+          </div>
+        )}
+      </div>
+
+      <div onClick={() => open({ key: "calorieOverride", label: "יעד קלורי יומי", type: "calorie", init: profile.calorieOverride || targets.targetKcal })} style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12, cursor: "pointer" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `2px solid ${C.brand}`, borderRadius: 10, padding: "9px 11px", background: "#fff" }}>
+          <span style={{ fontSize: 13, color: C.brandD }}>יעד קלורי יומי</span>
+          <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{calNow.toLocaleString()} קק״ל {profile.calorieOverride ? "" : <span style={{ fontSize: 11, color: C.sub }}>(מומלץ)</span>} <Pencil size={13} color={C.faint} /></span>
+        </div>
+        {programWeekFor(profile.startDate, TODAY) >= MACRO_UNLOCK.week && <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
+      </div>
+
+      <div onClick={() => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: profile.stepGoal || 2000 })} style={{ background: C.amberBg, borderRadius: 12, padding: 12, marginBottom: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 13, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}><Footprints size={15} color={C.amber} /> יעד צעדים יומי</span>
+        <span style={{ fontWeight: 600, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}>{(profile.stepGoal || 2000).toLocaleString()} צעדים <Pencil size={13} color={C.faint} /></span>
+      </div>
+
+      <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 4 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginBottom: 10 }}>העדפות תזונה</div>
+        <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>סגנון תזונה (משמש להמלצות)</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+          {DIET_OPTIONS.map((d) => {
+            const on = (profile.diet || []).includes(d.id);
+            return (<span key={d.id} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d.id) : [...(profile.diet || []), d.id] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
+          })}
+        </div>
+        <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות ואלרגיות (להימנע)</div>
+        <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>מה שתסמני ותכתבי כאן נשמר ומוזן ל-AI כדי להתחשב בזה בהמלצות. עדיין כדאי לבדוק רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+          {SENSITIVITY_OPTIONS.map((s) => {
+            const on = (profile.allergies || []).includes(s);
+            return (<span key={s} onClick={() => setProfile({ ...profile, allergies: on ? (profile.allergies || []).filter((x) => x !== s) : [...(profile.allergies || []), s] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+          })}
+        </div>
+        <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+          <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+          <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+        </div>
+        {customSens.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {customSens.map((s) => (
+              <span key={s} style={{ fontSize: 14, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {s}
+                <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
+      <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
+
+      {edit && (
+        <div onClick={() => setEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 18px 20px", width: "100%", maxWidth: 340, fontFamily: fontStack }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+              <span style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{edit.label}</span>
+              <button onClick={() => setEdit(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+            </div>
+
+            {(edit.type === "num") && (
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+                <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(edit.min || 0, v) })} step={edit.step} min={edit.min} suffix={edit.suffix} />
+              </div>
+            )}
+
+            {edit.type === "calorie" && (
+              <>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+                  <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(1000, v) })} step={10} min={1000} suffix="קק״ל" />
+                </div>
+                <div onClick={() => { setProfile({ ...profile, calorieOverride: null }); setEdit(null); }} style={{ textAlign: "center", fontSize: 13, color: C.brandD, textDecoration: "underline", cursor: "pointer", marginBottom: 18 }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</div>
+              </>
+            )}
+
+            {edit.type === "rate" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+                {RATE_OPTIONS.map((r) => (
+                  <button key={r} onClick={() => setEdit({ ...edit, value: r })} style={{ border: `1.5px solid ${edit.value === r ? C.brand : C.line}`, background: edit.value === r ? C.brandBg : C.panel, color: edit.value === r ? C.brandD : C.ink, borderRadius: 12, padding: "11px", fontSize: 15, fontFamily: fontStack, fontWeight: edit.value === r ? 600 : 400, cursor: "pointer" }}>{rateLabel(r)}</button>
+                ))}
+              </div>
+            )}
+
+            {edit.type === "date" && (
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+                <select value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", width: "100%" }}>
+                  {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
+                </select>
+              </div>
+            )}
+
+            <Btn onClick={commit}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   AI MEAL ANALYSIS (demo) - sends photo to Claude for estimation
+   ============================================================ */
+async function analyzeMeal(base64, mediaType) {
+  const prompt = "בתמונה מופיעה ארוחה או מוצר מזון. אם מופיעה תווית ערכים תזונתיים על האריזה - קרא את הערכים מהתווית (לפי הכמות שבאריזה, או ל-100 גרם) במקום לנחש. אחרת, זהה את פריטי המזון והערך לכל פריט כמות בגרמים וערכים תזונתיים סבירים. החזר JSON בלבד, ללא טקסט נוסף וללא סימוני קוד, במבנה: {\"items\":[{\"name\":\"שם בעברית\",\"grams\":0,\"kcal\":0,\"protein\":0,\"fat\":0,\"carbs\":0}]}";
+  const res = await fetch(AI_ENDPOINT, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: prompt }] }] }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error || !Array.isArray(data.content)) throw new Error("ai_unavailable");
+  const text = (data.content || []).map((i) => i.text || "").join("");
+  const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+  const arr = parsed.items || parsed || [];
+  return arr.map((it) => ({ name: it.name, grams: Math.round(it.grams || 0), kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) }));
+}
+
+function extractAiJson(text) {
+  const cleaned = (text || "").replace(/```json|```/g, "").trim();
+  try { return JSON.parse(cleaned); } catch (e) {}
+  const s = cleaned.indexOf("{"), e2 = cleaned.lastIndexOf("}");
+  if (s !== -1 && e2 > s) { try { return JSON.parse(cleaned.slice(s, e2 + 1)); } catch (e3) {} }
+  return null;
+}
+
+async function aiNutritionChat(messages) {
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב - אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
+  const res = await fetch(AI_ENDPOINT, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system, messages }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error || !Array.isArray(data.content)) {
+    return { raw: "", reply: "אופס - החיבור ל-AI לא עבד. ודאי שמפתח ה-API מוגדר ב-Vercel (Environment Variables) ושנעשה Redeploy, ושיש קרדיט בחשבון Anthropic.", done: false, items: [] };
+  }
+  const text = (data.content || []).map((i) => i.text || "").join("");
+  const obj = extractAiJson(text);
+  const parsed = obj || { reply: (text || "").replace(/\{[\s\S]*\}/g, "").trim() || "לא הבנתי, אפשר לנסות שוב?", done: false, items: [] };
+  return {
+    raw: text,
+    reply: parsed.reply || "",
+    done: !!parsed.done,
+    items: (parsed.items || []).map((it) => ({ name: it.name, en: it.en || "", grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) })),
+  };
+}
+
+async function aiMealChat(messages, ctx) {
+  const proteinRule = ctx.proteinFocus
+    ? "אם רלוונטי אפשר להזכיר חלבון בעדינות."
+    : "חשוב מאוד: בשלב הזה של התוכנית אל תדגישי חלבון, מאקרו או גרמים - דברי על ארוחות מאוזנות, משביעות וקלות להכנה.";
+  const estimateRule = ctx.proteinFocus
+    ? "לכל רעיון הוסיפי בסוף השורה הערכה קצרה בסוגריים: קלוריות וגרמים של חלבון/שומן/פחמימה. למשל: (~350 קק״ל · חלבון 30 / שומן 12 / פחמ׳ 20). הדגישי שאלו הערכות מקורבות."
+    : "לכל רעיון אפשר להוסיף הערכת קלוריות מקורבת בלבד בסוגריים (למשל: ~350 קק״ל), בלי לפרט חלבון/שומן/פחמימה או גרמים.";
+  const system =
+    "את היועצת של MyPrime, מדברת עברית בגוף שני נקבה. הטון: חברה חמה ואכפתית שמדברת, לא משווקת שמוכרת - אישי, פשוט ומעודד. " +
+    "המטרה: לעזור לה להחליט מה לאכול עכשיו, לפי מה שנשאר לה היום ומה שיש לה בבית. " +
+    proteinRule + " " +
+    "הציעי 2-3 רעיונות מעשיים, ים-תיכוניים וזמינים בישראל, שמתאימים לקלוריות שנותרו. שמרי על תשובות קצרות (2-4 משפטים). " +
+    estimateRule + " " +
+    "בסיס הערכים: התבססי ככל האפשר על ערכי מאגר התזונה הלאומי של משרד הבריאות (\"צמרת\") עבור מזונות ישראליים, כדי שההערכות יהיו עקביות ומדויקות. " +
+    "תמיד סיימי בשאלה עדינה - מה היא חושבת, או אם יש לה את המצרכים. אם חסר לה מצרך (למשל אין סלמון) - הציעי מיד חלופה זמינה ופשוטה. " +
+    "אל תפני אותה לדבר עם אדם, מאמנת או צוות, ואל תציעי ליצור קשר או להעביר פנייה לאף אחד - את כאן כדי לעזור עם האוכל והתזונה בלבד. " +
+    "אל תיתני ייעוץ רפואי. החזירי טקסט רגיל בלבד (לא JSON, בלי סימוני קוד).";
+  const res = await fetch(AI_ENDPOINT, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 700, system, messages }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error || !Array.isArray(data.content)) return { error: true, text: "" };
+  const text = (data.content || []).map((i) => i.text || "").join("").trim();
+  return { text };
+}
+
+/* Detect NEW dietary preferences / dislikes / sensitivities the user states mid-chat,
+   so we can offer to save them to her profile (with confirmation). */
+async function extractPreferences(userText, existing) {
+  try {
+    const sys = "המשתמשת כותבת לעוזרת תזונה. חלצי אך ורק העדפות תזונה חדשות, מאכלים שהיא לא אוהבת/לא רוצה, או רגישויות/אלרגיות שהיא מזכירה - שעדיין לא קיימים ברשימה הקיימת: "
+      + ((existing && existing.length) ? existing.join(", ") : "(ריק)")
+      + ". החזירי JSON בלבד, בלי טקסט נוסף ובלי סימוני קוד: {\"diet\":[],\"avoid\":[]}. diet = סגנונות תזונה בלבד (צמחוני/טבעוני/כשר/דל פחמימה/ים-תיכוני). avoid = מאכלים או רכיבים להימנע מהם (כולל רגישויות, אלרגיות, ולא-אוהבת). אם אין שום דבר חדש, החזירי {\"diet\":[],\"avoid\":[]}.";
+    const res = await fetch(AI_ENDPOINT, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 200, system: sys, messages: [{ role: "user", content: userText }] }),
+    });
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data.content)) return { diet: [], avoid: [] };
+    const raw = (data.content || []).map((i) => i.text || "").join("");
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) return { diet: [], avoid: [] };
+    const obj = JSON.parse(m[0]);
+    return { diet: Array.isArray(obj.diet) ? obj.diet : [], avoid: Array.isArray(obj.avoid) ? obj.avoid : [] };
+  } catch (e) { return { diet: [], avoid: [] }; }
+}
+
+// Immediate, offline detection of diet/sensitivity keywords so the "save to profile"
+// offer always appears even if the AI extraction is slow or fails.
+function localPrefs(text, existing) {
+  const t = text || "";
+  const ex = (existing || []).map((x) => String(x));
+  const diet = [];
+  const dietMap = [
+    ["צמחוני", /צמחונ/],
+    ["טבעוני", /טבעונ/],
+    ["כשר", /כשר/],
+    ["דל פחמימה", /דל[ת]? ?פחמימ|לואו ?קארב|low ?carb/i],
+    ["ים-תיכוני", /ים[- ]?תיכונ/],
+  ];
+  for (const [id, re] of dietMap) if (re.test(t) && !ex.includes(id)) diet.push(id);
+  const avoid = [];
+  const avoidMap = [
+    ["גלוטן", /גלוטן/],
+    ["חלב / לקטוז", /לקטוז|בלי חלב|ללא חלב|רגיש\S* לחלב/],
+    ["ביצים", /בלי ביצים|ללא ביצים|רגיש\S* לביצים/],
+    ["אגוזים", /אגוזים/],
+    ["בוטנים", /בוטנים/],
+    ["סויה", /סויה/],
+    ["דגים", /בלי דגים|ללא דגים|רגיש\S* לדג/],
+    ["שומשום", /שומשום/],
+  ];
+  for (const [id, re] of avoidMap) if (re.test(t) && !ex.includes(id)) avoid.push(id);
+  return { diet, avoid };
+}
+
+async function searchIsraeliDB(q) {
+  const res = await fetch(`/api/il-food?q=${encodeURIComponent(q)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.items || []).map((it, i) => ({
+    id: "il_" + i,
+    name: it.name,
+    per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
+    measures: [{ label: "100 ג׳", g: 100 }],
+    def: 0,
+  }));
+}
+
+async function searchOpenFoodFacts(q) {
+  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=20&fields=code,product_name,product_name_he,brands,nutriments`;
+  const res = await fetch(url);
+  const data = await res.json();
+  const out = [];
+  for (const p of data.products || []) {
+    const n = p.nutriments || {};
+    const kcal = n["energy-kcal_100g"];
+    if (kcal == null) continue;
+    const name = (p.product_name_he || p.product_name || p.brands || "").trim();
+    if (!name) continue;
+    out.push({
+      id: "off_" + (p.code || out.length),
+      name,
+      per100: { kcal: Math.round(kcal), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) },
+      measures: [{ label: "100 ג׳", g: 100 }],
+      def: 0,
+    });
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
+async function searchUSDA(q) {
+  try {
+    const res = await fetch(`/api/usda?q=${encodeURIComponent(q)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.items || []).map((it, i) => ({
+      id: "usda_" + i,
+      name: it.name + (it.brand ? ` · ${it.brand}` : ""),
+      per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
+      measures: [{ label: "100 ג׳", g: 100 }],
+      def: 0,
+    }));
+  } catch (e) { return []; }
+}
+
+// Short Hebrew→English food query for USDA lookups (used only when the
+// Hebrew DBs return nothing, and for the AI logging path via item.en).
+async function translateFoodToEnglish(q) {
+  try {
+    const res = await fetch(AI_ENDPOINT, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514", max_tokens: 40,
+        system: "Translate the Hebrew food name to a short English food-search query (2-4 words, common USDA-style naming, include cooking method if implied, e.g. 'grilled ribeye steak', 'white rice cooked'). Reply with ONLY the English term - no quotes, no punctuation, no extra words.",
+        messages: [{ role: "user", content: String(q || "") }],
+      }),
+    });
+    const data = await res.json();
+    const t = (data.content || []).map((i) => i.text || "").join("").trim();
+    return t.replace(/^["']|["']$/g, "").slice(0, 60);
+  } catch (e) { return ""; }
+}
+
+/* Reconcile AI-identified items against the product databases (by name).
+   Name search is fuzzier than a barcode (no unique id), so we only accept a
+   STRONG match; otherwise the AI estimate is kept. */
+function normName(s) { return String(s || "").replace(/["'.,()\[\]/-]/g, " ").replace(/\s+/g, " ").trim().toLowerCase(); }
+function strongMatch(aiName, dbName) {
+  const a = normName(aiName), b = normName(dbName);
+  if (!a || !b) return false;
+  if (b.includes(a) || a.includes(b)) return true;
+  const at = new Set(a.split(" ").filter((w) => w.length >= 2));
+  const bt = b.split(" ").filter((w) => w.length >= 2);
+  let hit = 0; for (const w of bt) if (at.has(w)) hit++;
+  return at.size > 0 && hit >= Math.min(2, at.size);
+}
+async function lookupProduct(name, en) {
+  // 1. Israeli national DB (Hebrew name) - best for Israeli foods.
+  try { const il = await searchIsraeliDB(name); for (const r of il) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return { ...r, source: "db" }; } catch (e) {}
+  // 2. USDA FoodData Central (English query) - best for generic cooked foods.
+  if (en) { try { const us = await searchUSDA(en); for (const r of us) if (r.per100 && r.per100.kcal && strongMatch(en, r.name)) return { ...r, source: "usda" }; } catch (e) {} }
+  // 3. Open Food Facts (Hebrew/brand) - packaged products.
+  try { const off = await searchOpenFoodFacts(name); for (const r of off) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return { ...r, source: "db" }; } catch (e) {}
+  return null;
+}
+async function reconcileWithDb(items) {
+  return Promise.all((items || []).map(async (it) => {
+    try {
+      const m = await lookupProduct(it.name, it.en);
+      if (m) {
+        const scale = (it.grams || 100) / 100;
+        return { ...it, source: m.source || "db", matched: m.name,
+          kcal: Math.round(m.per100.kcal * scale), p: Math.round((m.per100.p || 0) * scale),
+          f: Math.round((m.per100.f || 0) * scale), c: Math.round((m.per100.c || 0) * scale) };
+      }
+    } catch (e) {}
+    return { ...it, source: "estimated" };
+  }));
+}
+
+function IntroOverlay({ onClose }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 22, zIndex: 40 }}>
+      <div style={{ background: C.panel, borderRadius: 18, padding: 20, fontFamily: fontStack }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>דמו MyPrime · v{VERSION}</span></div>
+        <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 12px" }}>שלום ענת 🙂 זו גרסת הדגמה לשחק איתה. כמה דברים:</p>
+        <ul style={{ fontSize: 15, color: C.sub, lineHeight: 1.8, margin: "0 0 14px", paddingInlineStart: 18 }}>
+          <li>הנתונים לא נשמרים - רענון מתחיל מחדש.</li>
+          <li>אפשר לצלם צלחת אמיתית ולקבל הערכת ערכים (ניתוח ע״י AI).</li>
+          <li>אפשר לסרוק ברקוד של מוצר ולקבל ערכים מהמאגר.</li>
+          <li>מעקב צעדים, מים ומשקל מופיע לפי התקדמות התוכנית.</li>
+          <li>אפשר להשאיר הערות בכפתור ההערות, ולהעתיק אותן לשליחה.</li>
+        </ul>
+        <Btn onClick={onClose}>הבנתי, בואי נתחיל</Btn>
+      </div>
+    </div>
+  );
+}
+
+function NotesFab({ notes, setNotes, screen, userName }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const add = () => { if (!text.trim()) return; setNotes((n) => [...n, { text: text.trim(), screen, t: new Date().toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) }]); setText(""); };
+  const copyAll = () => { try { navigator.clipboard.writeText(notes.map((n) => `• [${n.screen}] ${n.text}`).join("\n")); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) {} };
+  const sendFeedback = async () => {
+    if (!notes.length || sending) return;
+    setSending(true);
+    let device = ""; try { device = localStorage.getItem("myprime_device_id") || ""; } catch (e) {}
+    try {
+      await fetch(FEEDBACK_URL, {
+        method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ device, name: userName || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
+      });
+      setSent(true); setTimeout(() => setSent(false), 2500); setNotes([]);
+    } catch (e) { alert("השליחה נכשלה - בדקי חיבור לאינטרנט ונסי שוב."); }
+    finally { setSending(false); }
+  };
+  return (
+    <>
+      <button onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 78, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
+        <MessageCircle size={20} />
+        {notes.length > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: C.ink, color: "#fff", fontSize: 12, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length}</span>}
+      </button>
+      {open && (
+        <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 45 }} onClick={() => setOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "80%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", overflowY: "auto", fontFamily: fontStack }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 19, fontWeight: 600, color: C.ink }}>הערות לדמו</span>
+              <button onClick={() => setOpen(false)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+            </div>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={3} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
+            <Btn onClick={add}>הוסיפי הערה</Btn>
+            {notes.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                {notes.map((n, i) => (
+                  <div key={i} style={{ borderTop: `1px solid ${C.line}`, padding: "9px 0", display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <span style={{ flex: 1, fontSize: 15, color: C.ink }}>{n.text}<div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>{n.screen} · {n.t}</div></span>
+                    <button onClick={() => setNotes((arr) => arr.filter((_, j) => j !== i))} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {FEEDBACK_URL && <Btn onClick={sendFeedback} disabled={sending}><Send size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {sent ? "נשלח, תודה!" : sending ? "שולחת…" : "שלחי משוב לצוות MyPrime"}</Btn>}
+                  <Btn variant="ghost" onClick={copyAll}><Copy size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {copied ? "הועתק!" : "העתיקי הכל"}</Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ============================================================
+   ADD / EDIT MODAL
+   ============================================================ */
+function AddModal({ state, close, commit, removeAndClose, favorites }) {
+  const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
+  const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || "בוקר");
+  const [food, setFood] = useState(state.editEntry ? (FOODS.find((f) => f.name === state.editEntry.name) || foodFromEntry(state.editEntry)) : null);
+  const [grams, setGrams] = useState(state.editEntry?.g || 100);
+  const [query, setQuery] = useState("");
+  const [dbResults, setDbResults] = useState([]);
+  const [dbSource, setDbSource] = useState("il");
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q || step !== "list") { setDbResults([]); setSearching(false); return; }
+    setSearching(true);
+    const id = setTimeout(async () => {
+      try {
+        let items = await searchIsraeliDB(q);
+        let src = "il";
+        if (!items.length) { items = await searchOpenFoodFacts(q); src = "off"; }
+        if (!items.length) { const en = await translateFoodToEnglish(q); if (en) { items = await searchUSDA(en); src = "usda"; } }
+        setDbResults(items); setDbSource(src);
+      } catch (e) { setDbResults([]); }
+      finally { setSearching(false); }
+    }, 450);
+    return () => clearTimeout(id);
+  }, [query, step]);
+  const fileRef = useRef(null);
+  const [photoState, setPhotoState] = useState("capture");
+  const [photoResult, setPhotoResult] = useState(null);
+  const onPhoto = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = String(reader.result).split(",")[1];
+      sendAiImage(base64, file.type || "image/jpeg");
+    };
+    reader.readAsDataURL(file);
+  };
+  const [aiMsgs, setAiMsgs] = useState([{ role: "assistant", text: "היי! ספרי לי מה אכלת ואעזור להעריך 🙂 אפשר לדבר או לכתוב." }]);
+  const [aiApi, setAiApi] = useState([]);
+  const [aiInput, setAiInput] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiDoneItems, setAiDoneItems] = useState(null);
+  const [reconciling, setReconciling] = useState(false);
+  const finishItems = (items) => {
+    setReconciling(true);
+    setAiDoneItems(null);
+    reconcileWithDb(items)
+      .then((enriched) => setAiDoneItems(enriched))
+      .catch(() => setAiDoneItems(items.map((it) => ({ ...it, source: "estimated" }))))
+      .finally(() => setReconciling(false));
+  };
+  const recRef = useRef(null);
+  const [aiListening, setAiListening] = useState(false);
+  const aiInputRef = useRef(null);
+  const aiEndRef = useRef(null);
+  useEffect(() => { const el = aiInputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [aiInput, step]);
+  useEffect(() => { aiEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [aiMsgs, aiLoading, aiDoneItems]);
+  const sendAi = async (textArg) => {
+    const text = (textArg != null ? textArg : aiInput).trim();
+    if (!text || aiLoading) return;
+    setAiInput("");
+    setAiMsgs((m) => [...m, { role: "user", text }]);
+    const apiMsgs = [...aiApi, { role: "user", content: text }];
+    setAiLoading(true);
+    try {
+      const r = await aiNutritionChat(apiMsgs);
+      setAiApi([...apiMsgs, { role: "assistant", content: r.raw }]);
+      setAiMsgs((m) => [...m, { role: "assistant", text: r.reply }]);
+      if (r.done && r.items.length) finishItems(r.items);
+    } catch (e) {
+      setAiMsgs((m) => [...m, { role: "assistant", text: "יש תקלה זמנית בחיבור ל-AI. נסי שוב, או הוסיפי דרך חיפוש." }]);
+    } finally { setAiLoading(false); }
+  };
+  const sendAiImage = async (base64, mediaType) => {
+    if (aiLoading) return;
+    setStep("ai");
+    setAiMsgs((m) => [...m, { role: "user", text: "📷 תמונת הארוחה", img: `data:${mediaType};base64,${base64}` }]);
+    const apiMsgs = [...aiApi, { role: "user", content: [
+      { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+      { type: "text", text: "זוהי תמונת הארוחה שלי. זהי מה יש בה ועזרי לי להעריך כמויות וערכים. אם זו אריזת מוצר עם תווית ערכים תזונתיים - קראי את הערכים מהתווית במקום לנחש." },
+    ] }];
+    setAiLoading(true);
+    try {
+      const r = await aiNutritionChat(apiMsgs);
+      setAiApi([...apiMsgs, { role: "assistant", content: r.raw }]);
+      setAiMsgs((m) => [...m, { role: "assistant", text: r.reply }]);
+      if (r.done && r.items.length) finishItems(r.items);
+    } catch (e) {
+      setAiMsgs((m) => [...m, { role: "assistant", text: "יש תקלה זמנית בחיבור ל-AI. נסי שוב." }]);
+    } finally { setAiLoading(false); }
+  };
+  const startMic = () => {
+    if (aiListening && recRef.current) { recRef.current.stop(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("זיהוי דיבור לא נתמך בדפדפן הזה - נסי ב-Chrome/Safari עדכני, או הקלידי."); return; }
+    const rec = new SR();
+    rec.lang = "he-IL";
+    rec.interimResults = true;   // מציג טקסט תוך כדי דיבור
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => setAiListening(true);
+    rec.onresult = (e) => {
+      let t = "";
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      setAiInput(t);
+    };
+    rec.onerror = () => setAiListening(false);
+    rec.onend = () => setAiListening(false);
+    try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
+  };
+  const [qtyOrigin, setQtyOrigin] = useState("list");
+  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const videoRef = useRef(null);
+  const scanControlsRef = useRef(null);
+  const [scanState, setScanState] = useState("idle");
+  const [manualCode, setManualCode] = useState("");
+  const stopScan = () => { try { scanControlsRef.current && scanControlsRef.current(); } catch (e) {} scanControlsRef.current = null; };
+  const lookupBarcode = async (code) => {
+    setScanState("looking");
+    try {
+      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_he,generic_name,generic_name_he,brands,nutriments`);
+      const d = await r.json();
+      if (d.status !== 1 || !d.product) { setScanState("notfound"); return; }
+      const p = d.product, n = p.nutriments || {};
+      const name = (p.product_name_he || p.generic_name_he || p.product_name || p.generic_name || p.brands || "מוצר").trim();
+      const food = { id: "bc_" + code, name, per100: { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) }, measures: [{ label: "100 ג׳", g: 100 }], def: 0 };
+      pickFood(food, 100);
+    } catch (e) { setScanState("error"); }
+  };
+  const startScan = () => setScanState("scanning");
+  useEffect(() => {
+    if (scanState !== "scanning") return;
+    let cancelled = false, raf = null, stream = null, zx = null;
+    const cleanup = () => {
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      try { zx && zx.stop(); } catch (e) {}
+      try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+      try { if (videoRef.current) videoRef.current.srcObject = null; } catch (e) {}
+    };
+    const onCode = (code) => { if (cancelled || !code) return; cleanup(); lookupBarcode(String(code)); };
+    (async () => {
+      try {
+        const video = videoRef.current;
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+        if (cancelled) { cleanup(); return; }
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+        try { await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch (e) {}
+
+        // Engine 1: native BarcodeDetector - only if actually supported. Some devices
+        // expose the class but support no formats, so verify via getSupportedFormats.
+        let nativeOk = false;
+        if ("BarcodeDetector" in window) {
+          try { const f = await window.BarcodeDetector.getSupportedFormats(); nativeOk = Array.isArray(f) && f.length > 0; } catch (e) { nativeOk = false; }
+        }
+        if (nativeOk) {
+          let det;
+          try { det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "itf"] }); }
+          catch (e) { det = new window.BarcodeDetector(); }
+          const tick = async () => {
+            if (cancelled) return;
+            try { const codes = await det.detect(video); if (codes && codes.length) return onCode(codes[0].rawValue); } catch (e) {}
+            raf = requestAnimationFrame(tick);
+          };
+          raf = requestAnimationFrame(tick);
+        }
+        // Engine 2: ZXing on the SAME video element, in parallel - covers devices where
+        // BarcodeDetector is missing or broken. First engine to read a code wins.
+        try {
+          const hints = new Map();
+          hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.CODE_128, BarcodeFormat.ITF]);
+          hints.set(DecodeHintType.TRY_HARDER, true);
+          const reader = new BrowserMultiFormatReader(hints);
+          zx = await reader.decodeFromVideoElement(video, (result) => { if (result) onCode(result.getText()); });
+          if (cancelled) { try { zx.stop(); } catch (e) {} }
+        } catch (e) {}
+      } catch (e) { if (!cancelled) setScanState("error"); }
+    })();
+    scanControlsRef.current = cleanup;
+    return () => cleanup();
+  }, [scanState]);
+  const photoItems = [{ f: FOOD_BY_ID["rice"], g: 158 }, { f: FOOD_BY_ID["chk"], g: 120 }, { f: FOOD_BY_ID["sal"], g: 80 }];
+  const filtered = query.trim() ? FOODS.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
+  const nut = food ? nutritionFor(food, grams) : null;
+  const unitLabel = unitLabelFor(food?.unit);
+  const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
+  const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "92%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", overflowY: "auto", fontFamily: fontStack }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 19, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
+          <button onClick={close} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+        </div>
+        {step === "method" && (
+          <>
+            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", bg: C.infoBg, color: C.info, go: () => setStep("ai") },
+              { ic: Camera, t: "צילום ארוחה", s: "המהיר ביותר", tag: "מהיר", bg: C.amberBg, color: C.amber, go: () => setStep("photo") },
+              { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
+              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, go: () => setStep("history") },
+              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") }].map((o) => (
+              <div key={o.t} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
+                <div style={{ width: 46, height: 46, borderRadius: 13, background: o.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 3px 9px ${o.color}55` }}><o.ic size={23} color="#fff" strokeWidth={2.2} /></div>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 600, color: C.ink }}>{o.t}</div><div style={{ fontSize: 13, color: C.sub }}>{o.s}</div></div>
+                {o.tag && <span style={{ fontSize: 12, background: C.panel, color: o.color, padding: "3px 10px", borderRadius: 8, fontWeight: 500 }}>{o.tag}</span>}
+              </div>
+            ))}
+            <div style={{ fontSize: 13, color: C.faint, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /> <span>ברקוד וחיפוש מדויקים יותר מצילום. בצילום נאשר את הכמות יחד.</span></div>
+          </>
+        )}
+        {step === "list" && (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 4, color: C.faint }}>
+              <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 15, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+            </div>
+            {query && filtered.length > 0 && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
+            {query && filtered.map((f) => {
+              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            {query && <div style={{ fontSize: 13, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
+            {query && dbResults.map((f) => {
+              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 14, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
+            {!query && <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
+          </>
+        )}
+        {step === "history" && (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+            </div>
+            {(favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
+              const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            <div style={{ fontSize: 12, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת על + מוסיפה עם הכמות האחרונה - בלי להזין שוב</span></div>
+          </>
+        )}
+        {step === "barcode" && (
+          <div>
+            {scanState === "idle" && (
+              <div style={{ textAlign: "center", padding: "4px 0" }}>
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Barcode size={32} color={C.brand} /></div>
+                <div style={{ fontSize: 17, fontWeight: 500, color: C.ink, marginBottom: 6 }}>סריקת ברקוד</div>
+                <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>כווני את המצלמה לברקוד של המוצר - הערכים יישלפו אוטומטית מ-Open Food Facts.</p>
+                <Btn onClick={startScan}>פתחי מצלמה לסריקה</Btn>
+                <div style={{ fontSize: 13, color: C.faint, margin: "16px 0 6px" }}>או הקלידי את מספר הברקוד</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={manualCode} onChange={(e) => setManualCode(e.target.value)} inputMode="numeric" placeholder="מספר ברקוד" style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+                  <button onClick={() => manualCode.trim() && lookupBarcode(manualCode.trim())} style={{ border: "none", background: C.brand, color: "#fff", borderRadius: 10, padding: "0 18px", cursor: "pointer", fontSize: 15, fontWeight: 500 }}>חפשי</button>
+                </div>
+              </div>
+            )}
+            {scanState === "scanning" && (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000" }}>
+                  <video ref={videoRef} style={{ width: "100%", display: "block", maxHeight: 320, objectFit: "cover" }} muted playsInline />
+                  <div style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ width: "80%", height: 92, border: "2px solid rgba(255,255,255,0.9)", borderRadius: 10, boxShadow: "0 0 0 9999px rgba(0,0,0,0.28)", position: "relative" }}>
+                      <div style={{ position: "absolute", top: "50%", left: 8, right: 8, height: 2, background: C.brand, transform: "translateY(-1px)" }} />
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 14, color: C.sub, marginTop: 10, lineHeight: 1.5 }}>מקמי את הברקוד בתוך המסגרת - ישר, ממלא את הרוחב, והחזיקי יציב לרגע</div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 10 }}>
+                  <Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>ביטול</Btn>
+                  <Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>להקליד מספר ידנית</Btn>
+                </div>
+              </div>
+            )}
+            {scanState === "looking" && (
+              <div style={{ textAlign: "center", padding: "32px 0" }}><Loader size={28} color={C.brand} className="spin" /><div style={{ fontSize: 15, color: C.ink, marginTop: 12 }}>מחפש את המוצר…</div></div>
+            )}
+            {scanState === "notfound" && (
+              <div style={{ textAlign: "center", padding: "16px 0" }}>
+                <div style={{ fontSize: 15, color: C.ink, marginBottom: 14, lineHeight: 1.6 }}>המוצר לא נמצא במאגר. אפשר לצלם את <b>התווית התזונתית</b> ואני אזהה את הערכים, או לנסות שוב.</div>
+                <label style={{ display: "block", marginBottom: 10 }}>
+                  <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי את התווית התזונתית</span>
+                </label>
+                <Btn variant="ghost" onClick={() => setScanState("idle")}>נסי שוב לסרוק</Btn>
+              </div>
+            )}
+            {scanState === "error" && (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div style={{ fontSize: 15, color: C.amber, marginBottom: 12, lineHeight: 1.6 }}>לא ניתן לפתוח את המצלמה. ודאי שאישרת גישה למצלמה בדפדפן, או הקלידי את הברקוד ידנית.</div>
+                <Btn variant="ghost" onClick={() => setScanState("idle")}>חזרה</Btn>
+              </div>
+            )}
+          </div>
+        )}
+        {step === "photo" && (
+          <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
+            <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Camera size={32} color={C.brand} /></div>
+            <div style={{ fontSize: 17, fontWeight: 500, color: C.ink, marginBottom: 6 }}>צלמי או העלי תמונה</div>
+            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>נפתח שיחה קצרה עם ה-AI - נזהה את הפריטים ונוכל לתקן כמויות יחד.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={{ display: "block" }}>
+                <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי עכשיו</span>
+              </label>
+              <label style={{ display: "block" }}>
+                <input ref={fileRef} type="file" accept="image/*" onChange={onPhoto} style={{ display: "none" }} />
+                <span style={{ display: "block", background: "transparent", color: C.brandD, borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 500, cursor: "pointer", boxShadow: `inset 0 0 0 1px ${C.line}` }}>העלי תמונה מהגלריה</span>
+              </label>
+            </div>
+            <div style={{ fontSize: 12, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>הניתוח מבוצע ע״י בינה מלאכותית - ייתכן שתתבקשי להתחבר ל-Claude.</div>
+          </div>
+        )}
+        {step === "ai" && (
+          <div style={{ display: "flex", flexDirection: "column", height: 380 }}>
+            <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+              {aiMsgs.map((m, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+                  <div style={{ maxWidth: "82%", fontSize: 15, lineHeight: 1.5, padding: m.img ? 6 : "9px 12px", borderRadius: 14, background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>
+                    {m.img && <img src={m.img} alt="" style={{ width: "100%", maxWidth: 180, borderRadius: 10, display: "block", marginBottom: m.text ? 6 : 0 }} />}
+                    {m.text && <div style={{ padding: m.img ? "0 6px 4px" : 0 }}>{m.text}</div>}
+                  </div>
+                </div>
+              ))}
+              {aiLoading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 15, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>כותבת…</div></div>}
+              {reconciling && !aiDoneItems && (
+                <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: C.sub, fontSize: 14 }}>
+                  <Search size={15} /> בודקת ערכים במאגרי המזון…
+                </div>
+              )}
+              {aiDoneItems && (
+                <div style={{ border: `1px solid ${C.brand}`, borderRadius: 12, padding: 10, marginTop: 6 }}>
+                  {aiDoneItems.map((it, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
+                      <span style={{ fontSize: 15, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source={it.source || "estimated"} /></span>
+                      <span style={{ fontSize: 14, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 11, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז - סריקת ברקוד היא המדויקת ביותר.</div>
+                  <div style={{ fontSize: 12, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
+                  <Btn onClick={() => commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })))}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ליומן</Btn>
+                  <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setAiDoneItems(null)}>אני רוצה לשנות</Btn></div>
+                </div>
+              )}
+              <div ref={aiEndRef} />
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+              <button onClick={startMic} disabled={aiLoading} className={aiListening ? "spin-pulse" : ""} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: aiListening ? C.brand : C.brandBg, color: aiListening ? "#fff" : C.brand, cursor: aiLoading ? "default" : "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Mic size={18} /></button>
+              <textarea ref={aiInputRef} value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }} disabled={aiLoading} rows={1} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+              <button onClick={() => sendAi()} disabled={aiLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Send size={18} /></button>
+            </div>
+            <div style={{ fontSize: 12, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>
+          </div>
+        )}
+        {step === "qty" && food && (
+          <>
+            {String(food.id || "").startsWith("bc_") && (
+              <>
+                <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>שם המוצר (אפשר לערוך)</div>
+                <input value={food.name} onChange={(e) => setFood({ ...food, name: e.target.value })} placeholder="שם המוצר" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
+              </>
+            )}
+            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>שיוך לארוחה</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
+            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>מידת בית</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>{food.measures.map((ms) => (<span key={ms.label} onClick={() => setGrams(ms.g)} style={{ fontSize: 14, padding: "6px 11px", borderRadius: 8, cursor: "pointer", background: grams === ms.g ? C.brandBg : "transparent", color: grams === ms.g ? C.brandD : C.sub, boxShadow: grams === ms.g ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{ms.label}{ms.label.includes(String(ms.g)) ? "" : ` · ${ms.g} ${unitLabel}`}</span>))}</div>
+            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>או כמות מדויקת</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
+              <button onClick={() => setGrams(Math.max(5, grams - 10))} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 21, color: C.ink }}>−</button>
+              <div style={{ minWidth: 70, textAlign: "center" }}><span style={{ fontSize: 26, fontWeight: 600, color: C.ink }}>{grams}</span> <span style={{ fontSize: 14, color: C.sub }}>{unitLabel}</span></div>
+              <button onClick={() => setGrams(grams + 10)} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 21, color: C.ink }}>+</button>
+            </div>
+            <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
+            </div>
+            <Btn onClick={() => commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...nut })}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
+            {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   ROOT APP
+   ============================================================ */
+function EntryMenu({ onClose, onPick, mode }) {
+  const items = mode === "calorie" ? [
+    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת" },
+    { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי" },
+  ] : [
+    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת" },
+    { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי" },
+    { id: "recommend", ic: Sparkles, t: "מה כדאי לאכול?", s: "הצעות חכמות לפי היעדים שלך" },
+    { id: "weight", ic: TrendingDown, t: "הזיני משקל היום", s: "מעקב המשקל בפועל" },
+  ];
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 26 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 19, fontWeight: 600, color: C.ink }}>מה תרצי להזין?</span>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+        </div>
+        {items.map((o) => (
+          <div key={o.id} onClick={() => onPick(o.id)} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13, marginBottom: 8, cursor: "pointer" }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><o.ic size={19} color={C.brand} /></div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{o.t}</div>{o.s && <div style={{ fontSize: 13, color: C.sub }}>{o.s}</div>}</div>
+            <ChevronLeft size={18} color={C.faint} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SheetShell({ title, onClose, children }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 27 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <span style={{ fontSize: 19, fontWeight: 600, color: C.ink }}>{title}</span>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ActivityModal({ onClose, onAdd, weightKg }) {
+  const acts = [
+    { name: "הליכה", met: 3.5 },
+    { name: "הליכה מהירה", met: 5 },
+    { name: "ריצה", met: 9.8 },
+    { name: "אימון כוח", met: 5 },
+    { name: "יוגה / פילאטיס", met: 3 },
+    { name: "אופניים", met: 7 },
+    { name: "שחייה", met: 7 },
+    { name: "אירובי / ריקוד", met: 6.5 },
+  ];
+  const INT = { "קלה": 3, "בינונית": 5, "גבוהה": 8 };
+  const [sel, setSel] = useState(0); // index, or -1 for custom
+  const [minutes, setMinutes] = useState(30);
+  const [customName, setCustomName] = useState("");
+  const [intensity, setIntensity] = useState("בינונית");
+  const met = sel >= 0 ? acts[sel].met : INT[intensity];
+  const baseName = sel >= 0 ? acts[sel].name : (customName.trim() || "פעילות");
+  const kcal = Math.round(met * 3.5 * (weightKg || 70) / 200 * minutes);
+  const chip = (on) => ({ fontSize: 14, padding: "7px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}`, display: "flex", alignItems: "center", gap: 6 });
+  return (
+    <SheetShell title="פעילות גופנית" onClose={onClose}>
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>בחרי פעילות</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        {acts.map((a, i) => (<span key={a.name} onClick={() => setSel(i)} style={chip(sel === i)}><Dumbbell size={14} /> {a.name}</span>))}
+        <span onClick={() => setSel(-1)} style={chip(sel === -1)}>אחר</span>
+      </div>
+      {sel === -1 && (
+        <>
+          <input value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="שם הפעילות" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>עצימות</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>{Object.keys(INT).map((k) => (<span key={k} onClick={() => setIntensity(k)} style={chip(intensity === k)}>{k}</span>))}</div>
+        </>
+      )}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <span style={{ fontSize: 15, color: C.sub }}>כמה דקות?</span>
+        <Stepper value={minutes} set={(v) => setMinutes(Math.max(1, v))} step={5} suffix="דק׳" />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+        <span style={{ fontSize: 14, color: C.sub }}>נשרף בערך</span>
+        <span style={{ fontSize: 17, fontWeight: 600, color: C.brandD }}>{kcal} קק״ל</span>
+      </div>
+      <Btn onClick={() => onAdd({ name: `${baseName} ${minutes} דק׳`, kcal })}>הוסף פעילות</Btn>
+      <div style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 8 }}>הערכה לפי סוג הפעילות, המשקל שלך ({weightKg || 70} ק״ג) ומשך הזמן</div>
+    </SheetShell>
+  );
+}
+
+function WeightModal({ current, onClose, onAdd }) {
+  const [kg, setKg] = useState(current != null ? String(current) : "");
+  const num = parseFloat(kg);
+  const valid = isFinite(num) && num >= 30 && num <= 400;
+  return (
+    <SheetShell title="הזיני משקל היום" onClose={onClose}>
+      <div style={{ margin: "4px 0 8px" }}>
+        <input type="text" inputMode="decimal" value={kg} autoFocus onChange={(e) => setKg(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="לדוגמה 71.5" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 24, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <div style={{ textAlign: "center", fontSize: 13, color: C.sub, marginTop: 6 }}>ק״ג</div>
+      </div>
+      <Btn onClick={() => { if (valid) onAdd(Math.round(num * 10) / 10); }} style={{ opacity: valid ? 1 : 0.5 }}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>נרשם כמשקל של היום בגרף. הזנה חוזרת היום פשוט מעדכנת את הערך.</div>
+    </SheetShell>
+  );
+}
+
+function StepsModal({ current, goal, weightKg, onClose, onAdd }) {
+  const [val, setVal] = useState(current ? String(current) : "");
+  const steps = Math.max(0, parseInt(val, 10) || 0);
+  const kcal = stepsKcal(steps, weightKg);
+  const frac = Math.max(0, Math.min(1, goal > 0 ? steps / goal : 0));
+  return (
+    <SheetShell title="עדכון צעדים" onClose={onClose}>
+      <div style={{ margin: "4px 0 10px" }}>
+        <input type="text" inputMode="numeric" value={val} autoFocus onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, ""))} placeholder="לדוגמה 6500" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 24, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <div style={{ textAlign: "center", fontSize: 13, color: C.sub, marginTop: 6 }}>צעדים</div>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: C.amberBg, overflow: "hidden", marginBottom: 8 }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: C.amber, borderRadius: 6 }} />
+      </div>
+      <div style={{ textAlign: "center", fontSize: 13, color: C.sub, marginBottom: 16 }}>{steps.toLocaleString()} מתוך יעד {goal.toLocaleString()} · מוסיף ~{kcal} קק״ל לתקציב</div>
+      <Btn onClick={() => onAdd(steps)}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>לשינוי יעד הצעדים - אפשר בפרופיל. הזנה חוזרת היום מעדכנת את הערך.</div>
+      <button disabled style={{ width: "100%", marginTop: 10, border: `1px dashed ${C.line}`, background: "transparent", color: C.faint, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 14, cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Footprints size={15} /> התחברות לאפליקציית הבריאות · זמין באפליקציה</button>
+    </SheetShell>
+  );
+}
+
+function WaterModal({ currentMl, cupMl, onClose, onSave }) {
+  const [ml, setMl] = useState(currentMl);
+  const [cup, setCup] = useState(cupMl || DEFAULT_CUP_ML);
+  const [free, setFree] = useState("");
+  const safeCup = Math.max(100, cup || DEFAULT_CUP_ML);
+  const cups = Math.round((ml / safeCup) * 10) / 10;
+  const targetCups = Math.round(WATER_TARGET_ML / safeCup);
+  const frac = Math.max(0, Math.min(1, ml / WATER_TARGET_ML));
+  const addFree = () => { const n = parseInt(free, 10) || 0; if (n >= 50) { setMl(ml + n); setFree(""); } };
+  return (
+    <SheetShell title="עדכון מים" onClose={onClose}>
+      <div style={{ textAlign: "center", margin: "2px 0 10px" }}>
+        <div style={{ fontSize: 34, fontWeight: 700, color: C.ink }}>{cups} <span style={{ fontSize: 16, color: C.sub }}>כוסות</span></div>
+        <div style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>{ml.toLocaleString()} מ"ל מתוך {targetCups} כוסות (2 ליטר)</div>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: C.waterBg, overflow: "hidden", marginBottom: 14 }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: C.water, borderRadius: 6, transition: "width .3s" }} />
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <button onClick={() => setMl(ml + safeCup)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ כוס ({safeCup} מ"ל)</button>
+        <button onClick={() => setMl(ml + 500)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ חצי ליטר</button>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+        <input type="text" inputMode="numeric" value={free} onChange={(e) => setFree(e.target.value.replace(/[^0-9]/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFree(); } }} placeholder={'הוספת מ"ל חופשי (לפחות 50)'} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <button onClick={addFree} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.water, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+      </div>
+      <div style={{ textAlign: "center", marginBottom: 14 }}>
+        <button onClick={() => setMl(0)} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, textDecoration: "underline", cursor: "pointer", fontFamily: fontStack }}>איפוס היום</button>
+      </div>
+      <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 14, color: C.ink }}>גודל כוס</span>
+          <Stepper value={safeCup} set={(v) => setCup(Math.max(100, Math.min(1000, v)))} step={10} suffix={'מ"ל'} />
+        </div>
+        <div style={{ fontSize: 12, color: C.faint, marginTop: 6 }}>היעד תמיד 2 ליטר; מספר הכוסות מתעדכן לפי גודל הכוס.</div>
+      </div>
+      <Btn onClick={() => onSave(ml, safeCup)}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+    </SheetShell>
+  );
+}
+
+function CalorieGoalModal({ current, onClose, onAdd }) {
+  const [kcal, setKcal] = useState(current);
+  return (
+    <SheetShell title="עדכון יעד קלורי ליום" onClose={onClose}>
+      <div style={{ fontSize: 13, color: C.sub, marginBottom: 10, textAlign: "center", lineHeight: 1.6 }}>היעד היומי שלך לקלוריות. שינוי כאן דורס את הערך המחושב.</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", margin: "4px 0 18px" }}>
+        <Stepper value={kcal} set={(v) => setKcal(Math.max(KCAL_FLOOR, v))} step={10} min={KCAL_FLOOR} suffix="קק״ל" />
+      </div>
+      <Btn onClick={() => onAdd(kcal)}>שמור יעד</Btn>
+    </SheetShell>
+  );
+}
+
+function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg }) {
+  const deniedText = reason === "device_limit"
+    ? "המייל שלך כבר מחובר בשני מכשירים. ניתן להשתמש ב-MyPrime בו-זמנית בשני מכשירים בלבד. התנתקי במכשיר אחר ונסי שוב, או פני למנהלת התוכנית."
+    : "המייל הזה לא נמצא ברשימת המשתתפות בתוכנית. אם נרשמת לאחרונה, או שיש בעיה - פני למנהלת התוכנית.";
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center", fontFamily: fontStack }}>
+      <div style={{ width: 64, height: 64, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><Sparkles size={28} color={C.brand} /></div>
+      <div style={{ fontSize: 22, fontWeight: 600, color: C.ink, marginBottom: 6 }}>{name.trim() ? `היי ${name.trim()}!` : "ברוכה הבאה ל-MyPrime"}</div>
+      {status === "checking" && (
+        <><Loader size={26} color={C.brand} className="spin" style={{ marginTop: 18 }} /><div style={{ fontSize: 14, color: C.sub, marginTop: 12 }}>מאמתת את ההרשמה לתוכנית…</div></>
+      )}
+      {status === "form" && (
+        <>
+          <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>הזיני שם פרטי והמייל שאיתו נרשמת לתוכנית.</p>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם פרטי" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 10 }} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל שלך" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
+          <div style={{ width: "100%" }}><Btn onClick={onSubmit}>כניסה</Btn></div>
+          {msg && <div style={{ fontSize: 13, color: C.amber, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}
+          <div style={{ fontSize: 12, color: C.faint, marginTop: 18, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, textAlign: "right" }}>
+            <Lock size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>כל הנתונים שאת מזינה נשמרים רק במכשיר שלך, ואינם נשמרים בשרתי החברה. <a href={PRIVACY_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> · <a href={COOKIE_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
+          </div>
+        </>
+      )}
+      {status === "denied" && (
+        <>
+          <div style={{ fontSize: 14, lineHeight: 1.7, margin: "12px 0 18px", background: C.amberBg, color: C.amber, padding: 12, borderRadius: 12 }}>{deniedText}</div>
+          <div style={{ width: "100%" }}><Btn variant="ghost" onClick={onRetry}>נסי שוב / כתובת אחרת</Btn></div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose }) {
+  const [stage, setStage] = useState("confirm");
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(false);
+  const [pending, setPending] = useState(null);
+  const [logMsgs, setLogMsgs] = useState([]);
+  const [logInput, setLogInput] = useState("");
+  const [logLoading, setLogLoading] = useState(false);
+  const [logErr, setLogErr] = useState(false);
+  const [logItems, setLogItems] = useState(null);
+  const [logMeal, setLogMeal] = useState("בוקר");
+  const [logged, setLogged] = useState(false);
+  const endRef = useRef(null);
+  const inputRef = useRef(null);
+  useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading, logMsgs, logLoading, logItems, logged]);
+  const ctx = { proteinFocus };
+
+  const diet = profile.diet || [];
+  const allergies = profile.allergies || [];
+  const dislikes = (profile.dislikes || "").trim();
+  const toggle = (key, val) => setProfile({ ...profile, [key]: (profile[key] || []).includes(val) ? (profile[key] || []).filter((x) => x !== val) : [...(profile[key] || []), val] });
+  const chip = (on) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
+  const [newSens, setNewSens] = useState("");
+  const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
+  const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
+
+  const run = async (history) => {
+    setLoading(true); setErr(false);
+    const r = await aiMealChat(history, ctx);
+    setLoading(false);
+    if (r.error || !r.text) { setErr(true); return; }
+    setMsgs([...history, { role: "assistant", content: r.text }]);
+  };
+  const startChat = () => {
+    const avoidList = [...allergies, ...(dislikes ? [dislikes] : [])].filter(Boolean);
+    const seed = `הקשר: נשארו לי כ-${Math.max(0, Math.round(remainingKcal))} קלוריות להיום`
+      + (proteinFocus && remainingProtein > 0 ? `, ונותרו כ-${Math.round(remainingProtein)} ג׳ חלבון ליעד` : "")
+      + (diet.length ? `. סגנון תזונה: ${diet.join(", ")}` : "")
+      + (avoidList.length ? `. חשוב מאוד - יש לי רגישות/אלרגיה, ואסור בשום אופן להציע לי מאכלים שמכילים: ${avoidList.join(", ")}. אם רעיון כולל אחד מהם, אל תציעי אותו בכלל, ותמיד הזכירי לי בעדינות לבדוק את רשימת הרכיבים המלאה לפני האכילה - כי לפעמים גם AI טועה.` : "")
+      + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
+      + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
+    const h = [{ role: "user", content: seed }];
+    setMsgs(h); setStage("chat"); run(h);
+  };
+
+  const sendText = (t) => {
+    const text = (t || "").trim();
+    if (!text || loading) return;
+    const next = [...msgs, { role: "user", content: text }];
+    setMsgs(next); setInput(""); run(next);
+    const existing = [...diet, ...allergies, ...(dislikes ? dislikes.split(/[,،]/).map((s) => s.trim()).filter(Boolean) : [])];
+    const local = localPrefs(text, existing);
+    if (local.diet.length || local.avoid.length) setPending(local);
+    extractPreferences(text, existing).then((p) => {
+      const mDiet = [...new Set([...local.diet, ...((p.diet || []).filter((d) => !existing.includes(d)))])];
+      const mAvoid = [...new Set([...local.avoid, ...((p.avoid || []).filter((a) => !existing.includes(a)))])];
+      if (mDiet.length || mAvoid.length) setPending({ diet: mDiet, avoid: mAvoid });
+    });
+  };
+  const savePending = () => {
+    if (!pending) return;
+    const dietIds = DIET_OPTIONS.map((d) => d.id);
+    const newDiet = (pending.diet || []).filter((d) => dietIds.includes(d) && !diet.includes(d));
+    const newAllerg = (pending.avoid || []).filter((a) => SENSITIVITY_OPTIONS.includes(a) && !allergies.includes(a));
+    const restAvoid = (pending.avoid || []).filter((a) => !SENSITIVITY_OPTIONS.includes(a));
+    const newDislikes = [dislikes, ...restAvoid].filter(Boolean).join(", ");
+    setProfile({ ...profile, diet: [...diet, ...newDiet], allergies: [...allergies, ...newAllerg], dislikes: newDislikes });
+    setPending(null);
+  };
+
+  const defaultMeal = () => { const h = new Date().getHours(); if (h < 11) return "בוקר"; if (h < 16) return "צהריים"; if (h < 21) return "ערב"; return "נשנושים"; };
+  const runLog = async (history) => {
+    setLogLoading(true); setLogErr(false);
+    const r = await aiNutritionChat(history.map((m) => ({ role: m.role, content: m.content })));
+    setLogLoading(false);
+    if (!r.reply && (!r.items || !r.items.length)) { setLogErr(true); return; }
+    setLogMsgs([...history, { role: "assistant", content: r.reply }]);
+    setLogItems(r.done && r.items && r.items.length ? r.items : null);
+  };
+  const startLog = () => {
+    const last = [...msgs].reverse().find((m) => m.role === "assistant");
+    const ctxText = last ? last.content : "";
+    const seed = "אני רוצה להוסיף ליומן משהו מתוך מה שהצעת לי. "
+      + (ctxText ? "ההצעות שלך היו: " + ctxText + " " : "")
+      + "אם לא ברור מה בדיוק אכלתי או באיזו כמות - שאלי אותי שאלה אחת בכל פעם, ואז סכמי לרישום.";
+    const h = [{ role: "user", content: seed }];
+    setLogMsgs(h); setLogItems(null); setLogged(false); setLogMeal(defaultMeal()); setStage("log"); runLog(h);
+  };
+  const sendLog = (t) => {
+    const text = (t || "").trim();
+    if (!text || logLoading) return;
+    const next = [...logMsgs, { role: "user", content: text }];
+    setLogMsgs(next); setLogInput(""); setLogItems(null); runLog(next);
+  };
+  const doLog = () => {
+    if (!logItems || !logItems.length) return;
+    onLog(logItems.map((it) => ({ meal: logMeal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })));
+    setLogged(true);
+  };
+
+  const visible = msgs.slice(1); // hide the synthetic opening prompt
+  const hasAvoid = allergies.length > 0 || dislikes.length > 0;
+
+  return (
+    <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
+      {stage === "confirm" ? (
+        <div>
+          <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ - בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+            {DIET_OPTIONS.map((d) => (<span key={d.id} onClick={() => toggle("diet", d.id)} style={chip(diet.includes(d.id))}>{d.emoji} {d.id}</span>))}
+          </div>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות / אלרגיות</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
+            {SENSITIVITY_OPTIONS.map((s) => (<span key={s} onClick={() => toggle("allergies", s)} style={chip(allergies.includes(s))}>{s}</span>))}
+          </div>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+            <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+            <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+          </div>
+          {customSens.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {customSens.map((s) => (
+                <span key={s} style={{ fontSize: 14, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {s}
+                  <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          {!diet.length && !hasAvoid && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 0" }}>לא רשמת עדיין העדפות או רגישויות. אפשר לבחור עכשיו, או פשוט להמשיך.</div>}
+          {hasAvoid && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
+          <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
+        </div>
+      ) : stage === "log" ? (
+      <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {visible.map((m, i) => (
+            <div key={"sug" + i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8, opacity: 0.5 }}>
+              <div style={{ maxWidth: "84%", fontSize: 14, lineHeight: 1.5, padding: "9px 12px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+            </div>
+          ))}
+          {visible.length > 0 && <div style={{ textAlign: "center", fontSize: 12, color: C.faint, margin: "2px 0 12px" }}>- מוסיפים ליומן -</div>}
+          {logMsgs.slice(1).map((m, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+              <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+            </div>
+          ))}
+          {logLoading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 15, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>רושמת…</div></div>}
+          {logErr && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. נסי שוב.</div>}
+          {logItems && !logged && (
+            <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginTop: 4 }}>
+              {logItems.map((it, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, padding: "4px 0", color: C.ink }}>
+                  <span>{it.name} · {it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"}</span>
+                  <span style={{ color: C.sub }}>{it.kcal} קק״ל</span>
+                </div>
+              ))}
+              <div style={{ fontSize: 13, color: C.sub, margin: "10px 0 6px" }}>לאיזו ארוחה?</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {MEALS.map((m) => (<span key={m} onClick={() => setLogMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === logMeal ? C.brand : "transparent", color: m === logMeal ? "#fff" : C.sub, boxShadow: m === logMeal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+              </div>
+            </div>
+          )}
+          {logged && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 14, marginTop: 6, fontSize: 15, fontWeight: 600, textAlign: "center" }}>✓ נוסף ליומן (וגם למועדפים והאחרונים)</div>}
+          <div ref={endRef} />
+        </div>
+        {logItems && !logged && <div style={{ marginBottom: 8 }}><Btn onClick={doLog}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ל{logMeal}</Btn></div>}
+        {logged ? (
+          <Btn variant="ghost" onClick={onClose}>סגירה</Btn>
+        ) : (
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+            <textarea value={logInput} onChange={(e) => setLogInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendLog(logInput); } }} disabled={logLoading} rows={1} placeholder={logLoading ? "רגע…" : "תשובה / מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: logLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+            <button onClick={() => sendLog(logInput)} disabled={logLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: logLoading ? 0.5 : 1 }}><Send size={18} /></button>
+          </div>
+        )}
+      </div>
+      ) : (
+      <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {visible.map((m, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+              <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+            </div>
+          ))}
+          {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 15, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
+          {err && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
+          <div ref={endRef} />
+        </div>
+
+        {visible.length > 0 && !loading && (
+          <button onClick={startLog} style={{ width: "100%", marginBottom: 8, border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={17} /> אכלתי - הוסיפי ליומן</button>
+        )}
+
+        {!loading && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            <span onClick={() => sendText("תני לי בבקשה רעיון אחר")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>רעיון אחר</span>
+            <span onClick={() => sendText("אין לי את המצרכים האלה בבית")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אין לי את זה</span>
+          </div>
+        )}
+
+        {pending && (
+          <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+            <div style={{ fontSize: 13, color: C.ink, marginBottom: 8, lineHeight: 1.5 }}>לשמור את זה להעדפות שלך לפעמים הבאות? <b>{[...(pending.diet || []), ...(pending.avoid || [])].join(", ")}</b></div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={savePending} style={{ border: "none", background: C.brand, color: "#fff", fontFamily: fontStack, fontSize: 13, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>שמרי</button>
+              <button onClick={() => setPending(null)} style={{ border: `1px solid ${C.line}`, background: "transparent", color: C.sub, fontFamily: fontStack, fontSize: 13, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>לא עכשיו</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+          <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(input); } }} disabled={loading} rows={1} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+          <button onClick={() => sendText(input)} disabled={loading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 }}><Send size={18} /></button>
+        </div>
+      </div>
+      )}
+    </SheetShell>
+  );
+}
+
+function StreakCheer({ streak, name, onClose }) {
+  const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
+  return (
+    <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        {Array.from({ length: 26 }).map((_, i) => (
+          <span key={i} style={{ position: "absolute", top: -12, left: `${(i * 3.9) % 100}%`, width: 8, height: 8, borderRadius: 2, background: colors[i % colors.length], animation: `confettiFall ${1 + (i % 5) * 0.15}s ease-out ${(i % 7) * 0.08}s forwards` }} />
+        ))}
+      </div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 300, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
+        <div style={{ fontSize: 52, animation: "flameFlicker 1s ease-in-out infinite" }}>🔥</div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginTop: 6 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""}!</div>
+        <div style={{ fontSize: 15, color: C.sub, marginTop: 8, lineHeight: 1.5 }}>{streak} ימים ברצף 💪 את עקבית ומדהימה - ככה ממשיכים!</div>
+        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות!</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: 2000, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
+  const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
+  const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
+  const [tab, setTab] = useState("day");
+  const [profile, setProfile] = useState(saved?.profile || DEFAULT_PROFILE);
+  const [log, setLog] = useState(saved?.log || INITIAL_LOG);
+  const [weights, setWeights] = useState(saved?.weights || initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate));
+  const [activityLog, setActivityLog] = useState(saved?.activityLog || []);
+  const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
+  const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
+  const [favorites, setFavorites] = useState(saved?.favorites || []);
+  const [selectedDate, setSelectedDate] = useState(TODAY);
+  const [today, setToday] = useState(TODAY);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = ymd(new Date());
+      if (now !== today) { setToday(now); setSelectedDate((sd) => (sd === today ? now : sd)); }
+    }, 60000);
+    return () => clearInterval(id);
+  }, [today]);
+  const [modal, setModal] = useState(null);
+  const [sheet, setSheet] = useState(null);
+  const [showIntro, setShowIntro] = useState(saved ? false : true);
+  const [notes, setNotes] = useState([]);
+  const [gate, setGate] = useState("checking");
+  const [gateReason, setGateReason] = useState("");
+  const [gateEmail, setGateEmail] = useState("");
+  const [gateName, setGateName] = useState("");
+  const [gateMsg, setGateMsg] = useState("");
+
+  // Android/Samsung hardware "back": intercept so the app doesn't close instantly.
+  // Back first closes an open sheet/modal; otherwise it asks whether to leave.
+  const [showExit, setShowExit] = useState(false);
+  const modalRef = useRef(modal); modalRef.current = modal;
+  const sheetRef = useRef(sheet); sheetRef.current = sheet;
+  const exitRef = useRef(showExit); exitRef.current = showExit;
+  const leavingRef = useRef(false);
+  useEffect(() => {
+    try { window.history.pushState({ mp: 1 }, ""); } catch (e) {}
+    const onPop = () => {
+      if (leavingRef.current) return;
+      if (modalRef.current) setModal(null);
+      else if (sheetRef.current) setSheet(null);
+      else if (exitRef.current) setShowExit(false);
+      else setShowExit(true);
+      try { window.history.pushState({ mp: 1 }, ""); } catch (e) {}
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const confirmExit = () => { leavingRef.current = true; setShowExit(false); try { window.history.go(-2); } catch (e) {} };
+
+  const checkAccess = async (em, nm) => {
+    setGate("checking"); setGateMsg("");
+    try {
+      const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
+      const d = await r.json();
+      if (d.allowed) {
+        try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
+        setGateReason(""); setGate("ok");
+      } else { setGateReason(d.reason || "not_registered"); setGate("denied"); }
+    } catch (e) { setGateMsg("תקלת תקשורת. נסי שוב."); setGate("form"); }
+  };
+  useEffect(() => {
+    let em = "", nm = "";
+    try { em = localStorage.getItem("myprime_access_email") || ""; nm = localStorage.getItem("myprime_access_name") || ""; } catch (e) {}
+    if (nm) setGateName(nm);
+    if (em) { setGateEmail(em); checkAccess(em, nm); } else { setGate("form"); }
+  }, []);
+  const submitGate = () => {
+    const e = gateEmail.trim().toLowerCase(); const n = gateName.trim();
+    if (!n) { setGateMsg("נא להזין שם פרטי."); return; }
+    if (!e || !e.includes("@")) { setGateMsg("נא להזין כתובת מייל תקינה."); return; }
+    checkAccess(e, n);
+  };
+  const retryGate = () => { try { localStorage.removeItem("myprime_access_email"); } catch (e) {} setGateEmail(""); setGateMsg(""); setGateReason(""); setGate("form"); };
+
+  const targets = useMemo(() => computeTargets(profile), [profile]);
+  const dailyTarget = profile.calorieOverride || targets.targetKcal;
+  const programWeek = programWeekFor(profile.startDate, TODAY);
+  const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
+  const stepsOpenToday = unlockedOn(profile.startDate, selectedDate, STEPS_UNLOCK);
+  const stepGoal = profile.stepGoal || 2000;
+  const recDayLog = log.filter((e) => e.date === selectedDate);
+  const recRemainingKcal = (dailyTarget + activityLog.filter((a) => a.date === selectedDate).reduce((s, a) => s + a.kcal, 0)) - recDayLog.reduce((s, e) => s + e.kcal, 0);
+  const recRemainingProtein = Math.max(0, targets.protein - recDayLog.reduce((s, e) => s + (e.p || 0), 0));
+  const recMealsHad = recDayLog.map((e) => e.name).join(", ");
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites })); } catch (e) {}
+  }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites]);
+
+  const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "" }); setWeights(initWeights(p.weightKg, p.startDate)); setOnboarded(true); };
+  const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
+  const editEntry = (e) => setModal(e.unit === "serving" ? { kind: "recipe", recipe: null, editEntry: e } : { kind: "food", preMeal: null, editEntry: e });
+  const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
+  const commit = (payload) => {
+    const date = modal?.editEntry ? modal.editEntry.date : selectedDate;
+    if (modal?.editEntry) setLog((l) => l.map((e) => e.id === modal.editEntry.id ? { ...e, ...payload, date } : e));
+    else {
+      const items = Array.isArray(payload) ? payload : [payload];
+      setLog((l) => [...l, ...items.map((p, i) => ({ id: "n" + Date.now() + i, date, ...p }))]);
+      setFavorites((fs) => {
+        let next = fs.slice();
+        items.forEach((p) => {
+          const name = (p.name || "").trim();
+          const g = p.g;
+          if (!name || !g) return;
+          const per100 = { kcal: Math.round((p.kcal || 0) / g * 100), p: Math.round((p.p || 0) / g * 100), f: Math.round((p.f || 0) / g * 100), c: Math.round((p.c || 0) / g * 100) };
+          const fav = { id: "fav_" + name, name, per100, measures: [{ label: "100 ג׳", g: 100 }], def: 0, unit: p.unit || "g", lastG: g };
+          next = next.filter((x) => x.name !== name);
+          next.unshift(fav);
+        });
+        return next.slice(0, 20);
+      });
+    }
+    setModal(null);
+  };
+  const addRecipe = (r) => setModal({ kind: "recipe", recipe: r, editEntry: null });
+  const saveRecipe = (payload, editId) => {
+    if (editId) setLog((l) => l.map((x) => x.id === editId ? { ...x, ...payload } : x));
+    else setLog((l) => [...l, { id: "n" + Date.now(), date: selectedDate, ...payload }]);
+    setModal(null);
+  };
+  const addActivity = (a) => { setActivityLog((l) => [...l, { id: "a" + Date.now(), date: selectedDate, name: a.name, kcal: Math.round(a.kcal) }]); setSheet(null); };
+  const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
+  const setStepsForDate = (date, n) => setStepsByDate((s) => ({ ...s, [date]: Math.max(0, Math.round(n || 0)) }));
+  const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
+  const addWeightValue = (kg) => { setWeights((w) => [...w.filter((x) => x.date !== selectedDate), { date: selectedDate, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
+  const logWeightToday = (kg) => { setWeights((w) => [...w.filter((x) => x.date !== today), { date: today, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
+  const reportAddWeight = () => setSheet("weight");
+  const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
+  const resetDemo = () => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
+    setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg("");
+    setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
+    setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate)); setSelectedDate(TODAY);
+    setProfile(DEFAULT_PROFILE);
+  };
+  const onPickEntry = (id) => {
+    if (id === "food") openAdd("food", null);
+    else if (id === "ai") openAdd("ai", null);
+    else if (id === "activity") setSheet("activity");
+    else if (id === "recommend") setSheet("recommend");
+    else if (id === "steps") setSheet("steps");
+    else if (id === "water") addWaterGlass();
+    else if (id === "weight") setSheet("weight");
+    else if (id === "calorie") setSheet("calorie");
+  };
+
+  const sweetsOpen = unlockedOn(profile.startDate, TODAY, SWEETS_UNLOCK);
+  const tabs = [
+    { id: "day", ic: Home, label: "יומן" },
+    { id: "report", ic: TrendingDown, label: "דוח" },
+    { id: "recipes", ic: ChefHat, label: "מתכונים" },
+    { id: "profile", ic: User, label: "פרופיל" },
+  ];
+
+  return (
+    <div dir="rtl" className="app-outer">
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600&display=swap');
+        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        ::-webkit-scrollbar{width:0;height:0}
+        button{font-family:'Rubik',sans-serif}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .spin{animation:spin 1s linear infinite}
+        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,93,121,0.5)}50%{box-shadow:0 0 0 8px rgba(212,93,121,0)}}
+        .spin-pulse{animation:pulse 1.2s ease-in-out infinite}
+        @keyframes flameFlicker{0%,100%{transform:rotate(-6deg) scale(1)}50%{transform:rotate(6deg) scale(1.18)}}
+        @keyframes fabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+        @keyframes fabGlow{0%,100%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 0 rgba(212,93,121,0.45)}50%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 12px rgba(212,93,121,0)}}
+        .fab-center{animation:fabFloat 3.2s ease-in-out infinite, fabGlow 2.2s ease-in-out infinite}
+        .streak-pill:active{transform:scale(0.96)}
+        @keyframes cheerPop{0%{transform:scale(0.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+        @keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(150px) rotate(360deg);opacity:0}}
+        .app-outer{min-height:100vh;min-height:100dvh;background:${C.bg};display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;font-family:${fontStack}}
+        .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
+        @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;border-radius:0;box-shadow:none;border:none}}`}</style>
+      <div className="phone-frame">
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "10px 18px 4px", flexShrink: 0 }}>
+          <span style={{ fontSize: 13, color: C.brandD, fontWeight: 600 }}>MyPrime · v{VERSION}</span>
+        </div>
+        {gate !== "ok" ? (
+          <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} />
+        ) : !onboarded ? (
+          <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} /></div>
+        ) : (
+          <>
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} stepGoal={stepGoal} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
+              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} stepGoal={stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
+              {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>
+              {tabs.slice(0, 2).map((t) => {
+                const active = tab === t.id;
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 14px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
+              })}
+              <button onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
+              {tabs.slice(2).map((t) => {
+                const active = tab === t.id;
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 14px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
+              })}
+            </div>
+
+            {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
+            {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
+            {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={stepGoal} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); }} />}
+            {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onClose={() => setSheet(null)} onSave={(ml, cup) => { setWaterForDate(selectedDate, ml); setProfile({ ...profile, cupMl: cup }); setSheet(null); }} />}
+            {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
+            {sheet === "weight" && <WeightModal current={(weights.find((x) => x.date === today) || weights[weights.length - 1] || {}).kg} onClose={() => setSheet(null)} onAdd={logWeightToday} />}
+            {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
+            {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {modal && (modal.kind === "recipe"
+              ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
+              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />)}
+          </>
+        )}
+        {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
+        {gate === "ok" && showIntro && <IntroOverlay onClose={() => setShowIntro(false)} />}
+        {showExit && (
+          <div onClick={() => setShowExit(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 50 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+              <div style={{ fontSize: 19, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לצאת מ-MyPrime?</div>
+              <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>אפשר להישאר ולהמשיך בדיוק מאיפה שעצרת.</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <Btn onClick={() => setShowExit(false)}>להישאר</Btn>
+                <Btn variant="ghost" onClick={confirmExit}>לצאת</Btn>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
