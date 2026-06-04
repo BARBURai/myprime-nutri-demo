@@ -12,6 +12,22 @@
 
 const KEY = process.env.USDA_API_KEY || "DEMO_KEY";
 const RANK = { "Foundation": 0, "SR Legacy": 1, "Survey (FNDDS)": 2, "Branded": 3 };
+const COOK_WORDS = ["grill", "cook", "roast", "bake", "fried", "fry", "boil", "broil", "steam", "saute", "sear", "poach"];
+
+// Lower score = better. Primary: data type. Then demote a "raw" entry when the
+// query asked for a cooked dish (a "grilled X" query should not match raw X).
+// NOTE: we deliberately do NOT penalize "separable lean only" — it crosses
+// between different foods and can promote a wrong (unpenalized) cut above the
+// correct one; the lean values are accurate anyway. strongMatch on the client
+// still guards the final pick.
+function rankScore(f, q) {
+  const name = (f.description || "").toLowerCase();
+  const ql = (q || "").toLowerCase();
+  let s = RANK[f.dataType] ?? 9;
+  const wantsCooked = COOK_WORDS.some((w) => ql.includes(w));
+  if (wantsCooked && /\braw\b/.test(name)) s += 5;
+  return s;
+}
 
 function nutrient(list, number) {
   for (const n of list || []) {
@@ -33,7 +49,7 @@ export default async function handler(req, res) {
     const r = await fetch(url);
     if (!r.ok) return res.status(200).json({ items: [], error: "usda " + r.status });
     const data = await r.json();
-    const foods = (data.foods || []).slice().sort((a, b) => (RANK[a.dataType] ?? 9) - (RANK[b.dataType] ?? 9));
+    const foods = (data.foods || []).slice().sort((a, b) => rankScore(a, q) - rankScore(b, q));
     const items = [];
     for (const f of foods) {
       const ns = f.foodNutrients || [];
