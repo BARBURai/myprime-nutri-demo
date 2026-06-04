@@ -75,7 +75,7 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.71`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.72`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -212,3 +212,7 @@ Symptom: AI-estimated values are unrealistically low (e.g. grilled entrecote kca
 - The v0.67 global em/en-dash -> hyphen replacement hit a regex character class inside `normName` (line ~1288). The original class `["'.,()\[\]/–-]` contained an en-dash; replacing it produced `["'.,()\[\]/--]`, and the adjacent `/--` was parsed as an out-of-order range (`/` to `-`), breaking `vite build` (rollup: "Range out of order in character class"). Fixed to a single trailing hyphen: `["'.,()\[\]/-]`. Verified: no other regex char-classes contain non-edge hyphens (only valid `0-9` digit classes remain), no `--` sequences anywhere.
 - LESSON for future bulk text edits: never blanket-replace characters that may appear inside regex literals; exclude/inspect regexes first.
 - VERSION 0.70->0.71 (App.jsx only).
+
+## v0.72 — force sedentary for ALL profiles (fix: legacy profiles still showed high target)
+- v0.70 only changed the DEFAULT activity for new profiles/onboarding; existing profiles in localStorage kept activity="בינונית" (×1.55) and still showed ~1,500. computeTargets now uses ACTIVITY_FACTORS["יושבני"] (1.2) directly, ignoring stored profile.activity, so legacy profiles recompute to the lower target without a reset. (If a user-facing activity selector is added later, revert to reading profile.activity.)
+- VERSION 0.71->0.72 (App.jsx only).

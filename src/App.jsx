@@ -48,7 +48,11 @@ function dailyDeficit(weeklyRateG) {
 }
 function computeTargets(profile) {
   const bmr = bmrMifflinWoman(profile.weightKg, profile.heightCm, profile.age);
-  const tdee = bmr * (ACTIVITY_FACTORS[profile.activity] ?? 1.2);
+  // Sedentary baseline for everyone: the app adds steps + logged activity to the
+  // daily budget separately, so a higher multiplier would double-count movement.
+  // (No activity selector is exposed; this intentionally ignores any stored
+  // profile.activity, so legacy profiles update without needing a reset.)
+  const tdee = bmr * ACTIVITY_FACTORS["יושבני"];
   const deficit = dailyDeficit(profile.weeklyRateG);
   const raw = Math.round(tdee - deficit);
   const targetKcal = Math.max(KCAL_FLOOR, raw);
@@ -236,7 +240,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.71";
+const VERSION = "0.72";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
