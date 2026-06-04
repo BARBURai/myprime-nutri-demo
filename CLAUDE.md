@@ -76,7 +76,7 @@ The AI features only work when deployed (or with the functions running), since t
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.91`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.92`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -378,3 +378,20 @@ Owner test: started 6 weeks ago, scrolled back to view "week 1" but the day stri
 - The top-left flame "X ימים ברצף" pill is REPLACED by a "ארון המדליות והגביעים" button (medal icon + current check-in streak, opens the collection). DayScreen prop `onStreakTap` -> `onOpenCollection`; the old StreakCheer "streak" sheet is now unused (left in place, harmless).
 - NEW `CollectionModal` (sheet "collection") = the cabinet: medal count (`trackerStats` = days with >=1 answer) + current streak, and a 4-col grid of the 10 weekly trophies (`trophy-1..9`, champion for week 10) - earned (full colour) when she filled >=1 day that program week, else greyed. Trophy "earned" = any filled day in that week (lenient v1; refine to "week completed" when the weekly summary lands).
 - VERSION 0.90->0.91 (App.jsx only; re-upload src/App.jsx). qa unaffected; check-logic 7/7.
+
+
+## v0.92 - Medal/streak/trophy actually register; header redesign; bug fixes
+Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE: week 1 has only AUTO tasks (steps + journal); the code only counted MANUAL answers in `checkins`, so `checkins[date]` stayed empty -> nothing registered.
+- **Completion marker:** finishing the check-in ("סיימתי להיום") now sets `checkins[date]._done = true` and ALWAYS opens `CheckinCheer` (medal + confetti + Anat note). Works on all-auto weeks. A medal = a completed day, intentional (she tapped done).
+- `checkinStreak` now counts consecutive `_done` days and SKIPS Saturday (optional rest day) so a skipped Saturday does not break the streak.
+- `trackerStats` medals = number of `_done` days (the cabinet count now rises).
+- **Trophy logic** = `weekTrophyEarned(checkins, startDate, w, today)`: earned once the week's Friday has passed AND every eligible non-Saturday day (program day >=3, date <= today) of that program week is `_done`. Matches owner: "Sunday to Friday is enough, Saturday not required". CollectionModal uses this (was the lenient any-filled-day rule).
+- Cabinet answer to owner: medals accumulate across the WHOLE program (one per completed day, no cap on total); trophies are one per completed week (1-9) + champion (week 10).
+- **Medal in the ring enlarged** again (ring 112->120, medal 78->92).
+- **Top header redesigned** (day screen): removed the global "MyPrime" top bar. Header row now = name/היי + date/week (right corner), "האוסף שלי" button in the middle (small medal icon removed - text only), and an APP-ICON on the left (~60px, ~2x the pill height). Icon loads `/app-icon.webp` with an onError fallback to the medal until the real asset arrives.
+- Saturday is fillable (owner is fine with it); only the trophy ignores Saturday.
+- VERSION 0.91->0.92 (App.jsx only; re-upload src/App.jsx). qa unaffected; check-logic 7/7.
+
+## OPEN (owner to provide / next)
+- **App icon + favicon asset:** owner to send the logo-in-medal as a square transparent PNG. Drop it at `public/app-icon.webp` (header auto-picks it up) and add `<link rel="icon" href="/app-icon.webp">` to index.html for the browser/Chrome favicon. Deferred until the asset arrives.
+- **Weekly summary (still next):** warm end-of-week recap with the week's trophy + champion for week 10.
