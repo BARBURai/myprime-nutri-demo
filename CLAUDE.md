@@ -75,7 +75,7 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.74`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.75`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -226,3 +226,9 @@ Symptom: AI-estimated values are unrealistically low (e.g. grilled entrecote kca
 ## v0.74 — brand border around the profile calorie-goal card
 - ProfileScreen calorie-goal card (line ~1018) gained `border: 1.5px solid C.brand` (matching the emphasized protein MacroCard's brand outline) so the whole "יעד קלורי יומי" card now has a surrounding pink frame like the protein card. Background stays C.brandBg.
 - VERSION 0.73->0.74 (App.jsx only).
+
+## v0.75 - RecommendModal: custom-sensitivity chips + add button + brand frame
+- The "מה כדאי לאכול?" confirm stage previously had only a PLAIN single free-text input bound directly to `profile.dislikes` (faint C.line border) - it did NOT render existing custom sensitivities as chips and had no add button. So a "בלי חריף" saved in the profile showed as raw text only, and there was no way to add+sync a new one from this screen.
+- Ported the exact v0.73 profile chip-add pattern into `RecommendModal`: new local `newSens` state + `customSens` (profile.dislikes comma-split) + `addSens`/`removeSens` (same helpers as ProfileScreen, writing back to `profile.dislikes` via `setProfile`). Replaced the plain input with: label "רגישויות נוספות" -> brand-bordered input (Enter to add) + a "+" (Plus) button -> existing customSens rendered as removable brand chips (X to remove). Because it persists to `profile.dislikes`, entries now (a) show as chips here AND in the profile, (b) flow into `avoidList`/the seed prompt, and (c) survive across sessions/future chats. `avoidList`/`hasAvoid`/`startChat` unchanged (still read the same comma-separated `profile.dislikes` string).
+- Added a `1.5px solid C.brand` rounded frame (radius 14, padding 14) around the ENTIRE confirm-stage content (the part Ron screenshotted). NOTE: v0.74 had put the brand border on the PROFILE calorie-goal card; that border is LEFT in place (matches the protein card, not removed). If Ron meant the frame should sit only around the sensitivities block, or around the whole sheet incl. the title bar, it is a one-line move.
+- VERSION 0.74->0.75 (App.jsx only). qa harness unaffected (no prompt change).

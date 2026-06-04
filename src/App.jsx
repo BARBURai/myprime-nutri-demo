@@ -240,7 +240,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.74";
+const VERSION = "0.75";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2030,6 +2030,10 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const dislikes = (profile.dislikes || "").trim();
   const toggle = (key, val) => setProfile({ ...profile, [key]: (profile[key] || []).includes(val) ? (profile[key] || []).filter((x) => x !== val) : [...(profile[key] || []), val] });
   const chip = (on) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
+  const [newSens, setNewSens] = useState("");
+  const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
+  const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
 
   const run = async (history) => {
     setLoading(true); setErr(false);
@@ -2111,7 +2115,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   return (
     <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
       {stage === "confirm" ? (
-        <div>
+        <div style={{ border: `1.5px solid ${C.brand}`, borderRadius: 14, padding: 14 }}>
           <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ - בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
           <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
@@ -2121,7 +2125,21 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
             {SENSITIVITY_OPTIONS.map((s) => (<span key={s} onClick={() => toggle("allergies", s)} style={chip(allergies.includes(s))}>{s}</span>))}
           </div>
-          <input value={profile.dislikes || ""} onChange={(e) => setProfile({ ...profile, dislikes: e.target.value })} placeholder="עוד משהו? (למשל: בלי חריף)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+            <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+            <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+          </div>
+          {customSens.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {customSens.map((s) => (
+                <span key={s} style={{ fontSize: 14, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {s}
+                  <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+                </span>
+              ))}
+            </div>
+          )}
           {!diet.length && !hasAvoid && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 0" }}>לא רשמת עדיין העדפות או רגישויות. אפשר לבחור עכשיו, או פשוט להמשיך.</div>}
           {hasAvoid && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
           <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
