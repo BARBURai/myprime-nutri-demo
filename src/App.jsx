@@ -243,7 +243,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.79";
+const VERSION = "0.80";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -432,11 +432,12 @@ function Onboarding({ onFinish, name }) {
   const [dislikes, setDislikes] = useState("");
   const [newSens, setNewSens] = useState("");
   const [confirmNoSens, setConfirmNoSens] = useState(false);
+  const [confirmSens, setConfirmSens] = useState(false);
   const customSens = dislikes.split(",").map((s) => s.trim()).filter(Boolean);
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setDislikes([...customSens, t].join(", ")); setNewSens(""); };
   const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
   const hasSens = allergies.length > 0 || customSens.length > 0;
-  const next = () => { if (step === 2 && !hasSens) { setConfirmNoSens(true); return; } setStep(step + 1); };
+  const next = () => { if (step === 2) { if (hasSens) setConfirmSens(true); else setConfirmNoSens(true); return; } setStep(step + 1); };
 
   const draft = { age, heightCm, weightKg, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, stepGoal: 2000, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes };
   const targets = computeTargets(draft);
@@ -605,6 +606,18 @@ function Onboarding({ onFinish, name }) {
             </div>
             <Btn onClick={() => { setConfirmNoSens(false); setStep(step + 1); }}>כן, אפשר להמשיך</Btn>
             <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmNoSens(false)} style={{ color: C.sub }}>חזרה לסמן רגישויות</Btn></div>
+          </div>
+        </div>
+      )}
+
+      {confirmSens && (
+        <div onClick={() => setConfirmSens(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
+            <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, marginBottom: 10 }}>רגע לפני שממשיכים</div>
+            <div style={{ fontSize: 15, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>רשמתי לעצמי להימנע מ: <b>{[...allergies, ...customSens].join(", ")}</b></div>
+            <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>תמיד כדאי לבדוק את רשימת הרכיבים בעצמך - זה כלי עזר, לא תחליף לבדיקה.</div>
+            <Btn onClick={() => { setConfirmSens(false); setStep(step + 1); }}>המשך</Btn>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmSens(false)} style={{ color: C.sub }}>שינוי</Btn></div>
           </div>
         </div>
       )}
