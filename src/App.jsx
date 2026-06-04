@@ -33,7 +33,9 @@ const KCAL_PER_KG = 7700;
 const KCAL_FLOOR = 1200;
 const PROTEIN_PER_KG = 1.6;        // טווח מומלץ 1.5-1.7
 const FAT_PER_KG = 0.9;
-const RATE_OPTIONS = [0, 250, 500, 750];
+const RATE_OPTIONS = [0, 250, 500];
+const UNDERWEIGHT_BMI = 18.5; // WHO: BMI<18.5 = תת-משקל
+function bmiOf(kg, heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? kg / (h * h) : 0; }
 const WATER_TARGET_GLASSES = 8;    // 8 כוסות = 2 ליטר
 const WATER_MIN_GLASSES = 6;       // 6 כוסות = 1.5 ליטר
 const WATER_TARGET_ML = 2000;      // יעד מים קבוע: 2 ליטר
@@ -244,7 +246,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.83";
+const VERSION = "0.84";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -435,11 +437,16 @@ function Onboarding({ onFinish, name }) {
   const [confirmNoSens, setConfirmNoSens] = useState(false);
   const [confirmSens, setConfirmSens] = useState(false);
   const [ack, setAck] = useState(false);
+  const [goalWarn, setGoalWarn] = useState(false);
   const customSens = dislikes.split(",").map((s) => s.trim()).filter(Boolean);
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setDislikes([...customSens, t].join(", ")); setNewSens(""); };
   const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
   const hasSens = allergies.length > 0 || customSens.length > 0;
-  const next = () => { if (step === 2) { if (hasSens) setConfirmSens(true); else setConfirmNoSens(true); return; } setStep(step + 1); };
+  const next = () => {
+    if (step === 1 && rate !== 0 && bmiOf(goalKg, heightCm) < UNDERWEIGHT_BMI) { setGoalWarn(true); return; }
+    if (step === 2) { if (hasSens) setConfirmSens(true); else setConfirmNoSens(true); return; }
+    setStep(step + 1);
+  };
 
   const draft = { age, heightCm, weightKg, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, stepGoal: 2000, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes };
   const targets = computeTargets(draft);
@@ -487,11 +494,15 @@ function Onboarding({ onFinish, name }) {
             <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 14 }}>בחרי קצב ירידה שבועי. קצב מתון נשמר לאורך זמן וטוב יותר לשמירה על מסת שריר.</p>
             {RATE_OPTIONS.map((g) => {
               const sel = rate === g;
+              const rec = g === 250;
               return (
-                <div key={g} onClick={() => setRate(g)} style={{ display: "flex", alignItems: "center", gap: 10, border: `1px solid ${sel ? C.brand : C.line}`, background: sel ? C.brandBg : "transparent", borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
+                <div key={g} onClick={() => setRate(g)} style={{ display: "flex", alignItems: "center", gap: 10, border: `${rec ? 2 : 1}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : "transparent", borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
                   <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${sel ? C.brand : C.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{sel && <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.brand }} />}</div>
-                  <span style={{ flex: 1, fontSize: 17, fontWeight: 500, color: C.ink }}>{rateLabel(g)}</span>
-                  {g === 250 && <span style={{ fontSize: 12, background: C.brand, color: "#fff", padding: "3px 9px", borderRadius: 7 }}>מומלץ</span>}
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{rateLabel(g)}</span>
+                    {rec && <div style={{ fontSize: 12.5, color: C.brandD, marginTop: 2, lineHeight: 1.4 }}>הקצב הבריא - נשמר לאורך זמן וטוב לשמירה על מסת השריר</div>}
+                  </div>
+                  {rec && <span style={{ fontSize: 12, fontWeight: 700, background: C.brand, color: "#fff", padding: "4px 11px", borderRadius: 8, flexShrink: 0 }}>מומלץ</span>}
                 </div>
               );
             })}
@@ -610,6 +621,10 @@ function Onboarding({ onFinish, name }) {
             <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmNoSens(false)} style={{ color: C.sub }}>חזרה לסמן רגישויות</Btn></div>
           </div>
         </div>
+      )}
+
+      {goalWarn && (
+        <LowValueWarning message={GOAL_LOW_MSG} onContinue={() => { setGoalWarn(false); setStep(step + 1); }} onCancel={() => setGoalWarn(false)} />
       )}
 
       {confirmSens && (
@@ -1039,7 +1054,13 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
-  const commit = () => { setProfile({ ...profile, [edit.key]: edit.value }); setEdit(null); };
+  const [warn, setWarn] = useState(null);
+  const doCommit = () => { setProfile({ ...profile, [edit.key]: edit.value }); setEdit(null); setWarn(null); };
+  const commit = () => {
+    if (edit.key === "goalWeightKg" && bmiOf(edit.value, profile.heightCm) < UNDERWEIGHT_BMI) { setWarn(GOAL_LOW_MSG); return; }
+    if (edit.key === "calorieOverride" && edit.value <= KCAL_FLOOR) { setWarn(KCAL_LOW_MSG); return; }
+    doCommit();
+  };
   const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
   const startLabel = (listSundays().find((s) => s.value === profile.startDate) || {}).label || profile.startDate;
   const calNow = profile.calorieOverride || targets.targetKcal;
@@ -1152,9 +1173,15 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
 
             {edit.type === "rate" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
-                {RATE_OPTIONS.map((r) => (
-                  <button key={r} onClick={() => setEdit({ ...edit, value: r })} style={{ border: `1.5px solid ${edit.value === r ? C.brand : C.line}`, background: edit.value === r ? C.brandBg : C.panel, color: edit.value === r ? C.brandD : C.ink, borderRadius: 12, padding: "11px", fontSize: 15, fontFamily: fontStack, fontWeight: edit.value === r ? 600 : 400, cursor: "pointer" }}>{rateLabel(r)}</button>
-                ))}
+                {RATE_OPTIONS.map((r) => {
+                  const sel = edit.value === r; const rec = r === 250;
+                  return (
+                    <button key={r} onClick={() => setEdit({ ...edit, value: r })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: `${rec ? 2 : 1.5}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : C.panel, color: sel || rec ? C.brandD : C.ink, borderRadius: 12, padding: "11px", fontSize: 15, fontFamily: fontStack, fontWeight: sel || rec ? 600 : 400, cursor: "pointer" }}>
+                      <span>{rateLabel(r)}</span>
+                      {rec && <span style={{ fontSize: 11, fontWeight: 700, background: C.brand, color: "#fff", padding: "3px 8px", borderRadius: 7 }}>מומלץ</span>}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -1170,6 +1197,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
           </div>
         </div>
       )}
+
+      {warn && <LowValueWarning message={warn} onContinue={doCommit} onCancel={() => setWarn(null)} />}
     </div>
   );
 }
@@ -2080,6 +2109,22 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
     </SheetShell>
   );
 }
+
+function LowValueWarning({ message, onContinue, onCancel }) {
+  return (
+    <div onClick={onCancel} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
+        <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}><Info size={20} color={C.amber} /> שווה לשים לב</div>
+        <div style={{ fontSize: 14, color: C.ink, lineHeight: 1.6, marginBottom: 18 }}>{message}</div>
+        <Btn onClick={onContinue}>הבנתי, להמשיך</Btn>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onCancel} style={{ color: C.sub }}>לשנות</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+const GOAL_LOW_MSG = "משקל היעד שבחרת נמוך מהטווח התקין (BMI מתחת ל-18.5), אזור של תת-משקל. מומלץ להתייעץ עם איש מקצוע לפני שממשיכים. אפשר להמשיך אם בכל זאת תרצי - ההחלטה והאחריות שלך.";
+const KCAL_LOW_MSG = "יעד קלורי כה נמוך (סביב המינימום של 1,200 קק״ל) אינו מתאים לכולן ועלול להזיק לאורך זמן. מומלץ להתייעץ עם איש מקצוע. אפשר להמשיך אם בכל זאת תרצי - ההחלטה והאחריות שלך.";
 
 function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg }) {
   const deniedText = reason === "device_limit"
