@@ -223,6 +223,8 @@ function streakDays(log) {
    ============================================================ */
 // Master switch - set to false to hide the whole tracker everywhere.
 const TRACKER_ENABLED = true;
+// Show the fat/carbs/fiber strip under the rings. Off for now (kept for future).
+const SHOW_MACRO_STRIP = false;
 const CHECKIN_UNLOCK = { week: 1, day: 3 };   // starts on day 3 of week 1
 const CHECKIN_REVEAL_HOUR = 19;               // today's report opens at 19:00
 const MEDAL_SRC = "/medals/medal.webp";
@@ -292,7 +294,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.87";
+const VERSION = "0.90";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -711,13 +713,15 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const streak = streakDays(log);
   const cupMlD = profile.cupMl || DEFAULT_CUP_ML;
   const checkinOpen = TRACKER_ENABLED && unlockedOn(profile.startDate, date, CHECKIN_UNLOCK);
-  const ciTasks = checkinOpen ? activeTasks(week) : [];
+  const ciWeek = Math.min(week, 10);
+  const ciTasks = checkinOpen ? activeTasks(ciWeek) : [];
   const ciAnswers = (checkins && checkins[date]) || {};
   const ciAuto = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMlD);
   const ciStreak = checkinStreak(checkins, today);
   const ciLocked = date === today && new Date().getHours() < CHECKIN_REVEAL_HOUR;
   useEffect(() => { if (todayRef.current) todayRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, []);
-  const days = Array.from({ length: 15 }, (_, i) => addDays(today, i - 10));
+  const backN = Math.min(74, Math.max(10, programDayNumber(profile.startDate, today) - 1));
+  const days = Array.from({ length: backN + 5 }, (_, i) => addDays(today, i - backN));
   return (
     <div style={{ padding: "8px 0 24px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 16px 0", gap: 10 }}>
@@ -757,7 +761,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           {waterOpen && <MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={130} />}
           {stepsOpen && <MetricRing value={steps} goal={stepGoal} color={C.amber} track={C.amberBg} label="צעדים" sub={`מתוך ${stepGoal.toLocaleString()}`} onPlus={onEditSteps} size={130} />}
         </div>
-        {macroOpen && (
+        {SHOW_MACRO_STRIP && macroOpen && (
           <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", margin: "0 0 16px" }}>
             {[{ label: "שומן", v: macros.f, t: targets.fat, color: C.macroF }, { label: "פחמימות", v: macros.c, t: targets.carbs, color: C.macroC }, { label: "סיבים", v: macros.fib, t: FIBER_TARGET, color: C.info }].map((m, i) => (
               <div key={m.label} style={{ flex: 1, textAlign: "center", padding: "5px 4px", borderInlineStart: i ? `1px solid ${C.line}` : "none" }}>
@@ -768,7 +772,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </div>
         )}
 
-        {checkinOpen && <CheckinCard date={date} today={today} week={week} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} streak={ciStreak} locked={ciLocked} onOpen={onOpenCheckin} />}
+        {checkinOpen && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} streak={ciStreak} locked={ciLocked} onOpen={onOpenCheckin} />}
 
         {dayAct.length > 0 && (
           <>
@@ -2432,20 +2436,33 @@ function CheckinCard({ date, today, week, tasks, answers, auto, streak, locked, 
   const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
   const total = tasks.length;
   const medals = Math.min(streak, 6);
+  const r = 54, circ = 2 * Math.PI * r;
+  const frac = total ? done / total : 0;
+  const allDone = total > 0 && done >= total;
   return (
-    <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "12px 14px", margin: "0 0 16px", background: C.panel }}>
+    <div onClick={locked ? undefined : onOpen} style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, margin: "0 0 16px", background: C.panel, cursor: locked ? "default" : "pointer" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, display: "flex", alignItems: "center", gap: 7 }}><Sparkles size={16} color={C.brand} /> המעקב היומי שלי</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, display: "flex", alignItems: "center", gap: 7 }}><Sparkles size={16} color={C.brand} /> המעקב היומי שלי <span style={{ fontSize: 12, fontWeight: 500, color: C.brandD, background: C.brandBg, padding: "2px 8px", borderRadius: 20 }}>שבוע {week}</span></span>
         {streak > 0 && <span style={{ display: "flex", alignItems: "center", gap: 2 }}>{Array.from({ length: medals }).map((_, i) => <img key={i} src={MEDAL_SRC} alt="" width={20} height={20} style={{ display: "block" }} />)}</span>}
       </div>
       {locked ? (
         <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, fontSize: 14, color: C.sub }}><Clock size={15} color={C.faint} /> הדוח של היום ייפתח ב-19:00. אפשר להשלים בכל שעה אחרי זה.</div>
       ) : (
-        <>
-          <div style={{ fontSize: 13.5, color: C.sub, marginTop: 6 }}>{done} מתוך {total} להיום{streak > 0 ? ` · ${streak} ימים ברצף` : ""}</div>
-          <div style={{ height: 6, background: C.line, borderRadius: 20, marginTop: 8, overflow: "hidden" }}><div style={{ width: total ? `${Math.round((done / total) * 100)}%` : "0%", height: "100%", background: C.brand, borderRadius: 20 }} /></div>
-          <button onClick={onOpen} style={{ marginTop: 12, width: "100%", border: "none", borderRadius: 10, padding: "11px", background: C.brand, color: "#fff", fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{done > 0 ? "להמשך המעקב של היום" : "פתחי את המעקב של היום"}</button>
-        </>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
+          <div style={{ position: "relative", width: 104, height: 104, flexShrink: 0 }}>
+            <svg width={104} height={104} viewBox="0 0 132 132">
+              <circle cx="66" cy="66" r={r} fill="none" stroke={C.brandBg} strokeWidth="10" />
+              <circle cx="66" cy="66" r={r} fill="none" stroke={C.brand} strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)} transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+            </svg>
+            <img src={MEDAL_SRC} alt="" width={54} height={54} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", filter: done === 0 ? "grayscale(1) opacity(0.55)" : "none" }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 14, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
+            <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{allDone ? "סיימת את כל המשימות להיום!" : "המשימות של היום"}{streak > 0 ? ` · ${streak} ימים ברצף` : ""}</div>
+            <div style={{ fontSize: 12.5, color: C.brandD, marginTop: 8, fontWeight: 500 }}>הקישי לפתיחה</div>
+            <div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>כל יום שתמלאי, עוד מדליה לאוסף</div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2744,7 +2761,7 @@ export default function App() {
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
             {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
-            {sheet === "checkin" && <CheckinModal tasks={activeTasks(programWeekFor(profile.startDate, selectedDate))} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} onDone={finishCheckin} />}
+            {sheet === "checkin" && <CheckinModal tasks={activeTasks(Math.min(programWeekFor(profile.startDate, selectedDate), 10))} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} onDone={finishCheckin} />}
             {sheet === "checkinCheer" && <CheckinCheer streak={checkinStreak(checkins, today)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />

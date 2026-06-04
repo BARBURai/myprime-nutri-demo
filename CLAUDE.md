@@ -76,7 +76,7 @@ The AI features only work when deployed (or with the functions running), since t
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.87`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.90`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -346,3 +346,25 @@ NEW module ported from the ManyChat 10-week WhatsApp tracker. Built as an opt-in
 - **Weekly summary + trophies (NEXT, v0.88):** a warm end-of-week summary card (per-task counts for the week, avg steps vs HER last week, NO percentages), using `trophyForWeek(week)` (champion for week 10), celebration in Anat's voice. Trophy assets already in `public/medals/`.
 - **Daily 19:00 notification:** native-app phase only (web/PWA push unreliable, esp iOS; needs notification permission). The in-app card already gates today's report to 19:00.
 - **QA automation (owner-flagged, important):** connect the two automatic checks (logic `qa/check-logic.mjs` + AI `qa/run-qa.mjs`) into one simple command, or have Claude run them before a release. Keep it solo-friendly (owner is the only tester).
+
+
+## v0.88 - Tracker clarity (week label, 10-week cap, reward hint)
+Small fixes after owner testing (he saw tasks that "had not started" and asked when rewards arrive).
+- `CheckinCard` header now shows a `שבוע {week}` pill so it is obvious which program week the app computed (driven by `profile.startDate`). Helps diagnose "too many tasks" - the active list is cumulative from week 1 up to that week.
+- Tracker week capped at 10: `ciWeek = Math.min(week, 10)` in DayScreen (card + tasks) and `Math.min(programWeekFor(...), 10)` in the modal, so it never shows beyond the defined schedule even if the start date is far in the past.
+- Added a one-line reward hint under the card button: "כל יום שתמלאי, נכנסת עוד מדליה לאוסף" (clarifies when medals are earned - one per filled day, streak builds 1..6).
+- No change to the task schedule itself (startWeeks). Open: owner to confirm the encoded startWeek per task matches the real program rollout (the schedule was read from the booklet PDF and may need per-task correction in `src/checkins.js`).
+- VERSION 0.87->0.88 (App.jsx only; re-upload src/App.jsx). qa unaffected.
+
+
+## v0.89 - Day strip reaches the program start (backfill any past day)
+Owner test: started 6 weeks ago, scrolled back to view "week 1" but the day strip only went 10 days back, so the leftmost reachable day was ~week 5 (showing ~13 cumulative tasks) - looked like "all of week 6's tasks on week 1". Root cause was navigation, not the task gating (each day already shows its own week via `programWeekFor(startDate, date)`).
+- Day strip range now spans from the program start to today (+4 future as before): `backN = Math.min(74, Math.max(10, programDayNumber(startDate, today) - 1))`, `days = length backN+5 from today-backN`. New users keep the old 10-back behavior; mid-program users can scroll to any past day to view/backfill (matches the WhatsApp "update past days"). Future days stay disabled/dimmed; strip still auto-scrolls to today.
+- Now navigating to a real week-1 day shows only week-1 tasks (2), confirming the per-day gating is correct.
+- VERSION 0.88->0.89 (App.jsx only; re-upload src/App.jsx). qa unaffected.
+
+
+## v0.90 - Tracker ring (medal in center) + macro strip hidden
+- `SHOW_MACRO_STRIP` flag (next to TRACKER_ENABLED) gates the day-screen fat/carbs/fiber strip. Set to false for now per owner (kept for future). With it hidden the daily tracker card sits higher. Protein/calorie/steps/water rings are unaffected.
+- `CheckinCard` redesigned: the flat progress bar is replaced by a circular ring (same style as the calorie/protein/steps rings: r=54, C.brand on C.brandBg track, fills by done/total) with the OWNER'S medal (`/medals/medal.webp`) centered inside it. Medal is greyscale until she has >=1 done. The whole card is tappable to open the check-in (the explicit button was removed). Keeps title + week pill + streak medals row + lock state + reward hint.
+- VERSION 0.89->0.90 (App.jsx only; re-upload src/App.jsx). qa unaffected.
