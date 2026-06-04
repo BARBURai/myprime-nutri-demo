@@ -240,7 +240,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.75";
+const VERSION = "0.76";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1015,8 +1015,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
         )}
       </div>
 
-      <div onClick={() => open({ key: "calorieOverride", label: "יעד קלורי יומי", type: "calorie", init: profile.calorieOverride || targets.targetKcal })} style={{ background: C.brandBg, border: `1.5px solid ${C.brand}`, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12, cursor: "pointer" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div onClick={() => open({ key: "calorieOverride", label: "יעד קלורי יומי", type: "calorie", init: profile.calorieOverride || targets.targetKcal })} style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12, cursor: "pointer" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `2px solid ${C.brand}`, borderRadius: 10, padding: "9px 11px", background: "#fff" }}>
           <span style={{ fontSize: 13, color: C.brandD }}>יעד קלורי יומי</span>
           <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{calNow.toLocaleString()} קק״ל {profile.calorieOverride ? "" : <span style={{ fontSize: 11, color: C.sub }}>(מומלץ)</span>} <Pencil size={13} color={C.faint} /></span>
         </div>
@@ -1937,7 +1937,7 @@ function WeightModal({ current, onClose, onAdd }) {
 }
 
 function StepsModal({ current, goal, weightKg, onClose, onAdd }) {
-  const [val, setVal] = useState(current != null ? String(current) : "");
+  const [val, setVal] = useState(current ? String(current) : "");
   const steps = Math.max(0, parseInt(val, 10) || 0);
   const kcal = stepsKcal(steps, weightKg);
   const frac = Math.max(0, Math.min(1, goal > 0 ? steps / goal : 0));
@@ -2115,7 +2115,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   return (
     <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
       {stage === "confirm" ? (
-        <div style={{ border: `1.5px solid ${C.brand}`, borderRadius: 14, padding: 14 }}>
+        <div>
           <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ - בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
           <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
