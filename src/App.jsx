@@ -222,9 +222,8 @@ const INITIAL_LOG = [
   seedEntry("e7", addDays(TODAY, -1), "צהריים", "chk", 140),
   seedEntry("e8", addDays(TODAY, -1), "ערב", "cot", 100),
 ];
-function makeWeightSeed(currentKg) {
-  const off = [2.2, 2.0, 1.6, 1.5, 1.1, 0.8, 0];
-  return off.map((o, i) => ({ date: addDays(TODAY, -((off.length - 1 - i) * 4)), kg: Math.round((currentKg + o) * 10) / 10 }));
+function initWeights(currentKg, startDate) {
+  return [{ date: startDate, kg: Math.round(currentKg * 10) / 10 }];
 }
 
 /* ============================================================
@@ -240,7 +239,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.76";
+const VERSION = "0.77";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -427,6 +426,13 @@ function Onboarding({ onFinish, name }) {
   const [diet, setDiet] = useState([]);
   const [allergies, setAllergies] = useState([]);
   const [dislikes, setDislikes] = useState("");
+  const [newSens, setNewSens] = useState("");
+  const [confirmNoSens, setConfirmNoSens] = useState(false);
+  const customSens = dislikes.split(",").map((s) => s.trim()).filter(Boolean);
+  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setDislikes([...customSens, t].join(", ")); setNewSens(""); };
+  const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
+  const hasSens = allergies.length > 0 || customSens.length > 0;
+  const next = () => { if (step === 2 && !hasSens) { setConfirmNoSens(true); return; } setStep(step + 1); };
 
   const draft = { age, heightCm, weightKg, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, stepGoal: 2000, diet, allergies, dislikes };
   const targets = computeTargets(draft);
@@ -504,18 +510,33 @@ function Onboarding({ onFinish, name }) {
 
             <div style={{ fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 4 }}>רגישויות ואלרגיות</div>
             <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>סמני וכתבי מה שחשוב להימנע ממנו, ואדאג שההמלצות יתחשבו בזה.</p>
-            <input value={dislikes} onChange={(e) => setDislikes(e.target.value)} placeholder="רגישות או העדפה נוספת (למשל: בלי חריף, בלי קצף חלב)" style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
               {SENSITIVITY_OPTIONS.map((s) => {
                 const on = allergies.includes(s);
                 return (<span key={s} onClick={() => setAllergies(on ? allergies.filter((x) => x !== s) : [...allergies, s])} style={{ fontSize: 14, padding: "7px 14px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
               })}
             </div>
 
-            <div style={{ fontSize: 12, color: C.sub, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, background: C.bg, borderRadius: 10, padding: 10 }}>
-              <Info size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 12 }}>
+              <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
               <span>אשתדל להתאים את ההמלצות לרגישויות שלך, אבל תמיד כדאי לבדוק רכיבים בעצמך. האפליקציה היא כלי עזר ולא תחליף לייעוץ רפואי. אם יש לך אלרגיה ממשית, אל תסתמכי רק עליה.</span>
             </div>
+
+            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+              <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+              <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+            </div>
+            {customSens.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {customSens.map((s) => (
+                  <span key={s} style={{ fontSize: 14, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {s}
+                    <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
           </>
         )}
 
@@ -566,8 +587,23 @@ function Onboarding({ onFinish, name }) {
 
       <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", gap: 10, alignItems: "center" }}>
         {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
-        {step < 3 ? (<Btn onClick={() => setStep(step + 1)}>המשך</Btn>) : (<Btn disabled={!agree} onClick={() => onFinish(draft)}>בואי נתחיל</Btn>)}
+        {step < 3 ? (<Btn onClick={next}>המשך</Btn>) : (<Btn disabled={!agree} onClick={() => onFinish(draft)}>בואי נתחיל</Btn>)}
       </div>
+
+      {confirmNoSens && (
+        <div onClick={() => setConfirmNoSens(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
+            <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לא סימנת שום רגישות או אלרגיה</div>
+            <div style={{ fontSize: 15, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>האם את בטוחה?</div>
+            <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 18 }}>
+              <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>אשתדל להתאים את ההמלצות לרגישויות שלך, אבל תמיד כדאי לבדוק רכיבים בעצמך. האפליקציה היא כלי עזר ולא תחליף לייעוץ רפואי. אם יש לך אלרגיה ממשית, אל תסתמכי רק עליה.</span>
+            </div>
+            <Btn onClick={() => { setConfirmNoSens(false); setStep(step + 1); }}>כן, אפשר להמשיך</Btn>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmNoSens(false)} style={{ color: C.sub }}>חזרה לסמן רגישויות</Btn></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2257,7 +2293,7 @@ export default function App() {
   const [tab, setTab] = useState("day");
   const [profile, setProfile] = useState(saved?.profile || DEFAULT_PROFILE);
   const [log, setLog] = useState(saved?.log || INITIAL_LOG);
-  const [weights, setWeights] = useState(saved?.weights || makeWeightSeed(72));
+  const [weights, setWeights] = useState(saved?.weights || initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate));
   const [activityLog, setActivityLog] = useState(saved?.activityLog || []);
   const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
   const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
@@ -2343,7 +2379,7 @@ export default function App() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites })); } catch (e) {}
   }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites]);
 
-  const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "" }); setWeights(makeWeightSeed(p.weightKg)); setOnboarded(true); };
+  const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "" }); setWeights(initWeights(p.weightKg, p.startDate)); setOnboarded(true); };
   const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
   const editEntry = (e) => setModal(e.unit === "serving" ? { kind: "recipe", recipe: null, editEntry: e } : { kind: "food", preMeal: null, editEntry: e });
   const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
@@ -2388,7 +2424,7 @@ export default function App() {
     try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
     setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg("");
     setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
-    setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(makeWeightSeed(DEFAULT_PROFILE.weightKg)); setSelectedDate(TODAY);
+    setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate)); setSelectedDate(TODAY);
     setProfile(DEFAULT_PROFILE);
   };
   const onPickEntry = (id) => {
