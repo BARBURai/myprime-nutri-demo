@@ -59,6 +59,10 @@ function computeTargets(profile) {
   const carbs = Math.round(carbKcal / 4);
   return { bmr: Math.round(bmr), tdee: Math.round(tdee), deficit, targetKcal, floored, protein, fat, carbs };
 }
+// Estimated calories burned from steps, scaled by body weight (~0.04 kcal/step at 70kg).
+function stepsKcal(steps, weightKg) {
+  return Math.round((steps || 0) * 0.00055 * (weightKg || 70));
+}
 function projection(currentKg, goalKg, weeklyRateG) {
   const rateKg = weeklyRateG / 1000;
   if (rateKg <= 0 || goalKg >= currentKg) {
@@ -182,6 +186,7 @@ function unlockedOn(startDate, onDate, u) {
 const MACRO_UNLOCK = { week: 3, day: 4 };
 const WATER_UNLOCK = { week: 3, day: 2 };
 const SWEETS_UNLOCK = { week: 3, day: 5 };
+const STEPS_UNLOCK = { week: 1, day: 2 };
 const FIBER_TARGET = 25;
 const DIET_OPTIONS = [
   { id: "הכל", emoji: "🍽️" },
@@ -230,7 +235,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.59";
+const VERSION = "0.62";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -321,6 +326,25 @@ function WaterCard({ glasses, setGlasses }) {
     </div>
   );
 }
+
+function StepsCard({ steps, goal, kcal, onEdit }) {
+  const frac = Math.max(0, Math.min(1, goal > 0 ? steps / goal : 0));
+  return (
+    <div onClick={onEdit} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 16, cursor: "pointer" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 15, color: C.ink, fontWeight: 500 }}><Footprints size={16} color={C.brand} /> צעדים</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{steps.toLocaleString()} / {goal.toLocaleString()}</span>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: C.brandBg, overflow: "hidden" }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: C.brand, borderRadius: 6, transition: "width .4s" }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+        <span style={{ fontSize: 12, color: C.faint }}>הקישי לעדכון · נוסף לתקציב: +{kcal} קק״ל</span>
+        <span style={{ fontSize: 12, color: C.brandD, display: "flex", alignItems: "center", gap: 4 }}><Pencil size={12} /> עדכון</span>
+      </div>
+    </div>
+  );
+}
 function Btn({ children, onClick, variant = "solid", disabled, style = {} }) {
   const base = { width: "100%", border: "none", borderRadius: 12, padding: "12px", fontSize: 17, fontWeight: 500, cursor: disabled ? "default" : "pointer", fontFamily: fontStack, transition: "transform .08s, opacity .15s" };
   const variants = { solid: { background: C.brand, color: "#fff" }, ghost: { background: "transparent", color: C.ink, border: `1px solid ${C.line}` } };
@@ -334,6 +358,7 @@ function Btn({ children, onClick, variant = "solid", disabled, style = {} }) {
 function SrcBadge({ source }) {
   if (source === "estimated") return <span style={{ fontSize: 12, background: C.amberBg, color: C.amber, padding: "2px 7px", borderRadius: 5 }}>מוערך</span>;
   if (source === "db") return <span style={{ fontSize: 12, background: "#E7F4EC", color: "#1E8449", padding: "2px 7px", borderRadius: 5 }}>מהמאגר</span>;
+  if (source === "usda") return <span style={{ fontSize: 12, background: "#EEF4FB", color: "#2D6CB5", padding: "2px 7px", borderRadius: 5 }}>USDA</span>;
   return null;
 }
 function Header({ title, onBack }) {
@@ -370,7 +395,7 @@ function Onboarding({ onFinish, name }) {
   const [allergies, setAllergies] = useState([]);
   const [dislikes, setDislikes] = useState("");
 
-  const draft = { age, heightCm, weightKg, activity: "בינונית", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, diet, allergies, dislikes };
+  const draft = { age, heightCm, weightKg, activity: "בינונית", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, stepGoal: 2000, diet, allergies, dislikes };
   const targets = computeTargets(draft);
   const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
@@ -521,12 +546,15 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, editEntry, deleteEntry, onRecommend, userName, onStreakTap }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, stepsByDate, stepGoal, onEditSteps, editEntry, deleteEntry, onRecommend, userName, onStreakTap }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
   const actKcal = dayAct.reduce((s, a) => s + a.kcal, 0);
-  const budget = dailyTarget + actKcal;
+  const stepsOpen = unlockedOn(profile.startDate, date, STEPS_UNLOCK);
+  const steps = (stepsByDate && stepsByDate[date]) || 0;
+  const stepKcal = stepsOpen ? stepsKcal(steps, profile.weightKg) : 0;
+  const budget = dailyTarget + actKcal + stepKcal;
   const macros = dayLog.reduce((s, e) => ({ p: s.p + (e.p || 0), f: s.f + (e.f || 0), c: s.c + (e.c || 0), fib: s.fib + (e.fib || 0) }), { p: 0, f: 0, c: 0, fib: 0 });
   const week = programWeekFor(profile.startDate, date);
   const macroOpen = unlockedOn(profile.startDate, date, MACRO_UNLOCK);
@@ -587,6 +615,10 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           <button onClick={onRecommend} style={{ border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 20, padding: "8px 18px", fontSize: 14, fontWeight: 500, fontFamily: fontStack, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}><Sparkles size={16} /> מה כדאי לאכול?</button>
         </div>
 
+        {stepsOpen && (
+          <StepsCard steps={steps} goal={stepGoal} kcal={stepKcal} onEdit={onEditSteps} />
+        )}
+
         {waterOpen && (
           <WaterCard glasses={glasses} setGlasses={(n) => setWaterForDate(date, n)} />
         )}
@@ -620,7 +652,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   );
 }
 
-function ReportScreen({ weights, addWeight, log, targets, programWeek }) {
+function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDate = {}, stepGoal = 2000, stepsOpen, today = TODAY, onEditSteps }) {
   const data = weights.map((w) => ({ ...w, label: `${new Date(w.date).getDate()}/${new Date(w.date).getMonth() + 1}` }));
   const change = Math.round((weights[weights.length - 1].kg - weights[0].kg) * 10) / 10;
   const current = weights[weights.length - 1].kg;
@@ -687,6 +719,38 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek }) {
         </div>
         <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={addWeight} style={{ padding: "9px" }}>+ הזיני משקל היום</Btn></div>
       </div>
+
+      {stepsOpen && (() => {
+        const sData = Array.from({ length: 14 }, (_, i) => {
+          const d = addDays(today, -13 + i);
+          return { label: `${new Date(d).getDate()}/${new Date(d).getMonth() + 1}`, steps: stepsByDate[d] || 0 };
+        });
+        const stepsToday = stepsByDate[today] || 0;
+        const maxStep = Math.max(stepGoal, ...sData.map((x) => x.steps));
+        return (
+          <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+              <div><div style={{ fontSize: 13, color: C.sub }}>צעדים היום</div><div style={{ fontSize: 28, fontWeight: 600, color: C.ink }}>{stepsToday.toLocaleString()}</div></div>
+              <span style={{ fontSize: 14, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 8 }}>יעד {stepGoal.toLocaleString()}</span>
+            </div>
+            <div style={{ fontSize: 12, color: C.faint, marginBottom: 2 }}>צעדים יומיים — 14 הימים האחרונים</div>
+            <div style={{ height: 150, margin: "6px -6px 0" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={sData} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} interval={1} />
+                  <YAxis domain={[0, maxStep]} hide />
+                  <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${Number(v).toLocaleString()} צעדים`, ""]} labelFormatter={(l) => l} />
+                  <ReferenceLine y={stepGoal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד`, position: "insideTopRight", fontSize: 11, fill: C.brandD }} />
+                  <Bar dataKey="steps" radius={[4, 4, 0, 0]}>
+                    {sData.map((d, i) => (<Cell key={i} fill={d.steps === 0 ? C.line : d.steps >= stepGoal ? C.brand : C.proteinTrack} />))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onEditSteps} style={{ padding: "9px" }}>+ עדכון צעדים להיום</Btn></div>
+          </div>
+        );
+      })()}
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>ימים ביעד</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div></div>
         {proteinFocus
@@ -891,80 +955,109 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
 }
 
 function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
-  const [draft, setDraft] = useState(profile);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(profile);
-  const save = () => setProfile(draft);
-  const set = (patch) => setDraft({ ...draft, ...patch });
-  const Row = ({ label, children }) => (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 15, padding: "11px 0", borderTop: `1px solid ${C.line}` }}>
+  const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
+  const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
+  const commit = () => { setProfile({ ...profile, [edit.key]: edit.value }); setEdit(null); };
+  const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
+  const startLabel = (listSundays().find((s) => s.value === profile.startDate) || {}).label || profile.startDate;
+  const calNow = profile.calorieOverride || targets.targetKcal;
+
+  const EditRow = ({ label, display, onClick }) => (
+    <div onClick={onClick} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 15, padding: "12px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
       <span style={{ color: C.sub }}>{label}</span>
-      <span style={{ fontWeight: 500, color: C.ink, display: "flex", alignItems: "center", gap: 8 }}>{children}</span>
+      <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{display} <Pencil size={13} color={C.faint} /></span>
     </div>
   );
-  const Mini = ({ value, set: setV, step = 1, min = 0, suffix }) => (
-    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <button onClick={() => setV(Math.max(min, Math.round((value - step) * 10) / 10))} style={{ width: 26, height: 26, border: `1px solid ${C.line}`, borderRadius: 7, background: C.panel, cursor: "pointer", color: C.ink }}><Minus size={13} /></button>
-      <span style={{ minWidth: 56, textAlign: "center" }}>{value}{suffix ? ` ${suffix}` : ""}</span>
-      <button onClick={() => setV(Math.round((value + step) * 10) / 10)} style={{ width: 26, height: 26, border: `1px solid ${C.line}`, borderRadius: 7, background: C.panel, cursor: "pointer", color: C.ink }}><Plus size={13} /></button>
-    </span>
-  );
-  const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
+
   return (
     <div style={{ padding: "8px 16px 16px" }}>
       <Header title="פרופיל" />
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>{((profile.name || userName || "").trim().charAt(0)) || "♥"}</div>
-        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(draft.weeklyRateG)}</div></div>
+        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
       </div>
-      <Row label="גיל"><Mini value={draft.age} set={(v) => set({ age: Math.max(18, v) })} /></Row>
-      <Row label="גובה"><Mini value={draft.heightCm} set={(v) => set({ heightCm: v })} suffix="ס״מ" /></Row>
-      <Row label="משקל"><Mini value={draft.weightKg} set={(v) => set({ weightKg: v })} step={0.5} suffix="ק״ג" /></Row>
-      <Row label="משקל יעד"><Mini value={draft.goalWeightKg} set={(v) => set({ goalWeightKg: v })} step={0.5} suffix="ק״ג" /></Row>
-      <Row label="קצב ירידה">
-        <button onClick={() => set({ weeklyRateG: cycle(RATE_OPTIONS, draft.weeklyRateG) })} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.ink, fontFamily: fontStack, fontSize: 15, fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>{rateShort(draft.weeklyRateG)} <Pencil size={13} color={C.faint} /></button>
-      </Row>
-      <Row label="תחילת התוכנית">
-        <select value={draft.startDate} onChange={(e) => set({ startDate: e.target.value })} style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: "6px 8px", fontSize: 14, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
-          {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
-        </select>
-      </Row>
-      <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(draft.startDate, TODAY)} בתוכנית.</div>
 
-      {dirty && <div style={{ marginTop: 12 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור שינויים</Btn></div>}
+      <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
+      <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
+      <EditRow label="משקל" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל", type: "num", step: 0.5, min: 30, suffix: "ק״ג", init: profile.weightKg })} />
+      <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: 30, suffix: "ק״ג", init: profile.goalWeightKg })} />
+      <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
+      <EditRow label="תחילת התוכנית" display={startLabel} onClick={() => open({ key: "startDate", label: "תחילת התוכנית", type: "date", init: profile.startDate })} />
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
 
-      <div style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+      <div onClick={() => open({ key: "calorieOverride", label: "יעד קלורי יומי", type: "calorie", init: profile.calorieOverride || targets.targetKcal })} style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12, cursor: "pointer" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: 13, color: C.brandD }}>יעד קלורי יומי</span>
-          {draft.calorieOverride
-            ? <span onClick={() => set({ calorieOverride: null })} style={{ fontSize: 12, color: C.brandD, textDecoration: "underline", cursor: "pointer" }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</span>
-            : <span style={{ fontSize: 12, color: C.sub }}>מומלץ</span>}
+          <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{calNow.toLocaleString()} קק״ל {profile.calorieOverride ? "" : <span style={{ fontSize: 11, color: C.sub }}>(מומלץ)</span>} <Pencil size={13} color={C.faint} /></span>
         </div>
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <Mini value={draft.calorieOverride || targets.targetKcal} set={(v) => set({ calorieOverride: Math.max(1000, v) })} step={10} suffix="קק״ל" />
-        </div>
-        {programWeekFor(draft.startDate, TODAY) >= MACRO_UNLOCK.week && <div style={{ marginTop: 12 }}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
+        {programWeekFor(profile.startDate, TODAY) >= MACRO_UNLOCK.week && <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
       </div>
+
+      <EditRow label={<span style={{ display: "flex", alignItems: "center", gap: 6 }}><Footprints size={15} color={C.brand} /> יעד צעדים יומי</span>} display={`${(profile.stepGoal || 2000).toLocaleString()} צעדים`} onClick={() => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: profile.stepGoal || 2000 })} />
 
       <div style={{ fontSize: 13, color: C.sub, marginTop: 18, marginBottom: 8 }}>סגנון תזונה (משמש להמלצות)</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
         {DIET_OPTIONS.map((d) => {
-          const on = (draft.diet || []).includes(d.id);
-          return (<span key={d.id} onClick={() => set({ diet: on ? (draft.diet || []).filter((x) => x !== d.id) : [...(draft.diet || []), d.id] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
+          const on = (profile.diet || []).includes(d.id);
+          return (<span key={d.id} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d.id) : [...(profile.diet || []), d.id] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
         })}
       </div>
       <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>רגישויות ואלרגיות (להימנע)</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
         {SENSITIVITY_OPTIONS.map((s) => {
-          const on = (draft.allergies || []).includes(s);
-          return (<span key={s} onClick={() => set({ allergies: on ? (draft.allergies || []).filter((x) => x !== s) : [...(draft.allergies || []), s] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+          const on = (profile.allergies || []).includes(s);
+          return (<span key={s} onClick={() => setProfile({ ...profile, allergies: on ? (profile.allergies || []).filter((x) => x !== s) : [...(profile.allergies || []), s] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
         })}
       </div>
-      <input value={draft.dislikes || ""} onChange={(e) => set({ dislikes: e.target.value })} placeholder="עוד משהו? (למשל: בלי חריף, בלי קצף חלב)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+      <input value={profile.dislikes || ""} onChange={(e) => setProfile({ ...profile, dislikes: e.target.value })} placeholder="עוד משהו? (למשל: בלי חריף, בלי קצף חלב)" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
       <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.6, marginTop: 8 }}>הרגישויות שלך מוזנות ל-AI כדי להימנע מהמלצות בעייתיות. עדיין — בדקי רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
 
-      {dirty && <div style={{ marginTop: 16 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור שינויים</Btn></div>}
-      <div style={{ marginTop: dirty ? 10 : 16 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
+      <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
       <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
+
+      {edit && (
+        <div onClick={() => setEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 18px 20px", width: "100%", maxWidth: 340, fontFamily: fontStack }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+              <span style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{edit.label}</span>
+              <button onClick={() => setEdit(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+            </div>
+
+            {(edit.type === "num") && (
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+                <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(edit.min || 0, v) })} step={edit.step} min={edit.min} suffix={edit.suffix} />
+              </div>
+            )}
+
+            {edit.type === "calorie" && (
+              <>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+                  <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(1000, v) })} step={10} min={1000} suffix="קק״ל" />
+                </div>
+                <div onClick={() => { setProfile({ ...profile, calorieOverride: null }); setEdit(null); }} style={{ textAlign: "center", fontSize: 13, color: C.brandD, textDecoration: "underline", cursor: "pointer", marginBottom: 18 }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</div>
+              </>
+            )}
+
+            {edit.type === "rate" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+                {RATE_OPTIONS.map((r) => (
+                  <button key={r} onClick={() => setEdit({ ...edit, value: r })} style={{ border: `1.5px solid ${edit.value === r ? C.brand : C.line}`, background: edit.value === r ? C.brandBg : C.panel, color: edit.value === r ? C.brandD : C.ink, borderRadius: 12, padding: "11px", fontSize: 15, fontFamily: fontStack, fontWeight: edit.value === r ? 600 : 400, cursor: "pointer" }}>{rateLabel(r)}</button>
+                ))}
+              </div>
+            )}
+
+            {edit.type === "date" && (
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+                <select value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", width: "100%" }}>
+                  {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
+                </select>
+              </div>
+            )}
+
+            <Btn onClick={commit}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -995,7 +1088,7 @@ function extractAiJson(text) {
 }
 
 async function aiNutritionChat(messages) {
-  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') — אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה — אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) — שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב — אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת — החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') — אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה — אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) — שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב — אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת — החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system, messages }),
@@ -1011,7 +1104,7 @@ async function aiNutritionChat(messages) {
     raw: text,
     reply: parsed.reply || "",
     done: !!parsed.done,
-    items: (parsed.items || []).map((it) => ({ name: it.name, grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) })),
+    items: (parsed.items || []).map((it) => ({ name: it.name, en: it.en || "", grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) })),
   };
 }
 
@@ -1128,6 +1221,39 @@ async function searchOpenFoodFacts(q) {
   return out;
 }
 
+async function searchUSDA(q) {
+  try {
+    const res = await fetch(`/api/usda?q=${encodeURIComponent(q)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.items || []).map((it, i) => ({
+      id: "usda_" + i,
+      name: it.name + (it.brand ? ` · ${it.brand}` : ""),
+      per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
+      measures: [{ label: "100 ג׳", g: 100 }],
+      def: 0,
+    }));
+  } catch (e) { return []; }
+}
+
+// Short Hebrew→English food query for USDA lookups (used only when the
+// Hebrew DBs return nothing, and for the AI logging path via item.en).
+async function translateFoodToEnglish(q) {
+  try {
+    const res = await fetch(AI_ENDPOINT, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514", max_tokens: 40,
+        system: "Translate the Hebrew food name to a short English food-search query (2-4 words, common USDA-style naming, include cooking method if implied, e.g. 'grilled ribeye steak', 'white rice cooked'). Reply with ONLY the English term — no quotes, no punctuation, no extra words.",
+        messages: [{ role: "user", content: String(q || "") }],
+      }),
+    });
+    const data = await res.json();
+    const t = (data.content || []).map((i) => i.text || "").join("").trim();
+    return t.replace(/^["']|["']$/g, "").slice(0, 60);
+  } catch (e) { return ""; }
+}
+
 /* Reconcile AI-identified items against the product databases (by name).
    Name search is fuzzier than a barcode (no unique id), so we only accept a
    STRONG match; otherwise the AI estimate is kept. */
@@ -1141,20 +1267,22 @@ function strongMatch(aiName, dbName) {
   let hit = 0; for (const w of bt) if (at.has(w)) hit++;
   return at.size > 0 && hit >= Math.min(2, at.size);
 }
-async function lookupProduct(name) {
-  let results = [];
-  try { results = results.concat(await searchIsraeliDB(name)); } catch (e) {}
-  try { results = results.concat(await searchOpenFoodFacts(name)); } catch (e) {}
-  for (const r of results) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return r;
+async function lookupProduct(name, en) {
+  // 1. Israeli national DB (Hebrew name) — best for Israeli foods.
+  try { const il = await searchIsraeliDB(name); for (const r of il) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return { ...r, source: "db" }; } catch (e) {}
+  // 2. USDA FoodData Central (English query) — best for generic cooked foods.
+  if (en) { try { const us = await searchUSDA(en); for (const r of us) if (r.per100 && r.per100.kcal && strongMatch(en, r.name)) return { ...r, source: "usda" }; } catch (e) {} }
+  // 3. Open Food Facts (Hebrew/brand) — packaged products.
+  try { const off = await searchOpenFoodFacts(name); for (const r of off) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return { ...r, source: "db" }; } catch (e) {}
   return null;
 }
 async function reconcileWithDb(items) {
   return Promise.all((items || []).map(async (it) => {
     try {
-      const m = await lookupProduct(it.name);
+      const m = await lookupProduct(it.name, it.en);
       if (m) {
         const scale = (it.grams || 100) / 100;
-        return { ...it, source: "db", matched: m.name,
+        return { ...it, source: m.source || "db", matched: m.name,
           kcal: Math.round(m.per100.kcal * scale), p: Math.round((m.per100.p || 0) * scale),
           f: Math.round((m.per100.f || 0) * scale), c: Math.round((m.per100.c || 0) * scale) };
       }
@@ -1260,6 +1388,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
         let items = await searchIsraeliDB(q);
         let src = "il";
         if (!items.length) { items = await searchOpenFoodFacts(q); src = "off"; }
+        if (!items.length) { const en = await translateFoodToEnglish(q); if (en) { items = await searchUSDA(en); src = "usda"; } }
         setDbResults(items); setDbSource(src);
       } catch (e) { setDbResults([]); }
       finally { setSearching(false); }
@@ -1468,7 +1597,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
                 </div>
               );
             })}
-            {query && <div style={{ fontSize: 13, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
+            {query && <div style={{ fontSize: 13, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
             {query && dbResults.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
@@ -1643,10 +1772,11 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
 /* ============================================================
    ROOT APP
    ============================================================ */
-function EntryMenu({ onClose, onPick, waterOpen }) {
+function EntryMenu({ onClose, onPick, waterOpen, stepsOpen }) {
   const items = [
     { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת" },
     { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי" },
+    ...(stepsOpen ? [{ id: "steps", ic: Footprints, t: "עדכון צעדים", s: "צעדי היום מול היעד" }] : []),
     ...(waterOpen ? [{ id: "water", ic: Droplet, t: "הוספת מים", s: "כוס מים (250 מ\"ל)" }] : []),
   ];
   return (
@@ -1738,6 +1868,25 @@ function WeightModal({ current, onClose, onAdd }) {
         <Stepper value={kg} set={(v) => setKg(Math.max(30, v))} step={0.1} min={30} suffix="ק״ג" />
       </div>
       <Btn onClick={() => onAdd(Math.round(kg * 10) / 10)}>שמור משקל</Btn>
+    </SheetShell>
+  );
+}
+
+function StepsModal({ current, goal, weightKg, onClose, onAdd }) {
+  const [steps, setSteps] = useState(current || 0);
+  const kcal = stepsKcal(steps, weightKg);
+  const frac = Math.max(0, Math.min(1, goal > 0 ? steps / goal : 0));
+  return (
+    <SheetShell title="עדכון צעדים" onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", margin: "6px 0 14px" }}>
+        <Stepper value={steps} set={(v) => setSteps(Math.max(0, v))} step={250} min={0} suffix="צעדים" />
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: C.brandBg, overflow: "hidden", marginBottom: 8 }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: C.brand, borderRadius: 6 }} />
+      </div>
+      <div style={{ textAlign: "center", fontSize: 13, color: C.sub, marginBottom: 16 }}>{steps.toLocaleString()} מתוך יעד {goal.toLocaleString()} · מוסיף ~{kcal} קק״ל לתקציב</div>
+      <Btn onClick={() => onAdd(steps)}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+      <button disabled style={{ width: "100%", marginTop: 10, border: `1px dashed ${C.line}`, background: "transparent", color: C.faint, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 14, cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Footprints size={15} /> התחברות לאפליקציית הבריאות · זמין באפליקציה</button>
     </SheetShell>
   );
 }
@@ -2017,7 +2166,7 @@ function StreakCheer({ streak, name, onClose }) {
 }
 
 export default function App() {
-  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, diet: [], allergies: [], dislikes: "", name: "" };
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "בינונית", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: 2000, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
@@ -2026,6 +2175,7 @@ export default function App() {
   const [weights, setWeights] = useState(saved?.weights || makeWeightSeed(72));
   const [activityLog, setActivityLog] = useState(saved?.activityLog || []);
   const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
+  const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
   const [favorites, setFavorites] = useState(saved?.favorites || []);
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [today, setToday] = useState(TODAY);
@@ -2097,14 +2247,16 @@ export default function App() {
   const dailyTarget = profile.calorieOverride || targets.targetKcal;
   const programWeek = programWeekFor(profile.startDate, TODAY);
   const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
+  const stepsOpenToday = unlockedOn(profile.startDate, selectedDate, STEPS_UNLOCK);
+  const stepGoal = profile.stepGoal || 2000;
   const recDayLog = log.filter((e) => e.date === selectedDate);
   const recRemainingKcal = (dailyTarget + activityLog.filter((a) => a.date === selectedDate).reduce((s, a) => s + a.kcal, 0)) - recDayLog.reduce((s, e) => s + e.kcal, 0);
   const recRemainingProtein = Math.max(0, targets.protein - recDayLog.reduce((s, e) => s + (e.p || 0), 0));
   const recMealsHad = recDayLog.map((e) => e.name).join(", ");
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, favorites })); } catch (e) {}
-  }, [onboarded, profile, log, weights, activityLog, waterByDate, favorites]);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites })); } catch (e) {}
+  }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites]);
 
   const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "" }); setWeights(makeWeightSeed(p.weightKg)); setOnboarded(true); };
   const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
@@ -2140,6 +2292,7 @@ export default function App() {
   };
   const addActivity = (a) => { setActivityLog((l) => [...l, { id: "a" + Date.now(), date: selectedDate, name: a.name, kcal: Math.round(a.kcal) }]); setSheet(null); };
   const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
+  const setStepsForDate = (date, n) => setStepsByDate((s) => ({ ...s, [date]: Math.max(0, Math.round(n || 0)) }));
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
   const addWeightValue = (kg) => { setWeights((w) => [...w.filter((x) => x.date !== selectedDate), { date: selectedDate, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
   const reportAddWeight = () => { const last = weights[weights.length - 1].kg; addWeightValue(Math.round((last - 0.2) * 10) / 10); };
@@ -2149,13 +2302,14 @@ export default function App() {
     try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
     setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg("");
     setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
-    setLog([]); setWaterByDate({}); setActivityLog([]); setWeights(makeWeightSeed(DEFAULT_PROFILE.weightKg)); setSelectedDate(TODAY);
+    setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(makeWeightSeed(DEFAULT_PROFILE.weightKg)); setSelectedDate(TODAY);
     setProfile(DEFAULT_PROFILE);
   };
   const onPickEntry = (id) => {
     if (id === "food") openAdd("food", null);
     else if (id === "ai") openAdd("ai", null);
     else if (id === "activity") setSheet("activity");
+    else if (id === "steps") setSheet("steps");
     else if (id === "water") addWaterGlass();
     else if (id === "weight") setSheet("weight");
     else if (id === "calorie") setSheet("calorie");
@@ -2200,8 +2354,8 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
-              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} stepsByDate={stepsByDate} stepGoal={stepGoal} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
+              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} stepGoal={stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
             </div>
@@ -2217,7 +2371,8 @@ export default function App() {
               })}
             </div>
 
-            {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} waterOpen={waterOpenToday} />}
+            {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} waterOpen={waterOpenToday} stepsOpen={stepsOpenToday} />}
+            {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={stepGoal} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); }} />}
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal current={weights[weights.length - 1].kg} onClose={() => setSheet(null)} onAdd={addWeightValue} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
