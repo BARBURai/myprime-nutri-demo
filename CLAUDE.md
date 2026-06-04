@@ -76,7 +76,7 @@ The AI features only work when deployed (or with the functions running), since t
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.92`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.94`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -395,3 +395,22 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 ## OPEN (owner to provide / next)
 - **App icon + favicon asset:** owner to send the logo-in-medal as a square transparent PNG. Drop it at `public/app-icon.webp` (header auto-picks it up) and add `<link rel="icon" href="/app-icon.webp">` to index.html for the browser/Chrome favicon. Deferred until the asset arrives.
 - **Weekly summary (still next):** warm end-of-week recap with the week's trophy + champion for week 10.
+
+
+## v0.93 - App icon uses the existing medal (left corner)
+- Header app icon now uses the existing medal (`MEDAL_SRC`) directly instead of waiting for a separate `/app-icon.webp` (owner: just use the medal we have). Removed the onError fallback.
+- Nudged it into the left corner: header padding "2px 16px 0" -> "2px 16px 0 6px".
+- Favicon still open (would point at the medal too if/when wired in index.html).
+- Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
+- VERSION 0.92->0.93 (App.jsx only).
+
+
+## v0.94 - Streak removed (owner decision); medals-per-day + trophy-per-week only
+Owner: the streak ("ימים ברצף") was confusing with backfill and adds no real prize - drop it.
+- Removed `checkinStreak` entirely (function + all usages: DayScreen `ciStreak`, CheckinCard `streak` prop + header medals row + subtitle, CheckinCheer `streak`, CollectionModal streak line, App CheckinCheer prop).
+- Reward model is now simple: a MEDAL for every completed day (cabinet count, whole program) + a TROPHY per completed week (Sunday-Friday, Saturday optional) + champion (week 10). No streak anywhere in the tracker.
+- `CheckinCheer` now shows ONE medal (92px) + "מדליה נכנסה לאוסף!" + Anat note (no streak count / no 1-6 medal fan).
+- CheckinCard: removed the top-right streak medals and the "X ימים ברצף" subtitle.
+- CollectionModal subtitle: "כל יום שהשלמת שווה מדליה".
+- NOTE: the old FOOD-LOG streak (`streakDays`, `StreakCheer`, sheet "streak") is now unreachable dead code (the flame pill that opened it was replaced by the cabinet in v0.91). Left in place (harmless, predates the tracker); its "ימים ברצף" copy is never shown. Can be deleted later if desired.
+- VERSION 0.93->0.94 (App.jsx only). qa unaffected; check-logic 7/7.
