@@ -76,7 +76,7 @@ The AI features only work when deployed (or with the functions running), since t
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.90`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.91`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -368,3 +368,13 @@ Owner test: started 6 weeks ago, scrolled back to view "week 1" but the day stri
 - `SHOW_MACRO_STRIP` flag (next to TRACKER_ENABLED) gates the day-screen fat/carbs/fiber strip. Set to false for now per owner (kept for future). With it hidden the daily tracker card sits higher. Protein/calorie/steps/water rings are unaffected.
 - `CheckinCard` redesigned: the flat progress bar is replaced by a circular ring (same style as the calorie/protein/steps rings: r=54, C.brand on C.brandBg track, fills by done/total) with the OWNER'S medal (`/medals/medal.webp`) centered inside it. Medal is greyscale until she has >=1 done. The whole card is tappable to open the check-in (the explicit button was removed). Keeps title + week pill + streak medals row + lock state + reward hint.
 - VERSION 0.89->0.90 (App.jsx only; re-upload src/App.jsx). qa unaffected.
+
+
+## v0.91 - Tracker ring polish + collection cabinet replaces the streak flame
+- Tracker ring fill is now a distinct pink (`#E8589B` on `#FBE0EE` track) so it differs from the calorie rose / protein purple / steps amber / water blue rings.
+- Medal inside the ring enlarged (ring 104->112, medal 54->78).
+- Version number moved OFF the top header (top now just "MyPrime") to the BOTTOM of the day screen ("MyPrime · v{VERSION}", small, faint) so the top layout reads cleaner.
+- Celebration trigger made predictable: `finishCheckin` now opens `CheckinCheer` (medal + animated confetti + Anat note) whenever "סיימתי להיום" is tapped and the day has >=1 answer (previously only for today). So the confetti appears right after finishing the day's check-in.
+- The top-left flame "X ימים ברצף" pill is REPLACED by a "ארון המדליות והגביעים" button (medal icon + current check-in streak, opens the collection). DayScreen prop `onStreakTap` -> `onOpenCollection`; the old StreakCheer "streak" sheet is now unused (left in place, harmless).
+- NEW `CollectionModal` (sheet "collection") = the cabinet: medal count (`trackerStats` = days with >=1 answer) + current streak, and a 4-col grid of the 10 weekly trophies (`trophy-1..9`, champion for week 10) - earned (full colour) when she filled >=1 day that program week, else greyed. Trophy "earned" = any filled day in that week (lenient v1; refine to "week completed" when the weekly summary lands).
+- VERSION 0.90->0.91 (App.jsx only; re-upload src/App.jsx). qa unaffected; check-logic 7/7.

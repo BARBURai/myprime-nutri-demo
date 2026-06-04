@@ -294,7 +294,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.90";
+const VERSION = "0.91";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -692,7 +692,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, stepGoal, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, userName, onStreakTap, checkins, onOpenCheckin }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, stepGoal, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, userName, onOpenCollection, checkins, onOpenCheckin }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -731,11 +731,9 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
             {date !== today && relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD }}> · שבוע {week}</span> : null}
           </div>
         </div>
-        {streak > 0
-          ? <button onClick={onStreakTap} className="streak-pill" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, ${C.amber}, ${C.brand})`, color: "#fff", border: "none", borderRadius: 18, padding: "7px 14px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(199,122,60,0.35)", fontFamily: fontStack }}>
-              <span style={{ display: "inline-block", animation: "flameFlicker 1s ease-in-out infinite" }}>🔥</span> {streak} ימים ברצף
-            </button>
-          : <span style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 5, color: C.faint, fontSize: 13 }}>🔥 מלאי משהו להתחיל רצף</span>}
+        <button onClick={onOpenCollection} className="streak-pill" style={{ flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6, background: `linear-gradient(135deg, #E8589B, ${C.brand})`, color: "#fff", border: "none", borderRadius: 18, padding: "6px 12px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(212,93,121,0.32)", fontFamily: fontStack }}>
+          <img src={MEDAL_SRC} alt="" width={18} height={18} style={{ display: "block" }} /> {ciStreak > 0 ? `${ciStreak} ימים ברצף` : "האוסף שלי"}
+        </button>
       </div>
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "12px 16px 4px" }}>
@@ -798,6 +796,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
             <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
           </div>
         ))}
+        <div style={{ textAlign: "center", fontSize: 11.5, color: C.faint, marginTop: 22 }}>MyPrime · v{VERSION}</div>
       </div>
     </div>
   );
@@ -2449,12 +2448,12 @@ function CheckinCard({ date, today, week, tasks, answers, auto, streak, locked, 
         <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, fontSize: 14, color: C.sub }}><Clock size={15} color={C.faint} /> הדוח של היום ייפתח ב-19:00. אפשר להשלים בכל שעה אחרי זה.</div>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
-          <div style={{ position: "relative", width: 104, height: 104, flexShrink: 0 }}>
-            <svg width={104} height={104} viewBox="0 0 132 132">
-              <circle cx="66" cy="66" r={r} fill="none" stroke={C.brandBg} strokeWidth="10" />
-              <circle cx="66" cy="66" r={r} fill="none" stroke={C.brand} strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)} transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+          <div style={{ position: "relative", width: 112, height: 112, flexShrink: 0 }}>
+            <svg width={112} height={112} viewBox="0 0 132 132">
+              <circle cx="66" cy="66" r={r} fill="none" stroke="#FBE0EE" strokeWidth="10" />
+              <circle cx="66" cy="66" r={r} fill="none" stroke="#E8589B" strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)} transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
             </svg>
-            <img src={MEDAL_SRC} alt="" width={54} height={54} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", filter: done === 0 ? "grayscale(1) opacity(0.55)" : "none" }} />
+            <img src={MEDAL_SRC} alt="" width={78} height={78} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", filter: done === 0 ? "grayscale(1) opacity(0.55)" : "none" }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 14, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
@@ -2519,6 +2518,47 @@ function CheckinCheer({ streak, name, onClose }) {
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות!</Btn></div>
       </div>
     </div>
+  );
+}
+
+function trackerStats(checkins, startDate) {
+  let days = 0; const weeks = new Set();
+  for (const d in checkins) {
+    if (checkins[d] && Object.keys(checkins[d]).length > 0) {
+      days++;
+      const w = Math.min(programWeekFor(startDate, d), 10);
+      if (w >= 1) weeks.add(w);
+    }
+  }
+  return { days, weeks };
+}
+
+function CollectionModal({ checkins, startDate, today, onClose }) {
+  const { days, weeks } = trackerStats(checkins, startDate);
+  const streak = checkinStreak(checkins, today);
+  const curWeek = Math.min(programWeekFor(startDate, today), 10);
+  return (
+    <SheetShell title="ארון המדליות והגביעים" onClose={onClose}>
+      <div style={{ textAlign: "center", padding: "2px 0 8px" }}>
+        <img src={MEDAL_SRC} alt="" width={88} height={88} style={{ filter: days === 0 ? "grayscale(1) opacity(0.5)" : "none" }} />
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginTop: 6 }}>{days} {days === 1 ? "מדליה" : "מדליות"}</div>
+        <div style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>{streak > 0 ? `${streak} ימים ברצף עכשיו` : "מלאי את המעקב כדי לאסוף מדליות"}</div>
+      </div>
+      <div style={{ fontSize: 13, color: C.faint, margin: "8px 0 8px" }}>הגביעים שלך</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+        {Array.from({ length: 10 }).map((_, i) => {
+          const w = i + 1; const earned = weeks.has(w);
+          const src = w >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${w}.webp`;
+          return (
+            <div key={w} style={{ textAlign: "center", opacity: earned ? 1 : 0.32 }}>
+              <img src={src} alt="" width={58} height={58} style={{ filter: earned ? "none" : "grayscale(1)" }} />
+              <div style={{ fontSize: 11, color: earned ? C.brandD : C.faint, marginTop: 2 }}>{w >= 10 ? "אלופה" : `שבוע ${w}`}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 12, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע נכנס לארון כשממלאים את המעקב במהלך השבוע</div>
+    </SheetShell>
   );
 }
 
@@ -2671,7 +2711,7 @@ export default function App() {
   const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
   const setStepsForDate = (date, n) => setStepsByDate((s) => ({ ...s, [date]: Math.max(0, Math.round(n || 0)) }));
   const setCheckinValue = (date, taskId, value) => setCheckins((c) => { const day = { ...(c[date] || {}) }; if (value === null || value === undefined || value === "") delete day[taskId]; else day[taskId] = value; return { ...c, [date]: day }; });
-  const finishCheckin = () => { const has = checkins[selectedDate] && Object.keys(checkins[selectedDate]).length > 0; setSheet(selectedDate === today && has ? "checkinCheer" : null); };
+  const finishCheckin = () => { const has = checkins[selectedDate] && Object.keys(checkins[selectedDate]).length > 0; setSheet(has ? "checkinCheer" : null); };
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
   const setWeightForDate = (date, kg) => { setWeights((w) => [...w.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
   const reportAddWeight = () => setSheet("weight");
@@ -2726,7 +2766,7 @@ export default function App() {
         @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;border-radius:0;box-shadow:none;border:none}}`}</style>
       <div className="phone-frame">
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "10px 18px 4px", flexShrink: 0 }}>
-          <span style={{ fontSize: 13, color: C.brandD, fontWeight: 600 }}>MyPrime · v{VERSION}</span>
+          <span style={{ fontSize: 13, color: C.brandD, fontWeight: 600 }}>MyPrime</span>
         </div>
         {gate !== "ok" ? (
           <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} />
@@ -2735,7 +2775,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} stepGoal={stepGoal} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} stepGoal={stepGoal} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} userName={profile.name || gateName} onOpenCollection={() => setSheet("collection")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} stepGoal={stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
@@ -2763,6 +2803,7 @@ export default function App() {
             {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={activeTasks(Math.min(programWeekFor(profile.startDate, selectedDate), 10))} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} onDone={finishCheckin} />}
             {sheet === "checkinCheer" && <CheckinCheer streak={checkinStreak(checkins, today)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
               : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />)}
