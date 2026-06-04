@@ -236,7 +236,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.70";
+const VERSION = "0.71";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1285,7 +1285,7 @@ async function translateFoodToEnglish(q) {
 /* Reconcile AI-identified items against the product databases (by name).
    Name search is fuzzier than a barcode (no unique id), so we only accept a
    STRONG match; otherwise the AI estimate is kept. */
-function normName(s) { return String(s || "").replace(/["'.,()\[\]/--]/g, " ").replace(/\s+/g, " ").trim().toLowerCase(); }
+function normName(s) { return String(s || "").replace(/["'.,()\[\]/-]/g, " ").replace(/\s+/g, " ").trim().toLowerCase(); }
 function strongMatch(aiName, dbName) {
   const a = normName(aiName), b = normName(dbName);
   if (!a || !b) return false;

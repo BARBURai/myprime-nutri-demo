@@ -75,7 +75,7 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.70`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.71`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -207,3 +207,8 @@ Symptom: AI-estimated values are unrealistically low (e.g. grilled entrecote kca
 ## v0.70 — default activity to sedentary (calorie targets aligned with familiar apps)
 - Decision (Ron): keep the Mifflin-St Jeor formula, but change the DEFAULT activity level from "בינונית" (×1.55) to "יושבני" (×1.2). Rationale: the app already adds steps + logged activity to the daily budget, so a moderate baseline double-counted movement and pushed targets well above what users see in familiar apps. Changed in DEFAULT_PROFILE (line ~2214) and the onboarding draft (line ~427); computeTargets fallback `?? 1.55` -> `?? 1.2`. For the demo profile this drops the target by ~400 kcal into the expected range. (Harris-Benedict was considered and rejected - less accurate, and would have raised the number.)
 - VERSION 0.69->0.70 (App.jsx only).
+
+## v0.71 — HOTFIX: build break from v0.67 dash cleanup
+- The v0.67 global em/en-dash -> hyphen replacement hit a regex character class inside `normName` (line ~1288). The original class `["'.,()\[\]/–-]` contained an en-dash; replacing it produced `["'.,()\[\]/--]`, and the adjacent `/--` was parsed as an out-of-order range (`/` to `-`), breaking `vite build` (rollup: "Range out of order in character class"). Fixed to a single trailing hyphen: `["'.,()\[\]/-]`. Verified: no other regex char-classes contain non-edge hyphens (only valid `0-9` digit classes remain), no `--` sequences anywhere.
+- LESSON for future bulk text edits: never blanket-replace characters that may appear inside regex literals; exclude/inspect regexes first.
+- VERSION 0.70->0.71 (App.jsx only).
