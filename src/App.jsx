@@ -36,6 +36,10 @@ const FAT_PER_KG = 0.9;
 const RATE_OPTIONS = [0, 250, 500, 750];
 const WATER_TARGET_GLASSES = 8;    // 8 כוסות = 2 ליטר
 const WATER_MIN_GLASSES = 6;       // 6 כוסות = 1.5 ליטר
+const WATER_TARGET_ML = 2000;      // יעד מים קבוע: 2 ליטר
+const DEFAULT_CUP_ML = 250;        // גודל כוס ברירת מחדל
+// מים נשמרים במ"ל. ערכים ישנים נשמרו כספירת כוסות (<= ~8); ממירים בקריאה (כוס = 250 מ"ל).
+function waterMlOf(v) { if (v == null) return 0; return v < 50 ? Math.round(v * 250) : v; }
 
 const rateLabel = (g) => (g === 0 ? "שמירה על המשקל" : `ירידה ${g} ג׳ בשבוע`);
 const rateShort = (g) => (g === 0 ? "שמירה" : `${g} ג׳/שבוע`);
@@ -239,7 +243,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.77";
+const VERSION = "0.78";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -286,7 +290,7 @@ function ProteinRing({ consumed, target, size = 124 }) {
     </svg>
   );
 }
-function MetricRing({ value, goal, color, track, label, sub, onPlus, size = 130 }) {
+function MetricRing({ value, goal, color, track, label, sub, onPlus, size = 130, bigText }) {
   const r = 54, circ = 2 * Math.PI * r;
   const frac = Math.max(0, Math.min(1, goal > 0 ? value / goal : 0));
   const done = goal > 0 && value >= goal;
@@ -297,7 +301,7 @@ function MetricRing({ value, goal, color, track, label, sub, onPlus, size = 130 
         <circle cx="66" cy="66" r={r} fill="none" stroke={color} strokeWidth="10"
           strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
           transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-        <text x="66" y="54" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{value.toLocaleString()}</text>
+        <text x="66" y="54" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{bigText != null ? bigText : value.toLocaleString()}</text>
         <text x="66" y="75" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: color }}>{label}</text>
         <text x="66" y="89" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{done ? "הגעת ליעד!" : sub}</text>
       </svg>
@@ -434,7 +438,7 @@ function Onboarding({ onFinish, name }) {
   const hasSens = allergies.length > 0 || customSens.length > 0;
   const next = () => { if (step === 2 && !hasSens) { setConfirmNoSens(true); return; } setStep(step + 1); };
 
-  const draft = { age, heightCm, weightKg, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, stepGoal: 2000, diet, allergies, dislikes };
+  const draft = { age, heightCm, weightKg, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : goalKg, returnPct: 50, startDate, stepGoal: 2000, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes };
   const targets = computeTargets(draft);
   const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
@@ -611,7 +615,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, stepsByDate, stepGoal, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, userName, onStreakTap }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, stepGoal, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, userName, onStreakTap }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -624,7 +628,10 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const week = programWeekFor(profile.startDate, date);
   const macroOpen = unlockedOn(profile.startDate, date, MACRO_UNLOCK);
   const waterOpen = unlockedOn(profile.startDate, date, WATER_UNLOCK);
-  const glasses = waterByDate[date] || 0;
+  const cupMl = profile.cupMl || DEFAULT_CUP_ML;
+  const waterMl = waterMlOf(waterByDate[date]);
+  const waterCups = Math.round((waterMl / cupMl) * 10) / 10;
+  const targetCups = Math.round(WATER_TARGET_ML / cupMl);
   const todayRef = useRef(null);
   const streak = streakDays(log);
   useEffect(() => { if (todayRef.current) todayRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, []);
@@ -665,7 +672,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", gap: 10, marginTop: 10, marginBottom: 14 }}>
           <Ring consumed={consumed} budget={budget} size={130} onPlus={onAddCalorie} />
           {macroOpen && <ProteinRing consumed={macros.p} target={targets.protein} size={130} />}
-          {waterOpen && <MetricRing value={glasses} goal={WATER_TARGET_GLASSES} color={C.water} track={C.waterBg} label="מים" sub={`מתוך ${WATER_TARGET_GLASSES} כוסות`} onPlus={() => setWaterForDate(date, Math.min(WATER_TARGET_GLASSES, glasses + 1))} size={130} />}
+          {waterOpen && <MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} color={C.water} track={C.waterBg} label="כוסות" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={130} />}
           {stepsOpen && <MetricRing value={steps} goal={stepGoal} color={C.amber} track={C.amberBg} label="צעדים" sub={`מתוך ${stepGoal.toLocaleString()}`} onPlus={onEditSteps} size={130} />}
         </div>
         {macroOpen && (
@@ -1994,6 +2001,47 @@ function StepsModal({ current, goal, weightKg, onClose, onAdd }) {
   );
 }
 
+function WaterModal({ currentMl, cupMl, onClose, onSave }) {
+  const [ml, setMl] = useState(currentMl);
+  const [cup, setCup] = useState(cupMl || DEFAULT_CUP_ML);
+  const [free, setFree] = useState("");
+  const safeCup = Math.max(100, cup || DEFAULT_CUP_ML);
+  const cups = Math.round((ml / safeCup) * 10) / 10;
+  const targetCups = Math.round(WATER_TARGET_ML / safeCup);
+  const frac = Math.max(0, Math.min(1, ml / WATER_TARGET_ML));
+  const addFree = () => { const n = parseInt(free, 10) || 0; if (n >= 50) { setMl(ml + n); setFree(""); } };
+  return (
+    <SheetShell title="עדכון מים" onClose={onClose}>
+      <div style={{ textAlign: "center", margin: "2px 0 10px" }}>
+        <div style={{ fontSize: 34, fontWeight: 700, color: C.ink }}>{cups} <span style={{ fontSize: 16, color: C.sub }}>כוסות</span></div>
+        <div style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>{ml.toLocaleString()} מ"ל מתוך {targetCups} כוסות (2 ליטר)</div>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: C.waterBg, overflow: "hidden", marginBottom: 14 }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: C.water, borderRadius: 6, transition: "width .3s" }} />
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <button onClick={() => setMl(ml + safeCup)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ כוס ({safeCup} מ"ל)</button>
+        <button onClick={() => setMl(ml + 500)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ חצי ליטר</button>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+        <input type="text" inputMode="numeric" value={free} onChange={(e) => setFree(e.target.value.replace(/[^0-9]/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFree(); } }} placeholder={'הוספת מ"ל חופשי (לפחות 50)'} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <button onClick={addFree} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.water, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+      </div>
+      <div style={{ textAlign: "center", marginBottom: 14 }}>
+        <button onClick={() => setMl(0)} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, textDecoration: "underline", cursor: "pointer", fontFamily: fontStack }}>איפוס היום</button>
+      </div>
+      <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 14, color: C.ink }}>גודל כוס</span>
+          <Stepper value={safeCup} set={(v) => setCup(Math.max(100, Math.min(1000, v)))} step={10} suffix={'מ"ל'} />
+        </div>
+        <div style={{ fontSize: 12, color: C.faint, marginTop: 6 }}>היעד תמיד 2 ליטר; מספר הכוסות מתעדכן לפי גודל הכוס.</div>
+      </div>
+      <Btn onClick={() => onSave(ml, safeCup)}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+    </SheetShell>
+  );
+}
+
 function CalorieGoalModal({ current, onClose, onAdd }) {
   const [kcal, setKcal] = useState(current);
   return (
@@ -2287,7 +2335,7 @@ function StreakCheer({ streak, name, onClose }) {
 }
 
 export default function App() {
-  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: 2000, diet: [], allergies: [], dislikes: "", name: "" };
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: 2000, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
@@ -2477,7 +2525,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} stepsByDate={stepsByDate} stepGoal={stepGoal} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} stepGoal={stepGoal} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} userName={profile.name || gateName} onStreakTap={() => setSheet("streak")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} stepGoal={stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
@@ -2497,6 +2545,7 @@ export default function App() {
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={stepGoal} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); }} />}
+            {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onClose={() => setSheet(null)} onSave={(ml, cup) => { setWaterForDate(selectedDate, ml); setProfile({ ...profile, cupMl: cup }); setSheet(null); }} />}
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal current={(weights.find((x) => x.date === today) || weights[weights.length - 1] || {}).kg} onClose={() => setSheet(null)} onAdd={logWeightToday} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
