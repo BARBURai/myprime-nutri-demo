@@ -302,7 +302,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.95";
+const VERSION = "0.96";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -843,6 +843,50 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
     <div style={{ padding: "8px 16px 16px" }}>
       <Header title="דוח והתקדמות" />
       <div style={{ marginBottom: 12 }}><span style={{ fontSize: 13, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 20 }}>שבוע {programWeek} בתוכנית</span></div>
+      {stepsOpen && (() => {
+        const sData = Array.from({ length: 14 }, (_, i) => {
+          const d = addDays(today, -13 + i);
+          return { label: `${new Date(d).getDate()}/${new Date(d).getMonth() + 1}`, steps: stepsByDate[d] || 0 };
+        });
+        const stepsToday = stepsByDate[today] || 0;
+        const baseline = stepBaseline(stepsByDate, startDate);
+        const goal = programWeek < 2 ? null : (stepGoalStored != null ? stepGoalStored : (baseline != null ? baseline + stepGoalCumOffset(programWeek) : null));
+        const avg7 = steps7avg(stepsByDate, today);
+        const maxStep = Math.max(goal || 0, ...sData.map((x) => x.steps), 1);
+        const cells = [
+          { label: "צעדים היום", val: stepsToday.toLocaleString() },
+          { label: "היעד היומי", val: goal ? goal.toLocaleString() : "במדידה" },
+          { label: "ממוצע 7 ימים", val: avg7.toLocaleString() },
+        ];
+        return (
+          <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+            <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+              {cells.map((c, i) => (
+                <div key={i} style={{ flex: 1, textAlign: "center", padding: "12px 6px", borderInlineStart: i === 0 ? "none" : `1px solid ${C.line}`, background: i === 1 ? C.brandBg : "transparent" }}>
+                  <div style={{ fontSize: 12.5, color: C.sub, marginBottom: 5 }}>{c.label}</div>
+                  <div style={{ fontSize: 23, fontWeight: 700, color: i === 1 ? C.brandD : C.ink, lineHeight: 1.1 }}>{c.val}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: C.faint, marginBottom: 2 }}>צעדים יומיים - 14 הימים האחרונים</div>
+            <div style={{ height: 150, margin: "6px -6px 0" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={sData} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} interval={1} />
+                  <YAxis domain={[0, maxStep]} hide />
+                  <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${Number(v).toLocaleString()} צעדים`, ""]} labelFormatter={(l) => l} />
+                  {goal && <ReferenceLine y={goal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד`, position: "insideTopRight", fontSize: 11, fill: C.brandD }} />}
+                  <Bar dataKey="steps" radius={[4, 4, 0, 0]}>
+                    {sData.map((d, i) => (<Cell key={i} fill={d.steps === 0 ? C.line : (goal && d.steps >= goal) ? C.brand : C.proteinTrack} />))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onEditSteps} style={{ padding: "9px" }}>+ עדכון צעדים להיום</Btn></div>
+          </div>
+        );
+      })()}
+
       <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
           <Target size={16} color={C.brand} />
@@ -888,44 +932,6 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         </div>
         <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={addWeight} style={{ padding: "9px" }}>+ הזיני משקל</Btn></div>
       </div>
-
-      {stepsOpen && (() => {
-        const sData = Array.from({ length: 14 }, (_, i) => {
-          const d = addDays(today, -13 + i);
-          return { label: `${new Date(d).getDate()}/${new Date(d).getMonth() + 1}`, steps: stepsByDate[d] || 0 };
-        });
-        const stepsToday = stepsByDate[today] || 0;
-        const baseline = stepBaseline(stepsByDate, startDate);
-        const goal = programWeek < 2 ? null : (stepGoalStored != null ? stepGoalStored : (baseline != null ? baseline + stepGoalCumOffset(programWeek) : null));
-        const avg7 = steps7avg(stepsByDate, today);
-        const maxStep = Math.max(goal || 0, ...sData.map((x) => x.steps), 1);
-        return (
-          <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
-              <div><div style={{ fontSize: 13, color: C.sub }}>צעדים היום</div><div style={{ fontSize: 28, fontWeight: 600, color: C.ink }}>{stepsToday.toLocaleString()}</div></div>
-              <div style={{ textAlign: "left" }}>
-                <span style={{ fontSize: 14, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 8 }}>{goal ? `יעד ${goal.toLocaleString()}` : "מודדת ממוצע"}</span>
-                <div style={{ fontSize: 12.5, color: C.sub, marginTop: 5 }}>ממוצע 7 ימים: <b style={{ color: C.ink }}>{avg7.toLocaleString()}</b></div>
-              </div>
-            </div>
-            <div style={{ fontSize: 12, color: C.faint, marginBottom: 2 }}>צעדים יומיים - 14 הימים האחרונים</div>
-            <div style={{ height: 150, margin: "6px -6px 0" }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={sData} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} interval={1} />
-                  <YAxis domain={[0, maxStep]} hide />
-                  <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${Number(v).toLocaleString()} צעדים`, ""]} labelFormatter={(l) => l} />
-                  {goal && <ReferenceLine y={goal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד`, position: "insideTopRight", fontSize: 11, fill: C.brandD }} />}
-                  <Bar dataKey="steps" radius={[4, 4, 0, 0]}>
-                    {sData.map((d, i) => (<Cell key={i} fill={d.steps === 0 ? C.line : (goal && d.steps >= goal) ? C.brand : C.proteinTrack} />))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onEditSteps} style={{ padding: "9px" }}>+ עדכון צעדים להיום</Btn></div>
-          </div>
-        );
-      })()}
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>ימים ביעד</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div></div>
         {proteinFocus
