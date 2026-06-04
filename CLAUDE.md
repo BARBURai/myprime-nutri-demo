@@ -76,11 +76,20 @@ The AI features only work when deployed (or with the functions running), since t
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.94`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.95`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
 - **QA is MANDATORY, not optional (owner directive).** The owner is the ONLY tester (no QA team), tests by hand in the browser on the live site. Keep the test list simple and doable solo - it lives in `qa/QA-CHECKLIST.md` (plain Hebrew, click-through). Rule: any change touching user input, a safety guardrail (weight blocks, calorie floor, sensitivities/allergies), or an AI prompt must be checked. Two moments: (1) after delivering such a change - the owner re-checks just the part that changed; (2) one full pass through the whole list before letting any real user in (incl. sending the link to dietitians) and especially before turning it into the native app, on a phone and on a computer. The `qa/run-qa.mjs` AI harness exists but requires Node/terminal, so it is OPTIONAL for the owner - do not present it as a required step; offer to walk through it only before a big release if asked. **Automatic logic check:** `qa/check-logic.mjs` is a no-network/no-browser Node script that asserts the guardrail RULES (weight blocks keep BMI>=18.5, calorie floor 1200, no 750 rate, water never negative, water legacy migration). Claude RUNS THIS ITSELF every version that touches a guardrail and reports pass/fail - the owner does nothing. It mirrors the rule fns/consts from App.jsx (keep in sync). It checks logic/math, NOT visual rendering - the only thing left for the owner is a short eyeball on the live site before sharing.
+
+## How we work (process - agreed with owner v0.94, IMPORTANT)
+Learned the hard way: running to code before locking the spec caused back-and-forth, wrong builds, and patch-on-patch. Default to clarify-first.
+- **New feature, or any change with more than one reasonable way to do it:** do NOT code yet. First send a short plan in chat - what it does exactly, the rules (what counts as done, what triggers what), the edge cases (e.g. backfill, Saturday, week boundaries), and where it lives. If it is visual, include a mockup. Wait for the owner's explicit "go" before touching code.
+- **Multi-point feedback in one message:** reflect it back as a numbered list with the proposed approach per item, flag the items that need an owner decision, get confirmation, THEN build them all in ONE clean version. No partial patches across several replies.
+- **Tiny, unambiguous fixes** (a color, a text string, a size, a label): just do them, no need to ask.
+- **One clean version per agreed round.** Batch decisions; avoid a long tail of micro-versions.
+- **Lock data/logic rules in words before coding them** (definitions of "completed", what earns a reward, how past-day edits behave). Most churn came from coding a rule before agreeing on it.
+- **Periodic cleanup:** remove dead/unused code left from iterations (no leftover patches) so the app stays clean.
 
 ## v0.53 — Recipe booklet (29 real MyPrime recipes)
 The "מתכונים" tab now renders the real MyPrime recipe booklet instead of placeholder data.
@@ -404,6 +413,16 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v0.95 - Verified day-by-day schedule + running step goal + Shabbat option + cleanup
+- **Schedule overhaul (src/checkins.js):** rewritten against the 10-week PDF, day by day. Each task now has `startWeek` + `startDow` (1=Sun..6=Fri) + `recur`: "daily" / "strength" (Sun/Tue/Thu, skipped on a mobility day) / "mobility" (explicit `MOBILITY_DAYS` = [[9,1],[10,1],[10,3]]). `activeTasks(week, dow)` now takes the day-of-week; returns [] for Saturday (dow 0/rest). fasting = optional (never blocks finishing).
+- Start-day fixes vs the old week-only model: strength w2 d3 (not daily), veg+mealorder w2 d4, water+drinkbefore w3 d2, protein w3 d4, stopeating w4 d2, probiotics w7 d4, antiinflam w8 d2, etc. Full reference: outputs Excel "MyPrime-לוז-מעקב-יומי.xlsx".
+- **Running step goal:** week 1 = measure baseline (avg daily steps, days 2-6). From week 2 the goal is a stored running value in `profile.stepGoal`; it goes up on Sundays of weeks 2/4/6/8 (+2000/+2000/+1000/+1000), each bump relative to the LAST goal. She can override it manually in the profile any time; later bumps build on her number. Helpers: `stepBaseline`, `stepGoalCumOffset`, `STEP_BUMP_WEEKS`. Day-screen + report steps ring uses this goal; week 1 shows "מודדת ממוצע" (no target).
+- **Goal-increase notice:** `GoalBumpModal` (sheet "goalBump") fires once on the bump Sunday - "היעד היומי שלך עלה היום ל-X (+Y)" + acknowledge. Recorded via `goalAckWeek` (persisted in STORAGE_KEY).
+- **7-day average:** report shows rolling 7-day avg daily steps next to "צעדים היום" (`steps7avg`; week 1 = from when she started measuring).
+- **Shabbat option:** onboarding Q ("להשתמש בכל ימות השבוע כולל שבת?") + profile toggle "שומרת שבת" -> `profile.keepShabbat`. When on, Saturdays are greyed/disabled in the day strip (rest day); rest of app stays available. (Saturday already has no tasks for anyone.)
+- **Cleanup:** removed dead `streakDays`, `StreakCheer`, sheet "streak", and the unused `const streak` in DayScreen. `dowOf(date)` helper added.
+- VERSION 0.94->0.95 (re-upload src/App.jsx AND src/checkins.js). qa unaffected; check-logic 7/7; tsc clean; 0 em/en dashes; 19/19 schedule spot-checks pass.
 
 ## v0.94 - Streak removed (owner decision); medals-per-day + trophy-per-week only
 Owner: the streak ("ימים ברצף") was confusing with backfill and adds no real prize - drop it.
