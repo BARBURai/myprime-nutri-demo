@@ -243,7 +243,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.78";
+const VERSION = "0.79";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -779,7 +779,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
             </AreaChart>
           </ResponsiveContainer>
         </div>
-        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={addWeight} style={{ padding: "9px" }}>+ הזיני משקל היום</Btn></div>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={addWeight} style={{ padding: "9px" }}>+ הזיני משקל</Btn></div>
       </div>
 
       {stepsOpen && (() => {
@@ -1880,7 +1880,7 @@ function EntryMenu({ onClose, onPick, mode }) {
     { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת" },
     { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי" },
     { id: "recommend", ic: Sparkles, t: "מה כדאי לאכול?", s: "הצעות חכמות לפי היעדים שלך" },
-    { id: "weight", ic: TrendingDown, t: "הזיני משקל היום", s: "מעקב המשקל בפועל" },
+    { id: "weight", ic: TrendingDown, t: "הזיני משקל", s: "מעקב המשקל בפועל" },
   ];
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 26 }} onClick={onClose}>
@@ -1963,18 +1963,25 @@ function ActivityModal({ onClose, onAdd, weightKg }) {
   );
 }
 
-function WeightModal({ current, onClose, onAdd }) {
-  const [kg, setKg] = useState(current != null ? String(current) : "");
+function WeightModal({ weights, today, minDate, onClose, onAdd }) {
+  const find = (d) => { const w = (weights || []).find((x) => x.date === d); return w ? w.kg : null; };
+  const [date, setDate] = useState(today);
+  const [kg, setKg] = useState(() => { const k = find(today); return k != null ? String(k) : ""; });
+  const onDate = (d) => { setDate(d); const k = find(d); setKg(k != null ? String(k) : ""); };
   const num = parseFloat(kg);
-  const valid = isFinite(num) && num >= 30 && num <= 400;
+  const valid = isFinite(num) && num >= 30 && num <= 400 && !!date;
   return (
-    <SheetShell title="הזיני משקל היום" onClose={onClose}>
+    <SheetShell title="הזנת משקל" onClose={onClose}>
+      <div style={{ margin: "2px 0 12px" }}>
+        <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>תאריך</div>
+        <input type="date" value={date} min={minDate} max={today} onChange={(e) => onDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center" }} />
+      </div>
       <div style={{ margin: "4px 0 8px" }}>
         <input type="text" inputMode="decimal" value={kg} autoFocus onChange={(e) => setKg(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="לדוגמה 71.5" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 24, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
         <div style={{ textAlign: "center", fontSize: 13, color: C.sub, marginTop: 6 }}>ק״ג</div>
       </div>
-      <Btn onClick={() => { if (valid) onAdd(Math.round(num * 10) / 10); }} style={{ opacity: valid ? 1 : 0.5 }}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
-      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>נרשם כמשקל של היום בגרף. הזנה חוזרת היום פשוט מעדכנת את הערך.</div>
+      <Btn onClick={() => { if (valid) onAdd(Math.round(num * 10) / 10, date); }} style={{ opacity: valid ? 1 : 0.5 }}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>אפשר לבחור גם תאריך קודם. הזנה חוזרת לאותו תאריך מעדכנת את הערך.</div>
     </SheetShell>
   );
 }
@@ -2463,8 +2470,7 @@ export default function App() {
   const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
   const setStepsForDate = (date, n) => setStepsByDate((s) => ({ ...s, [date]: Math.max(0, Math.round(n || 0)) }));
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
-  const addWeightValue = (kg) => { setWeights((w) => [...w.filter((x) => x.date !== selectedDate), { date: selectedDate, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
-  const logWeightToday = (kg) => { setWeights((w) => [...w.filter((x) => x.date !== today), { date: today, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
+  const setWeightForDate = (date, kg) => { setWeights((w) => [...w.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
   const reportAddWeight = () => setSheet("weight");
   const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
   const resetDemo = () => {
@@ -2547,7 +2553,7 @@ export default function App() {
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={stepGoal} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); }} />}
             {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onClose={() => setSheet(null)} onSave={(ml, cup) => { setWaterForDate(selectedDate, ml); setProfile({ ...profile, cupMl: cup }); setSheet(null); }} />}
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
-            {sheet === "weight" && <WeightModal current={(weights.find((x) => x.date === today) || weights[weights.length - 1] || {}).kg} onClose={() => setSheet(null)} onAdd={logWeightToday} />}
+            {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
             {sheet === "streak" && <StreakCheer streak={streakDays(log)} name={profile.name || gateName} onClose={() => setSheet(null)} />}
