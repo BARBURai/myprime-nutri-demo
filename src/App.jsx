@@ -240,7 +240,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.72";
+const VERSION = "0.74";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -972,6 +972,10 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
 function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [baseOpen, setBaseOpen] = useState(false);
+  const [newSens, setNewSens] = useState("");
+  const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
+  const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
   const commit = () => { setProfile({ ...profile, [edit.key]: edit.value }); setEdit(null); };
   const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
@@ -1011,7 +1015,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
         )}
       </div>
 
-      <div onClick={() => open({ key: "calorieOverride", label: "יעד קלורי יומי", type: "calorie", init: profile.calorieOverride || targets.targetKcal })} style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12, cursor: "pointer" }}>
+      <div onClick={() => open({ key: "calorieOverride", label: "יעד קלורי יומי", type: "calorie", init: profile.calorieOverride || targets.targetKcal })} style={{ background: C.brandBg, border: `1.5px solid ${C.brand}`, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12, cursor: "pointer" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: 13, color: C.brandD }}>יעד קלורי יומי</span>
           <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{calNow.toLocaleString()} קק״ל {profile.calorieOverride ? "" : <span style={{ fontSize: 11, color: C.sub }}>(מומלץ)</span>} <Pencil size={13} color={C.faint} /></span>
@@ -1033,15 +1037,29 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
             return (<span key={d.id} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d.id) : [...(profile.diet || []), d.id] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
           })}
         </div>
-        <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>רגישויות ואלרגיות (להימנע)</div>
-        <input value={profile.dislikes || ""} onChange={(e) => setProfile({ ...profile, dislikes: e.target.value })} placeholder="רגישות או העדפה נוספת (למשל: בלי חריף, בלי קצף חלב)" style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, marginBottom: 10 }} />
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות ואלרגיות (להימנע)</div>
+        <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>מה שתסמני ותכתבי כאן נשמר ומוזן ל-AI כדי להתחשב בזה בהמלצות. עדיין כדאי לבדוק רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
           {SENSITIVITY_OPTIONS.map((s) => {
             const on = (profile.allergies || []).includes(s);
             return (<span key={s} onClick={() => setProfile({ ...profile, allergies: on ? (profile.allergies || []).filter((x) => x !== s) : [...(profile.allergies || []), s] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
           })}
         </div>
-        <div style={{ fontSize: 12, color: C.sub, lineHeight: 1.6, marginTop: 4 }}>מה שתסמני ותכתבי כאן נשמר ומוזן ל-AI כדי להתחשב בזה בהמלצות. עדיין כדאי לבדוק רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
+        <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+          <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+          <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+        </div>
+        {customSens.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {customSens.map((s) => (
+              <span key={s} style={{ fontSize: 14, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {s}
+                <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>

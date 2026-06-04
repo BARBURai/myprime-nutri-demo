@@ -1,20 +1,29 @@
 /* ============================================================================
-   MyPrime — beta feedback collector (STANDALONE Google Apps Script Web App)
-   v2 — also emails each submission to NOTIFY_EMAIL (in addition to the sheet).
+   MyPrime - beta feedback collector (STANDALONE Google Apps Script Web App)
+   v3 - adds testEmail() to FORCE email authorization, and logs mail errors to
+        a "Log" tab so silent failures become visible.
 
-   For a standalone script (created at script.google.com, NOT bound to the
-   sheet) we must open the spreadsheet by ID — getActiveSpreadsheet() won't work.
+   WHY EMAILS WEREN'T ARRIVING:
+   The web app was deployed/authorized before the email code (MailApp) existed,
+   so the "send email" permission was never granted. doPost saves the row to the
+   sheet and then tries to email inside a try/catch that swallows errors - so a
+   missing-permission error was eaten silently (row saved, no email).
 
-   Setup: see feedback/README.md
-   NOTE: v2 adds sending email (MailApp). After pasting this, you must RE-DEPLOY
-   and RE-AUTHORIZE the script — Google will ask for an extra "send email"
-   permission the first time. Without authorizing, feedback still saves to the
-   sheet but no email is sent.
+   HOW TO FIX (one time):
+   1. Paste this whole file, Save.
+   2. In the editor, pick the function "testEmail" from the dropdown and click Run.
+      Google will show a permissions screen asking to "send email as you" - approve it.
+   3. Check that the test email arrived at NOTIFY_EMAIL (also check Spam / Promotions).
+   4. Re-deploy: Deploy > Manage deployments > Edit (pencil) > Version: New version > Deploy.
+      (This keeps the same /exec URL.)
+   After that, every feedback submission will also email. If an email ever fails,
+   the exact error is recorded in the "Log" tab of the sheet.
    ========================================================================== */
 
 // The target Google Sheet (from its URL: /spreadsheets/d/<THIS_ID>/edit).
 var SHEET_ID = "18sKeB5KMsO9TnQO5iJXmBcAigzgzl7spcOmpwop1aT8";
 var TAB_NAME = "Feedback";
+var LOG_TAB = "Log";
 
 // Where feedback notifications are sent.
 var NOTIFY_EMAIL = "ron@myprime.co.il";
@@ -36,14 +45,17 @@ function doPost(e) {
       sheet.appendRow([now, data.ts || "", data.name || "", data.device || "", data.version || "", n.screen || "", n.text || ""]);
     });
 
-    // Send an email with the feedback (best-effort — never blocks saving).
+    // Send an email with the feedback (best-effort - never blocks saving).
+    // On failure we record the error to the Log tab so it is no longer invisible.
+    var mailStatus = "ok";
     try {
       sendNotification(data, notes, now);
     } catch (mailErr) {
-      // swallow — the sheet row already saved; mail failure shouldn't fail the request
+      mailStatus = String(mailErr);
+      logError_(ss, "doPost sendNotification", mailErr);
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ ok: true, added: notes.length }))
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, added: notes.length, mail: mailStatus }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
@@ -55,14 +67,14 @@ function doPost(e) {
 
 function sendNotification(data, notes, now) {
   var name = data.name || "ללא שם";
-  var subject = "משוב חדש מ-MyPrime" + (data.name ? " — " + data.name : "");
+  var subject = "משוב חדש מ-MyPrime" + (data.name ? " - " + data.name : "");
 
   var lines = [];
   lines.push("התקבל משוב חדש מהאפליקציה MyPrime.");
   lines.push("");
   lines.push("שם: " + name);
-  lines.push("מכשיר: " + (data.device || "—"));
-  lines.push("גרסה: " + (data.version || "—"));
+  lines.push("מכשיר: " + (data.device || "-"));
+  lines.push("גרסה: " + (data.version || "-"));
   lines.push("זמן (מהאפליקציה): " + (data.ts || ""));
   lines.push("התקבל בשרת: " + now.toLocaleString("he-IL"));
   lines.push("");
@@ -79,6 +91,29 @@ function sendNotification(data, notes, now) {
     body: body,
     name: "MyPrime Feedback",
   });
+}
+
+function logError_(ss, context, err) {
+  try {
+    var log = ss.getSheetByName(LOG_TAB) || ss.insertSheet(LOG_TAB);
+    if (log.getLastRow() === 0) {
+      log.appendRow(["זמן", "הקשר", "שגיאה"]);
+      log.setFrozenRows(1);
+    }
+    log.appendRow([new Date(), context, String(err)]);
+  } catch (e) { /* nothing else we can do */ }
+}
+
+/* RUN THIS ONCE from the editor (Run > testEmail) to authorize "send email"
+   and confirm delivery end to end. */
+function testEmail() {
+  MailApp.sendEmail({
+    to: NOTIFY_EMAIL,
+    subject: "בדיקת מייל - MyPrime Feedback",
+    body: "אם קיבלת את המייל הזה, שליחת המייל מהסקריפט עובדת. אפשר להמשיך לפריסה מחדש.",
+    name: "MyPrime Feedback",
+  });
+  Logger.log("Sent test email to " + NOTIFY_EMAIL);
 }
 
 // Open this deployment's /exec URL in a browser to confirm it's live.

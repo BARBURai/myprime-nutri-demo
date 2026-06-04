@@ -75,7 +75,7 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a full project zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.72`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.74`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -216,3 +216,13 @@ Symptom: AI-estimated values are unrealistically low (e.g. grilled entrecote kca
 ## v0.72 — force sedentary for ALL profiles (fix: legacy profiles still showed high target)
 - v0.70 only changed the DEFAULT activity for new profiles/onboarding; existing profiles in localStorage kept activity="בינונית" (×1.55) and still showed ~1,500. computeTargets now uses ACTIVITY_FACTORS["יושבני"] (1.2) directly, ignoring stored profile.activity, so legacy profiles recompute to the lower target without a reset. (If a user-facing activity selector is added later, revert to reading profile.activity.)
 - VERSION 0.71->0.72 (App.jsx only).
+
+## v0.73 — profile sensitivities section reordered + custom-sensitivity chips
+- ProfileScreen "רגישויות ואלרגיות" subsection reordered to: (1) heading "רגישויות ואלרגיות (להימנע)"; (2) the explanatory note moved to right after the heading and made readable (C.ink, was faint gray); (3) preset sensitivity chips; (4) new "רגישויות נוספות" labelled free-text input WITH an add mechanism - Enter key and a "+" button (Plus icon) - that commits each entry as a removable brand-colored chip (X icon to remove).
+- Custom sensitivities are stored in profile.dislikes as a comma-separated list (state newSens + helpers customSens/addSens/removeSens). This is the SAME field RecommendModal already feeds into avoidList (line ~2042), so custom entries flow into "מה כדאי לאכול" with the strict "never suggest foods containing these" instruction. Confirmed wired.
+- Removed the old single free-text dislikes input from the profile (replaced by the chip-add input). Onboarding allergies step left unchanged (not in scope).
+- VERSION 0.72->0.73 (App.jsx only).
+
+## v0.74 — brand border around the profile calorie-goal card
+- ProfileScreen calorie-goal card (line ~1018) gained `border: 1.5px solid C.brand` (matching the emphasized protein MacroCard's brand outline) so the whole "יעד קלורי יומי" card now has a surrounding pink frame like the protein card. Background stays C.brandBg.
+- VERSION 0.73->0.74 (App.jsx only).
