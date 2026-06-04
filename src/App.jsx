@@ -206,6 +206,7 @@ const DIET_OPTIONS = [
   { id: "ים-תיכוני", emoji: "🫒" },
 ];
 const SENSITIVITY_OPTIONS = ["גלוטן", "חלב / לקטוז", "ביצים", "אגוזים", "בוטנים", "סויה", "דגים", "שומשום"];
+const WANT_OPTIONS = [{ id: "ארוחה מלאה", emoji: "🍽️" }, { id: "משהו קל", emoji: "🥗" }, { id: "חטיף", emoji: "🍎" }, { id: "משקה", emoji: "🥤" }];
 function streakDays(log) {
   const has = (d) => log.some((e) => e.date === d);
   let n = 0, d = TODAY;
@@ -243,7 +244,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.80";
+const VERSION = "0.83";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -276,7 +277,7 @@ function Ring({ consumed, budget, size = 132, onPlus }) {
 function ProteinRing({ consumed, target, size = 124 }) {
   const r = 54, circ = 2 * Math.PI * r;
   const frac = Math.max(0, Math.min(1, target > 0 ? consumed / target : 0));
-  const remaining = Math.max(0, Math.round(target - consumed));
+  const eaten = Math.round(consumed);
   const done = target > 0 && consumed >= target;
   return (
     <svg width={size} height={size} viewBox="0 0 132 132">
@@ -284,7 +285,7 @@ function ProteinRing({ consumed, target, size = 124 }) {
       <circle cx="66" cy="66" r={r} fill="none" stroke={C.macroP} strokeWidth="10"
         strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
         transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-      <text x="66" y="56" textAnchor="middle" style={{ fontSize: 27, fontWeight: 700, fill: C.ink }}>{remaining}<tspan style={{ fontSize: 14, fill: C.sub }}> ג׳</tspan></text>
+      <text x="66" y="56" textAnchor="middle" style={{ fontSize: 27, fontWeight: 700, fill: C.ink }}>{eaten}<tspan style={{ fontSize: 14, fill: C.sub }}> ג׳</tspan></text>
       <text x="66" y="77" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: C.macroP }}>חלבון</text>
       <text x="66" y="92" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{done ? "הגעת ליעד!" : `מתוך ${Math.round(target)}`}</text>
     </svg>
@@ -433,6 +434,7 @@ function Onboarding({ onFinish, name }) {
   const [newSens, setNewSens] = useState("");
   const [confirmNoSens, setConfirmNoSens] = useState(false);
   const [confirmSens, setConfirmSens] = useState(false);
+  const [ack, setAck] = useState(false);
   const customSens = dislikes.split(",").map((s) => s.trim()).filter(Boolean);
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setDislikes([...customSens, t].join(", ")); setNewSens(""); };
   const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
@@ -611,13 +613,17 @@ function Onboarding({ onFinish, name }) {
       )}
 
       {confirmSens && (
-        <div onClick={() => setConfirmSens(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <div onClick={() => { setConfirmSens(false); setAck(false); }} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
             <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, marginBottom: 10 }}>רגע לפני שממשיכים</div>
             <div style={{ fontSize: 15, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>רשמתי לעצמי להימנע מ: <b>{[...allergies, ...customSens].join(", ")}</b></div>
-            <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>תמיד כדאי לבדוק את רשימת הרכיבים בעצמך - זה כלי עזר, לא תחליף לבדיקה.</div>
-            <Btn onClick={() => { setConfirmSens(false); setStep(step + 1); }}>המשך</Btn>
-            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmSens(false)} style={{ color: C.sub }}>שינוי</Btn></div>
+            <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>תמיד כדאי לבדוק את רשימת הרכיבים בעצמך - זה כלי עזר, לא תחליף לבדיקה. אם יש לך אלרגיה ממשית, אל תסתמכי רק על האפליקציה.</div>
+            <div onClick={() => setAck(!ack)} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 16 }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${ack ? C.brand : C.line}`, background: ack ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{ack && <Check size={14} color="#fff" />}</div>
+              <span style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}>קראתי והבנתי שהאפליקציה היא כלי עזר בלבד, ובאחריותי לבדוק תמיד את רשימת הרכיבים המלאה לפני אכילה.</span>
+            </div>
+            <Btn disabled={!ack} onClick={() => { setConfirmSens(false); setAck(false); setStep(step + 1); }}>המשך</Btn>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setConfirmSens(false); setAck(false); }} style={{ color: C.sub }}>שינוי</Btn></div>
           </div>
         </div>
       )}
@@ -2135,6 +2141,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const toggle = (key, val) => setProfile({ ...profile, [key]: (profile[key] || []).includes(val) ? (profile[key] || []).filter((x) => x !== val) : [...(profile[key] || []), val] });
   const chip = (on) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
   const [newSens, setNewSens] = useState("");
+  const [want, setWant] = useState(null);
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
@@ -2153,6 +2160,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       + (diet.length ? `. סגנון תזונה: ${diet.join(", ")}` : "")
       + (avoidList.length ? `. חשוב מאוד - יש לי רגישות/אלרגיה, ואסור בשום אופן להציע לי מאכלים שמכילים: ${avoidList.join(", ")}. אם רעיון כולל אחד מהם, אל תציעי אותו בכלל, ותמיד הזכירי לי בעדינות לבדוק את רשימת הרכיבים המלאה לפני האכילה - כי לפעמים גם AI טועה.` : "")
       + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
+      + (want ? `. אני מחפשת עכשיו: ${want}` : "")
       + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
     const h = [{ role: "user", content: seed }];
     setMsgs(h); setStage("chat"); run(h);
@@ -2221,6 +2229,10 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       {stage === "confirm" ? (
         <div>
           <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ - בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>מה את מחפשת עכשיו?</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+            {WANT_OPTIONS.map((w) => (<span key={w.id} onClick={() => setWant(want === w.id ? null : w.id)} style={chip(want === w.id)}>{w.emoji} {w.id}</span>))}
+          </div>
           <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
             {DIET_OPTIONS.map((d) => (<span key={d.id} onClick={() => toggle("diet", d.id)} style={chip(diet.includes(d.id))}>{d.emoji} {d.id}</span>))}

@@ -76,7 +76,7 @@ The AI features only work when deployed (or with the functions running), since t
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.80`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.83`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -272,3 +272,21 @@ Symptom: AI-estimated values are unrealistically low (e.g. grilled entrecote kca
 - Per Ron: the step-2 "המשך" now ALWAYS goes through a confirm (kept light). Added `confirmSens` state; `next()` on step 2 -> `hasSens ? setConfirmSens(true) : setConfirmNoSens(true)`.
 - New `confirmSens` overlay (marked case): title "רגע לפני שממשיכים", a readback "רשמתי לעצמי להימנע מ: <bold list>" (allergies + customSens joined), ONE short reminder line ("תמיד כדאי לבדוק את רשימת הרכיבים בעצמך - זה כלי עזר, לא תחליף לבדיקה."), buttons "המשך" / "שינוי". Deliberately NOT the full disclaimer (that already sits on the step screen; full version is only in the no-mark `confirmNoSens` overlay). Decision: readback is worth it for allergy safety + catches mis-taps, but kept short to avoid nagging.
 - VERSION 0.79->0.80 (App.jsx only). qa harness unaffected.
+
+## v0.81 - onboarding marked-sensitivities confirm: add allergy line + required acknowledgement checkbox
+- In the `confirmSens` overlay (step 2, when she DID mark sensitivities): appended the real-allergy sentence so it now reads "...לא תחליף לבדיקה. אם יש לך אלרגיה ממשית, אל תסתמכי רק על האפליקציה." (previously only the no-mark overlay had the allergy line).
+- Added a REQUIRED acknowledgement checkbox (`ack` state): "קראתי והבנתי שהאפליקציה היא כלי עזר בלבד, ובאחריותי לבדוק תמיד את רשימת הרכיבים המלאה לפני אכילה." "המשך" is `disabled` until it is ticked. `ack` resets on continue / "שינוי" / overlay dismiss. Checkbox styled like the consent checkbox (22px box + Check).
+- The no-mark `confirmNoSens` overlay is unchanged (no checkbox there - she has nothing to take responsibility for; it keeps the full disclaimer + "כן, אפשר להמשיך"/"חזרה לסמן").
+- VERSION 0.80->0.81 (App.jsx only). qa harness unaffected.
+
+## v0.82 - "מה כדאי לאכול?" asks direction before recommending
+- Per Ron: before generating ideas, ask what she is in the mood for. Added module const `WANT_OPTIONS` = ארוחה מלאה / משהו קל / חטיף / משקה (id+emoji). New `want` state in `RecommendModal` (single-select, optional - tapping again clears).
+- Confirm stage: added a "מה את מחפשת עכשיו?" chip row right under the intro (above סגנון תזונה), using the same `chip()` style. The recommendations already factor in what she logged today (the seed includes `mealsHad` + remainingKcal), so the only addition is the direction.
+- `startChat` seed: appends `. אני מחפשת עכשיו: {want}` when one is chosen. If none chosen, behavior is unchanged (general ideas).
+- VERSION 0.81->0.82 (App.jsx only). qa harness: the RecommendModal seed changed (added the optional "אני מחפשת עכשיו" clause) - mirror in qa/run-qa.mjs if/when that seed is covered.
+
+## v0.83 - protein ring shows protein EATEN (counts up), not remaining
+- Ron reported the day-screen protein ring "changing protein to ~101 instead of 14" and then "going down" when he added another recipe. Not a value/scaling bug: `ProteinRing` was displaying `remaining = target - consumed` (target ~115 for 72kg at PROTEIN_PER_KG 1.6, so after a 14g recipe it showed 101, and dropped as more was eaten). With the "מתוך {target}" subtitle this read as "101 of 115 eaten" and counted the wrong direction.
+- Fix: the ring big number now shows `eaten = Math.round(consumed)` (counts UP toward the goal). Subtitle stays "מתוך {target}", fill stays consumed/target, "הגעת ליעד!" still at consumed>=target. So protein now reads "14 ג׳ חלבון מתוך 115" and grows as she eats.
+- Intentional asymmetry left as-is: the CALORIE ring still shows `remaining = budget - consumed` (counts DOWN - it is a budget to stay under), while protein counts UP (it is a goal to reach). Different metric types, different framing.
+- VERSION 0.82->0.83 (App.jsx only). qa harness unaffected.
