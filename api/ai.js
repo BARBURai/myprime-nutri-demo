@@ -9,12 +9,12 @@
 //  Reuses the SAME Upstash Redis used by the access gate. Set in Vercel env:
 //    UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
 //  Optional tuning (defaults in code):
-//    AI_DAILY_LIMIT  = max AI calls per user per day        (default 40)
+//    AI_DAILY_LIMIT  = max AI calls per user per day        (default 25)
 //    AI_BURST_LIMIT  = max AI calls per user per minute     (default 10)
 //  While the Upstash vars are unset, the limit is simply OFF (the app still works).
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 40);
+const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 25);
 const BURST_LIMIT = Number(process.env.AI_BURST_LIMIT || 10);
 
 async function redis(base, token, ...args) {
