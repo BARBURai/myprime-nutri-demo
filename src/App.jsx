@@ -328,7 +328,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.10";
+const VERSION = "1.11";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2564,8 +2564,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 14, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
               <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{allDone ? "סיימת את כל המשימות להיום!" : "המשימות של היום"}</div>
-              <div style={{ fontSize: 12.5, color: C.brandD, marginTop: 8, fontWeight: 500 }}>הקישי לפתיחה</div>
-              <div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>כל יום שתמלאי, עוד מדליה לאוסף</div>
+              <button onClick={(e) => { e.stopPropagation(); onOpen && onOpen(); }} style={{ marginTop: 10, border: "none", borderRadius: 10, padding: "10px 12px", background: C.brand, color: "#fff", fontSize: 13.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", width: "100%" }}>הקישי למילוי המעקב</button>
             </div>
           </div>
         )}
@@ -2577,8 +2576,8 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
           </div>
         )}
       </div>
-      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} role="button" aria-label="ארון הגביעים" style={{ width: 80, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: "#fff", padding: "10px 6px" }}>
-        <img src="/medals/trophy-icon.webp" alt="" width={44} height={44} style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
+      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} role="button" aria-label="ארון הגביעים" style={{ width: 84, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
+        <img src="/medals/trophy-icon.webp" alt="" width={72} height={58} style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
         <div style={{ fontSize: 12.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
         <ChevronLeft size={16} color="#fff" />
       </div>
