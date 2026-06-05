@@ -14,6 +14,14 @@ import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
+// Identify the user to the server so it can enforce a per-user rate limit (cost protection).
+function aiHeaders() {
+  let uid = "";
+  try { uid = localStorage.getItem("myprime_access_email") || ""; } catch (e) {}
+  const h = { "Content-Type": "application/json" };
+  if (uid) h["x-user-id"] = uid;
+  return h;
+}
 const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
 const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a4%d7%a8%d7%98%d7%99%d7%95%d7%aa/";
 const COOKIE_URL = import.meta.env.VITE_COOKIE_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a7%d7%95%d7%a7%d7%99%d7%96/";
@@ -341,7 +349,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.14";
+const VERSION = "1.15";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1388,10 +1396,11 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
 async function analyzeMeal(base64, mediaType) {
   const prompt = "בתמונה מופיעה ארוחה או מוצר מזון. אם מופיעה תווית ערכים תזונתיים על האריזה - קרא את הערכים מהתווית (לפי הכמות שבאריזה, או ל-100 גרם) במקום לנחש. אחרת, זהה את פריטי המזון והערך לכל פריט כמות בגרמים וערכים תזונתיים סבירים. החזר JSON בלבד, ללא טקסט נוסף וללא סימוני קוד, במבנה: {\"items\":[{\"name\":\"שם בעברית\",\"grams\":0,\"kcal\":0,\"protein\":0,\"fat\":0,\"carbs\":0}]}";
   const res = await fetch(AI_ENDPOINT, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: aiHeaders(),
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: prompt }] }] }),
   });
   const data = await res.json();
+  if (res.status === 429) throw new Error(data.message || "limit");
   if (!res.ok || data.error || !Array.isArray(data.content)) throw new Error("ai_unavailable");
   const text = (data.content || []).map((i) => i.text || "").join("");
   const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
@@ -1410,10 +1419,13 @@ function extractAiJson(text) {
 async function aiNutritionChat(messages) {
   const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב - אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: aiHeaders(),
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system, messages }),
   });
   const data = await res.json();
+  if (res.status === 429 || data.error === "limit") {
+    return { raw: "", reply: data.message || "הגעת למכסת הפעולות להיום. נתראה מחר 💜", done: false, items: [] };
+  }
   if (!res.ok || data.error || !Array.isArray(data.content)) {
     return { raw: "", reply: "אופס - החיבור ל-AI לא עבד. ודאי שמפתח ה-API מוגדר ב-Vercel (Environment Variables) ושנעשה Redeploy, ושיש קרדיט בחשבון Anthropic.", done: false, items: [] };
   }
@@ -1446,10 +1458,11 @@ async function aiMealChat(messages, ctx) {
     "אל תפני אותה לדבר עם אדם, מאמנת או צוות, ואל תציעי ליצור קשר או להעביר פנייה לאף אחד - את כאן כדי לעזור עם האוכל והתזונה בלבד. " +
     "אל תיתני ייעוץ רפואי. החזירי טקסט רגיל בלבד (לא JSON, בלי סימוני קוד).";
   const res = await fetch(AI_ENDPOINT, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: aiHeaders(),
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 700, system, messages }),
   });
   const data = await res.json();
+  if (res.status === 429 || data.error === "limit") return { error: true, text: "", limit: true, message: data.message || "" };
   if (!res.ok || data.error || !Array.isArray(data.content)) return { error: true, text: "" };
   const text = (data.content || []).map((i) => i.text || "").join("").trim();
   return { text };
@@ -1463,7 +1476,7 @@ async function extractPreferences(userText, existing) {
       + ((existing && existing.length) ? existing.join(", ") : "(ריק)")
       + ". החזירי JSON בלבד, בלי טקסט נוסף ובלי סימוני קוד: {\"diet\":[],\"avoid\":[]}. diet = סגנונות תזונה בלבד (צמחוני/טבעוני/כשר/דל פחמימה/ים-תיכוני). avoid = מאכלים או רכיבים להימנע מהם (כולל רגישויות, אלרגיות, ולא-אוהבת). אם אין שום דבר חדש, החזירי {\"diet\":[],\"avoid\":[]}.";
     const res = await fetch(AI_ENDPOINT, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: aiHeaders(),
       body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 200, system: sys, messages: [{ role: "user", content: userText }] }),
     });
     const data = await res.json();
@@ -1561,7 +1574,7 @@ async function searchUSDA(q) {
 async function translateFoodToEnglish(q) {
   try {
     const res = await fetch(AI_ENDPOINT, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: aiHeaders(),
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514", max_tokens: 40,
         system: "Translate the Hebrew food name to a short English food-search query (2-4 words, common USDA-style naming, include cooking method if implied, e.g. 'grilled ribeye steak', 'white rice cooked'). Reply with ONLY the English term - no quotes, no punctuation, no extra words.",
