@@ -328,7 +328,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.07";
+const VERSION = "1.08";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2622,7 +2622,6 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose }) {
 
 function CheckinCheer({ name, onClose }) {
   const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
-  useEffect(() => { const t = setTimeout(onClose, 2600); return () => clearTimeout(t); }, []);
   return (
     <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
       <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
@@ -2634,6 +2633,7 @@ function CheckinCheer({ name, onClose }) {
         <img src={MEDAL_SRC} alt="" width={100} height={100} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.6s cubic-bezier(.2,1.3,.5,1) both" }} />
         <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, marginTop: 10 }}>מדליה נכנסה לאוסף!</div>
         <div style={{ fontSize: 14.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""}. עוד יום שהשלמת, אני איתך 💜<div style={{ marginTop: 2, color: C.faint, fontSize: 13 }}>ענת</div></div>
+        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>
       </div>
     </div>
   );
@@ -2643,7 +2643,6 @@ function TrophyCheer({ week, name, onClose }) {
   const colors = ["#F4C04A", C.brand, C.amber, C.info, C.macroC];
   const src = week >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${Math.max(1, Math.min(9, week))}.webp`;
   const champ = week >= 10;
-  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, []);
   return (
     <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 47 }}>
       <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
@@ -2655,6 +2654,7 @@ function TrophyCheer({ week, name, onClose }) {
         <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
         <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : "גביע השבוע נכנס לארון!"}</div>
         <div style={{ fontSize: 14.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2, color: C.faint, fontSize: 13 }}>ענת</div></div>
+        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>{champ ? "סגירה 💜" : "ממשיכות חזק 💜"}</Btn></div>
       </div>
     </div>
   );
