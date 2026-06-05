@@ -77,7 +77,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.05`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.10`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -414,6 +414,45 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.10 - Summary button polish (Fri/Sat only) + trophy image on cabinet button
+- Weekly-summary bar now appears ONLY on Friday (dn 6) and Saturday (dn 0); hidden on other days.
+- Bar restyled as a clear button: light brand background (C.brandBg) + brand border + bar-chart icon + label + ChevronLeft.
+- WeeklySummaryModal: Anat's motivation line is hidden when there is no data (empty state shows only the "עוד אין נתונים" message, no closing quote).
+- Cabinet "ארון הגביעים" button: replaced the white SVG trophy outline with the actual golden trophy image. New asset `public/medals/trophy-icon.webp` = label-free crop of trophy-1 (cup only, no "שבוע N").
+- VERSION 1.09->1.10. CHANGED FILES: src/App.jsx, CLAUDE.md, public/medals/trophy-icon.webp (NEW). check-logic 7/7; tsc clean; 0 dashes.
+- ASSET NOTE: the cabinet INTERIOR trophies use /medals/trophy-1..9.webp + trophy-champion.webp (real golden trophies, 400x400). If they 404 in production the owner must upload them to public/medals/. Delivered the full medals folder in the zip to be safe.
+
+## v1.09 - Weekly summary (סיכום שבועי) built
+- New "סיכום שבועי" bar at the bottom of the tracker-card main area (top border, spans right edge to where the cabinet button starts; inline bar-chart SVG + label; stopPropagation so it does not open the check-in). Wired App -> DayScreen -> CheckinCard via onOpenSummary.
+- New WeeklySummaryModal (sheet "weeklySummary"): computes LIVE on every open (re-tap after adding data recomputes). Covers the program week of the SELECTED date (navigate to a past week's day to see that week's summary). Aggregates only days that are unlocked, <= today, and have tasks (Saturday included for non-keepers).
+- Aggregation (weeklySummaryData): bool/workout tasks -> COUNT of days done ("ב-X ימים" / "X אימונים", no denominator); number tasks (steps, water cups, veg, mealorder, sleep, fasting) -> AVERAGE over reported days ("בממוצע X" + "ב-N לילות שדיווחת" for sleep). Steps also compared to the previous week's average. Calories: avg kcal/day vs dailyTarget + "על היעד ב-X ימים" where on-goal = within 95%-105% of target (ASSUMPTION - owner to confirm band). Protein: avg g/day vs targets.protein. Only positives shown (zero-count tasks are skipped, warm tone).
+- Motivation: WEEKLY_MOTIVATION[week-1] closes each summary in Anat's voice; week 10 = the long "program ends, keep the habits" text (no "מסע"). ALL summary copy + phrasing is DRAFT - owner will refine.
+- VERSION 1.08->1.09 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+- Note: calorie 95% rule lives here (calorie on-goal count), since calories is not a daily check-in task.
+
+## v1.08 - Cheers stay (close button, no auto-dismiss)
+- Removed the auto-dismiss timers from CheckinCheer and TrophyCheer (they "ran away" before the owner could enjoy them). Both now stay until dismissed.
+- Added a warm close button to both: medal -> "יאללה, ממשיכות 💜"; trophy -> "ממשיכות חזק 💜" (champion week 10 -> "סגירה 💜"). Tap-outside still closes.
+- Confirmed: the trophy cheer fires on BACKFILL too - the auto-award effect detects an increase in earned-trophy count on any data change (after mount), regardless of which day was filled.
+- VERSION 1.07->1.08 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+
+## v1.07 - Medal pops for any completed day (was today-only)
+- Auto-award effect: the medal cheer now fires when ANY day newly completes (not only `today`). Fixes "completed week 2 day 3, no medal popped" - that day was not the demo's today, so the old `d === today` guard suppressed it. The first-load `celebRef.mounted` guard still prevents pops on app open.
+- Reminder: a day completes only when ALL its tasks are done. E.g. week 2 day 3 = steps (auto) + food journal (auto) + strength (manual). Filling only strength will not complete it; steps must be entered and food logged for that date too.
+- VERSION 1.06->1.07 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+
+## OPEN TASK (owner): owner will supply/refine the weekly-summary copy later (motivation lines 1-10 + metric phrasing). Hold final copy until provided. Aggregation spec is otherwise locked (live recompute on button tap; counts as "ב-X ימים" no denominator; averages "בממוצע X, ב-N ימים שדיווחת"; add calories/day-vs-target and protein/day-vs-target; count days within 95% of calorie target as on-goal).
+
+## Copy rule (owner): AVOID the word "מסע" anywhere in UI/copy (Anat's voice). Also scrub it from the days 1-2 welcome ("ברוכה הבאה למסע") on the next build.
+
+## v1.06 - Celebration animations + 95% protein
+- Protein task (auto) now counts as done at 95% of target: autoStatusFor.protein uses `proteinHad >= targets.protein * 0.95`. Affects the card, dayComplete, and medal logic consistently.
+- Medal celebration (CheckinCheer): now AUTO-dismisses (~2.6s), no button. Medal image pops with a new `medalIn` keyframe (scale+rotate bounce) on top of the existing confetti. Tap still dismisses.
+- New TrophyCheer overlay: when a NEW weekly trophy is earned, a trophy (that week's image, champion for week 10) pops in and auto-dismisses (~3s) with confetti. Warm Anat copy ("גביע השבוע נכנס לארון!" / champion text for week 10).
+- Auto-award effect upgraded: a `celebRef` (useRef) guards against popping on first load (sets _done silently on mount, only celebrates on later transitions) and tracks earned-trophy count to detect a NEW trophy. Routing: new trophy -> trophyCheer (priority); else today newly complete -> checkinCheer. New state `cheerTrophyWeek` feeds the trophy image.
+- VERSION 1.05->1.06 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+- RESUMING NEXT: weekly-summary aggregation spec was proposed (count vs average-over-reported-days per task) - awaiting owner's approval + the "ב-5 ימים" vs "5 מתוך 6" choice, then full copy + 10-week motivation bank + mock + build (with the "סיכום שבועי" button bar).
 
 ## v1.05 - Collection shows individual medals
 - CollectionModal: replaced the single big medal with a wrapping grid of N small medals (40px, count = days earned = _done days), scrollable (maxHeight 176) when many. The "X מדליות" count text and subtitle are KEPT below the grid (owner: keep the number AND show medals visually). 0 medals -> one greyed medal.

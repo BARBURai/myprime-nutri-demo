@@ -328,7 +328,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.09";
+const VERSION = "1.10";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2569,20 +2569,16 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
             </div>
           </div>
         )}
-        <div onClick={(e) => { e.stopPropagation(); onOpenSummary && onOpenSummary(); }} role="button" aria-label="סיכום שבועי" style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: C.brandD, fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={C.brandD} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3v18h18" /><path d="M7 16v-5" /><path d="M12 16V8" /><path d="M17 16v-9" /></svg>
-          סיכום שבועי
-        </div>
+        {(dn === 6 || dn === 0) && (
+          <div onClick={(e) => { e.stopPropagation(); onOpenSummary && onOpenSummary(); }} role="button" aria-label="סיכום שבועי" style={{ marginTop: 12, background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "11px 12px", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, color: C.brandD, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.brandD} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3v18h18" /><path d="M7 16v-5" /><path d="M12 16V8" /><path d="M17 16v-9" /></svg>
+            סיכום שבועי
+            <ChevronLeft size={16} color={C.brandD} />
+          </div>
+        )}
       </div>
       <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} role="button" aria-label="ארון הגביעים" style={{ width: 80, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: "#fff", padding: "10px 6px" }}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-          <path d="M4 22h16" />
-          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-        </svg>
+        <img src="/medals/trophy-icon.webp" alt="" width={44} height={44} style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
         <div style={{ fontSize: 12.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
         <ChevronLeft size={16} color="#fff" />
       </div>
@@ -2850,10 +2846,12 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
           </div>
         </>
       )}
-      <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 14.5, lineHeight: 1.6 }}>
-        {motivation}
-        <div style={{ marginTop: 6, color: C.faint, fontSize: 13 }}>ענת</div>
-      </div>
+      {lines.length > 0 && (
+        <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 14.5, lineHeight: 1.6 }}>
+          {motivation}
+          <div style={{ marginTop: 6, color: C.faint, fontSize: 13 }}>ענת</div>
+        </div>
+      )}
     </SheetShell>
   );
 }
