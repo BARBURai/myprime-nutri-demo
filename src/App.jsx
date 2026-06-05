@@ -228,6 +228,11 @@ function stepBaseline(stepsByDate, startDate) {
 }
 // Cumulative step-goal offset above baseline: +2000 (w2-3), +4000 (w4-5), +5000 (w6-7), +6000 (w8+).
 function stepGoalCumOffset(week) { return week >= 8 ? 6000 : week >= 6 ? 5000 : week >= 4 ? 4000 : week >= 2 ? 2000 : 0; }
+// Single source of truth for the daily step goal shown everywhere (day ring, report, profile).
+// null = still measuring (week 1, or no baseline data yet).
+function effectiveStepGoal(stepGoal, week) {
+  return week < 2 ? null : (stepGoal != null ? stepGoal : null);
+}
 // 7-day rolling average of daily steps ending at `date` (only days with data; week 1: from when she started).
 function steps7avg(stepsByDate, date) {
   let sum = 0, n = 0;
@@ -236,6 +241,14 @@ function steps7avg(stepsByDate, date) {
 }
 // Sundays when the running goal goes up, and by how much.
 const STEP_BUMP_WEEKS = { 2: 2000, 4: 2000, 6: 1000, 8: 1000 };
+function highestBumpAtOrBelow(week) { let h = 0; for (const w of [2, 4, 6, 8]) if (w <= week) h = w; return h; }
+// What step-goal action is pending for this week: set the baseline (first time), or accept an increase.
+function pendingStepAction(profile, week, ackWeek) {
+  if (week < 2) return null;
+  if (profile.stepBaseline == null) return { kind: "baseline" };
+  for (const w of [4, 6, 8]) if (w <= week && w > ackWeek) return { kind: "increase", week: w, inc: STEP_BUMP_WEEKS[w] };
+  return null;
+}
 
 /* ============================================================
    DAILY PROGRESS TRACKER (check-in module)
@@ -328,7 +341,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.11";
+const VERSION = "1.14";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -532,7 +545,7 @@ function Onboarding({ onFinish, name }) {
     setStep(step + 1);
   };
 
-  const draft = { age, heightCm, weightKg: Math.max(minHealthyKg(heightCm), weightKg), activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : Math.max(minHealthyKg(heightCm), goalKg), returnPct: 50, startDate, keepShabbat, stepGoal: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes };
+  const draft = { age, heightCm, weightKg: Math.max(minHealthyKg(heightCm), weightKg), activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : Math.max(minHealthyKg(heightCm), goalKg), returnPct: 50, startDate, keepShabbat, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes };
   const targets = computeTargets(draft);
   const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
@@ -740,7 +753,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -764,7 +777,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const isShabbatRest = profile.keepShabbat && dow === 0;
   const baseline = stepBaseline(stepsByDate, profile.startDate);
   // Running goal: stored value if set, else baseline + cumulative offset; null in week 1 (still measuring).
-  const dayStepGoal = week < 2 ? null : (profile.stepGoal != null ? profile.stepGoal : (baseline != null ? baseline + stepGoalCumOffset(week) : null));
+  const dayStepGoal = effectiveStepGoal(profile.stepGoal, week);
   const checkinOpen = TRACKER_ENABLED && unlockedOn(profile.startDate, date, CHECKIN_UNLOCK);
   const ciWeek = Math.min(week, 10);
   const ciTasks = checkinOpen ? tasksForDate(profile.startDate, date, profile.keepShabbat) : [];
@@ -819,6 +832,16 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         })}
       </div>
 
+      {stepAction && (
+        <div onClick={onStepSetup} role="button" aria-label="קביעת יעד צעדים" style={{ margin: "10px 16px 0", background: C.amberBg, border: `1.5px solid ${C.amber}`, borderRadius: 14, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+          <span style={{ fontSize: 20 }}>⭐</span>
+          <div style={{ flex: 1, textAlign: "right" }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: C.ink }}>{stepAction.kind === "baseline" ? "קביעת ממוצע צעדים יומי" : "היעד שלך עולה השבוע"}</div>
+            <div style={{ fontSize: 12.5, color: C.sub }}>{stepAction.kind === "baseline" ? "הקישי כדי לקבוע את נקודת ההתחלה שלך" : "הקישי לעדכון היעד"}</div>
+          </div>
+          <ChevronLeft size={18} color={C.amber} />
+        </div>
+      )}
       {progDay >= 1 && progDay <= 2 ? (
         <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "40px 24px 64px", textAlign: "center" }}>
           <div style={{ fontSize: 46, marginBottom: 12 }}>🤍</div>
@@ -912,7 +935,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         });
         const stepsToday = stepsByDate[today] || 0;
         const baseline = stepBaseline(stepsByDate, startDate);
-        const goal = programWeek < 2 ? null : (stepGoalStored != null ? stepGoalStored : (baseline != null ? baseline + stepGoalCumOffset(programWeek) : null));
+        const goal = effectiveStepGoal(stepGoalStored, programWeek);
         const avg7 = steps7avg(stepsByDate, today);
         const maxStep = Math.max(goal || 0, ...sData.map((x) => x.steps), 1);
         const cells = [
@@ -1193,8 +1216,9 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
+function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsByDate, programWeek }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
+  const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   const [baseOpen, setBaseOpen] = useState(false);
   const [newSens, setNewSens] = useState("");
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -1247,9 +1271,12 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName }) {
         {programWeekFor(profile.startDate, TODAY) >= MACRO_UNLOCK.week && <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
       </div>
 
-      <div onClick={() => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: profile.stepGoal || 2000 })} style={{ background: C.amberBg, borderRadius: 12, padding: 12, marginBottom: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 13, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}><Footprints size={15} color={C.amber} /> יעד צעדים יומי</span>
-        <span style={{ fontWeight: 600, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}>{profile.stepGoal != null ? `${profile.stepGoal.toLocaleString()} צעדים` : "מודדת ממוצע"} <Pencil size={13} color={C.faint} /></span>
+      <div onClick={() => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: effStepGoal != null ? effStepGoal : 2000 })} style={{ background: C.amberBg, borderRadius: 12, padding: 12, marginBottom: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontSize: 13, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}><Footprints size={15} color={C.amber} /> יעד צעדים יומי</span>
+          {profile.stepBaseline != null && <span style={{ fontSize: 11.5, color: C.faint }}>התחלת ב-{profile.stepBaseline.toLocaleString()}</span>}
+        </span>
+        <span style={{ fontWeight: 600, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}>{effStepGoal != null ? `${effStepGoal.toLocaleString()} צעדים` : "מודדת ממוצע"} <Pencil size={13} color={C.faint} /></span>
       </div>
 
       <div onClick={() => setProfile({ ...profile, keepShabbat: !profile.keepShabbat })} style={{ background: C.bg, borderRadius: 12, padding: "12px 12px", marginBottom: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -2585,9 +2612,15 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   );
 }
 
-function CheckinModal({ tasks, answers, auto, setValue, onClose }) {
+function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate }) {
+  const dd = new Date(date);
+  const rel = relLabel(date);
+  const wk = Math.min(programWeekFor(startDate, date), 10);
+  const dn = dowOf(date);
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getDay()]}, ${dd.getDate()} ב${HE_MONTHS[dd.getMonth()]} · שבוע ${wk}${dn >= 1 ? `, יום ${dn}` : ""}`;
   return (
     <SheetShell title="המעקב היומי שלי" onClose={onClose}>
+      <div style={{ fontSize: 13, fontWeight: 500, color: C.sub, marginBottom: 8, textAlign: "right" }}>{dateLine}</div>
       <div style={{ maxHeight: "58vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
         {CHECKIN_GROUPS.map((g) => {
           const items = tasks.filter((t) => t.group === g.id);
@@ -2855,6 +2888,38 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
   );
 }
 
+function StepSetupModal({ action, profile, stepsByDate, startDate, programWeek, onBaseline, onIncrease, onClose }) {
+  const isBaseline = action.kind === "baseline";
+  const measured = stepBaseline(stepsByDate, startDate);
+  const suggested = isBaseline
+    ? (measured != null ? measured : 3000)
+    : ((profile.stepGoal != null ? profile.stepGoal : (profile.stepBaseline || 0)) + action.inc);
+  const [val, setVal] = useState(Math.max(500, Math.round(suggested / 250) * 250));
+  const stepBtn = { width: 46, height: 46, borderRadius: 12, border: `1px solid ${C.line}`, background: C.panel, color: C.brand, fontSize: 24, fontWeight: 700, cursor: "pointer", fontFamily: fontStack };
+  return (
+    <SheetShell title={isBaseline ? "קביעת ממוצע צעדים יומי" : "היעד שלך עולה"} onClose={onClose}>
+      <div style={{ textAlign: "right", fontSize: 14.5, color: C.sub, lineHeight: 1.7, marginBottom: 16 }}>
+        {isBaseline
+          ? (measured != null
+            ? <>מדדנו את הצעדים שלך בשבוע הראשון - הקצב הטבעי שלך יצא בערך <b style={{ color: C.ink }}>{measured.toLocaleString()}</b> צעדים ביום. נתחיל מכאן, ומכאן נעלה יחד בהדרגה.</>
+            : <>כדי לבנות לך יעד אישי, בואי נקבע מאיפה מתחילים. כמה צעדים בערך את עושה ביום רגיל?<div style={{ fontSize: 12.5, color: C.faint, marginTop: 6 }}>לא בטוחה? בתחילת הדרך רוב הנשים נעות בין 2,000 ל-4,000. תמיד אפשר לעדכן.</div></>)
+          : <>כל הכבוד על ההתמדה. השבוע מוסיפים לקצב - היעד עולה ב-<b style={{ color: C.ink }}>{action.inc.toLocaleString()}</b>. אפשר לאשר או לשנות. ממשיכות לעלות 💜</>}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 18 }}>
+        <button onClick={() => setVal((v) => v + 250)} style={stepBtn}>+</button>
+        <div style={{ textAlign: "center", minWidth: 110 }}>
+          <div style={{ fontSize: 30, fontWeight: 800, color: C.ink }}>{val.toLocaleString()}</div>
+          <div style={{ fontSize: 12.5, color: C.faint }}>צעדים ביום</div>
+        </div>
+        <button onClick={() => setVal((v) => Math.max(500, v - 250))} style={stepBtn}>-</button>
+      </div>
+      <button onClick={() => (isBaseline ? onBaseline(val) : onIncrease(action.week, val))} style={{ width: "100%", border: "none", borderRadius: 12, padding: "13px", background: C.brand, color: "#fff", fontSize: 16, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>
+        {isBaseline ? `מאשרת, נתחיל מ-${val.toLocaleString()}` : `מאשרת - ${val.toLocaleString()} צעדים`}
+      </button>
+    </SheetShell>
+  );
+}
+
 function GoalBumpModal({ info, name, onClose }) {
   const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
   const newGoal = info ? info.newGoal : 0;
@@ -2878,7 +2943,7 @@ function GoalBumpModal({ info, name, onClose }) {
 }
 
 export default function App() {
-  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, keepShabbat: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, keepShabbat: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
@@ -2965,23 +3030,10 @@ export default function App() {
   const programWeek = programWeekFor(profile.startDate, TODAY);
   const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
   const stepsOpenToday = unlockedOn(profile.startDate, selectedDate, STEPS_UNLOCK);
-  const stepBase = stepBaseline(stepsByDate, profile.startDate);
-  const curStepGoal = programWeek < 2 ? null : (profile.stepGoal != null ? profile.stepGoal : (stepBase != null ? stepBase + stepGoalCumOffset(programWeek) : null));
-  // Goal-increase day: Sunday of weeks 2/4/6/8 - raise the running goal once and show the notice.
-  useEffect(() => {
-    if (!onboarded) return;
-    const inc = STEP_BUMP_WEEKS[programWeek];
-    if (!inc || programWeek <= goalAckWeek) return;
-    const measured = stepBaseline(stepsByDate, profile.startDate);
-    let newGoal;
-    if (profile.stepGoal != null) newGoal = profile.stepGoal + inc;            // relative to her last goal
-    else if (measured != null) newGoal = measured + stepGoalCumOffset(programWeek); // first time / mid-program
-    else return;                                                              // no baseline measured yet
-    setProfile((p) => ({ ...p, stepGoal: newGoal }));
-    setGoalAckWeek(programWeek);
-    setGoalBump({ week: programWeek, inc, newGoal });
-    setSheet("goalBump");
-  }, [onboarded, programWeek, goalAckWeek]);
+  // Step goal: she sets the baseline once, then accepts increases via a prominent banner (never silent).
+  const stepAction = pendingStepAction(profile, programWeek, goalAckWeek);
+  const confirmBaseline = (val) => { setProfile((p) => ({ ...p, stepBaseline: val, stepGoal: val + stepGoalCumOffset(programWeek) })); setGoalAckWeek(highestBumpAtOrBelow(programWeek)); setSheet(null); };
+  const confirmIncrease = (week, val) => { setProfile((p) => ({ ...p, stepGoal: val })); setGoalAckWeek(week); setSheet(null); };
   const recDayLog = log.filter((e) => e.date === selectedDate);
   const recRemainingKcal = (dailyTarget + activityLog.filter((a) => a.date === selectedDate).reduce((s, a) => s + a.kcal, 0)) - recDayLog.reduce((s, e) => s + e.kcal, 0);
   const recRemainingProtein = Math.max(0, targets.protein - recDayLog.reduce((s, e) => s + (e.p || 0), 0));
@@ -3106,10 +3158,10 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} />}
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>
               {tabs.slice(0, 2).map((t) => {
@@ -3131,8 +3183,8 @@ export default function App() {
             {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
-            {sheet === "goalBump" && <GoalBumpModal info={goalBump} name={profile.name || gateName} onClose={() => setSheet(null)} />}
-            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} />}
+            {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
+            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} onClose={() => setSheet(null)} />}
