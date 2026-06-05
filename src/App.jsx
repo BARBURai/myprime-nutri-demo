@@ -302,7 +302,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.96";
+const VERSION = "0.99";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -319,9 +319,10 @@ function Ring({ consumed, budget, size = 132, onPlus }) {
       <circle cx="66" cy="66" r={r} fill="none" stroke={over ? C.amber : C.brand} strokeWidth="10"
         strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
         transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-      <text x="66" y="56" textAnchor="middle" style={{ fontSize: 27, fontWeight: 700, fill: C.ink }}>{Math.abs(remaining).toLocaleString()}</text>
-      <text x="66" y="77" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: over ? C.amber : C.brand }}>קלוריות</text>
-      <text x="66" y="92" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{over ? "מעל היעד" : `מתוך ${Math.round(budget).toLocaleString()}`}</text>
+      <text x="66" y="40" textAnchor="middle" style={{ fontSize: 11.5, fontWeight: 600, fill: C.sub }}>צרכת</text>
+      <text x="66" y="64" textAnchor="middle" style={{ fontSize: 25, fontWeight: 700, fill: C.ink }}>{Math.round(consumed).toLocaleString()}</text>
+      <text x="66" y="83" textAnchor="middle" style={{ fontSize: 13.5, fontWeight: 700, fill: over ? C.amber : C.brand }}>קלוריות</text>
+      <text x="66" y="97" textAnchor="middle" style={{ fontSize: 10, fill: over ? C.amber : C.sub }}>{over ? `מעל היעד (${Math.round(budget).toLocaleString()})` : `מתוך ${Math.round(budget).toLocaleString()}`}</text>
     </svg>
   );
   if (!onPlus) return svg;
@@ -343,13 +344,14 @@ function ProteinRing({ consumed, target, size = 124 }) {
       <circle cx="66" cy="66" r={r} fill="none" stroke={C.macroP} strokeWidth="10"
         strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
         transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-      <text x="66" y="56" textAnchor="middle" style={{ fontSize: 27, fontWeight: 700, fill: C.ink }}>{eaten}<tspan style={{ fontSize: 14, fill: C.sub }}> ג׳</tspan></text>
-      <text x="66" y="77" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: C.macroP }}>חלבון</text>
-      <text x="66" y="92" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{done ? "הגעת ליעד!" : `מתוך ${Math.round(target)}`}</text>
+      <text x="66" y="40" textAnchor="middle" style={{ fontSize: 11.5, fontWeight: 600, fill: C.sub }}>צרכת</text>
+      <text x="66" y="64" textAnchor="middle" style={{ fontSize: 25, fontWeight: 700, fill: C.ink }}>{eaten}<tspan style={{ fontSize: 13, fill: C.sub }}> ג׳</tspan></text>
+      <text x="66" y="83" textAnchor="middle" style={{ fontSize: 13.5, fontWeight: 700, fill: C.macroP }}>חלבון</text>
+      <text x="66" y="97" textAnchor="middle" style={{ fontSize: 10, fill: C.sub }}>{done ? "הגעת ליעד!" : `מתוך ${Math.round(target)}`}</text>
     </svg>
   );
 }
-function MetricRing({ value, goal, color, track, label, sub, onPlus, size = 130, bigText }) {
+function MetricRing({ value, goal, color, track, label, sub, onPlus, size = 130, bigText, verb }) {
   const r = 54, circ = 2 * Math.PI * r;
   const frac = Math.max(0, Math.min(1, goal > 0 ? value / goal : 0));
   const done = goal > 0 && value >= goal;
@@ -360,9 +362,10 @@ function MetricRing({ value, goal, color, track, label, sub, onPlus, size = 130,
         <circle cx="66" cy="66" r={r} fill="none" stroke={color} strokeWidth="10"
           strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
           transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-        <text x="66" y="54" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{bigText != null ? bigText : value.toLocaleString()}</text>
-        <text x="66" y="75" textAnchor="middle" style={{ fontSize: 14, fontWeight: 700, fill: color }}>{label}</text>
-        <text x="66" y="89" textAnchor="middle" style={{ fontSize: 10.5, fill: C.sub }}>{done ? "הגעת ליעד!" : sub}</text>
+        {verb && <text x="66" y="40" textAnchor="middle" style={{ fontSize: 11.5, fontWeight: 600, fill: C.sub }}>{verb}</text>}
+        <text x="66" y="64" textAnchor="middle" style={{ fontSize: 25, fontWeight: 700, fill: C.ink }}>{bigText != null ? bigText : value.toLocaleString()}</text>
+        <text x="66" y="83" textAnchor="middle" style={{ fontSize: 13.5, fontWeight: 700, fill: color }}>{label}</text>
+        <text x="66" y="97" textAnchor="middle" style={{ fontSize: 10, fill: C.sub }}>{done ? "הגעת ליעד!" : sub}</text>
       </svg>
       {onPlus && (
         <button onClick={onPlus} aria-label={`עדכון ${label}`} style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 30, height: 30, borderRadius: "50%", background: color, color: "#fff", border: `2px solid ${C.panel}`, boxShadow: "0 2px 6px rgba(0,0,0,0.18)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={17} /></button>
@@ -711,7 +714,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, userName, onOpenCollection, checkins, onOpenCheckin }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -731,6 +734,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const todayRef = useRef(null);
   const cupMlD = profile.cupMl || DEFAULT_CUP_ML;
   const dow = dowOf(date);
+  const isShabbatRest = profile.keepShabbat && dow === 0;
   const baseline = stepBaseline(stepsByDate, profile.startDate);
   // Running goal: stored value if set, else baseline + cumulative offset; null in week 1 (still measuring).
   const dayStepGoal = week < 2 ? null : (profile.stepGoal != null ? profile.stepGoal : (baseline != null ? baseline + stepGoalCumOffset(week) : null));
@@ -745,18 +749,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const days = Array.from({ length: backN + 5 }, (_, i) => addDays(today, i - backN));
   return (
     <div style={{ padding: "8px 0 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 16px 0 6px", gap: 10 }}>
-        <div style={{ minWidth: 0 }}>
-          {userName && userName.trim() && <div style={{ fontSize: 15, color: C.brandD, fontWeight: 600 }}>היי {userName.trim()} 👋</div>}
-          <div style={{ fontSize: 14, color: C.sub, fontWeight: 500, marginTop: 1 }}>
-            {date !== today && relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD }}> · שבוע {week}</span> : null}
-          </div>
-        </div>
-        <button onClick={onOpenCollection} className="streak-pill" style={{ flexShrink: 0, background: `linear-gradient(135deg, #E8589B, ${C.brand})`, color: "#fff", border: "none", borderRadius: 18, padding: "8px 16px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 12px rgba(212,93,121,0.32)", fontFamily: fontStack }}>האוסף שלי</button>
-        <img src={MEDAL_SRC} alt="MyPrime" width={60} height={60} style={{ flexShrink: 0, display: "block" }} />
-      </div>
-
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "12px 16px 4px" }}>
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
           const sel = d === date; const isToday = d === today; const isFuture = d > today; const has = log.some((e) => e.date === d); const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest;
           return (
@@ -772,12 +765,23 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         })}
       </div>
 
+      <div style={{ textAlign: "center", padding: "9px 16px 2px", fontSize: 15.5, color: C.sub, fontWeight: 500 }}>
+        {relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD, fontWeight: 700 }}> · שבוע {week}</span> : null}
+      </div>
+
+      {isShabbatRest ? (
+        <div style={{ padding: "36px 24px 60px", textAlign: "center", color: C.faint }}>
+          <div style={{ fontSize: 56, marginBottom: 12 }}>🤍</div>
+          <div style={{ fontSize: 23, fontWeight: 700, color: C.sub }}>שבת שלום</div>
+          <div style={{ fontSize: 16, marginTop: 10, lineHeight: 1.7 }}>היום יום מנוחה - בלי מעקב ובלי מדידה.<br />נתראה במוצאי שבת 🌙</div>
+        </div>
+      ) : (
       <div style={{ padding: "0 16px" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", gap: 10, marginTop: 10, marginBottom: 14 }}>
-          <Ring consumed={consumed} budget={budget} size={130} onPlus={onAddCalorie} />
-          {macroOpen && <ProteinRing consumed={macros.p} target={targets.protein} size={130} />}
-          {waterOpen && <MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={130} />}
-          {stepsOpen && <MetricRing value={steps} goal={dayStepGoal || 0} color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : "מודדת ממוצע"} onPlus={onEditSteps} size={130} />}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", justifyItems: "center", alignItems: "start", rowGap: 14, columnGap: 6, marginTop: 6, marginBottom: 14 }}>
+          <div style={{ gridColumn: 1, gridRow: 1 }}><Ring consumed={consumed} budget={budget} size={130} onPlus={onAddCalorie} /></div>
+          {stepsOpen && <div style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : "מודדת ממוצע"} onPlus={onEditSteps} size={130} /></div>}
+          {macroOpen && <div style={{ gridColumn: 1, gridRow: 2 }}><ProteinRing consumed={macros.p} target={targets.protein} size={130} /></div>}
+          {waterOpen && <div style={{ gridColumn: 2, gridRow: 2 }}><MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} verb="שתית" color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={130} /></div>}
         </div>
         {SHOW_MACRO_STRIP && macroOpen && (
           <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", margin: "0 0 16px" }}>
@@ -818,6 +822,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         ))}
         <div style={{ textAlign: "center", fontSize: 11.5, color: C.faint, marginTop: 22 }}>MyPrime · v{VERSION}</div>
       </div>
+      )}
     </div>
   );
 }
@@ -2840,7 +2845,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} userName={profile.name || gateName} onOpenCollection={() => setSheet("collection")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
@@ -2848,12 +2853,16 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 14px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 8px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
               })}
               <button onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
+              <button onClick={() => setSheet("collection")} aria-label="האוסף שלי" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 8px", borderRadius: 14, background: "transparent", color: C.sub, fontWeight: 400 }}>
+                <img src={MEDAL_SRC} alt="" width={22} height={22} style={{ display: "block" }} />
+                <span style={{ fontSize: 12 }}>האוסף</span>
+              </button>
               {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 14px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 8px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
               })}
             </div>
 

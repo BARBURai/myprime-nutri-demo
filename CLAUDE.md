@@ -76,7 +76,7 @@ The AI features only work when deployed (or with the functions running), since t
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.96`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.99`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -413,6 +413,23 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v0.99 - Dashboard restructure: cleaner top, stable ring grid, verbs, collection in bottom bar
+- Removed the top header on DayScreen (greeting "היי <name>", the "האוסף שלי" pill, the medal logo); tightened the top space. `userName`/`onOpenCollection` props dropped from DayScreen.
+- "האוסף שלי" moved to the BOTTOM nav as a button (medal image icon, label "האוסף", opens the collection sheet). Nav button padding shrunk (5px 8px) to fit 5 items + FAB.
+- New selected-day line under the day strip, above the rings: relLabel + prettyDate + "שבוע N" (date + day + week, centered).
+- Rings now a FIXED 2-col grid - positions never shift when a new ring unlocks: calories top-right (col1/row1), steps top-left (col2/row1), protein bottom-right (col1/row2), water bottom-left (col2/row2). RTL => col1 = right. (Between water unlock w3d2 and protein w3d4 the bottom-right cell is briefly empty - the cost of stable positions.)
+- Verb label added at the top of each ring (center = the number, as before): calories/protein "צרכת", water "שתית", steps "צעדת". `MetricRing` got a `verb` prop. All ring text re-spaced to 4 lines (y 40/64/83/97).
+- VERSION 0.98->0.99 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+- STILL OPEN (next batch, owner approved structure first): the help/explanation system - onboarding intro screens, a full-screen explainer on each "first appearance" day (steps w1d2, daily tracker w1d3, water w3d2, protein w3d4), and a small "?" badge on each ring for the first 2 weeks opening a per-metric help popup (protein ring = only "?", no +). Texts to be drafted in Anat's voice for owner approval before building.
+
+## v0.98 - Calorie ring consistent with the others (center = eaten, not remaining)
+- `Ring` (calorie) center now shows calories EATEN (`Math.round(consumed)`) instead of remaining, so all four day rings read the same way: center = what you did, ring fills as you progress, subtitle "מתוך X". Over the cap: amber + "מעל היעד (X)". Resolves the confusion where a full ring meant "good progress" on 3 rings but "near your limit" on calories, and "245 מתוך 1,333" was ambiguous (ate vs left). Kept 4 rings (owner: for an older audience clarity > fewer rings).
+- VERSION 0.97->0.98 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+
+## v0.97 - Shabbat = full rest day (no measurement), not just a greyed pill
+- When `profile.keepShabbat` and the viewed date is Saturday, DayScreen now shows a calm rest view ("שבת שלום, יום מנוחה") instead of the rings/check-in/food content. `const isShabbatRest = profile.keepShabbat && dow === 0;` wraps the day content. Matters mainly when today itself is Saturday (auto-selected). Header + day strip stay so she can navigate to other days.
+- VERSION 0.96->0.97 (App.jsx only). qa unaffected; check-logic 7/7; tsc clean; 0 em/en dashes.
 
 ## v0.96 - Report steps section moved to top + 3-column table layout
 - In ReportScreen the steps section is now the FIRST section (right after the week pill, above the calorie and weight cards).
