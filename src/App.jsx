@@ -349,7 +349,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.15";
+const VERSION = "1.17";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -793,7 +793,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const ciAuto = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMlD);
   const ciLocked = date === today && new Date().getHours() < CHECKIN_REVEAL_HOUR;
   useEffect(() => { if (selRef.current) selRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, [date]);
-  const backN = Math.min(74, Math.max(10, programDayNumber(profile.startDate, today) - 1));
+  const backN = Math.min(74, Math.max(0, programDayNumber(profile.startDate, today) - 1));
   const days = Array.from({ length: backN + 5 }, (_, i) => addDays(today, i - backN));
   const dayProgress = (d) => {
     if (!TRACKER_ENABLED) return 0;
@@ -3190,7 +3190,7 @@ export default function App() {
 
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
-            {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={curStepGoal || 0} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); }} />}
+            {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); }} />}
             {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onSetMl={(ml) => setWaterForDate(selectedDate, ml)} onSetCup={(cup) => setProfile({ ...profile, cupMl: cup })} onClose={() => setSheet(null)} />}
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
