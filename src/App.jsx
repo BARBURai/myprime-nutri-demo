@@ -10,7 +10,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
-import { CHECKIN_GROUPS, activeTasks } from "./checkins";
+import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -328,7 +328,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.08";
+const VERSION = "1.09";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -740,7 +740,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -851,7 +851,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </div>
         )}
 
-        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} />}
+        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} />}
 
         {dayAct.length > 0 && (
           <>
@@ -2535,7 +2535,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   );
 }
 
-function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, onOpenCollection }) {
+function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary }) {
   const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
   const total = tasks.length;
   const r = 54, circ = 2 * Math.PI * r;
@@ -2569,6 +2569,10 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
             </div>
           </div>
         )}
+        <div onClick={(e) => { e.stopPropagation(); onOpenSummary && onOpenSummary(); }} role="button" aria-label="סיכום שבועי" style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: C.brandD, fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={C.brandD} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3v18h18" /><path d="M7 16v-5" /><path d="M12 16V8" /><path d="M17 16v-9" /></svg>
+          סיכום שבועי
+        </div>
       </div>
       <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} role="button" aria-label="ארון הגביעים" style={{ width: 80, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: "#fff", padding: "10px 6px" }}>
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -2711,6 +2715,145 @@ function CollectionModal({ checkins, startDate, today, onClose }) {
         })}
       </div>
       <div style={{ fontSize: 12, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע נכנס לארון כשמשלימים את ימי השבוע (ראשון עד שישי). שבת לא חובה.</div>
+    </SheetShell>
+  );
+}
+
+// Weekly-summary motivation, indexed by week-1 (1..10). DRAFT copy - owner will refine.
+const WEEKLY_MOTIVATION = [
+  "כל צעד קטן השבוע הוא הבסיס לשבוע הבא. אני איתך.",
+  "הגוף שלך כבר מרגיש את השינוי, גם אם המספרים עוד לא צועקים אותו.",
+  "את לא צריכה להיות מושלמת. את צריכה להמשיך - ואת ממשיכה.",
+  "השבוע הזה הוכיח שאת מסוגלת. תזכרי את זה כשיהיה קשה.",
+  "חצי הדרך מאחורייך. תראי כמה כבר השתנה.",
+  "ההרגלים שבנית הופכים לחלק ממך. זה כבר לא מאמץ, זה את.",
+  "כל בוקר שבחרת בעצמך השבוע - ניצחון. תספרי אותם.",
+  "הגוף בגיל הזה צריך סבלנות ואהבה, ואת נותנת לו בדיוק את זה.",
+  "עוד מעט הסיום, ואת נכנסת אליו חזקה יותר משהתחלת.",
+  "השבוע התוכנית מסתיימת, אבל העבודה שלך לא. כל מה שבנית בעשרת השבועות האלה - ההרגלים, המודעות, הדרך שבה את מתייחסת לעצמך - זה בדיוק מה שישמור על התוצאות הלאה. הסוד הוא להתמיד: להמשיך לזוז, לאכול נכון, לישון ולשתות, גם בלי המעקב היומי. את כבר יודעת איך. מכאן זה פשוט להמשיך להיות הגרסה הזאת של עצמך, יום אחרי יום. גאה בך, ובוטחת בך. 💜",
+];
+
+const SUMMARY_COUNT_PHRASE = {
+  journal: (c) => `מילאת יומן תזונה ב-${c} ימים`,
+  drinkbefore: (c) => `שתית לפני הארוחות ב-${c} ימים`,
+  protein: (c) => `הגעת ליעד החלבון ב-${c} ימים`,
+  noscreens: (c) => `בלי מסכים לפני השינה ב-${c} ימים`,
+  stopeating: (c) => `הפסקת לאכול שעתיים לפני השינה ב-${c} ימים`,
+  breathing: (c) => `תרגלת נשימות ב-${c} ימים`,
+  gratitude: (c) => `כתבת הכרת תודה ב-${c} ימים`,
+  grains: (c) => `דגנים מלאים או קטניות ב-${c} ימים`,
+  goodfat: (c) => `שומן בריא ב-${c} ימים`,
+  pelvic: (c) => `תרגלת רצפת אגן ב-${c} ימים`,
+  probiotics: (c) => `פרוביוטיקה ב-${c} ימים`,
+  antiinflam: (c) => `מזון אנטי-דלקתי ב-${c} ימים`,
+  calcium: (c) => `מזון עשיר בסידן ב-${c} ימים`,
+  sun: (c) => `חשיפה לשמש ב-${c} ימים`,
+  strength: (c) => `עשית ${c} אימוני כוח`,
+  mobility: (c) => `עשית ${c} אימוני מוביליטי`,
+};
+const SUMMARY_AVG_PHRASE = {
+  veg: (a) => `בממוצע ${a.avg} צבעי ירקות ביום`,
+  mealorder: (a) => `בממוצע ${a.avg} ארוחות בסדר אכילה ביום`,
+  water: (a) => `שתית בממוצע ${a.avg} כוסות מים ביום`,
+  sleephours: (a) => `ישנת בממוצע ${a.avg} שעות, ב-${a.n} לילות שדיווחת`,
+  fasting: (a) => `חלון צום בממוצע ${a.avg} שעות`,
+};
+
+function summaryWeekDates(week, startDate, today, keepShabbat) {
+  const out = []; const maxT = new Date(today).getTime();
+  for (let dnum = (week - 1) * 7 + 1; dnum <= week * 7; dnum++) {
+    const d = addDays(startDate, dnum - 1);
+    if (new Date(d).getTime() > maxT) break;
+    if (!unlockedOn(startDate, d, CHECKIN_UNLOCK)) continue;
+    if (!tasksForDate(startDate, d, keepShabbat).length) continue;
+    out.push(d);
+  }
+  return out;
+}
+function summaryStepsAvg(week, startDate, today, stepsByDate) {
+  if (week < 1) return null;
+  let sum = 0, n = 0; const maxT = new Date(today).getTime();
+  for (let dnum = (week - 1) * 7 + 1; dnum <= week * 7; dnum++) {
+    const d = addDays(startDate, dnum - 1);
+    if (new Date(d).getTime() > maxT) break;
+    const v = stepsByDate[d];
+    if (v != null && v > 0) { sum += v; n++; }
+  }
+  return n ? Math.round(sum / n) : null;
+}
+function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget) {
+  const dates = summaryWeekDates(week, startDate, today, keepShabbat);
+  const counts = {}, sums = {}, ns = {};
+  let calSum = 0, calN = 0, protSum = 0, protN = 0, calOnGoal = 0;
+  for (const d of dates) {
+    const ans = checkins[d] || {};
+    const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMl);
+    for (const t of tasksForDate(startDate, d, keepShabbat)) {
+      if (t.type === "number") {
+        let v = null;
+        if (t.auto === "steps") v = stepsByDate[d];
+        else if (t.auto === "water") v = waterByDate[d];
+        else v = ans[t.id];
+        if (v != null && v > 0) { sums[t.id] = (sums[t.id] || 0) + v; ns[t.id] = (ns[t.id] || 0) + 1; }
+      } else if (taskDone(t, ans, au)) {
+        counts[t.id] = (counts[t.id] || 0) + 1;
+      }
+    }
+    const dl = log.filter((e) => e.date === d);
+    if (dl.length) {
+      const kc = dl.reduce((s, e) => s + (e.kcal || 0), 0);
+      const pr = dl.reduce((s, e) => s + (e.p || 0), 0);
+      calSum += kc; calN++; protSum += pr; protN++;
+      if (dailyTarget > 0 && kc >= dailyTarget * 0.95 && kc <= dailyTarget * 1.05) calOnGoal++;
+    }
+  }
+  const avgs = {};
+  for (const id in sums) avgs[id] = { avg: Math.round(sums[id] / ns[id]), n: ns[id] };
+  return {
+    days: dates.length, counts, avgs,
+    cal: calN ? { avg: Math.round(calSum / calN), target: Math.round(dailyTarget), onGoal: calOnGoal } : null,
+    protein: protN ? { avg: Math.round(protSum / protN), target: targets.protein } : null,
+    stepsPrev: summaryStepsAvg(week - 1, startDate, today, stepsByDate),
+  };
+}
+
+function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, onClose }) {
+  const week = Math.min(programWeekFor(startDate, date), 10);
+  const data = weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget);
+  const lines = [];
+  if (data.avgs.steps) {
+    let s = `הוצאת בממוצע ${data.avgs.steps.avg.toLocaleString()} צעדים ביום`;
+    if (data.stepsPrev != null) s += data.avgs.steps.avg > data.stepsPrev ? " - יותר מהשבוע שעבר" : data.avgs.steps.avg < data.stepsPrev ? " - מעט פחות מהשבוע שעבר" : " - כמו השבוע שעבר";
+    lines.push(s);
+  }
+  if (data.cal) lines.push(`צרכת בממוצע ${data.cal.avg.toLocaleString()} קלוריות ביום (היעד ${data.cal.target.toLocaleString()})${data.cal.onGoal ? ` - על היעד ב-${data.cal.onGoal} ימים` : ""}`);
+  if (data.protein) lines.push(`בממוצע ${data.protein.avg} גרם חלבון ביום (היעד ${data.protein.target})`);
+  for (const t of CHECKIN_TASKS) {
+    if (t.id === "steps") continue;
+    if (SUMMARY_COUNT_PHRASE[t.id] && data.counts[t.id]) lines.push(SUMMARY_COUNT_PHRASE[t.id](data.counts[t.id]));
+    else if (SUMMARY_AVG_PHRASE[t.id] && data.avgs[t.id]) lines.push(SUMMARY_AVG_PHRASE[t.id](data.avgs[t.id]));
+  }
+  const motivation = WEEKLY_MOTIVATION[Math.max(0, Math.min(9, week - 1))];
+  return (
+    <SheetShell title={`סיכום שבוע ${week}`} onClose={onClose}>
+      {lines.length === 0 ? (
+        <div style={{ textAlign: "center", color: C.sub, padding: "24px 12px", lineHeight: 1.7 }}>עוד אין נתונים לשבוע הזה.<br />ברגע שתתחילי למלא, הסיכום יופיע כאן.</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 15, color: C.ink, fontWeight: 600, marginBottom: 12 }}>{name && name.trim() ? `${name.trim()}, הנה השבוע שלך:` : "הנה השבוע שלך:"}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 16 }}>
+            {lines.map((ln, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 14.5, color: C.sub, lineHeight: 1.5 }}>
+                <span style={{ color: C.brand, flexShrink: 0, marginTop: 1 }}>✓</span><span>{ln}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 14.5, lineHeight: 1.6 }}>
+        {motivation}
+        <div style={{ marginTop: 6, color: C.faint, fontSize: 13 }}>ענת</div>
+      </div>
     </SheetShell>
   );
 }
@@ -2966,7 +3109,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
@@ -2995,6 +3138,7 @@ export default function App() {
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
