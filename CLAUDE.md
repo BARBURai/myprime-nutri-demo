@@ -75,8 +75,9 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
+- **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `0.99`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.04`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -413,6 +414,42 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.04 - Swipe fixes
+- Swipe direction FLIPPED per owner (it felt reversed): onTouchEnd now `goDay(dx > 0 ? 1 : -1)`.
+- Future/pre-start clamp hardened: goDay now compares with getTime() against [startDate, today] so swipe can never land on a future (not-yet-arrived) or pre-program day.
+- VERSION 1.03->1.04 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+- OPEN VISUAL TASK (owner request): the collection ("ארון הגביעים") should show individual SMALL medals, count = medals earned since program start (now = number of _done days, auto). Need a layout that holds many: shrink the medal size / wrap to a scrollable grid as the count grows. Currently CollectionModal shows ONE medal image + a "X מדליות" count - to be replaced with N small medals.
+- OPEN: weekly summary (סיכום שבועי) + its button in the tracker card - still in planning.
+
+## v1.03 - Days 1-2 intro, Saturday tracking for non-keepers, automatic medal
+- Days 1-2 of the program: no rings and no tracker card - a placeholder intro panel instead (welcome text, marked as temporary; real onboarding text comes with the help system). Gated on `progDay = programDayNumber(startDate, date)` in {1,2}. Swipe still works there.
+- Saturday: new `tasksForDate(startDate, date, keepShabbat)` - for non-Shabbat-keepers, Saturday now shows the SAME tasks as the Friday before it (`activeTasks(week, 6)` = that week's daily tasks; Friday has no strength/mobility so it is exactly the daily set). Shabbat-keepers: Saturday stays a rest day (tasksForDate returns []). DayScreen ciTasks, dayProgress, and the CheckinModal all use tasksForDate now. Rings show on Saturday for non-keepers (they are date-gated, not dow-gated). Weekly trophy still counts Sun-Fri only (Saturday optional, never blocks).
+- Automatic medal: removed the "סיימתי להיום" button (now just "סגירה"/close). New `dayComplete(...)` helper (every active task done). An effect in App auto-sets `_done` for any day from start..today that is complete (so all-auto days like day 3 earn the medal by themselves) and pops the "מדליה נכנסה לאוסף" cheer when TODAY transitions to complete. `_done` still drives the existing medal/trophy counts (trackerStats, weekTrophyEarned) - now set automatically instead of by a button. Removed finishCheckin.
+- VERSION 1.02->1.03 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+- STILL OPEN: weekly summary (סיכום שבועי) - needs planning (Friday vs Saturday timing, content) + a "סיכום שבועי" button as a bar at the bottom of the tracker-card main area (right edge to where the cabinet button starts). Not built yet.
+
+## v1.02 - Real trophy icon + swipe between days
+- Cabinet button: the lucide Trophy icon was not rendering for the owner, so replaced it with an INLINE SVG trophy (lucide Trophy paths, white stroke) - guaranteed to show. Removed the lucide Trophy import.
+- Swipe between days on the day content area (onTouchStart/onTouchEnd on the rings/content div, NOT the strip so it doesn't fight the strip's own horizontal scroll). Swipe RIGHT = previous (earlier) day, swipe LEFT = next (later) day - matches the strip layout (past on the right, future on the left). Threshold 55px and horizontal-dominant (|dx| > 1.5*|dy|). `goDay(delta)` clamps to [profile.startDate, today] and SKIPS Saturday for keepShabbat users (steps one more in the same direction). Tap on strip still works.
+- Strip auto-sync: renamed todayRef -> selRef; the selected pill now scrolls into center via a useEffect on [date], so the strip follows the day you swiped to (also covers mount = today).
+- VERSION 1.01->1.02 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+- Swipe direction is easy to flip if it feels backwards (one line in onTouchEnd).
+
+## v1.01 - Fixes to v1.00 tracker card
+- Removed the "יומן המעקב שלי" screen title from the top of DayScreen (top now shows only the scrolling day strip, per owner).
+- Moved "יומן המעקב שלי" INTO the tracker card as the first header line (with Sparkles icon), with the detailed date line ("שלישי, 2 ביוני · שבוע 9, יום 3") directly below it as a secondary line.
+- Cabinet button icon changed from Award (rosette) to Trophy (cup), matching "ארון הגביעים". Import Award->Trophy.
+- VERSION 1.00->1.01 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+
+## v1.00 - Tracker-card redesign, day-strip progress bars, screen title
+- Bottom nav: removed the "האוסף" button - back to 4 tabs + CENTERED FAB (padding restored to 5px 12px). The collection is now opened from the tracker card instead.
+- CheckinCard rebuilt: it is now a flex row. LEFT = a solid brand-pink "ארון הגביעים" button (Award icon + label + ChevronLeft, full height, clearly tappable) that opens the collection (stopPropagation so it does not trigger the check-in). RIGHT = the main area (tap opens check-in). The card header is no longer "המעקב היומי שלי" + week pill; it now shows the selected day's date line: relLabel + full day name (HE_DAYS_FULL) + date + "שבוע N, יום D" (D = dowOf 1-6). Week pill removed. `onOpenCollection` prop added (App -> DayScreen -> CheckinCard, = setSheet("collection")).
+- DayScreen: added a screen title "יומן המעקב שלי" at the very top. Removed the day-line that sat under the strip (date now lives only in the tracker card header, per owner). Note: on days with no tracker card (week 1 days 1-2, Saturdays) no date text shows except the highlighted strip pill.
+- Day strip: the small dot under each day was replaced by a thin completion progress bar at the bottom of each pill. Fills RIGHT->LEFT by that day's tracker completion fraction (new `dayProgress(d)` in DayScreen using programWeekFor/dowOf/activeTasks/autoStatusFor/taskDone). Color STRENGTHENS with completion via new `lerpHex("#F4B8D2","#D81B7A",pct)`; selected (pink) pill uses white fill on a translucent track.
+- New module helpers: HE_DAYS_FULL, lerpHex. New import: Award.
+- VERSION 0.99->1.00 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+- STILL OPEN: swipe between days (discussed, owner positive, direction not finalized - not built); the help/explanation system (onboarding screens, per-unlock full-screen explainers, "?" badge popups) - texts not drafted yet.
 
 ## v0.99 - Dashboard restructure: cleaner top, stable ring grid, verbs, collection in bottom bar
 - Removed the top header on DayScreen (greeting "היי <name>", the "האוסף שלי" pill, the medal logo); tightened the top space. `userName`/`onOpenCollection` props dropped from DayScreen.

@@ -328,7 +328,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.03";
+const VERSION = "1.04";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -786,16 +786,18 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   };
   const swipe = useRef({ x: 0, y: 0 });
   const goDay = (delta) => {
+    const minT = new Date(profile.startDate).getTime(), maxT = new Date(today).getTime();
     let d = addDays(date, delta);
     if (profile.keepShabbat && new Date(d).getDay() === 6) d = addDays(d, delta);
-    if (d < profile.startDate || d > today) return;
+    const t = new Date(d).getTime();
+    if (t < minT || t > maxT) return;
     setDate(d);
   };
   const onTouchStart = (e) => { const t = e.touches[0]; swipe.current = { x: t.clientX, y: t.clientY }; };
   const onTouchEnd = (e) => {
     const t = e.changedTouches[0];
     const dx = t.clientX - swipe.current.x, dy = t.clientY - swipe.current.y;
-    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) goDay(dx > 0 ? -1 : 1);
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) goDay(dx > 0 ? 1 : -1);
   };
   return (
     <div style={{ padding: "8px 0 24px" }}>
