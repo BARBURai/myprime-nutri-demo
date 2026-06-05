@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Home, BookOpen, TrendingDown, ChefHat, User, Plus, Check, Search,
   Barcode, Camera, ChevronRight, ChevronLeft, ChevronDown, Pencil, Trash2, Minus, X,
-  Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet,
+  Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet, Award,
   MessageCircle, Loader, Copy, Mic, Send, Lock, Clock, Cookie,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
@@ -156,6 +156,13 @@ const RECENT = [
 ];
 const MEALS = ["בוקר", "ביניים בוקר", "צהריים", "ביניים אחה״צ", "ערב", "נשנושים"];
 const HE_DAYS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+const HE_DAYS_FULL = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+function lerpHex(a, b, t) {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  const r = pa.map((v, i) => Math.round(v + (pb[i] - v) * Math.max(0, Math.min(1, t))));
+  return "#" + r.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
 const HE_MONTHS = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
 
 function ymd(d) { return d.toISOString().slice(0, 10); }
@@ -302,7 +309,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "0.99";
+const VERSION = "1.00";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -714,7 +721,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -747,26 +754,38 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   useEffect(() => { if (todayRef.current) todayRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, []);
   const backN = Math.min(74, Math.max(10, programDayNumber(profile.startDate, today) - 1));
   const days = Array.from({ length: backN + 5 }, (_, i) => addDays(today, i - backN));
+  const dayProgress = (d) => {
+    if (!TRACKER_ENABLED) return 0;
+    const dw = dowOf(d);
+    if (dw === 0) return 0;
+    if (!unlockedOn(profile.startDate, d, CHECKIN_UNLOCK)) return 0;
+    const wk = Math.min(programWeekFor(profile.startDate, d), 10);
+    const ts = activeTasks(wk, dw);
+    if (!ts.length) return 0;
+    const ans = (checkins && checkins[d]) || {};
+    const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMlD);
+    const dn = ts.filter((t) => taskDone(t, ans, au)).length;
+    return dn / ts.length;
+  };
   return (
     <div style={{ padding: "8px 0 24px" }}>
+      <div style={{ textAlign: "center", fontSize: 19, fontWeight: 700, color: C.ink, padding: "2px 16px 8px" }}>יומן המעקב שלי</div>
       <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
-          const sel = d === date; const isToday = d === today; const isFuture = d > today; const has = log.some((e) => e.date === d); const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest;
+          const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
           return (
             <button key={d} ref={isToday ? todayRef : null} disabled={off} onClick={() => { if (!off) setDate(d); }} title={isRest ? "שבת - יום מנוחה" : (isFuture ? "יום עתידי - ייפתח בתאריך הזה" : undefined)} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, overflow: "hidden", padding: 0, background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: off ? C.faint : (sel ? "#fff" : C.ink), cursor: off ? "default" : "pointer", opacity: off ? 0.4 : 1, textAlign: "center" }}>
               {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
               <div style={{ padding: "7px 0" }}>
                 <div style={{ fontSize: 13, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
                 <div style={{ fontSize: 17, fontWeight: 700, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
-                <div style={{ width: 5, height: 5, borderRadius: "50%", margin: "0 auto", background: has && !isRest ? (sel ? "#fff" : C.brand) : "transparent" }} />
+                <div style={{ height: 4, margin: "5px 6px 0", borderRadius: 3, position: "relative", background: sel ? "rgba(255,255,255,0.35)" : C.line, overflow: "hidden" }}>
+                  {pct > 0 && <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: `${Math.round(pct * 100)}%`, borderRadius: 3, background: sel ? "#fff" : lerpHex("#F4B8D2", "#D81B7A", pct) }} />}
+                </div>
               </div>
             </button>
           );
         })}
-      </div>
-
-      <div style={{ textAlign: "center", padding: "9px 16px 2px", fontSize: 15.5, color: C.sub, fontWeight: 500 }}>
-        {relLabel(date) ? `${relLabel(date)} · ` : ""}{prettyDate(date)}{week >= 1 ? <span style={{ color: C.brandD, fontWeight: 700 }}> · שבוע {week}</span> : null}
       </div>
 
       {isShabbatRest ? (
@@ -794,7 +813,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </div>
         )}
 
-        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} />}
+        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} />}
 
         {dayAct.length > 0 && (
           <>
@@ -2478,36 +2497,45 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   );
 }
 
-function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen }) {
+function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, onOpenCollection }) {
   const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
   const total = tasks.length;
   const r = 54, circ = 2 * Math.PI * r;
   const frac = total ? done / total : 0;
   const allDone = total > 0 && done >= total;
+  const dn = dowOf(date);
+  const dd = new Date(date);
+  const rel = relLabel(date);
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getDay()]}, ${dd.getDate()} ב${HE_MONTHS[dd.getMonth()]} · שבוע ${week}${dn >= 1 ? `, יום ${dn}` : ""}`;
   return (
-    <div onClick={locked ? undefined : onOpen} style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, margin: "0 0 16px", background: C.panel, cursor: locked ? "default" : "pointer" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, display: "flex", alignItems: "center", gap: 7 }}><Sparkles size={16} color={C.brand} /> המעקב היומי שלי <span style={{ fontSize: 12, fontWeight: 500, color: C.brandD, background: C.brandBg, padding: "2px 8px", borderRadius: 20 }}>שבוע {week}</span></span>
+    <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
+      <div onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}>{dateLine}</div>
+        {locked ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, fontSize: 14, color: C.sub }}><Clock size={15} color={C.faint} /> הדוח של היום ייפתח ב-19:00. אפשר להשלים בכל שעה אחרי זה.</div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
+            <div style={{ position: "relative", width: 120, height: 120, flexShrink: 0 }}>
+              <svg width={120} height={120} viewBox="0 0 132 132">
+                <circle cx="66" cy="66" r={r} fill="none" stroke="#FBE0EE" strokeWidth="10" />
+                <circle cx="66" cy="66" r={r} fill="none" stroke="#E8589B" strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)} transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+              </svg>
+              <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", filter: done === 0 ? "grayscale(1) opacity(0.55)" : "none" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 14, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
+              <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{allDone ? "סיימת את כל המשימות להיום!" : "המשימות של היום"}</div>
+              <div style={{ fontSize: 12.5, color: C.brandD, marginTop: 8, fontWeight: 500 }}>הקישי לפתיחה</div>
+              <div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>כל יום שתמלאי, עוד מדליה לאוסף</div>
+            </div>
+          </div>
+        )}
       </div>
-      {locked ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, fontSize: 14, color: C.sub }}><Clock size={15} color={C.faint} /> הדוח של היום ייפתח ב-19:00. אפשר להשלים בכל שעה אחרי זה.</div>
-      ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
-          <div style={{ position: "relative", width: 120, height: 120, flexShrink: 0 }}>
-            <svg width={120} height={120} viewBox="0 0 132 132">
-              <circle cx="66" cy="66" r={r} fill="none" stroke="#FBE0EE" strokeWidth="10" />
-              <circle cx="66" cy="66" r={r} fill="none" stroke="#E8589B" strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)} transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-            </svg>
-            <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", filter: done === 0 ? "grayscale(1) opacity(0.55)" : "none" }} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 14, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
-            <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{allDone ? "סיימת את כל המשימות להיום!" : "המשימות של היום"}</div>
-            <div style={{ fontSize: 12.5, color: C.brandD, marginTop: 8, fontWeight: 500 }}>הקישי לפתיחה</div>
-            <div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>כל יום שתמלאי, עוד מדליה לאוסף</div>
-          </div>
-        </div>
-      )}
+      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} role="button" aria-label="ארון הגביעים" style={{ width: 80, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: "#fff", padding: "10px 6px" }}>
+        <Award size={26} color="#fff" />
+        <div style={{ fontSize: 12.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
+        <ChevronLeft size={16} color="#fff" />
+      </div>
     </div>
   );
 }
@@ -2845,7 +2873,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} />}
@@ -2853,16 +2881,12 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 8px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
               })}
               <button onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
-              <button onClick={() => setSheet("collection")} aria-label="האוסף שלי" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 8px", borderRadius: 14, background: "transparent", color: C.sub, fontWeight: 400 }}>
-                <img src={MEDAL_SRC} alt="" width={22} height={22} style={{ display: "block" }} />
-                <span style={{ fontSize: 12 }}>האוסף</span>
-              </button>
               {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 8px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
               })}
             </div>
 
