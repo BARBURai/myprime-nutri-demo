@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Home, BookOpen, TrendingDown, ChefHat, User, Plus, Check, Search,
   Barcode, Camera, ChevronRight, ChevronLeft, ChevronDown, Pencil, Trash2, Minus, X,
-  Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet, Award,
+  Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet, Trophy,
   MessageCircle, Loader, Copy, Mic, Send, Lock, Clock, Cookie,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
@@ -309,7 +309,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.00";
+const VERSION = "1.01";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -769,7 +769,6 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   };
   return (
     <div style={{ padding: "8px 0 24px" }}>
-      <div style={{ textAlign: "center", fontSize: 19, fontWeight: 700, color: C.ink, padding: "2px 16px 8px" }}>יומן המעקב שלי</div>
       <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
           const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
@@ -2510,7 +2509,8 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
       <div onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}>{dateLine}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={16} color={C.brand} /> יומן המעקב שלי</div>
+        <div style={{ fontSize: 12.5, fontWeight: 500, color: C.sub, marginTop: 3 }}>{dateLine}</div>
         {locked ? (
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, fontSize: 14, color: C.sub }}><Clock size={15} color={C.faint} /> הדוח של היום ייפתח ב-19:00. אפשר להשלים בכל שעה אחרי זה.</div>
         ) : (
@@ -2532,7 +2532,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
         )}
       </div>
       <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} role="button" aria-label="ארון הגביעים" style={{ width: 80, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer", color: "#fff", padding: "10px 6px" }}>
-        <Award size={26} color="#fff" />
+        <Trophy size={26} color="#fff" />
         <div style={{ fontSize: 12.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
         <ChevronLeft size={16} color="#fff" />
       </div>
