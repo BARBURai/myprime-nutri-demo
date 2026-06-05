@@ -328,7 +328,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.06";
+const VERSION = "1.07";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2895,7 +2895,7 @@ export default function App() {
     for (let n = 1; n <= total; n++) {
       const d = addDays(profile.startDate, n - 1);
       if (dayComplete(profile.startDate, d, profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl) && !(checkins[d] && checkins[d]._done)) {
-        next[d] = { ...(next[d] || {}), _done: true }; changed = true; if (d === today) celebrate = true;
+        next[d] = { ...(next[d] || {}), _done: true }; changed = true; celebrate = true;
       }
     }
     if (changed) setCheckins(next);
