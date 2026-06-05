@@ -328,7 +328,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.04";
+const VERSION = "1.05";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2666,8 +2666,14 @@ function CollectionModal({ checkins, startDate, today, onClose }) {
   return (
     <SheetShell title="ארון המדליות והגביעים" onClose={onClose}>
       <div style={{ textAlign: "center", padding: "2px 0 8px" }}>
-        <img src={MEDAL_SRC} alt="" width={88} height={88} style={{ filter: days === 0 ? "grayscale(1) opacity(0.5)" : "none" }} />
-        <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginTop: 6 }}>{days} {days === 1 ? "מדליה" : "מדליות"}</div>
+        {days > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6, maxHeight: 176, overflowY: "auto", padding: "4px 2px" }}>
+            {Array.from({ length: days }).map((_, i) => <img key={i} src={MEDAL_SRC} alt="" width={40} height={40} style={{ display: "block" }} />)}
+          </div>
+        ) : (
+          <img src={MEDAL_SRC} alt="" width={64} height={64} style={{ filter: "grayscale(1) opacity(0.5)" }} />
+        )}
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginTop: 8 }}>{days} {days === 1 ? "מדליה" : "מדליות"}</div>
         <div style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>כל יום שהשלמת שווה מדליה</div>
       </div>
       <div style={{ fontSize: 13, color: C.faint, margin: "8px 0 8px" }}>הגביעים שלך</div>

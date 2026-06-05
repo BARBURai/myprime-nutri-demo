@@ -77,7 +77,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.04`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.05`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -414,6 +414,11 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.05 - Collection shows individual medals
+- CollectionModal: replaced the single big medal with a wrapping grid of N small medals (40px, count = days earned = _done days), scrollable (maxHeight 176) when many. The "X מדליות" count text and subtitle are KEPT below the grid (owner: keep the number AND show medals visually). 0 medals -> one greyed medal.
+- VERSION 1.04->1.05 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
+- WEEKLY SUMMARY (planning): owner says base the CALCULATIONS on the uploaded PDF (Friday weekly-summary column + Sunday weekly-avg-steps) and the WhatsApp/ManyChat flow files, and present it WARM in Anat's voice (not a dry report) with a motivational line that VARIES week to week. Next step: extract the exact weekly calcs from the PDF/flows, draft structure + sample warm copy + a per-week motivation bank for approval, then mock, then build (+ the "סיכום שבועי" button bar in the card).
 
 ## v1.04 - Swipe fixes
 - Swipe direction FLIPPED per owner (it felt reversed): onTouchEnd now `goDay(dx > 0 ? 1 : -1)`.
