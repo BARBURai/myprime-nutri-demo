@@ -261,7 +261,7 @@ function autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl) {
     steps: steps > 0 ? steps : null,
     water: cups > 0 ? cups : null,
     journal: dayLog.length > 0,
-    protein: !!(targets && targets.protein && proteinHad >= targets.protein),
+    protein: !!(targets && targets.protein && proteinHad >= targets.protein * 0.95),
   };
 }
 // A day is auto-marked complete (_done) by an effect in App the moment every
@@ -328,7 +328,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.05";
+const VERSION = "1.06";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2622,6 +2622,7 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose }) {
 
 function CheckinCheer({ name, onClose }) {
   const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
+  useEffect(() => { const t = setTimeout(onClose, 2600); return () => clearTimeout(t); }, []);
   return (
     <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
       <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
@@ -2630,10 +2631,30 @@ function CheckinCheer({ name, onClose }) {
         ))}
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", textAlign: "center", maxWidth: 300, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
-        <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto" }} />
+        <img src={MEDAL_SRC} alt="" width={100} height={100} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.6s cubic-bezier(.2,1.3,.5,1) both" }} />
         <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, marginTop: 10 }}>מדליה נכנסה לאוסף!</div>
         <div style={{ fontSize: 14.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""}. עוד יום שהשלמת, אני איתך 💜<div style={{ marginTop: 2, color: C.faint, fontSize: 13 }}>ענת</div></div>
-        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות!</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+function TrophyCheer({ week, name, onClose }) {
+  const colors = ["#F4C04A", C.brand, C.amber, C.info, C.macroC];
+  const src = week >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${Math.max(1, Math.min(9, week))}.webp`;
+  const champ = week >= 10;
+  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, []);
+  return (
+    <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 47 }}>
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        {Array.from({ length: 36 }).map((_, i) => (
+          <span key={i} style={{ position: "absolute", top: -12, left: `${(i * 2.8) % 100}%`, width: 9, height: 9, borderRadius: 2, background: colors[i % colors.length], animation: `confettiFall ${1.1 + (i % 5) * 0.16}s ease-out ${(i % 9) * 0.07}s forwards` }} />
+        ))}
+      </div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.35)" }}>
+        <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : "גביע השבוע נכנס לארון!"}</div>
+        <div style={{ fontSize: 14.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2, color: C.faint, fontSize: 13 }}>ענת</div></div>
       </div>
     </div>
   );
@@ -2728,6 +2749,8 @@ export default function App() {
   const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
   const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
   const [checkins, setCheckins] = useState(saved?.checkins || {});
+  const celebRef = useRef({ mounted: false, trophies: 0 });
+  const [cheerTrophyWeek, setCheerTrophyWeek] = useState(1);
   const [goalAckWeek, setGoalAckWeek] = useState(saved?.goalAckWeek || 0);
   const [goalBump, setGoalBump] = useState(null);
   const [favorites, setFavorites] = useState(saved?.favorites || []);
@@ -2876,7 +2899,11 @@ export default function App() {
       }
     }
     if (changed) setCheckins(next);
-    if (celebrate) setSheet("checkinCheer");
+    let tcount = 0, maxW = 0;
+    for (let w = 1; w <= 10; w++) if (weekTrophyEarned(next, profile.startDate, w, today)) { tcount++; maxW = w; }
+    if (!celebRef.current.mounted) { celebRef.current = { mounted: true, trophies: tcount }; return; }
+    if (tcount > celebRef.current.trophies) { celebRef.current.trophies = tcount; setCheerTrophyWeek(maxW); setSheet("trophyCheer"); }
+    else if (celebrate) setSheet("checkinCheer");
   }, [checkins, log, stepsByDate, waterByDate, targets, profile.startDate, profile.keepShabbat, today]);
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
   const setWeightForDate = (date, kg) => { setWeights((w) => [...w.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
@@ -2926,6 +2953,7 @@ export default function App() {
         .fab-center{animation:fabFloat 3.2s ease-in-out infinite, fabGlow 2.2s ease-in-out infinite}
         .streak-pill:active{transform:scale(0.96)}
         @keyframes cheerPop{0%{transform:scale(0.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+        @keyframes medalIn{0%{transform:scale(0) rotate(-25deg);opacity:0}55%{transform:scale(1.2) rotate(8deg)}75%{transform:scale(0.95) rotate(-3deg)}100%{transform:scale(1) rotate(0);opacity:1}}
         @keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(150px) rotate(360deg);opacity:0}}
         .app-outer{min-height:100vh;min-height:100dvh;background:${C.bg};display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;font-family:${fontStack}}
         .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
@@ -2966,6 +2994,7 @@ export default function App() {
             {sheet === "goalBump" && <GoalBumpModal info={goalBump} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
