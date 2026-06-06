@@ -358,7 +358,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.29";
+const VERSION = "1.30";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -770,7 +770,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, overlayOpen = false }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -803,10 +803,11 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   useEffect(() => {
     if (tipIdx !== -1) return;
     if (isIntro || isShabbatRest) return;
+    if (overlayOpen) return; // never start a tip over an open sheet/modal (no on-screen target -> no spotlight)
     const ctx = { progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBanner: stepBannerActive, week, weeklySummaryShown: checkinOpen && (dow === 6 || dow === 0) };
     const due = TIPS.filter((t) => t.due(ctx) && !(tipsSeen || []).includes(t.key));
     if (due.length) { setTipQueue(due); setTipIdx(0); }
-  }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBannerActive, tipsSeen, tipIdx, isIntro, isShabbatRest, week, dow]);
+  }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBannerActive, tipsSeen, tipIdx, isIntro, isShabbatRest, week, dow, overlayOpen]);
   const tipAdvance = () => setTipIdx((i) => { const n = i + 1; if (n >= tipQueue.length) { onTipsSeen && onTipsSeen(tipQueue.map((t) => t.key)); setTipQueue([]); return -1; } return n; });
   const ciWeek = Math.min(week, 10);
   const ciTasks = checkinOpen ? tasksForDate(profile.startDate, date, profile.keepShabbat) : [];
@@ -3076,6 +3077,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [today, setToday] = useState(TODAY);
   useEffect(() => {
+    if (DEV) return; // dev "today" is simulated/fixed; the DevDateBar reloads to change it. Never clobber it with the real date.
     const id = setInterval(() => {
       const now = ymd(new Date());
       if (now !== today) { setToday(now); setSelectedDate((sd) => (sd === today ? now : sd)); }
@@ -3282,7 +3284,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} />}
