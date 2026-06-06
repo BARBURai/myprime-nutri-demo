@@ -358,7 +358,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.23";
+const VERSION = "1.24";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -770,7 +770,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tutorialSeen, onTutorialDone }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -791,6 +791,9 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const cupMlD = profile.cupMl || DEFAULT_CUP_ML;
   const dow = dowOf(date);
   const progDay = programDayNumber(profile.startDate, date);
+  const [tutStep, setTutStep] = useState(-1);
+  useEffect(() => { if (tutStep === -1 && !tutorialSeen && progDay >= 3) setTutStep(0); }, [tutorialSeen, progDay, tutStep]);
+  const tutAdvance = () => setTutStep((i) => { const n = i + 1; if (n >= TUTORIAL_STEPS.length) { onTutorialDone && onTutorialDone(); return 99; } return n; });
   const isShabbatRest = profile.keepShabbat && dow === 0;
   const baseline = stepBaseline(stepsByDate, profile.startDate);
   // Running goal: stored value if set, else baseline + cumulative offset; null in week 1 (still measuring).
@@ -831,6 +834,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   };
   return (
     <div style={{ padding: "8px 0 24px" }}>
+      {tutStep >= 0 && tutStep < TUTORIAL_STEPS.length && <TutorialOverlay steps={TUTORIAL_STEPS} idx={tutStep} onNext={tutAdvance} />}
       <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
           const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
@@ -875,8 +879,8 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       ) : (
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "0 16px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", justifyItems: "center", alignItems: "start", rowGap: 10, columnGap: 6, marginTop: 2, marginBottom: 10 }}>
-          <div style={{ gridColumn: 1, gridRow: 1 }}><Ring consumed={consumed} budget={budget} size={124} onPlus={onAddCalorie} /></div>
-          {stepsOpen && <div style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : ""} onPlus={onEditSteps} size={124} /></div>}
+          <div data-tut="cal" style={{ gridColumn: 1, gridRow: 1 }}><Ring consumed={consumed} budget={budget} size={124} onPlus={onAddCalorie} /></div>
+          {stepsOpen && <div data-tut="steps" style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : ""} onPlus={onEditSteps} size={124} /></div>}
           {macroOpen && <div style={{ gridColumn: 1, gridRow: 2 }}><ProteinRing consumed={macros.p} target={targets.protein} size={124} /></div>}
           {waterOpen && <div style={{ gridColumn: 2, gridRow: 2 }}><MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} verb="שתית" color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={124} /></div>}
         </div>
@@ -2593,7 +2597,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   const rel = relLabel(date);
   const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getDay()]}, ${dd.getDate()} ב${HE_MONTHS[dd.getMonth()]} · שבוע ${week}${dn >= 1 ? `, יום ${dn}` : ""}`;
   return (
-    <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
+    <div data-tut="tracker" style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
       <div onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={16} color={C.brand} /> יומן המעקב שלי</div>
         <div style={{ fontSize: 13.5, fontWeight: 500, color: C.sub, marginTop: 3 }}>{dateLine}</div>
@@ -2623,7 +2627,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
           </div>
         )}
       </div>
-      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} role="button" aria-label="ארון הגביעים" style={{ width: 84, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
+      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} data-tut="cabinet" role="button" aria-label="ארון הגביעים" style={{ width: 84, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
         <img src="/medals/trophy-icon.webp" alt="" width={72} height={58} style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
         <div style={{ fontSize: 13.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
         <ChevronLeft size={16} color="#fff" />
@@ -2990,8 +2994,46 @@ function DevDateBar() {
   );
 }
 
+const TUTORIAL_STEPS = [
+  { sel: "cal", text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת לאורך היום ואת הפעילות הגופנית שעשית (חוץ מהצעדים). אפשר לעדכן בכל פעם שאת מוסיפה משהו - לאורך כל היום." },
+  { sel: "steps", text: "כאן את ממלאת את הצעדים שלך. עדיף למלא מאוחר ככל האפשר במהלך היום, אחרי שבדקת את מספר הצעדים באפליקציית הבריאות שלך." },
+  { sel: "tracker", text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך כמה משימות קטנות - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
+  { sel: "cabinet", text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
+];
+
+function TutorialOverlay({ steps, idx, onNext }) {
+  const [rect, setRect] = useState(null);
+  const cur = steps[idx];
+  useEffect(() => {
+    let cancelled = false;
+    setRect(null);
+    const el = document.querySelector(`[data-tut="${cur.sel}"]`);
+    if (!el) return;
+    try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+    const t = setTimeout(() => { if (!cancelled) { try { setRect(el.getBoundingClientRect()); } catch (e) {} } }, 380);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [idx, cur.sel]);
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const below = rect ? rect.top < vh * 0.5 : true;
+  const bubblePos = rect ? (below ? { top: rect.bottom + 12 } : { bottom: vh - rect.top + 12 }) : { bottom: 28 };
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, zIndex: 99996 }} onClick={(e) => e.stopPropagation()} />
+      {rect && <div style={{ position: "fixed", top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 16, boxShadow: "0 0 0 9999px rgba(0,0,0,0.62)", border: "2px solid #fff", zIndex: 99997, pointerEvents: "none", transition: "all .2s" }} />}
+      {!rect && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
+      <div style={{ position: "fixed", left: 16, right: 16, ...bubblePos, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
+        <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>{cur.text}</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontSize: 12.5, color: C.faint }}>{idx + 1}/{steps.length}</span>
+          <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הבנתי</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function App() {
-  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, keepShabbat: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, tutorialSeen: false, keepShabbat: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
@@ -3207,7 +3249,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} tutorialSeen={profile.tutorialSeen} onTutorialDone={() => setProfile({ ...profile, tutorialSeen: true })} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} />}
