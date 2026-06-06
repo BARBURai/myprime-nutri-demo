@@ -349,7 +349,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.17";
+const VERSION = "1.20";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -366,10 +366,10 @@ function Ring({ consumed, budget, size = 132, onPlus }) {
       <circle cx="66" cy="66" r={r} fill="none" stroke={over ? C.amber : C.brand} strokeWidth="10"
         strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
         transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-      <text x="66" y="40" textAnchor="middle" style={{ fontSize: 11.5, fontWeight: 600, fill: C.sub }}>צרכת</text>
-      <text x="66" y="64" textAnchor="middle" style={{ fontSize: 25, fontWeight: 700, fill: C.ink }}>{Math.round(consumed).toLocaleString()}</text>
-      <text x="66" y="83" textAnchor="middle" style={{ fontSize: 13.5, fontWeight: 700, fill: over ? C.amber : C.brand }}>קלוריות</text>
-      <text x="66" y="97" textAnchor="middle" style={{ fontSize: 10, fill: over ? C.amber : C.sub }}>{over ? `מעל היעד (${Math.round(budget).toLocaleString()})` : `מתוך ${Math.round(budget).toLocaleString()}`}</text>
+      <text x="66" y="40" textAnchor="middle" style={{ fontSize: 12.5, fontWeight: 600, fill: C.sub }}>צרכת</text>
+      <text x="66" y="64" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{Math.round(consumed).toLocaleString()}</text>
+      <text x="66" y="83" textAnchor="middle" style={{ fontSize: 14.5, fontWeight: 700, fill: over ? C.amber : C.brand }}>קלוריות</text>
+      <text x="66" y="97" textAnchor="middle" style={{ fontSize: 11, fill: over ? C.amber : C.sub }}>{over ? `מעל היעד (${Math.round(budget).toLocaleString()})` : `מתוך ${Math.round(budget).toLocaleString()}`}</text>
     </svg>
   );
   if (!onPlus) return svg;
@@ -391,10 +391,10 @@ function ProteinRing({ consumed, target, size = 124 }) {
       <circle cx="66" cy="66" r={r} fill="none" stroke={C.macroP} strokeWidth="10"
         strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
         transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-      <text x="66" y="40" textAnchor="middle" style={{ fontSize: 11.5, fontWeight: 600, fill: C.sub }}>צרכת</text>
-      <text x="66" y="64" textAnchor="middle" style={{ fontSize: 25, fontWeight: 700, fill: C.ink }}>{eaten}<tspan style={{ fontSize: 13, fill: C.sub }}> ג׳</tspan></text>
-      <text x="66" y="83" textAnchor="middle" style={{ fontSize: 13.5, fontWeight: 700, fill: C.macroP }}>חלבון</text>
-      <text x="66" y="97" textAnchor="middle" style={{ fontSize: 10, fill: C.sub }}>{done ? "הגעת ליעד!" : `מתוך ${Math.round(target)}`}</text>
+      <text x="66" y="40" textAnchor="middle" style={{ fontSize: 12.5, fontWeight: 600, fill: C.sub }}>צרכת</text>
+      <text x="66" y="64" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{eaten}<tspan style={{ fontSize: 14, fill: C.sub }}> ג׳</tspan></text>
+      <text x="66" y="83" textAnchor="middle" style={{ fontSize: 14.5, fontWeight: 700, fill: C.macroP }}>חלבון</text>
+      <text x="66" y="97" textAnchor="middle" style={{ fontSize: 11, fill: C.sub }}>{done ? "הגעת ליעד!" : `מתוך ${Math.round(target)}`}</text>
     </svg>
   );
 }
@@ -409,10 +409,10 @@ function MetricRing({ value, goal, color, track, label, sub, onPlus, size = 130,
         <circle cx="66" cy="66" r={r} fill="none" stroke={color} strokeWidth="10"
           strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
           transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
-        {verb && <text x="66" y="40" textAnchor="middle" style={{ fontSize: 11.5, fontWeight: 600, fill: C.sub }}>{verb}</text>}
-        <text x="66" y="64" textAnchor="middle" style={{ fontSize: 25, fontWeight: 700, fill: C.ink }}>{bigText != null ? bigText : value.toLocaleString()}</text>
-        <text x="66" y="83" textAnchor="middle" style={{ fontSize: 13.5, fontWeight: 700, fill: color }}>{label}</text>
-        <text x="66" y="97" textAnchor="middle" style={{ fontSize: 10, fill: C.sub }}>{done ? "הגעת ליעד!" : sub}</text>
+        {verb && <text x="66" y="40" textAnchor="middle" style={{ fontSize: 12.5, fontWeight: 600, fill: C.sub }}>{verb}</text>}
+        <text x="66" y="64" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{bigText != null ? bigText : value.toLocaleString()}</text>
+        <text x="66" y="83" textAnchor="middle" style={{ fontSize: 14.5, fontWeight: 700, fill: color }}>{label}</text>
+        <text x="66" y="97" textAnchor="middle" style={{ fontSize: 11, fill: C.sub }}>{done ? "הגעת ליעד!" : sub}</text>
       </svg>
       {onPlus && (
         <button onClick={onPlus} aria-label={`עדכון ${label}`} style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 30, height: 30, borderRadius: "50%", background: color, color: "#fff", border: `2px solid ${C.panel}`, boxShadow: "0 2px 6px rgba(0,0,0,0.18)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={17} /></button>
@@ -426,13 +426,13 @@ function MacroCard({ label, value, target, color, emphasized, headline }) {
     <div style={{ flex: 1, background: emphasized ? C.brandBg : C.bg, border: `1px solid ${emphasized ? C.brand : "transparent"}`, borderRadius: 12, padding: "10px 9px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 7 }}>
         <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0 }} />
-        <span style={{ fontSize: 14, color: emphasized ? C.brandD : C.sub, fontWeight: emphasized ? 600 : 400 }}>{label}</span>
+        <span style={{ fontSize: 15, color: emphasized ? C.brandD : C.sub, fontWeight: emphasized ? 600 : 400 }}>{label}</span>
       </div>
       {headline ? (
-        <div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{target}<span style={{ fontSize: 13, color: C.sub, fontWeight: 400 }}> ג׳</span></div>
+        <div style={{ fontSize: 22, fontWeight: 600, color: C.ink }}>{target}<span style={{ fontSize: 14, color: C.sub, fontWeight: 400 }}> ג׳</span></div>
       ) : (
         <>
-          <div style={{ fontSize: 17, fontWeight: 600, color: C.ink }}>{value}<span style={{ fontSize: 12, color: C.faint, fontWeight: 400 }}> / {target} ג׳</span></div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{value}<span style={{ fontSize: 13, color: C.faint, fontWeight: 400 }}> / {target} ג׳</span></div>
           <div style={{ height: 5, background: C.line, borderRadius: 3, marginTop: 7 }}><div style={{ width: `${pct}%`, height: 5, background: color, borderRadius: 3, transition: "width .4s" }} /></div>
         </>
       )}
@@ -453,8 +453,8 @@ function WaterCard({ glasses, setGlasses }) {
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 15, color: C.ink, fontWeight: 500 }}><Droplet size={16} color={C.water} /> מים</span>
-        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{liters} / 2 ליטר</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 16, color: C.ink, fontWeight: 500 }}><Droplet size={16} color={C.water} /> מים</span>
+        <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{liters} / 2 ליטר</span>
       </div>
       <div style={{ display: "flex", gap: 5 }}>
         {Array.from({ length: WATER_TARGET_GLASSES }).map((_, i) => {
@@ -467,7 +467,7 @@ function WaterCard({ glasses, setGlasses }) {
           );
         })}
       </div>
-      <div style={{ fontSize: 12, color: C.faint, marginTop: 8 }}>מומלץ {WATER_MIN_GLASSES}-{WATER_TARGET_GLASSES} כוסות ביום (1.5-2 ליטר)</div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>מומלץ {WATER_MIN_GLASSES}-{WATER_TARGET_GLASSES} כוסות ביום (1.5-2 ליטר)</div>
     </div>
   );
 }
@@ -477,21 +477,21 @@ function StepsCard({ steps, goal, kcal, onEdit }) {
   return (
     <div onClick={onEdit} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 16, cursor: "pointer" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 15, color: C.ink, fontWeight: 500 }}><Footprints size={16} color={C.brand} /> צעדים</span>
-        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{steps.toLocaleString()} / {goal.toLocaleString()}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 16, color: C.ink, fontWeight: 500 }}><Footprints size={16} color={C.brand} /> צעדים</span>
+        <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{steps.toLocaleString()} / {goal.toLocaleString()}</span>
       </div>
       <div style={{ height: 10, borderRadius: 6, background: C.brandBg, overflow: "hidden" }}>
         <div style={{ width: `${frac * 100}%`, height: "100%", background: C.brand, borderRadius: 6, transition: "width .4s" }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-        <span style={{ fontSize: 12, color: C.faint }}>הקישי לעדכון · נוסף לתקציב: +{kcal} קק״ל</span>
-        <span style={{ fontSize: 12, color: C.brandD, display: "flex", alignItems: "center", gap: 4 }}><Pencil size={12} /> עדכון</span>
+        <span style={{ fontSize: 13, color: C.faint }}>הקישי לעדכון · נוסף לתקציב: +{kcal} קק״ל</span>
+        <span style={{ fontSize: 13, color: C.brandD, display: "flex", alignItems: "center", gap: 4 }}><Pencil size={12} /> עדכון</span>
       </div>
     </div>
   );
 }
 function Btn({ children, onClick, variant = "solid", disabled, style = {} }) {
-  const base = { width: "100%", border: "none", borderRadius: 12, padding: "12px", fontSize: 17, fontWeight: 500, cursor: disabled ? "default" : "pointer", fontFamily: fontStack, transition: "transform .08s, opacity .15s" };
+  const base = { width: "100%", border: "none", borderRadius: 12, padding: "12px", fontSize: 18, fontWeight: 500, cursor: disabled ? "default" : "pointer", fontFamily: fontStack, transition: "transform .08s, opacity .15s" };
   const variants = { solid: { background: C.brand, color: "#fff" }, ghost: { background: "transparent", color: C.ink, border: `1px solid ${C.line}` } };
   return (
     <button onClick={disabled ? undefined : onClick} style={{ ...base, ...variants[variant], opacity: disabled ? 0.45 : 1, ...style }}
@@ -501,16 +501,16 @@ function Btn({ children, onClick, variant = "solid", disabled, style = {} }) {
   );
 }
 function SrcBadge({ source }) {
-  if (source === "estimated") return <span style={{ fontSize: 12, background: C.amberBg, color: C.amber, padding: "2px 7px", borderRadius: 5 }}>מוערך</span>;
-  if (source === "db") return <span style={{ fontSize: 12, background: "#E7F4EC", color: "#1E8449", padding: "2px 7px", borderRadius: 5 }}>מהמאגר</span>;
-  if (source === "usda") return <span style={{ fontSize: 12, background: "#EEF4FB", color: "#2D6CB5", padding: "2px 7px", borderRadius: 5 }}>USDA</span>;
+  if (source === "estimated") return <span style={{ fontSize: 13, background: C.amberBg, color: C.amber, padding: "2px 7px", borderRadius: 5 }}>מוערך</span>;
+  if (source === "db") return <span style={{ fontSize: 13, background: "#E7F4EC", color: "#1E8449", padding: "2px 7px", borderRadius: 5 }}>מהמאגר</span>;
+  if (source === "usda") return <span style={{ fontSize: 13, background: "#EEF4FB", color: "#2D6CB5", padding: "2px 7px", borderRadius: 5 }}>USDA</span>;
   return null;
 }
 function Header({ title, onBack }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
       {onBack && <button onClick={onBack} style={{ border: "none", background: "transparent", cursor: "pointer", padding: 4, color: C.sub }}><ChevronRight size={22} /></button>}
-      <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{title}</span>
+      <span style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{title}</span>
     </div>
   );
 }
@@ -518,7 +518,7 @@ function Stepper({ value, set, step = 1, min = 0, suffix }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <button onClick={() => set(Math.max(min, Math.round((value - step) * 10) / 10))} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Minus size={15} /></button>
-      <span style={{ minWidth: 78, textAlign: "center", fontSize: 21, fontWeight: 600, color: C.ink }}>{value}{suffix ? <span style={{ fontSize: 14, color: C.sub, fontWeight: 400 }}> {suffix}</span> : null}</span>
+      <span style={{ minWidth: 78, textAlign: "center", fontSize: 22, fontWeight: 600, color: C.ink }}>{value}{suffix ? <span style={{ fontSize: 15, color: C.sub, fontWeight: 400 }}> {suffix}</span> : null}</span>
       <button onClick={() => set(Math.round((value + step) * 10) / 10)} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Plus size={15} /></button>
     </span>
   );
@@ -560,7 +560,7 @@ function Onboarding({ onFinish, name }) {
 
   const Field = ({ label, children }) => (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
-      <span style={{ fontSize: 17, color: C.ink }}>{label}</span>{children}
+      <span style={{ fontSize: 18, color: C.ink }}>{label}</span>{children}
     </div>
   );
 
@@ -570,44 +570,44 @@ function Onboarding({ onFinish, name }) {
         <div style={{ display: "flex", gap: 6, margin: "6px 0 8px" }}>
           {[0, 1, 2, 3].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
         </div>
-        <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginBottom: 6 }}>v{VERSION}</div>
+        <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginBottom: 6 }}>v{VERSION}</div>
         <div style={{ textAlign: "center", marginBottom: 12 }}>
-          <button onClick={() => onFinish(draft)} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
+          <button onClick={() => onFinish(draft)} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 15, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
         </div>
 
         {step === 0 && (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>{name && name.trim() ? `היי ${name.trim()}, נעים להכיר!` : "נעים להכיר"}</span></div>
-            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>{name && name.trim() ? `היי ${name.trim()}, נעים להכיר!` : "נעים להכיר"}</span></div>
+            <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
             <Field label="גיל"><Stepper value={age} set={(v) => setAge(Math.max(18, v))} min={18} /></Field>
             <Field label="גובה"><Stepper value={heightCm} set={setHeightCm} suffix="ס״מ" /></Field>
             <Field label="משקל נוכחי"><Stepper value={weightKg} set={(v) => setWeightKg(Math.max(minHealthyKg(heightCm), v))} step={0.5} suffix="ק״ג" /></Field>
-            <div style={{ fontSize: 12.5, color: C.faint, marginTop: -2, marginBottom: 4, lineHeight: 1.5 }}>לא ניתן להזין משקל נמוך מ-{minHealthyKg(heightCm)} ק״ג, הטווח הבריא לגובה שלך.</div>
+            <div style={{ fontSize: 13.5, color: C.faint, marginTop: -2, marginBottom: 4, lineHeight: 1.5 }}>לא ניתן להזין משקל נמוך מ-{minHealthyKg(heightCm)} ק״ג, הטווח הבריא לגובה שלך.</div>
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
-              <div style={{ fontSize: 17, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
-              <select value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 17, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
+              <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
+              <select value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 18, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
                 {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
               </select>
-              <div style={{ fontSize: 13, color: C.faint, marginTop: 6 }}>התוכנית מתחילה בימי ראשון בלבד.</div>
+              <div style={{ fontSize: 14, color: C.faint, marginTop: 6 }}>התוכנית מתחילה בימי ראשון בלבד.</div>
             </div>
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
-              <div style={{ fontSize: 17, color: C.ink, marginBottom: 8 }}>האם את מעוניינת להשתמש באפליקציה בכל ימות השבוע (כולל שבת)?</div>
+              <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>האם את מעוניינת להשתמש באפליקציה בכל ימות השבוע (כולל שבת)?</div>
               <div style={{ display: "flex", gap: 8 }}>
                 {[{ v: false, label: "כן, כל השבוע" }, { v: true, label: "לא, שבת יום מנוחה" }].map((o) => {
                   const sel = keepShabbat === o.v;
-                  return (<button key={String(o.v)} onClick={() => setKeepShabbat(o.v)} style={{ flex: 1, border: `2px solid ${sel ? C.brand : C.line}`, background: sel ? C.brandBg : C.panel, color: sel ? C.brandD : C.ink, borderRadius: 12, padding: "11px 8px", fontSize: 15, fontWeight: sel ? 600 : 400, cursor: "pointer", fontFamily: fontStack }}>{o.label}</button>);
+                  return (<button key={String(o.v)} onClick={() => setKeepShabbat(o.v)} style={{ flex: 1, border: `2px solid ${sel ? C.brand : C.line}`, background: sel ? C.brandBg : C.panel, color: sel ? C.brandD : C.ink, borderRadius: 12, padding: "11px 8px", fontSize: 16, fontWeight: sel ? 600 : 400, cursor: "pointer", fontFamily: fontStack }}>{o.label}</button>);
                 })}
               </div>
-              <div style={{ fontSize: 13, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>אם תבחרי "יום מנוחה", שבת תופיע אפורה ובלי מעקב. תמיד אפשר לשנות בפרופיל.</div>
+              <div style={{ fontSize: 14, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>אם תבחרי "יום מנוחה", שבת תופיע אפורה ובלי מעקב. תמיד אפשר לשנות בפרופיל.</div>
             </div>
-            <p style={{ fontSize: 13, color: C.faint, marginTop: 14, lineHeight: 1.6 }}>התוכנית מותאמת לנשים, ולכן אין צורך בשאלת מין.</p>
+            <p style={{ fontSize: 14, color: C.faint, marginTop: 14, lineHeight: 1.6 }}>התוכנית מותאמת לנשים, ולכן אין צורך בשאלת מין.</p>
           </>
         )}
 
         {step === 1 && (
           <>
-            <span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>מה המטרה שלך?</span>
-            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 14 }}>בחרי קצב ירידה שבועי. קצב מתון נשמר לאורך זמן וטוב יותר לשמירה על מסת שריר.</p>
+            <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>מה המטרה שלך?</span>
+            <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 14 }}>בחרי קצב ירידה שבועי. קצב מתון נשמר לאורך זמן וטוב יותר לשמירה על מסת שריר.</p>
             {RATE_OPTIONS.map((g) => {
               const sel = rate === g;
               const rec = g === 250;
@@ -615,56 +615,56 @@ function Onboarding({ onFinish, name }) {
                 <div key={g} onClick={() => setRate(g)} style={{ display: "flex", alignItems: "center", gap: 10, border: `${rec ? 2 : 1}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : "transparent", borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
                   <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${sel ? C.brand : C.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{sel && <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.brand }} />}</div>
                   <div style={{ flex: 1 }}>
-                    <span style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{rateLabel(g)}</span>
-                    {rec && <div style={{ fontSize: 12.5, color: C.brandD, marginTop: 2, lineHeight: 1.4 }}>הקצב הבריא - נשמר לאורך זמן וטוב לשמירה על מסת השריר</div>}
+                    <span style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{rateLabel(g)}</span>
+                    {rec && <div style={{ fontSize: 13.5, color: C.brandD, marginTop: 2, lineHeight: 1.4 }}>הקצב הבריא - נשמר לאורך זמן וטוב לשמירה על מסת השריר</div>}
                   </div>
-                  {rec && <span style={{ fontSize: 12, fontWeight: 700, background: C.brand, color: "#fff", padding: "4px 11px", borderRadius: 8, flexShrink: 0 }}>מומלץ</span>}
+                  {rec && <span style={{ fontSize: 13, fontWeight: 700, background: C.brand, color: "#fff", padding: "4px 11px", borderRadius: 8, flexShrink: 0 }}>מומלץ</span>}
                 </div>
               );
             })}
-            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalKg} set={(v) => setGoalKg(Math.max(minHealthyKg(heightCm), Math.min(weightKg - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 12.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightCm)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
+            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalKg} set={(v) => setGoalKg(Math.max(minHealthyKg(heightCm), Math.min(weightKg - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightCm)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
           </>
         )}
 
         {step === 2 && (
           <>
-            <span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>איך את אוכלת?</span>
-            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 16 }}>בחרי את סגנון התזונה שלך - אפשר לבחור יותר מאחד. זה יעזור לי להתאים לך המלצות.</p>
+            <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>איך את אוכלת?</span>
+            <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 16 }}>בחרי את סגנון התזונה שלך - אפשר לבחור יותר מאחד. זה יעזור לי להתאים לך המלצות.</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 22 }}>
               {DIET_OPTIONS.map((d) => {
                 const on = diet.includes(d.id);
                 return (
                   <div key={d.id} onClick={() => setDiet(on ? diet.filter((x) => x !== d.id) : [...diet, d.id])} style={{ width: 92, textAlign: "center", cursor: "pointer" }}>
-                    <div style={{ width: 72, height: 72, borderRadius: "50%", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, background: on ? C.brandBg : C.bg, border: `2px solid ${on ? C.brand : C.line}`, transition: "all .15s" }}>{d.emoji}</div>
-                    <span style={{ fontSize: 14, color: on ? C.brandD : C.sub, fontWeight: on ? 600 : 400 }}>{d.id}</span>
+                    <div style={{ width: 72, height: 72, borderRadius: "50%", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 31, background: on ? C.brandBg : C.bg, border: `2px solid ${on ? C.brand : C.line}`, transition: "all .15s" }}>{d.emoji}</div>
+                    <span style={{ fontSize: 15, color: on ? C.brandD : C.sub, fontWeight: on ? 600 : 400 }}>{d.id}</span>
                   </div>
                 );
               })}
             </div>
 
-            <div style={{ fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 4 }}>רגישויות ואלרגיות</div>
-            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>סמני וכתבי מה שחשוב להימנע ממנו, ואדאג שההמלצות יתחשבו בזה.</p>
+            <div style={{ fontSize: 19, fontWeight: 500, color: C.ink, marginBottom: 4 }}>רגישויות ואלרגיות</div>
+            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>סמני וכתבי מה שחשוב להימנע ממנו, ואדאג שההמלצות יתחשבו בזה.</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
               {SENSITIVITY_OPTIONS.map((s) => {
                 const on = allergies.includes(s);
-                return (<span key={s} onClick={() => setAllergies(on ? allergies.filter((x) => x !== s) : [...allergies, s])} style={{ fontSize: 14, padding: "7px 14px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+                return (<span key={s} onClick={() => setAllergies(on ? allergies.filter((x) => x !== s) : [...allergies, s])} style={{ fontSize: 15, padding: "7px 14px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
               })}
             </div>
 
-            <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 12 }}>
               <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
               <span>אשתדל להתאים את ההמלצות לרגישויות שלך, אבל תמיד כדאי לבדוק רכיבים בעצמך. האפליקציה היא כלי עזר ולא תחליף לייעוץ רפואי. אם יש לך אלרגיה ממשית, אל תסתמכי רק עליה.</span>
             </div>
 
-            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
             <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
-              <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+              <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
               <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
             </div>
             {customSens.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {customSens.map((s) => (
-                  <span key={s} style={{ fontSize: 14, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
                     {s}
                     <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
                   </span>
@@ -676,8 +676,8 @@ function Onboarding({ onFinish, name }) {
 
         {step === 3 && (
           <>
-            <span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>התוכנית שלך</span>
-            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 12 }}>
+            <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>התוכנית שלך</span>
+            <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 12 }}>
               {proj.maintain ? "תוכנית לשמירה על המשקל הנוכחי." : `בקצב של ${rate} ג׳ בשבוע, תגיעי ל־${goalKg} ק״ג בעוד כ־${proj.weeks} שבועות.`}
             </p>
 
@@ -686,34 +686,34 @@ function Onboarding({ onFinish, name }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={projData} margin={{ top: 6, right: 10, left: 10, bottom: 0 }}>
                     <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.brand} stopOpacity={0.2} /><stop offset="100%" stopColor={C.brand} stopOpacity={0} /></linearGradient></defs>
-                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 13, fill: C.faint }} axisLine={false} tickLine={false} />
                     <YAxis domain={["dataMin - 1", "dataMax + 1"]} hide />
-                    <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v} ק״ג`, "משקל צפוי"]} labelFormatter={(l) => `שבוע ${l}`} />
+                    <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v} ק״ג`, "משקל צפוי"]} labelFormatter={(l) => `שבוע ${l}`} />
                     <Area type="monotone" dataKey="kg" stroke={C.brand} strokeWidth={2.5} fill="url(#pg)" dot={{ r: 2.5, fill: C.brand }} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-              <div style={{ textAlign: "center", fontSize: 12, color: C.faint, paddingBottom: 6 }}>תחזית לפי שבועות</div>
+              <div style={{ textAlign: "center", fontSize: 13, color: C.faint, paddingBottom: 6 }}>תחזית לפי שבועות</div>
             </div>
 
             <div style={{ background: C.brandBg, borderRadius: 14, padding: 14, marginBottom: 12, textAlign: "center" }}>
-              <div style={{ fontSize: 13, color: C.brandD, marginBottom: 4 }}>יעד קלורי יומי מומלץ</div>
-              <div style={{ fontSize: 35, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 17 }}>קק״ל</span></div>
+              <div style={{ fontSize: 14, color: C.brandD, marginBottom: 4 }}>יעד קלורי יומי מומלץ</div>
+              <div style={{ fontSize: 36, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 18 }}>קק״ל</span></div>
             </div>
 
             {targets.floored && (
-              <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 12, display: "flex", gap: 6 }}>
+              <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 12, display: "flex", gap: 6 }}>
                 <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>הקצב שבחרת מהיר מהמומלץ עבור הנתונים שלך. היעד הוגבל ל־{KCAL_FLOOR} קק״ל לשמירה על בריאותך - שקלי קצב מתון יותר.</span>
               </div>
             )}
 
-            <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.7, textAlign: "right" }}>
+            <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.7, textAlign: "right" }}>
               <Lock size={13} style={{ display: "inline", verticalAlign: "-2px", marginInlineEnd: 5 }} />
               מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
             </div>
             <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "12px 0 2px", marginTop: 12, borderTop: `1px solid ${C.line}` }}>
               <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
-              <span style={{ fontSize: 14, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
+              <span style={{ fontSize: 15, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
             </div>
           </>
         )}
@@ -727,9 +727,9 @@ function Onboarding({ onFinish, name }) {
       {confirmNoSens && (
         <div onClick={() => setConfirmNoSens(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
-            <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לא סימנת שום רגישות או אלרגיה</div>
-            <div style={{ fontSize: 15, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>האם את בטוחה?</div>
-            <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 18 }}>
+            <div style={{ fontSize: 19, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לא סימנת שום רגישות או אלרגיה</div>
+            <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>האם את בטוחה?</div>
+            <div style={{ fontSize: 14, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 18 }}>
               <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
               <span>אשתדל להתאים את ההמלצות לרגישויות שלך, אבל תמיד כדאי לבדוק רכיבים בעצמך. האפליקציה היא כלי עזר ולא תחליף לייעוץ רפואי. אם יש לך אלרגיה ממשית, אל תסתמכי רק עליה.</span>
             </div>
@@ -742,12 +742,12 @@ function Onboarding({ onFinish, name }) {
       {confirmSens && (
         <div onClick={() => { setConfirmSens(false); setAck(false); }} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
-            <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, marginBottom: 10 }}>רגע לפני שממשיכים</div>
-            <div style={{ fontSize: 15, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>רשמתי לעצמי להימנע מ: <b>{[...allergies, ...customSens].join(", ")}</b></div>
-            <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>תמיד כדאי לבדוק את רשימת הרכיבים בעצמך - זה כלי עזר, לא תחליף לבדיקה. אם יש לך אלרגיה ממשית, אל תסתמכי רק על האפליקציה.</div>
+            <div style={{ fontSize: 19, fontWeight: 600, color: C.ink, marginBottom: 10 }}>רגע לפני שממשיכים</div>
+            <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>רשמתי לעצמי להימנע מ: <b>{[...allergies, ...customSens].join(", ")}</b></div>
+            <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>תמיד כדאי לבדוק את רשימת הרכיבים בעצמך - זה כלי עזר, לא תחליף לבדיקה. אם יש לך אלרגיה ממשית, אל תסתמכי רק על האפליקציה.</div>
             <div onClick={() => setAck(!ack)} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 16 }}>
               <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${ack ? C.brand : C.line}`, background: ack ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{ack && <Check size={14} color="#fff" />}</div>
-              <span style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}>קראתי והבנתי שהאפליקציה היא כלי עזר בלבד, ובאחריותי לבדוק תמיד את רשימת הרכיבים המלאה לפני אכילה.</span>
+              <span style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.55 }}>קראתי והבנתי שהאפליקציה היא כלי עזר בלבד, ובאחריותי לבדוק תמיד את רשימת הרכיבים המלאה לפני אכילה.</span>
             </div>
             <Btn disabled={!ack} onClick={() => { setConfirmSens(false); setAck(false); setStep(step + 1); }}>המשך</Btn>
             <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setConfirmSens(false); setAck(false); }} style={{ color: C.sub }}>שינוי</Btn></div>
@@ -827,10 +827,10 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
           return (
             <button key={d} ref={sel ? selRef : null} disabled={off} onClick={() => { if (!off) setDate(d); }} title={isRest ? "שבת - יום מנוחה" : (isFuture ? "יום עתידי - ייפתח בתאריך הזה" : undefined)} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, overflow: "hidden", padding: 0, background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: off ? C.faint : (sel ? "#fff" : C.ink), cursor: off ? "default" : "pointer", opacity: off ? 0.4 : 1, textAlign: "center" }}>
-              {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
+              {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
               <div style={{ padding: "7px 0" }}>
-                <div style={{ fontSize: 13, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
-                <div style={{ fontSize: 17, fontWeight: 700, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
+                <div style={{ fontSize: 14, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
                 <div style={{ height: 4, margin: "5px 6px 0", borderRadius: 3, position: "relative", background: sel ? "rgba(255,255,255,0.35)" : C.line, overflow: "hidden" }}>
                   {pct > 0 && <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: `${Math.round(pct * 100)}%`, borderRadius: 3, background: sel ? "#fff" : lerpHex("#F4B8D2", "#D81B7A", pct) }} />}
                 </div>
@@ -842,41 +842,41 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
 
       {stepAction && (
         <div onClick={onStepSetup} role="button" aria-label="קביעת יעד צעדים" style={{ margin: "10px 16px 0", background: C.amberBg, border: `1.5px solid ${C.amber}`, borderRadius: 14, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-          <span style={{ fontSize: 20 }}>⭐</span>
+          <span style={{ fontSize: 21 }}>⭐</span>
           <div style={{ flex: 1, textAlign: "right" }}>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: C.ink }}>{stepAction.kind === "baseline" ? "קביעת ממוצע צעדים יומי" : "היעד שלך עולה השבוע"}</div>
-            <div style={{ fontSize: 12.5, color: C.sub }}>{stepAction.kind === "baseline" ? "הקישי כדי לקבוע את נקודת ההתחלה שלך" : "הקישי לעדכון היעד"}</div>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.ink }}>{stepAction.kind === "baseline" ? "קביעת ממוצע צעדים יומי" : "היעד שלך עולה השבוע"}</div>
+            <div style={{ fontSize: 13.5, color: C.sub }}>{stepAction.kind === "baseline" ? "הקישי כדי לקבוע את נקודת ההתחלה שלך" : "הקישי לעדכון היעד"}</div>
           </div>
           <ChevronLeft size={18} color={C.amber} />
         </div>
       )}
       {progDay >= 1 && progDay <= 2 ? (
         <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "40px 24px 64px", textAlign: "center" }}>
-          <div style={{ fontSize: 46, marginBottom: 12 }}>🤍</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: C.ink }}>ברוכה הבאה למסע</div>
-          <div style={{ fontSize: 15, color: C.sub, marginTop: 10, lineHeight: 1.75 }}>היומיים הראשונים רכים - בלי מעקב ובלי מדידות.<br />רק להכיר את האפליקציה ולהתרגל.<br />מחרתיים מתחילות יחד, צעד אחרי צעד.</div>
-          <div style={{ fontSize: 12.5, color: C.faint, marginTop: 18 }}>(כאן יופיע ההסבר הראשוני - טקסט זמני)</div>
+          <div style={{ fontSize: 47, marginBottom: 12 }}>🤍</div>
+          <div style={{ fontSize: 21, fontWeight: 700, color: C.ink }}>ברוכה הבאה למסע</div>
+          <div style={{ fontSize: 16, color: C.sub, marginTop: 10, lineHeight: 1.75 }}>היומיים הראשונים רכים - בלי מעקב ובלי מדידות.<br />רק להכיר את האפליקציה ולהתרגל.<br />מחרתיים מתחילות יחד, צעד אחרי צעד.</div>
+          <div style={{ fontSize: 13.5, color: C.faint, marginTop: 18 }}>(כאן יופיע ההסבר הראשוני - טקסט זמני)</div>
         </div>
       ) : isShabbatRest ? (
         <div style={{ padding: "36px 24px 60px", textAlign: "center", color: C.faint }}>
-          <div style={{ fontSize: 56, marginBottom: 12 }}>🤍</div>
-          <div style={{ fontSize: 23, fontWeight: 700, color: C.sub }}>שבת שלום</div>
-          <div style={{ fontSize: 16, marginTop: 10, lineHeight: 1.7 }}>היום יום מנוחה - בלי מעקב ובלי מדידה.<br />נתראה במוצאי שבת 🌙</div>
+          <div style={{ fontSize: 57, marginBottom: 12 }}>🤍</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: C.sub }}>שבת שלום</div>
+          <div style={{ fontSize: 17, marginTop: 10, lineHeight: 1.7 }}>היום יום מנוחה - בלי מעקב ובלי מדידה.<br />נתראה במוצאי שבת 🌙</div>
         </div>
       ) : (
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "0 16px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", justifyItems: "center", alignItems: "start", rowGap: 14, columnGap: 6, marginTop: 6, marginBottom: 14 }}>
-          <div style={{ gridColumn: 1, gridRow: 1 }}><Ring consumed={consumed} budget={budget} size={130} onPlus={onAddCalorie} /></div>
-          {stepsOpen && <div style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : "מודדת ממוצע"} onPlus={onEditSteps} size={130} /></div>}
-          {macroOpen && <div style={{ gridColumn: 1, gridRow: 2 }}><ProteinRing consumed={macros.p} target={targets.protein} size={130} /></div>}
-          {waterOpen && <div style={{ gridColumn: 2, gridRow: 2 }}><MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} verb="שתית" color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={130} /></div>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", justifyItems: "center", alignItems: "start", rowGap: 10, columnGap: 6, marginTop: 2, marginBottom: 10 }}>
+          <div style={{ gridColumn: 1, gridRow: 1 }}><Ring consumed={consumed} budget={budget} size={124} onPlus={onAddCalorie} /></div>
+          {stepsOpen && <div style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : "מודדת ממוצע"} onPlus={onEditSteps} size={124} /></div>}
+          {macroOpen && <div style={{ gridColumn: 1, gridRow: 2 }}><ProteinRing consumed={macros.p} target={targets.protein} size={124} /></div>}
+          {waterOpen && <div style={{ gridColumn: 2, gridRow: 2 }}><MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} verb="שתית" color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={124} /></div>}
         </div>
         {SHOW_MACRO_STRIP && macroOpen && (
           <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", margin: "0 0 16px" }}>
             {[{ label: "שומן", v: macros.f, t: targets.fat, color: C.macroF }, { label: "פחמימות", v: macros.c, t: targets.carbs, color: C.macroC }, { label: "סיבים", v: macros.fib, t: FIBER_TARGET, color: C.info }].map((m, i) => (
               <div key={m.label} style={{ flex: 1, textAlign: "center", padding: "5px 4px", borderInlineStart: i ? `1px solid ${C.line}` : "none" }}>
-                <div style={{ fontSize: 11.5, color: C.sub, display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: m.color }} />{m.label}</div>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, marginTop: 1 }}>{m.v} / {m.t} ג׳</div>
+                <div style={{ fontSize: 12.5, color: C.sub, display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: m.color }} />{m.label}</div>
+                <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, marginTop: 1 }}>{m.v} / {m.t} ג׳</div>
               </div>
             ))}
           </div>
@@ -886,9 +886,9 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
 
         {dayAct.length > 0 && (
           <>
-            <div style={{ fontSize: 13, color: C.faint, marginBottom: 2 }}>פעילות גופנית</div>
+            <div style={{ fontSize: 14, color: C.faint, marginBottom: 2 }}>פעילות גופנית</div>
             {dayAct.map((a) => (
-              <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: `1px solid ${C.line}`, fontSize: 15 }}>
+              <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: `1px solid ${C.line}`, fontSize: 16 }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 7, color: C.ink }}><Dumbbell size={15} color={C.info} /> {a.name}</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ color: C.brandD, fontWeight: 500 }}>+{a.kcal}</span><button onClick={() => deleteEntry(a.id, "activity")} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><Trash2 size={14} /></button></span>
               </div>
@@ -896,19 +896,19 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </>
         )}
 
-        <div style={{ fontSize: 13, color: C.faint, margin: "16px 0 2px" }}>מה שהוזן</div>
-        {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 15, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה - הקישי על כפתור ה־+ להוספה</div>}
+        <div style={{ fontSize: 14, color: C.faint, margin: "16px 0 2px" }}>מה שהוזן</div>
+        {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 16, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה - הקישי על כפתור ה־+ להוספה</div>}
         {dayLog.map((e) => (
           <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
             <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
-              <div style={{ fontSize: 15, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
-              <div style={{ fontSize: 13, color: C.faint }}>{e.meal} · {e.unit === "serving" ? `${e.servings} ${e.servings === 1 ? "מנה" : "מנות"}` : `${e.g} ${e.unit === "ml" ? "מ\"ל" : "ג׳"}`} · {e.kcal} קק״ל</div>
+              <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
+              <div style={{ fontSize: 14, color: C.faint }}>{e.meal} · {e.unit === "serving" ? `${e.servings} ${e.servings === 1 ? "מנה" : "מנות"}` : `${e.g} ${e.unit === "ml" ? "מ\"ל" : "ג׳"}`} · {e.kcal} קק״ל</div>
             </div>
             <button onClick={() => editEntry(e)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Pencil size={15} /></button>
             <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
           </div>
         ))}
-        <div style={{ textAlign: "center", fontSize: 11.5, color: C.faint, marginTop: 22 }}>MyPrime · v{VERSION}</div>
+        <div style={{ textAlign: "center", fontSize: 12.5, color: C.faint, marginTop: 22 }}>MyPrime · v{VERSION}</div>
       </div>
       )}
     </div>
@@ -935,7 +935,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
   return (
     <div style={{ padding: "8px 16px 16px" }}>
       <Header title="דוח והתקדמות" />
-      <div style={{ marginBottom: 12 }}><span style={{ fontSize: 13, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 20 }}>שבוע {programWeek} בתוכנית</span></div>
+      <div style={{ marginBottom: 12 }}><span style={{ fontSize: 14, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 20 }}>שבוע {programWeek} בתוכנית</span></div>
       {stepsOpen && (() => {
         const sData = Array.from({ length: 14 }, (_, i) => {
           const d = addDays(today, -13 + i);
@@ -956,19 +956,19 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
             <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
               {cells.map((c, i) => (
                 <div key={i} style={{ flex: 1, textAlign: "center", padding: "12px 6px", borderInlineStart: i === 0 ? "none" : `1px solid ${C.line}`, background: i === 1 ? C.brandBg : "transparent" }}>
-                  <div style={{ fontSize: 12.5, color: C.sub, marginBottom: 5 }}>{c.label}</div>
-                  <div style={{ fontSize: 23, fontWeight: 700, color: i === 1 ? C.brandD : C.ink, lineHeight: 1.1 }}>{c.val}</div>
+                  <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 5 }}>{c.label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: i === 1 ? C.brandD : C.ink, lineHeight: 1.1 }}>{c.val}</div>
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: 12, color: C.faint, marginBottom: 2 }}>צעדים יומיים - 14 הימים האחרונים</div>
+            <div style={{ fontSize: 13, color: C.faint, marginBottom: 2 }}>צעדים יומיים - 14 הימים האחרונים</div>
             <div style={{ height: 150, margin: "6px -6px 0" }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={sData} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.faint }} axisLine={false} tickLine={false} interval={1} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} interval={1} />
                   <YAxis domain={[0, maxStep]} hide />
-                  <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${Number(v).toLocaleString()} צעדים`, ""]} labelFormatter={(l) => l} />
-                  {goal && <ReferenceLine y={goal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד`, position: "insideTopRight", fontSize: 11, fill: C.brandD }} />}
+                  <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${Number(v).toLocaleString()} צעדים`, ""]} labelFormatter={(l) => l} />
+                  {goal && <ReferenceLine y={goal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד`, position: "insideTopRight", fontSize: 12, fill: C.brandD }} />}
                   <Bar dataKey="steps" radius={[4, 4, 0, 0]}>
                     {sData.map((d, i) => (<Cell key={i} fill={d.steps === 0 ? C.line : (goal && d.steps >= goal) ? C.brand : C.proteinTrack} />))}
                   </Bar>
@@ -983,9 +983,9 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
       <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
           <Target size={16} color={C.brand} />
-          <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>עמידה ביעד הקלורי</span>
+          <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>עמידה ביעד הקלורי</span>
         </div>
-        <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 10 }}>
           {loggedDays.length > 0
             ? <>עמדת ביעד <b style={{ color: C.brandD }}>{metDays} מתוך {loggedDays.length}</b> הימים האחרונים 🎯</>
             : "עדיין אין נתוני אכילה לשבוע הזה"}
@@ -994,10 +994,10 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
           <div style={{ height: 140, margin: "0 -6px" }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={calSeries} margin={{ top: 12, right: 8, left: 8, bottom: 0 }}>
-                <XAxis dataKey="label" tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 13, fill: C.faint }} axisLine={false} tickLine={false} />
                 <YAxis domain={[0, Math.round(maxCal * 1.15)]} hide />
-                <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
-                <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 11, fill: C.brandD }} />
+                <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
+                <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 12, fill: C.brandD }} />
                 <Bar dataKey="kcal" radius={[6, 6, 0, 0]}>
                   {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : d.kcal <= goalKcal ? C.brand : C.amber} />))}
                 </Bar>
@@ -1008,17 +1008,17 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
       </div>
       <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-          <div><div style={{ fontSize: 13, color: C.sub }}>משקל נוכחי</div><div style={{ fontSize: 28, fontWeight: 600, color: C.ink }}>{current} <span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></div></div>
-          <span style={{ fontSize: 14, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 8, display: "flex", alignItems: "center", gap: 3 }}><ArrowDownRight size={14} /> {Math.abs(change)} ק״ג</span>
+          <div><div style={{ fontSize: 14, color: C.sub }}>משקל נוכחי</div><div style={{ fontSize: 29, fontWeight: 600, color: C.ink }}>{current} <span style={{ fontSize: 16, color: C.sub }}>ק״ג</span></div></div>
+          <span style={{ fontSize: 15, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 8, display: "flex", alignItems: "center", gap: 3 }}><ArrowDownRight size={14} /> {Math.abs(change)} ק״ג</span>
         </div>
-        <div style={{ fontSize: 12, color: C.faint, marginBottom: 2 }}>המשקל שהזנת בפועל לאורך זמן (לא תחזית)</div>
+        <div style={{ fontSize: 13, color: C.faint, marginBottom: 2 }}>המשקל שהזנת בפועל לאורך זמן (לא תחזית)</div>
         <div style={{ height: 150, margin: "6px -6px 0" }}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
               <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.brand} stopOpacity={0.2} /><stop offset="100%" stopColor={C.brand} stopOpacity={0} /></linearGradient></defs>
-              <XAxis dataKey="label" tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 13, fill: C.faint }} axisLine={false} tickLine={false} />
               <YAxis domain={["dataMin - 0.5", "dataMax + 0.5"]} hide />
-              <Tooltip contentStyle={{ fontSize: 14, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v} ק״ג`, "משקל"]} labelFormatter={() => ""} />
+              <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v} ק״ג`, "משקל"]} labelFormatter={() => ""} />
               <Area type="monotone" dataKey="kg" stroke={C.brand} strokeWidth={2.5} fill="url(#wg)" dot={{ r: 3, fill: C.brand }} activeDot={{ r: 5, fill: C.brandD }} />
             </AreaChart>
           </ResponsiveContainer>
@@ -1026,10 +1026,10 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={addWeight} style={{ padding: "9px" }}>+ הזיני משקל</Btn></div>
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>ימים ביעד</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div></div>
+        <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, color: C.sub }}>ימים ביעד</div><div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div></div>
         {proteinFocus
-          ? <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>יעד חלבון</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{targets.protein} ג׳</div></div>
-          : <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 12, color: C.sub }}>ירידה מתחילת המעקב</div><div style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{Math.abs(change)} ק״ג</div></div>}
+          ? <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, color: C.sub }}>יעד חלבון</div><div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{targets.protein} ג׳</div></div>
+          : <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, color: C.sub }}>ירידה מתחילת המעקב</div><div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{Math.abs(change)} ק״ג</div></div>}
       </div>
     </div>
   );
@@ -1038,8 +1038,8 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
 function RecipeDetail({ r, onBack, onAdd }) {
   const stat = (label, value, color) => (
     <div style={{ flex: 1, textAlign: "center", padding: "8px 4px" }}>
-      <div style={{ fontSize: 17, fontWeight: 700, color: color || C.ink }}>{value}</div>
-      <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: color || C.ink }}>{value}</div>
+      <div style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{label}</div>
     </div>
   );
   return (
@@ -1048,14 +1048,14 @@ function RecipeDetail({ r, onBack, onAdd }) {
         <img src={r.img} alt={r.name} style={{ width: "100%", height: 230, objectFit: "cover", display: "block" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0) 55%)" }} />
         <button onClick={onBack} style={{ position: "absolute", top: 12, insetInlineStart: 12, width: 38, height: 38, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.92)", color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}><ChevronRight size={22} /></button>
-        <div style={{ position: "absolute", bottom: 12, insetInlineStart: 16, insetInlineEnd: 16, color: "#fff", fontSize: 22, fontWeight: 700, lineHeight: 1.3, textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}>{r.name}</div>
+        <div style={{ position: "absolute", bottom: 12, insetInlineStart: 16, insetInlineEnd: 16, color: "#fff", fontSize: 23, fontWeight: 700, lineHeight: 1.3, textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}>{r.name}</div>
       </div>
 
       <div style={{ padding: "14px 16px 0" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <span style={{ fontSize: 13, color: C.brandD, background: C.brandBg, padding: "6px 12px", borderRadius: 16, display: "flex", alignItems: "center", gap: 5 }}><Clock size={14} /> {r.prep}</span>
-          <span style={{ fontSize: 13, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>מנות: {r.servings}</span>
-          <span style={{ fontSize: 13, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>קושי: {r.diff}</span>
+          <span style={{ fontSize: 14, color: C.brandD, background: C.brandBg, padding: "6px 12px", borderRadius: 16, display: "flex", alignItems: "center", gap: 5 }}><Clock size={14} /> {r.prep}</span>
+          <span style={{ fontSize: 14, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>מנות: {r.servings}</span>
+          <span style={{ fontSize: 14, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>קושי: {r.diff}</span>
         </div>
 
         <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 14 }}>
@@ -1070,31 +1070,31 @@ function RecipeDetail({ r, onBack, onAdd }) {
 
         <div style={{ marginBottom: 16 }}><Btn onClick={() => onAdd(r)}><Plus size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> הוסיפי מנה ליומן</Btn></div>
 
-        <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: "4px 0 8px" }}>מרכיבים</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, margin: "4px 0 8px" }}>מרכיבים</div>
         <div style={{ marginBottom: 18 }}>
           {r.ing.map((line, i) => {
             const isHeader = line.trim().endsWith(":");
             return isHeader
-              ? <div key={i} style={{ fontSize: 14, fontWeight: 700, color: C.brandD, margin: i === 0 ? "0 0 6px" : "12px 0 6px" }}>{line.replace(/:$/, "")}</div>
-              : <div key={i} style={{ display: "flex", gap: 9, fontSize: 14.5, color: C.ink, lineHeight: 1.5, marginBottom: 7 }}><span style={{ color: C.brand, marginTop: 7, width: 6, height: 6, borderRadius: "50%", background: C.brand, flexShrink: 0 }} /><span>{line}</span></div>;
+              ? <div key={i} style={{ fontSize: 15, fontWeight: 700, color: C.brandD, margin: i === 0 ? "0 0 6px" : "12px 0 6px" }}>{line.replace(/:$/, "")}</div>
+              : <div key={i} style={{ display: "flex", gap: 9, fontSize: 15.5, color: C.ink, lineHeight: 1.5, marginBottom: 7 }}><span style={{ color: C.brand, marginTop: 7, width: 6, height: 6, borderRadius: "50%", background: C.brand, flexShrink: 0 }} /><span>{line}</span></div>;
           })}
         </div>
 
-        <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, margin: "4px 0 10px" }}>אופן ההכנה</div>
+        <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, margin: "4px 0 10px" }}>אופן ההכנה</div>
         <div style={{ marginBottom: r.tips && r.tips.length ? 18 : 4 }}>
           {r.steps.map((s, i) => (
             <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-              <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</div>
-              <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.6, paddingTop: 2 }}>{s}</div>
+              <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: C.brandBg, color: C.brandD, fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</div>
+              <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, paddingTop: 2 }}>{s}</div>
             </div>
           ))}
         </div>
 
         {r.tips && r.tips.length > 0 && (
           <div style={{ background: C.amberBg, borderRadius: 12, padding: "12px 14px" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, marginBottom: 7, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={15} /> טיפים ושדרוגים</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.amber, marginBottom: 7, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={15} /> טיפים ושדרוגים</div>
             {r.tips.map((t, i) => (
-              <div key={i} style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.55, marginBottom: 6, display: "flex", gap: 8 }}><span style={{ color: C.amber }}>•</span><span>{t}</span></div>
+              <div key={i} style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.55, marginBottom: 6, display: "flex", gap: 8 }}><span style={{ color: C.amber }}>•</span><span>{t}</span></div>
             ))}
           </div>
         )}
@@ -1121,9 +1121,9 @@ function RecipesScreen({ addRecipe, sweetsOpen }) {
     : "חוברת המתכונים של מיי פריים - עשירים בחלבון, דלים בפחמימות ומשולבים מזונות אנטי-דלקתיים.";
   const goSection = (s) => { setSection(s); setFilter("הכל"); setQuery(""); if (s === "sweets") setSeenSweets(true); };
   const segBtn = (s, label, icon) => (
-    <button onClick={() => goSection(s)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 6px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, background: section === s ? C.panel : "transparent", color: section === s ? C.brandD : C.sub, boxShadow: section === s ? "0 1px 4px rgba(168,66,92,0.14)" : "none" }}>
+    <button onClick={() => goSection(s)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 6px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, background: section === s ? C.panel : "transparent", color: section === s ? C.brandD : C.sub, boxShadow: section === s ? "0 1px 4px rgba(168,66,92,0.14)" : "none" }}>
       {icon}{label}
-      {s === "sweets" && !seenSweets && <span style={{ position: "absolute", top: 2, insetInlineEnd: 8, fontSize: 10, fontWeight: 600, background: C.brand, color: "#fff", padding: "1px 6px", borderRadius: 8 }}>חדש</span>}
+      {s === "sweets" && !seenSweets && <span style={{ position: "absolute", top: 2, insetInlineEnd: 8, fontSize: 11, fontWeight: 600, background: C.brand, color: "#fff", padding: "1px 6px", borderRadius: 8 }}>חדש</span>}
     </button>
   );
 
@@ -1133,7 +1133,7 @@ function RecipesScreen({ addRecipe, sweetsOpen }) {
     if (filter !== "הכל") return r.cat === filter;
     return true;
   });
-  const fchip = (t) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 20, cursor: "pointer", whiteSpace: "nowrap", background: filter === t ? C.ink : "transparent", color: filter === t ? "#fff" : C.sub, boxShadow: filter === t ? "none" : `inset 0 0 0 1px ${C.line}` });
+  const fchip = (t) => ({ fontSize: 15, padding: "6px 13px", borderRadius: 20, cursor: "pointer", whiteSpace: "nowrap", background: filter === t ? C.ink : "transparent", color: filter === t ? "#fff" : C.sub, boxShadow: filter === t ? "none" : `inset 0 0 0 1px ${C.line}` });
 
   return (
     <div style={{ padding: "8px 16px 16px", position: "relative" }}>
@@ -1146,11 +1146,11 @@ function RecipesScreen({ addRecipe, sweetsOpen }) {
         </div>
       )}
 
-      <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>{subtitle}</div>
+      <div style={{ fontSize: 14.5, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>{subtitle}</div>
 
       <div style={{ position: "relative", marginBottom: 12 }}>
         <Search size={16} style={{ position: "absolute", insetInlineStart: 12, top: 12, color: C.faint }} />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isSweets ? "חיפוש מתוק…" : "חיפוש מתכון…"} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 36px", fontSize: 14.5, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isSweets ? "חיפוש מתוק…" : "חיפוש מתכון…"} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 36px", fontSize: 15.5, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
@@ -1164,16 +1164,16 @@ function RecipesScreen({ addRecipe, sweetsOpen }) {
             <button onClick={(e) => { e.stopPropagation(); addRecipe(r); }} style={{ position: "absolute", bottom: 10, insetInlineEnd: 10, width: 38, height: 38, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}><Plus size={20} /></button>
           </div>
           <div style={{ padding: "11px 13px 13px" }}>
-            <div style={{ fontSize: 15.5, fontWeight: 600, color: C.ink, marginBottom: 7, lineHeight: 1.35 }}>{r.name}</div>
+            <div style={{ fontSize: 16.5, fontWeight: 600, color: C.ink, marginBottom: 7, lineHeight: 1.35 }}>{r.name}</div>
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 12, color: C.brandD, background: C.brandBg, padding: "3px 9px", borderRadius: 12 }}>{r.kcal} קק״ל</span>
-              <span style={{ fontSize: 12, color: C.macroP, background: C.proteinTrack, padding: "3px 9px", borderRadius: 12 }}>חלבון {r.p} ג׳</span>
-              <span style={{ fontSize: 12, color: C.sub, background: C.bg, padding: "3px 9px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} /> {r.prep}</span>
+              <span style={{ fontSize: 13, color: C.brandD, background: C.brandBg, padding: "3px 9px", borderRadius: 12 }}>{r.kcal} קק״ל</span>
+              <span style={{ fontSize: 13, color: C.macroP, background: C.proteinTrack, padding: "3px 9px", borderRadius: 12 }}>חלבון {r.p} ג׳</span>
+              <span style={{ fontSize: 13, color: C.sub, background: C.bg, padding: "3px 9px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} /> {r.prep}</span>
             </div>
           </div>
         </div>
       ))}
-      {filtered.length === 0 && <div style={{ fontSize: 14, color: C.faint, textAlign: "center", padding: 24 }}>לא נמצאו מתכונים תואמים.</div>}
+      {filtered.length === 0 && <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: 24 }}>לא נמצאו מתכונים תואמים.</div>}
     </div>
   );
 }
@@ -1190,20 +1190,20 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   const save = () => onSave({ meal, name, source: "verified", unit: "serving", servings, base, kcal: n.kcal, p: n.p, f: n.f, c: n.c }, editing ? editEntry.id : null);
   const stat = (label, value, color) => (
     <div style={{ flex: 1, textAlign: "center", padding: "8px 4px" }}>
-      <div style={{ fontSize: 17, fontWeight: 700, color }}>{value}</div>
-      <div style={{ fontSize: 11, color: C.sub, marginTop: 2 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color }}>{value}</div>
+      <div style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{label}</div>
     </div>
   );
   return (
     <SheetShell title={editing ? "עריכת מנה" : "הוספה ליומן"} onClose={onClose}>
-      <div style={{ fontSize: 16, fontWeight: 600, color: C.ink, marginBottom: 16, lineHeight: 1.35 }}>{name}</div>
+      <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, marginBottom: 16, lineHeight: 1.35 }}>{name}</div>
 
-      <div style={{ fontSize: 13, color: C.sub, marginBottom: 7 }}>שיוך לארוחה</div>
+      <div style={{ fontSize: 14, color: C.sub, marginBottom: 7 }}>שיוך לארוחה</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 18 }}>
-        {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.brand : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+        {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.brand : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
       </div>
 
-      <div style={{ fontSize: 13, color: C.sub, marginBottom: 10 }}>כמות מנות</div>
+      <div style={{ fontSize: 14, color: C.sub, marginBottom: 10 }}>כמות מנות</div>
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
         <Stepper value={servings} set={setServings} step={0.5} min={0.5} suffix={servings === 1 ? "מנה" : "מנות"} />
       </div>
@@ -1239,7 +1239,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
   const calNow = profile.calorieOverride || targets.targetKcal;
 
   const EditRow = ({ label, display, onClick }) => (
-    <div onClick={onClick} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 15, padding: "12px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+    <div onClick={onClick} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 16, padding: "12px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
       <span style={{ color: C.sub }}>{label}</span>
       <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{display} <Pencil size={13} color={C.faint} /></span>
     </div>
@@ -1250,12 +1250,12 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
       <Header title="פרופיל" />
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>{((profile.name || userName || "").trim().charAt(0)) || "♥"}</div>
-        <div><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 13, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
+        <div><div style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 14, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
       </div>
 
       <div style={{ borderTop: `1px solid ${C.line}` }}>
         <div onClick={() => setBaseOpen(!baseOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", cursor: "pointer" }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>נתוני בסיס</span>
+          <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>נתוני בסיס</span>
           <ChevronDown size={20} color={C.sub} style={{ transform: baseOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
         </div>
         {baseOpen && (
@@ -1266,63 +1266,62 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
             <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
             <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
             <EditRow label="תחילת התוכנית" display={startLabel} onClick={() => open({ key: "startDate", label: "תחילת התוכנית", type: "date", init: profile.startDate })} />
-            <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
+            <div onClick={() => setProfile({ ...profile, keepShabbat: !profile.keepShabbat })} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 16, color: C.ink }}>שומרת שבת</div>
+                <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>שבת תופיע אפורה ובלי מעקב יומי</div>
+              </div>
+              <div style={{ width: 46, height: 27, borderRadius: 14, background: profile.keepShabbat ? C.brand : C.line, position: "relative", transition: "background .2s", flexShrink: 0 }}>
+                <div style={{ position: "absolute", top: 3, left: profile.keepShabbat ? 22 : 3, width: 21, height: 21, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+              </div>
+            </div>
+            <div style={{ fontSize: 14, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
           </div>
         )}
       </div>
 
       <div onClick={() => open({ key: "calorieOverride", label: "יעד קלורי יומי", type: "calorie", init: profile.calorieOverride || targets.targetKcal })} style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12, cursor: "pointer" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `2px solid ${C.brand}`, borderRadius: 10, padding: "9px 11px", background: "#fff" }}>
-          <span style={{ fontSize: 13, color: C.brandD }}>יעד קלורי יומי</span>
-          <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{calNow.toLocaleString()} קק״ל {profile.calorieOverride ? "" : <span style={{ fontSize: 11, color: C.sub }}>(מומלץ)</span>} <Pencil size={13} color={C.faint} /></span>
+          <span style={{ fontSize: 14, color: C.brandD }}>יעד קלורי יומי</span>
+          <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{calNow.toLocaleString()} קק״ל {profile.calorieOverride ? "" : <span style={{ fontSize: 12, color: C.sub }}>(מומלץ)</span>} <Pencil size={13} color={C.faint} /></span>
         </div>
         {programWeekFor(profile.startDate, TODAY) >= MACRO_UNLOCK.week && <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
       </div>
 
       <div onClick={() => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: effStepGoal != null ? effStepGoal : 2000 })} style={{ background: C.amberBg, borderRadius: 12, padding: 12, marginBottom: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span style={{ fontSize: 13, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}><Footprints size={15} color={C.amber} /> יעד צעדים יומי</span>
-          {profile.stepBaseline != null && <span style={{ fontSize: 11.5, color: C.faint }}>התחלת ב-{profile.stepBaseline.toLocaleString()}</span>}
+          <span style={{ fontSize: 14, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}><Footprints size={15} color={C.amber} /> יעד צעדים יומי</span>
+          {profile.stepBaseline != null && <span style={{ fontSize: 12.5, color: C.faint }}>התחלת ב-{profile.stepBaseline.toLocaleString()}</span>}
         </span>
         <span style={{ fontWeight: 600, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}>{effStepGoal != null ? `${effStepGoal.toLocaleString()} צעדים` : "מודדת ממוצע"} <Pencil size={13} color={C.faint} /></span>
       </div>
 
-      <div onClick={() => setProfile({ ...profile, keepShabbat: !profile.keepShabbat })} style={{ background: C.bg, borderRadius: 12, padding: "12px 12px", marginBottom: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>שומרת שבת</div>
-          <div style={{ fontSize: 12.5, color: C.sub, marginTop: 2 }}>שבת תופיע אפורה ובלי מעקב יומי</div>
-        </div>
-        <div style={{ width: 46, height: 27, borderRadius: 14, background: profile.keepShabbat ? C.brand : C.line, position: "relative", transition: "background .2s", flexShrink: 0 }}>
-          <div style={{ position: "absolute", top: 3, left: profile.keepShabbat ? 22 : 3, width: 21, height: 21, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
-        </div>
-      </div>
-
       <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 4 }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginBottom: 10 }}>העדפות תזונה</div>
-        <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>סגנון תזונה (משמש להמלצות)</div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: C.ink, marginBottom: 10 }}>העדפות תזונה</div>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 8 }}>סגנון תזונה (משמש להמלצות)</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
           {DIET_OPTIONS.map((d) => {
             const on = (profile.diet || []).includes(d.id);
-            return (<span key={d.id} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d.id) : [...(profile.diet || []), d.id] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
+            return (<span key={d.id} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d.id) : [...(profile.diet || []), d.id] })} style={{ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
           })}
         </div>
-        <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות ואלרגיות (להימנע)</div>
-        <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>מה שתסמני ותכתבי כאן נשמר ומוזן ל-AI כדי להתחשב בזה בהמלצות. עדיין כדאי לבדוק רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות ואלרגיות (להימנע)</div>
+        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>מה שתסמני ותכתבי כאן נשמר ומוזן ל-AI כדי להתחשב בזה בהמלצות. עדיין כדאי לבדוק רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
           {SENSITIVITY_OPTIONS.map((s) => {
             const on = (profile.allergies || []).includes(s);
-            return (<span key={s} onClick={() => setProfile({ ...profile, allergies: on ? (profile.allergies || []).filter((x) => x !== s) : [...(profile.allergies || []), s] })} style={{ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+            return (<span key={s} onClick={() => setProfile({ ...profile, allergies: on ? (profile.allergies || []).filter((x) => x !== s) : [...(profile.allergies || []), s] })} style={{ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
           })}
         </div>
-        <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
         <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
-          <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+          <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
           <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
         </div>
         {customSens.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {customSens.map((s) => (
-              <span key={s} style={{ fontSize: 14, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
                 {s}
                 <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
               </span>
@@ -1332,13 +1331,13 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
       </div>
 
       <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
-      <div style={{ textAlign: "center", fontSize: 12, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
+      <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
 
       {edit && (
         <div onClick={() => setEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 18px 20px", width: "100%", maxWidth: 340, fontFamily: fontStack }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-              <span style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{edit.label}</span>
+              <span style={{ fontSize: 19, fontWeight: 600, color: C.ink }}>{edit.label}</span>
               <button onClick={() => setEdit(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
             </div>
 
@@ -1347,7 +1346,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: edit.hint ? 8 : 18 }}>
                   <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(edit.min || 0, v) })} step={edit.step} min={edit.min} suffix={edit.suffix} />
                 </div>
-                {edit.hint && <div style={{ fontSize: 12.5, color: C.faint, textAlign: "center", marginBottom: 18, lineHeight: 1.5 }}>{edit.hint}</div>}
+                {edit.hint && <div style={{ fontSize: 13.5, color: C.faint, textAlign: "center", marginBottom: 18, lineHeight: 1.5 }}>{edit.hint}</div>}
               </>
             )}
 
@@ -1356,7 +1355,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
                   <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(KCAL_FLOOR, v) })} step={10} min={KCAL_FLOOR} suffix="קק״ל" />
                 </div>
-                <div onClick={() => { setProfile({ ...profile, calorieOverride: null }); setEdit(null); }} style={{ textAlign: "center", fontSize: 13, color: C.brandD, textDecoration: "underline", cursor: "pointer", marginBottom: 18 }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</div>
+                <div onClick={() => { setProfile({ ...profile, calorieOverride: null }); setEdit(null); }} style={{ textAlign: "center", fontSize: 14, color: C.brandD, textDecoration: "underline", cursor: "pointer", marginBottom: 18 }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</div>
               </>
             )}
 
@@ -1365,9 +1364,9 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
                 {RATE_OPTIONS.map((r) => {
                   const sel = edit.value === r; const rec = r === 250;
                   return (
-                    <button key={r} onClick={() => setEdit({ ...edit, value: r })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: `${rec ? 2 : 1.5}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : C.panel, color: sel || rec ? C.brandD : C.ink, borderRadius: 12, padding: "11px", fontSize: 15, fontFamily: fontStack, fontWeight: sel || rec ? 600 : 400, cursor: "pointer" }}>
+                    <button key={r} onClick={() => setEdit({ ...edit, value: r })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: `${rec ? 2 : 1.5}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : C.panel, color: sel || rec ? C.brandD : C.ink, borderRadius: 12, padding: "11px", fontSize: 16, fontFamily: fontStack, fontWeight: sel || rec ? 600 : 400, cursor: "pointer" }}>
                       <span>{rateLabel(r)}</span>
-                      {rec && <span style={{ fontSize: 11, fontWeight: 700, background: C.brand, color: "#fff", padding: "3px 8px", borderRadius: 7 }}>מומלץ</span>}
+                      {rec && <span style={{ fontSize: 12, fontWeight: 700, background: C.brand, color: "#fff", padding: "3px 8px", borderRadius: 7 }}>מומלץ</span>}
                     </button>
                   );
                 })}
@@ -1376,7 +1375,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
 
             {edit.type === "date" && (
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
-                <select value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", width: "100%" }}>
+                <select value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", width: "100%" }}>
                   {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
                 </select>
               </div>
@@ -1628,9 +1627,9 @@ function IntroOverlay({ onClose }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 22, zIndex: 40 }}>
       <div style={{ background: C.panel, borderRadius: 18, padding: 20, fontFamily: fontStack }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>דמו MyPrime · v{VERSION}</span></div>
-        <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 12px" }}>שלום ענת 🙂 זו גרסת הדגמה לשחק איתה. כמה דברים:</p>
-        <ul style={{ fontSize: 15, color: C.sub, lineHeight: 1.8, margin: "0 0 14px", paddingInlineStart: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>דמו MyPrime · v{VERSION}</span></div>
+        <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.7, margin: "0 0 12px" }}>שלום ענת 🙂 זו גרסת הדגמה לשחק איתה. כמה דברים:</p>
+        <ul style={{ fontSize: 16, color: C.sub, lineHeight: 1.8, margin: "0 0 14px", paddingInlineStart: 18 }}>
           <li>הנתונים לא נשמרים - רענון מתחיל מחדש.</li>
           <li>אפשר לצלם צלחת אמיתית ולקבל הערכת ערכים (ניתוח ע״י AI).</li>
           <li>אפשר לסרוק ברקוד של מוצר ולקבל ערכים מהמאגר.</li>
@@ -1668,22 +1667,22 @@ function NotesFab({ notes, setNotes, screen, userName }) {
     <>
       <button onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 78, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
         <MessageCircle size={20} />
-        {notes.length > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: C.ink, color: "#fff", fontSize: 12, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length}</span>}
+        {notes.length > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: C.ink, color: "#fff", fontSize: 13, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length}</span>}
       </button>
       {open && (
         <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 45 }} onClick={() => setOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "80%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", overflowY: "auto", fontFamily: fontStack }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <span style={{ fontSize: 19, fontWeight: 600, color: C.ink }}>הערות לדמו</span>
+              <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>הערות לדמו</span>
               <button onClick={() => setOpen(false)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
             </div>
-            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={3} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
+            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={3} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
             <Btn onClick={add}>הוסיפי הערה</Btn>
             {notes.length > 0 && (
               <div style={{ marginTop: 14 }}>
                 {notes.map((n, i) => (
                   <div key={i} style={{ borderTop: `1px solid ${C.line}`, padding: "9px 0", display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <span style={{ flex: 1, fontSize: 15, color: C.ink }}>{n.text}<div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>{n.screen} · {n.t}</div></span>
+                    <span style={{ flex: 1, fontSize: 16, color: C.ink }}>{n.text}<div style={{ fontSize: 13, color: C.faint, marginTop: 2 }}>{n.screen} · {n.t}</div></span>
                     <button onClick={() => setNotes((arr) => arr.filter((_, j) => j !== i))} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><Trash2 size={14} /></button>
                   </div>
                 ))}
@@ -1897,7 +1896,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "92%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", overflowY: "auto", fontFamily: fontStack }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 19, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
           <button onClick={close} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
         </div>
         {step === "method" && (
@@ -1909,60 +1908,60 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") }].map((o) => (
               <div key={o.t} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
                 <div style={{ width: 46, height: 46, borderRadius: 13, background: o.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 3px 9px ${o.color}55` }}><o.ic size={23} color="#fff" strokeWidth={2.2} /></div>
-                <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 600, color: C.ink }}>{o.t}</div><div style={{ fontSize: 13, color: C.sub }}>{o.s}</div></div>
-                {o.tag && <span style={{ fontSize: 12, background: C.panel, color: o.color, padding: "3px 10px", borderRadius: 8, fontWeight: 500 }}>{o.tag}</span>}
+                <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{o.t}</div><div style={{ fontSize: 14, color: C.sub }}>{o.s}</div></div>
+                {o.tag && <span style={{ fontSize: 13, background: C.panel, color: o.color, padding: "3px 10px", borderRadius: 8, fontWeight: 500 }}>{o.tag}</span>}
               </div>
             ))}
-            <div style={{ fontSize: 13, color: C.faint, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /> <span>ברקוד וחיפוש מדויקים יותר מצילום. בצילום נאשר את הכמות יחד.</span></div>
+            <div style={{ fontSize: 14, color: C.faint, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /> <span>ברקוד וחיפוש מדויקים יותר מצילום. בצילום נאשר את הכמות יחד.</span></div>
           </>
         )}
         {step === "list" && (
           <>
             <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 4, color: C.faint }}>
-              <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 15, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+              <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
             </div>
-            {query && filtered.length > 0 && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
+            {query && filtered.length > 0 && <div style={{ fontSize: 14, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
             {query && filtered.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
                 <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
                   <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
                 </div>
               );
             })}
-            {query && <div style={{ fontSize: 13, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
+            {query && <div style={{ fontSize: 14, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
             {query && dbResults.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
                 <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
                   <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
                 </div>
               );
             })}
-            {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 14, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
-            {!query && <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
+            {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 15, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
+            {!query && <div style={{ fontSize: 14, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
           </>
         )}
         {step === "history" && (
           <>
             <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
             </div>
             {(favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
               const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
                 <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 15, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 12, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
                   <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
                 </div>
               );
             })}
-            <div style={{ fontSize: 12, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת על + מוסיפה עם הכמות האחרונה - בלי להזין שוב</span></div>
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת על + מוסיפה עם הכמות האחרונה - בלי להזין שוב</span></div>
           </>
         )}
         {step === "barcode" && (
@@ -1970,13 +1969,13 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
             {scanState === "idle" && (
               <div style={{ textAlign: "center", padding: "4px 0" }}>
                 <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Barcode size={32} color={C.brand} /></div>
-                <div style={{ fontSize: 17, fontWeight: 500, color: C.ink, marginBottom: 6 }}>סריקת ברקוד</div>
-                <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>כווני את המצלמה לברקוד של המוצר - הערכים יישלפו אוטומטית מ-Open Food Facts.</p>
+                <div style={{ fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 6 }}>סריקת ברקוד</div>
+                <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>כווני את המצלמה לברקוד של המוצר - הערכים יישלפו אוטומטית מ-Open Food Facts.</p>
                 <Btn onClick={startScan}>פתחי מצלמה לסריקה</Btn>
-                <div style={{ fontSize: 13, color: C.faint, margin: "16px 0 6px" }}>או הקלידי את מספר הברקוד</div>
+                <div style={{ fontSize: 14, color: C.faint, margin: "16px 0 6px" }}>או הקלידי את מספר הברקוד</div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <input value={manualCode} onChange={(e) => setManualCode(e.target.value)} inputMode="numeric" placeholder="מספר ברקוד" style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
-                  <button onClick={() => manualCode.trim() && lookupBarcode(manualCode.trim())} style={{ border: "none", background: C.brand, color: "#fff", borderRadius: 10, padding: "0 18px", cursor: "pointer", fontSize: 15, fontWeight: 500 }}>חפשי</button>
+                  <input value={manualCode} onChange={(e) => setManualCode(e.target.value)} inputMode="numeric" placeholder="מספר ברקוד" style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+                  <button onClick={() => manualCode.trim() && lookupBarcode(manualCode.trim())} style={{ border: "none", background: C.brand, color: "#fff", borderRadius: 10, padding: "0 18px", cursor: "pointer", fontSize: 16, fontWeight: 500 }}>חפשי</button>
                 </div>
               </div>
             )}
@@ -1990,7 +1989,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
                     </div>
                   </div>
                 </div>
-                <div style={{ fontSize: 14, color: C.sub, marginTop: 10, lineHeight: 1.5 }}>מקמי את הברקוד בתוך המסגרת - ישר, ממלא את הרוחב, והחזיקי יציב לרגע</div>
+                <div style={{ fontSize: 15, color: C.sub, marginTop: 10, lineHeight: 1.5 }}>מקמי את הברקוד בתוך המסגרת - ישר, ממלא את הרוחב, והחזיקי יציב לרגע</div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 10 }}>
                   <Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>ביטול</Btn>
                   <Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>להקליד מספר ידנית</Btn>
@@ -1998,21 +1997,21 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
               </div>
             )}
             {scanState === "looking" && (
-              <div style={{ textAlign: "center", padding: "32px 0" }}><Loader size={28} color={C.brand} className="spin" /><div style={{ fontSize: 15, color: C.ink, marginTop: 12 }}>מחפש את המוצר…</div></div>
+              <div style={{ textAlign: "center", padding: "32px 0" }}><Loader size={28} color={C.brand} className="spin" /><div style={{ fontSize: 16, color: C.ink, marginTop: 12 }}>מחפש את המוצר…</div></div>
             )}
             {scanState === "notfound" && (
               <div style={{ textAlign: "center", padding: "16px 0" }}>
-                <div style={{ fontSize: 15, color: C.ink, marginBottom: 14, lineHeight: 1.6 }}>המוצר לא נמצא במאגר. אפשר לצלם את <b>התווית התזונתית</b> ואני אזהה את הערכים, או לנסות שוב.</div>
+                <div style={{ fontSize: 16, color: C.ink, marginBottom: 14, lineHeight: 1.6 }}>המוצר לא נמצא במאגר. אפשר לצלם את <b>התווית התזונתית</b> ואני אזהה את הערכים, או לנסות שוב.</div>
                 <label style={{ display: "block", marginBottom: 10 }}>
                   <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
-                  <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי את התווית התזונתית</span>
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי את התווית התזונתית</span>
                 </label>
                 <Btn variant="ghost" onClick={() => setScanState("idle")}>נסי שוב לסרוק</Btn>
               </div>
             )}
             {scanState === "error" && (
               <div style={{ textAlign: "center", padding: "20px 0" }}>
-                <div style={{ fontSize: 15, color: C.amber, marginBottom: 12, lineHeight: 1.6 }}>לא ניתן לפתוח את המצלמה. ודאי שאישרת גישה למצלמה בדפדפן, או הקלידי את הברקוד ידנית.</div>
+                <div style={{ fontSize: 16, color: C.amber, marginBottom: 12, lineHeight: 1.6 }}>לא ניתן לפתוח את המצלמה. ודאי שאישרת גישה למצלמה בדפדפן, או הקלידי את הברקוד ידנית.</div>
                 <Btn variant="ghost" onClick={() => setScanState("idle")}>חזרה</Btn>
               </div>
             )}
@@ -2021,19 +2020,19 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
         {step === "photo" && (
           <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
             <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Camera size={32} color={C.brand} /></div>
-            <div style={{ fontSize: 17, fontWeight: 500, color: C.ink, marginBottom: 6 }}>צלמי או העלי תמונה</div>
-            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>נפתח שיחה קצרה עם ה-AI - נזהה את הפריטים ונוכל לתקן כמויות יחד.</p>
+            <div style={{ fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 6 }}>צלמי או העלי תמונה</div>
+            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>נפתח שיחה קצרה עם ה-AI - נזהה את הפריטים ונוכל לתקן כמויות יחד.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <label style={{ display: "block" }}>
                 <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
-                <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי עכשיו</span>
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי עכשיו</span>
               </label>
               <label style={{ display: "block" }}>
                 <input ref={fileRef} type="file" accept="image/*" onChange={onPhoto} style={{ display: "none" }} />
-                <span style={{ display: "block", background: "transparent", color: C.brandD, borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 500, cursor: "pointer", boxShadow: `inset 0 0 0 1px ${C.line}` }}>העלי תמונה מהגלריה</span>
+                <span style={{ display: "block", background: "transparent", color: C.brandD, borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer", boxShadow: `inset 0 0 0 1px ${C.line}` }}>העלי תמונה מהגלריה</span>
               </label>
             </div>
-            <div style={{ fontSize: 12, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>הניתוח מבוצע ע״י בינה מלאכותית - ייתכן שתתבקשי להתחבר ל-Claude.</div>
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>הניתוח מבוצע ע״י בינה מלאכותית - ייתכן שתתבקשי להתחבר ל-Claude.</div>
           </div>
         )}
         {step === "ai" && (
@@ -2041,15 +2040,15 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
             <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
               {aiMsgs.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
-                  <div style={{ maxWidth: "82%", fontSize: 15, lineHeight: 1.5, padding: m.img ? 6 : "9px 12px", borderRadius: 14, background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>
+                  <div style={{ maxWidth: "82%", fontSize: 16, lineHeight: 1.5, padding: m.img ? 6 : "9px 12px", borderRadius: 14, background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>
                     {m.img && <img src={m.img} alt="" style={{ width: "100%", maxWidth: 180, borderRadius: 10, display: "block", marginBottom: m.text ? 6 : 0 }} />}
                     {m.text && <div style={{ padding: m.img ? "0 6px 4px" : 0 }}>{m.text}</div>}
                   </div>
                 </div>
               ))}
-              {aiLoading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 15, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>כותבת…</div></div>}
+              {aiLoading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>כותבת…</div></div>}
               {reconciling && !aiDoneItems && (
-                <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: C.sub, fontSize: 14 }}>
+                <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: C.sub, fontSize: 15 }}>
                   <Search size={15} /> בודקת ערכים במאגרי המזון…
                 </div>
               )}
@@ -2057,13 +2056,13 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
                 <div style={{ border: `1px solid ${C.brand}`, borderRadius: 12, padding: 10, marginTop: 6 }}>
                   {aiDoneItems.map((it, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
-                      <span style={{ fontSize: 15, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source={it.source || "estimated"} /></span>
-                      <span style={{ fontSize: 14, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
+                      <span style={{ fontSize: 16, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source={it.source || "estimated"} /></span>
+                      <span style={{ fontSize: 15, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
                     </div>
                   ))}
-                  <div style={{ fontSize: 11, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז - סריקת ברקוד היא המדויקת ביותר.</div>
-                  <div style={{ fontSize: 12, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
+                  <div style={{ fontSize: 12, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז - סריקת ברקוד היא המדויקת ביותר.</div>
+                  <div style={{ fontSize: 13, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
                   <Btn onClick={() => commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })))}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ליומן</Btn>
                   <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setAiDoneItems(null)}>אני רוצה לשנות</Btn></div>
                 </div>
@@ -2072,33 +2071,33 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
               <button onClick={startMic} disabled={aiLoading} className={aiListening ? "spin-pulse" : ""} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: aiListening ? C.brand : C.brandBg, color: aiListening ? "#fff" : C.brand, cursor: aiLoading ? "default" : "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Mic size={18} /></button>
-              <textarea ref={aiInputRef} value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }} disabled={aiLoading} rows={1} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+              <textarea ref={aiInputRef} value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }} disabled={aiLoading} rows={1} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
               <button onClick={() => sendAi()} disabled={aiLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Send size={18} /></button>
             </div>
-            <div style={{ fontSize: 12, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>
           </div>
         )}
         {step === "qty" && food && (
           <>
             {String(food.id || "").startsWith("bc_") && (
               <>
-                <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>שם המוצר (אפשר לערוך)</div>
-                <input value={food.name} onChange={(e) => setFood({ ...food, name: e.target.value })} placeholder="שם המוצר" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
+                <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>שם המוצר (אפשר לערוך)</div>
+                <input value={food.name} onChange={(e) => setFood({ ...food, name: e.target.value })} placeholder="שם המוצר" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
               </>
             )}
-            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>שיוך לארוחה</div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
-            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>מידת בית</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>{food.measures.map((ms) => (<span key={ms.label} onClick={() => setGrams(ms.g)} style={{ fontSize: 14, padding: "6px 11px", borderRadius: 8, cursor: "pointer", background: grams === ms.g ? C.brandBg : "transparent", color: grams === ms.g ? C.brandD : C.sub, boxShadow: grams === ms.g ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{ms.label}{ms.label.includes(String(ms.g)) ? "" : ` · ${ms.g} ${unitLabel}`}</span>))}</div>
-            <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>או כמות מדויקת</div>
+            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>שיוך לארוחה</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
+            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>מידת בית</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>{food.measures.map((ms) => (<span key={ms.label} onClick={() => setGrams(ms.g)} style={{ fontSize: 15, padding: "6px 11px", borderRadius: 8, cursor: "pointer", background: grams === ms.g ? C.brandBg : "transparent", color: grams === ms.g ? C.brandD : C.sub, boxShadow: grams === ms.g ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{ms.label}{ms.label.includes(String(ms.g)) ? "" : ` · ${ms.g} ${unitLabel}`}</span>))}</div>
+            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>או כמות מדויקת</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
-              <button onClick={() => setGrams(Math.max(5, grams - 10))} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 21, color: C.ink }}>−</button>
-              <div style={{ minWidth: 70, textAlign: "center" }}><span style={{ fontSize: 26, fontWeight: 600, color: C.ink }}>{grams}</span> <span style={{ fontSize: 14, color: C.sub }}>{unitLabel}</span></div>
-              <button onClick={() => setGrams(grams + 10)} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 21, color: C.ink }}>+</button>
+              <button onClick={() => setGrams(Math.max(5, grams - 10))} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 22, color: C.ink }}>−</button>
+              <div style={{ minWidth: 70, textAlign: "center" }}><span style={{ fontSize: 27, fontWeight: 600, color: C.ink }}>{grams}</span> <span style={{ fontSize: 15, color: C.sub }}>{unitLabel}</span></div>
+              <button onClick={() => setGrams(grams + 10)} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 22, color: C.ink }}>+</button>
             </div>
             <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
             </div>
             <Btn onClick={() => commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...nut })}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
@@ -2126,13 +2125,13 @@ function EntryMenu({ onClose, onPick, mode }) {
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 26 }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ fontSize: 19, fontWeight: 600, color: C.ink }}>מה תרצי להזין?</span>
+          <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>מה תרצי להזין?</span>
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
         </div>
         {items.map((o) => (
           <div key={o.id} onClick={() => onPick(o.id)} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13, marginBottom: 8, cursor: "pointer" }}>
             <div style={{ width: 38, height: 38, borderRadius: 10, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><o.ic size={19} color={C.brand} /></div>
-            <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 500, color: C.ink }}>{o.t}</div>{o.s && <div style={{ fontSize: 13, color: C.sub }}>{o.s}</div>}</div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{o.t}</div>{o.s && <div style={{ fontSize: 14, color: C.sub }}>{o.s}</div>}</div>
             <ChevronLeft size={18} color={C.faint} />
           </div>
         ))}
@@ -2146,7 +2145,7 @@ function SheetShell({ title, onClose, children }) {
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 27 }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <span style={{ fontSize: 19, fontWeight: 600, color: C.ink }}>{title}</span>
+          <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{title}</span>
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
         </div>
         {children}
@@ -2174,31 +2173,31 @@ function ActivityModal({ onClose, onAdd, weightKg }) {
   const met = sel >= 0 ? acts[sel].met : INT[intensity];
   const baseName = sel >= 0 ? acts[sel].name : (customName.trim() || "פעילות");
   const kcal = Math.round(met * 3.5 * (weightKg || 70) / 200 * minutes);
-  const chip = (on) => ({ fontSize: 14, padding: "7px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}`, display: "flex", alignItems: "center", gap: 6 });
+  const chip = (on) => ({ fontSize: 15, padding: "7px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}`, display: "flex", alignItems: "center", gap: 6 });
   return (
     <SheetShell title="פעילות גופנית" onClose={onClose}>
-      <div style={{ fontSize: 13, color: C.sub, marginBottom: 8 }}>בחרי פעילות</div>
+      <div style={{ fontSize: 14, color: C.sub, marginBottom: 8 }}>בחרי פעילות</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
         {acts.map((a, i) => (<span key={a.name} onClick={() => setSel(i)} style={chip(sel === i)}><Dumbbell size={14} /> {a.name}</span>))}
         <span onClick={() => setSel(-1)} style={chip(sel === -1)}>אחר</span>
       </div>
       {sel === -1 && (
         <>
-          <input value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="שם הפעילות" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>עצימות</div>
+          <input value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="שם הפעילות" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>עצימות</div>
           <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>{Object.keys(INT).map((k) => (<span key={k} onClick={() => setIntensity(k)} style={chip(intensity === k)}>{k}</span>))}</div>
         </>
       )}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <span style={{ fontSize: 15, color: C.sub }}>כמה דקות?</span>
+        <span style={{ fontSize: 16, color: C.sub }}>כמה דקות?</span>
         <Stepper value={minutes} set={(v) => setMinutes(Math.max(1, v))} step={5} suffix="דק׳" />
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
-        <span style={{ fontSize: 14, color: C.sub }}>נשרף בערך</span>
-        <span style={{ fontSize: 17, fontWeight: 600, color: C.brandD }}>{kcal} קק״ל</span>
+        <span style={{ fontSize: 15, color: C.sub }}>נשרף בערך</span>
+        <span style={{ fontSize: 18, fontWeight: 600, color: C.brandD }}>{kcal} קק״ל</span>
       </div>
       <Btn onClick={() => onAdd({ name: `${baseName} ${minutes} דק׳`, kcal })}>הוסף פעילות</Btn>
-      <div style={{ fontSize: 11, color: C.faint, textAlign: "center", marginTop: 8 }}>הערכה לפי סוג הפעילות, המשקל שלך ({weightKg || 70} ק״ג) ומשך הזמן</div>
+      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 8 }}>הערכה לפי סוג הפעילות, המשקל שלך ({weightKg || 70} ק״ג) ומשך הזמן</div>
     </SheetShell>
   );
 }
@@ -2214,16 +2213,16 @@ function WeightModal({ weights, today, minDate, heightCm, onClose, onAdd }) {
   return (
     <SheetShell title="הזנת משקל" onClose={onClose}>
       <div style={{ margin: "2px 0 12px" }}>
-        <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>תאריך</div>
-        <input type="date" value={date} min={minDate} max={today} onChange={(e) => onDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center" }} />
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>תאריך</div>
+        <input type="date" value={date} min={minDate} max={today} onChange={(e) => onDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center" }} />
       </div>
       <div style={{ margin: "4px 0 8px" }}>
-        <input type="text" inputMode="decimal" value={kg} autoFocus onChange={(e) => setKg(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="לדוגמה 71.5" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 24, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
-        <div style={{ textAlign: "center", fontSize: 13, color: C.sub, marginTop: 6 }}>ק״ג</div>
+        <input type="text" inputMode="decimal" value={kg} autoFocus onChange={(e) => setKg(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="לדוגמה 71.5" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 25, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <div style={{ textAlign: "center", fontSize: 14, color: C.sub, marginTop: 6 }}>ק״ג</div>
       </div>
-      {low && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, borderRadius: 10, padding: 10, lineHeight: 1.6, marginBottom: 10, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>המשקל שהזנת נמוך מהטווח התקין (BMI מתחת ל-18.5). שווה להתייעץ עם איש מקצוע. אפשר כמובן לשמור את הערך.</span></div>}
+      {low && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, borderRadius: 10, padding: 10, lineHeight: 1.6, marginBottom: 10, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>המשקל שהזנת נמוך מהטווח התקין (BMI מתחת ל-18.5). שווה להתייעץ עם איש מקצוע. אפשר כמובן לשמור את הערך.</span></div>}
       <Btn onClick={() => { if (valid) onAdd(Math.round(num * 10) / 10, date); }} style={{ opacity: valid ? 1 : 0.5 }}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
-      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>אפשר לבחור גם תאריך קודם. הזנה חוזרת לאותו תאריך מעדכנת את הערך.</div>
+      <div style={{ fontSize: 13, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>אפשר לבחור גם תאריך קודם. הזנה חוזרת לאותו תאריך מעדכנת את הערך.</div>
     </SheetShell>
   );
 }
@@ -2236,16 +2235,16 @@ function StepsModal({ current, goal, weightKg, onClose, onAdd }) {
   return (
     <SheetShell title="עדכון צעדים" onClose={onClose}>
       <div style={{ margin: "4px 0 10px" }}>
-        <input type="text" inputMode="numeric" value={val} autoFocus onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, ""))} placeholder="לדוגמה 6500" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 24, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
-        <div style={{ textAlign: "center", fontSize: 13, color: C.sub, marginTop: 6 }}>צעדים</div>
+        <input type="text" inputMode="numeric" value={val} autoFocus onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, ""))} placeholder="לדוגמה 6500" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 25, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <div style={{ textAlign: "center", fontSize: 14, color: C.sub, marginTop: 6 }}>צעדים</div>
       </div>
       <div style={{ height: 10, borderRadius: 6, background: C.amberBg, overflow: "hidden", marginBottom: 8 }}>
         <div style={{ width: `${frac * 100}%`, height: "100%", background: C.amber, borderRadius: 6 }} />
       </div>
-      <div style={{ textAlign: "center", fontSize: 13, color: C.sub, marginBottom: 16 }}>{steps.toLocaleString()} מתוך יעד {goal.toLocaleString()} · מוסיף ~{kcal} קק״ל לתקציב</div>
+      <div style={{ textAlign: "center", fontSize: 14, color: C.sub, marginBottom: 16 }}>{steps.toLocaleString()} מתוך יעד {goal.toLocaleString()} · מוסיף ~{kcal} קק״ל לתקציב</div>
       <Btn onClick={() => onAdd(steps)}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
-      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>לשינוי יעד הצעדים - אפשר בפרופיל. הזנה חוזרת היום מעדכנת את הערך.</div>
-      <button disabled style={{ width: "100%", marginTop: 10, border: `1px dashed ${C.line}`, background: "transparent", color: C.faint, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 14, cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Footprints size={15} /> התחברות לאפליקציית הבריאות · זמין באפליקציה</button>
+      <div style={{ fontSize: 13, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>לשינוי יעד הצעדים - אפשר בפרופיל. הזנה חוזרת היום מעדכנת את הערך.</div>
+      <button disabled style={{ width: "100%", marginTop: 10, border: `1px dashed ${C.line}`, background: "transparent", color: C.faint, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 15, cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Footprints size={15} /> התחברות לאפליקציית הבריאות · זמין באפליקציה</button>
     </SheetShell>
   );
 }
@@ -2264,34 +2263,34 @@ function WaterModal({ currentMl, cupMl, onSetMl, onSetCup, onClose }) {
   return (
     <SheetShell title="עדכון מים" onClose={onClose}>
       <div style={{ textAlign: "center", margin: "2px 0 10px" }}>
-        <div style={{ fontSize: 34, fontWeight: 700, color: C.ink }}>{cups} <span style={{ fontSize: 16, color: C.sub }}>כוסות</span></div>
-        <div style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>{ml.toLocaleString()} מ"ל מתוך {targetCups} כוסות (2 ליטר)</div>
+        <div style={{ fontSize: 35, fontWeight: 700, color: C.ink }}>{cups} <span style={{ fontSize: 17, color: C.sub }}>כוסות</span></div>
+        <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>{ml.toLocaleString()} מ"ל מתוך {targetCups} כוסות (2 ליטר)</div>
       </div>
       <div style={{ height: 10, borderRadius: 6, background: C.waterBg, overflow: "hidden", marginBottom: 14 }}>
         <div style={{ width: `${frac * 100}%`, height: "100%", background: C.water, borderRadius: 6, transition: "width .3s" }} />
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <button onClick={() => add(safeCup)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ כוס ({safeCup} מ"ל)</button>
-        <button onClick={() => add(500)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>+ חצי ליטר</button>
+        <button onClick={() => add(safeCup)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, cursor: "pointer" }}>+ כוס ({safeCup} מ"ל)</button>
+        <button onClick={() => add(500)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, cursor: "pointer" }}>+ חצי ליטר</button>
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <button onClick={() => add(-safeCup)} disabled={ml <= 0} style={{ flex: 1, border: `1.5px solid ${ml <= 0 ? C.line : C.water}`, background: C.panel, color: ml <= 0 ? C.faint : C.water, borderRadius: 12, padding: "10px 8px", fontFamily: fontStack, fontSize: 14, fontWeight: 600, cursor: ml <= 0 ? "default" : "pointer", opacity: ml <= 0 ? 0.6 : 1 }}>- כוס (תיקון)</button>
+        <button onClick={() => add(-safeCup)} disabled={ml <= 0} style={{ flex: 1, border: `1.5px solid ${ml <= 0 ? C.line : C.water}`, background: C.panel, color: ml <= 0 ? C.faint : C.water, borderRadius: 12, padding: "10px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: ml <= 0 ? "default" : "pointer", opacity: ml <= 0 ? 0.6 : 1 }}>- כוס (תיקון)</button>
       </div>
       <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-        <input type="text" inputMode="numeric" value={free} onChange={(e) => setFree(e.target.value.replace(/[^0-9]/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFree(); } }} placeholder={'הוספת מ"ל חופשי (לפחות 50)'} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <input type="text" inputMode="numeric" value={free} onChange={(e) => setFree(e.target.value.replace(/[^0-9]/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFree(); } }} placeholder={'הוספת מ"ל חופשי (לפחות 50)'} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
         <button onClick={addFree} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.water, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
       </div>
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <button onClick={() => onSetMl(0)} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, textDecoration: "underline", cursor: "pointer", fontFamily: fontStack }}>איפוס היום</button>
+        <button onClick={() => onSetMl(0)} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 14, textDecoration: "underline", cursor: "pointer", fontFamily: fontStack }}>איפוס היום</button>
       </div>
       <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 14, color: C.ink }}>גודל כוס</span>
+          <span style={{ fontSize: 15, color: C.ink }}>גודל כוס</span>
           <Stepper value={safeCup} set={setCupLive} step={10} suffix={'מ"ל'} />
         </div>
-        <div style={{ fontSize: 12, color: C.faint, marginTop: 6 }}>היעד תמיד 2 ליטר; מספר הכוסות מתעדכן לפי גודל הכוס.</div>
+        <div style={{ fontSize: 13, color: C.faint, marginTop: 6 }}>היעד תמיד 2 ליטר; מספר הכוסות מתעדכן לפי גודל הכוס.</div>
       </div>
-      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 10 }}>כל שינוי נשמר מיד. אפשר לסגור בכל רגע.</div>
+      <div style={{ fontSize: 13, color: C.faint, textAlign: "center", marginTop: 10 }}>כל שינוי נשמר מיד. אפשר לסגור בכל רגע.</div>
     </SheetShell>
   );
 }
@@ -2300,7 +2299,7 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
   const [kcal, setKcal] = useState(current);
   return (
     <SheetShell title="עדכון יעד קלורי ליום" onClose={onClose}>
-      <div style={{ fontSize: 13, color: C.sub, marginBottom: 10, textAlign: "center", lineHeight: 1.6 }}>היעד היומי שלך לקלוריות. שינוי כאן דורס את הערך המחושב.</div>
+      <div style={{ fontSize: 14, color: C.sub, marginBottom: 10, textAlign: "center", lineHeight: 1.6 }}>היעד היומי שלך לקלוריות. שינוי כאן דורס את הערך המחושב.</div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", margin: "4px 0 18px" }}>
         <Stepper value={kcal} set={(v) => setKcal(Math.max(KCAL_FLOOR, v))} step={10} min={KCAL_FLOOR} suffix="קק״ל" />
       </div>
@@ -2316,18 +2315,18 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center", fontFamily: fontStack }}>
       <div style={{ width: 64, height: 64, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><Sparkles size={28} color={C.brand} /></div>
-      <div style={{ fontSize: 22, fontWeight: 600, color: C.ink, marginBottom: 6 }}>{name.trim() ? `היי ${name.trim()}!` : "ברוכה הבאה ל-MyPrime"}</div>
+      <div style={{ fontSize: 23, fontWeight: 600, color: C.ink, marginBottom: 6 }}>{name.trim() ? `היי ${name.trim()}!` : "ברוכה הבאה ל-MyPrime"}</div>
       {status === "checking" && (
-        <><Loader size={26} color={C.brand} className="spin" style={{ marginTop: 18 }} /><div style={{ fontSize: 14, color: C.sub, marginTop: 12 }}>מאמתת את ההרשמה לתוכנית…</div></>
+        <><Loader size={26} color={C.brand} className="spin" style={{ marginTop: 18 }} /><div style={{ fontSize: 15, color: C.sub, marginTop: 12 }}>מאמתת את ההרשמה לתוכנית…</div></>
       )}
       {status === "form" && (
         <>
-          <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>הזיני שם פרטי והמייל שאיתו נרשמת לתוכנית.</p>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם פרטי" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 10 }} />
-          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל שלך" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
+          <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>הזיני שם פרטי והמייל שאיתו נרשמת לתוכנית.</p>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם פרטי" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 10 }} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל שלך" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
           <div style={{ width: "100%" }}><Btn onClick={onSubmit}>כניסה</Btn></div>
-          {msg && <div style={{ fontSize: 13, color: C.amber, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}
-          <div style={{ fontSize: 12, color: C.faint, marginTop: 18, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, textAlign: "right" }}>
+          {msg && <div style={{ fontSize: 14, color: C.amber, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}
+          <div style={{ fontSize: 13, color: C.faint, marginTop: 18, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, textAlign: "right" }}>
             <Lock size={14} style={{ flexShrink: 0, marginTop: 2 }} />
             <span>כל הנתונים שאת מזינה נשמרים רק במכשיר שלך, ואינם נשמרים בשרתי החברה. <a href={PRIVACY_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> · <a href={COOKIE_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
           </div>
@@ -2335,7 +2334,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
       )}
       {status === "denied" && (
         <>
-          <div style={{ fontSize: 14, lineHeight: 1.7, margin: "12px 0 18px", background: C.amberBg, color: C.amber, padding: 12, borderRadius: 12 }}>{deniedText}</div>
+          <div style={{ fontSize: 15, lineHeight: 1.7, margin: "12px 0 18px", background: C.amberBg, color: C.amber, padding: 12, borderRadius: 12 }}>{deniedText}</div>
           <div style={{ width: "100%" }}><Btn variant="ghost" onClick={onRetry}>נסי שוב / כתובת אחרת</Btn></div>
         </>
       )}
@@ -2367,7 +2366,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const allergies = profile.allergies || [];
   const dislikes = (profile.dislikes || "").trim();
   const toggle = (key, val) => setProfile({ ...profile, [key]: (profile[key] || []).includes(val) ? (profile[key] || []).filter((x) => x !== val) : [...(profile[key] || []), val] });
-  const chip = (on) => ({ fontSize: 14, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
+  const chip = (on) => ({ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
   const [newSens, setNewSens] = useState("");
   const [want, setWant] = useState(null);
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -2456,36 +2455,36 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
       {stage === "confirm" ? (
         <div>
-          <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ - בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>מה את מחפשת עכשיו?</div>
+          <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ - בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>מה את מחפשת עכשיו?</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
             {WANT_OPTIONS.map((w) => (<span key={w.id} onClick={() => setWant(want === w.id ? null : w.id)} style={chip(want === w.id)}>{w.emoji} {w.id}</span>))}
           </div>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
             {DIET_OPTIONS.map((d) => (<span key={d.id} onClick={() => toggle("diet", d.id)} style={chip(diet.includes(d.id))}>{d.emoji} {d.id}</span>))}
           </div>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות / אלרגיות</div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות / אלרגיות</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
             {SENSITIVITY_OPTIONS.map((s) => (<span key={s} onClick={() => toggle("allergies", s)} style={chip(allergies.includes(s))}>{s}</span>))}
           </div>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
           <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
-            <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 14, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+            <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
             <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
           </div>
           {customSens.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {customSens.map((s) => (
-                <span key={s} style={{ fontSize: 14, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   {s}
                   <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
                 </span>
               ))}
             </div>
           )}
-          {!diet.length && !hasAvoid && <div style={{ fontSize: 13, color: C.faint, margin: "10px 0 0" }}>לא רשמת עדיין העדפות או רגישויות. אפשר לבחור עכשיו, או פשוט להמשיך.</div>}
-          {hasAvoid && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
+          {!diet.length && !hasAvoid && <div style={{ fontSize: 14, color: C.faint, margin: "10px 0 0" }}>לא רשמת עדיין העדפות או רגישויות. אפשר לבחור עכשיו, או פשוט להמשיך.</div>}
+          {hasAvoid && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
           <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
         </div>
       ) : stage === "log" ? (
@@ -2493,32 +2492,32 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
           {visible.map((m, i) => (
             <div key={"sug" + i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8, opacity: 0.5 }}>
-              <div style={{ maxWidth: "84%", fontSize: 14, lineHeight: 1.5, padding: "9px 12px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+              <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.5, padding: "9px 12px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
             </div>
           ))}
-          {visible.length > 0 && <div style={{ textAlign: "center", fontSize: 12, color: C.faint, margin: "2px 0 12px" }}>- מוסיפים ליומן -</div>}
+          {visible.length > 0 && <div style={{ textAlign: "center", fontSize: 13, color: C.faint, margin: "2px 0 12px" }}>- מוסיפים ליומן -</div>}
           {logMsgs.slice(1).map((m, i) => (
             <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
-              <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+              <div style={{ maxWidth: "84%", fontSize: 16, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
             </div>
           ))}
-          {logLoading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 15, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>רושמת…</div></div>}
-          {logErr && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. נסי שוב.</div>}
+          {logLoading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>רושמת…</div></div>}
+          {logErr && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. נסי שוב.</div>}
           {logItems && !logged && (
             <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginTop: 4 }}>
               {logItems.map((it, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, padding: "4px 0", color: C.ink }}>
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 15, padding: "4px 0", color: C.ink }}>
                   <span>{it.name} · {it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"}</span>
                   <span style={{ color: C.sub }}>{it.kcal} קק״ל</span>
                 </div>
               ))}
-              <div style={{ fontSize: 13, color: C.sub, margin: "10px 0 6px" }}>לאיזו ארוחה?</div>
+              <div style={{ fontSize: 14, color: C.sub, margin: "10px 0 6px" }}>לאיזו ארוחה?</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {MEALS.map((m) => (<span key={m} onClick={() => setLogMeal(m)} style={{ fontSize: 13, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === logMeal ? C.brand : "transparent", color: m === logMeal ? "#fff" : C.sub, boxShadow: m === logMeal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+                {MEALS.map((m) => (<span key={m} onClick={() => setLogMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === logMeal ? C.brand : "transparent", color: m === logMeal ? "#fff" : C.sub, boxShadow: m === logMeal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
               </div>
             </div>
           )}
-          {logged && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 14, marginTop: 6, fontSize: 15, fontWeight: 600, textAlign: "center" }}>✓ נוסף ליומן (וגם למועדפים והאחרונים)</div>}
+          {logged && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 14, marginTop: 6, fontSize: 16, fontWeight: 600, textAlign: "center" }}>✓ נוסף ליומן (וגם למועדפים והאחרונים)</div>}
           <div ref={endRef} />
         </div>
         {logItems && !logged && <div style={{ marginBottom: 8 }}><Btn onClick={doLog}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ל{logMeal}</Btn></div>}
@@ -2526,7 +2525,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
           <Btn variant="ghost" onClick={onClose}>סגירה</Btn>
         ) : (
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
-            <textarea value={logInput} onChange={(e) => setLogInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendLog(logInput); } }} disabled={logLoading} rows={1} placeholder={logLoading ? "רגע…" : "תשובה / מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: logLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+            <textarea value={logInput} onChange={(e) => setLogInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendLog(logInput); } }} disabled={logLoading} rows={1} placeholder={logLoading ? "רגע…" : "תשובה / מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: logLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
             <button onClick={() => sendLog(logInput)} disabled={logLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: logLoading ? 0.5 : 1 }}><Send size={18} /></button>
           </div>
         )}
@@ -2536,37 +2535,37 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
           {visible.map((m, i) => (
             <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
-              <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+              <div style={{ maxWidth: "84%", fontSize: 16, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
             </div>
           ))}
-          {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 15, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
-          {err && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
+          {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
+          {err && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
           <div ref={endRef} />
         </div>
 
         {visible.length > 0 && !loading && (
-          <button onClick={startLog} style={{ width: "100%", marginBottom: 8, border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={17} /> אכלתי - הוסיפי ליומן</button>
+          <button onClick={startLog} style={{ width: "100%", marginBottom: 8, border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 12, padding: 11, fontSize: 16, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={17} /> אכלתי - הוסיפי ליומן</button>
         )}
 
         {!loading && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-            <span onClick={() => sendText("תני לי בבקשה רעיון אחר")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>רעיון אחר</span>
-            <span onClick={() => sendText("אין לי את המצרכים האלה בבית")} style={{ fontSize: 13, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אין לי את זה</span>
+            <span onClick={() => sendText("תני לי בבקשה רעיון אחר")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>רעיון אחר</span>
+            <span onClick={() => sendText("אין לי את המצרכים האלה בבית")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אין לי את זה</span>
           </div>
         )}
 
         {pending && (
           <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
-            <div style={{ fontSize: 13, color: C.ink, marginBottom: 8, lineHeight: 1.5 }}>לשמור את זה להעדפות שלך לפעמים הבאות? <b>{[...(pending.diet || []), ...(pending.avoid || [])].join(", ")}</b></div>
+            <div style={{ fontSize: 14, color: C.ink, marginBottom: 8, lineHeight: 1.5 }}>לשמור את זה להעדפות שלך לפעמים הבאות? <b>{[...(pending.diet || []), ...(pending.avoid || [])].join(", ")}</b></div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={savePending} style={{ border: "none", background: C.brand, color: "#fff", fontFamily: fontStack, fontSize: 13, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>שמרי</button>
-              <button onClick={() => setPending(null)} style={{ border: `1px solid ${C.line}`, background: "transparent", color: C.sub, fontFamily: fontStack, fontSize: 13, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>לא עכשיו</button>
+              <button onClick={savePending} style={{ border: "none", background: C.brand, color: "#fff", fontFamily: fontStack, fontSize: 14, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>שמרי</button>
+              <button onClick={() => setPending(null)} style={{ border: `1px solid ${C.line}`, background: "transparent", color: C.sub, fontFamily: fontStack, fontSize: 14, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>לא עכשיו</button>
             </div>
           </div>
         )}
 
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
-          <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(input); } }} disabled={loading} rows={1} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+          <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(input); } }} disabled={loading} rows={1} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
           <button onClick={() => sendText(input)} disabled={loading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 }}><Send size={18} /></button>
         </div>
       </div>
@@ -2588,10 +2587,10 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
       <div onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={16} color={C.brand} /> יומן המעקב שלי</div>
-        <div style={{ fontSize: 12.5, fontWeight: 500, color: C.sub, marginTop: 3 }}>{dateLine}</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={16} color={C.brand} /> יומן המעקב שלי</div>
+        <div style={{ fontSize: 13.5, fontWeight: 500, color: C.sub, marginTop: 3 }}>{dateLine}</div>
         {locked ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, fontSize: 14, color: C.sub }}><Clock size={15} color={C.faint} /> הדוח של היום ייפתח ב-19:00. אפשר להשלים בכל שעה אחרי זה.</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, fontSize: 15, color: C.sub }}><Clock size={15} color={C.faint} /> הדוח של היום ייפתח ב-19:00. אפשר להשלים בכל שעה אחרי זה.</div>
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
             <div style={{ position: "relative", width: 120, height: 120, flexShrink: 0 }}>
@@ -2602,14 +2601,14 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
               <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", filter: done === 0 ? "grayscale(1) opacity(0.55)" : "none" }} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 14, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
-              <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{allDone ? "סיימת את כל המשימות להיום!" : "המשימות של היום"}</div>
-              <button onClick={(e) => { e.stopPropagation(); onOpen && onOpen(); }} style={{ marginTop: 10, border: "none", borderRadius: 10, padding: "10px 12px", background: C.brand, color: "#fff", fontSize: 13.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", width: "100%" }}>הקישי למילוי המעקב</button>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 15, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
+              <div style={{ fontSize: 14.5, color: C.sub, marginTop: 2 }}>{allDone ? "סיימת את כל המשימות להיום!" : "המשימות של היום"}</div>
+              <button onClick={(e) => { e.stopPropagation(); onOpen && onOpen(); }} style={{ marginTop: 10, border: "none", borderRadius: 10, padding: "10px 12px", background: C.brand, color: "#fff", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", width: "100%" }}>הקישי למילוי המעקב</button>
             </div>
           </div>
         )}
         {(dn === 6 || dn === 0) && (
-          <div onClick={(e) => { e.stopPropagation(); onOpenSummary && onOpenSummary(); }} role="button" aria-label="סיכום שבועי" style={{ marginTop: 12, background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "11px 12px", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, color: C.brandD, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+          <div onClick={(e) => { e.stopPropagation(); onOpenSummary && onOpenSummary(); }} role="button" aria-label="סיכום שבועי" style={{ marginTop: 12, background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "11px 12px", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, color: C.brandD, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.brandD} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3v18h18" /><path d="M7 16v-5" /><path d="M12 16V8" /><path d="M17 16v-9" /></svg>
             סיכום שבועי
             <ChevronLeft size={16} color={C.brandD} />
@@ -2618,7 +2617,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
       </div>
       <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} role="button" aria-label="ארון הגביעים" style={{ width: 84, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
         <img src="/medals/trophy-icon.webp" alt="" width={72} height={58} style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
-        <div style={{ fontSize: 12.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
         <ChevronLeft size={16} color="#fff" />
       </div>
     </div>
@@ -2633,21 +2632,21 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
   const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getDay()]}, ${dd.getDate()} ב${HE_MONTHS[dd.getMonth()]} · שבוע ${wk}${dn >= 1 ? `, יום ${dn}` : ""}`;
   return (
     <SheetShell title="המעקב היומי שלי" onClose={onClose}>
-      <div style={{ fontSize: 13, fontWeight: 500, color: C.sub, marginBottom: 8, textAlign: "right" }}>{dateLine}</div>
+      <div style={{ fontSize: 14, fontWeight: 500, color: C.sub, marginBottom: 8, textAlign: "right" }}>{dateLine}</div>
       <div style={{ maxHeight: "58vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
         {CHECKIN_GROUPS.map((g) => {
           const items = tasks.filter((t) => t.group === g.id);
           if (!items.length) return null;
           return (
             <div key={g.id}>
-              <div style={{ fontSize: 12.5, color: C.faint, margin: "12px 0 2px" }}>{g.label}</div>
+              <div style={{ fontSize: 13.5, color: C.faint, margin: "12px 0 2px" }}>{g.label}</div>
               {items.map((t) => {
                 const done = taskDone(t, answers, auto);
                 return (
                   <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
-                    <span style={{ fontSize: 15, color: C.ink }}>{t.label}{t.optional ? <span style={{ color: C.faint, fontSize: 12 }}> (רשות)</span> : null}</span>
+                    <span style={{ fontSize: 16, color: C.ink }}>{t.label}{t.optional ? <span style={{ color: C.faint, fontSize: 13 }}> (רשות)</span> : null}</span>
                     {t.auto ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: done ? C.brandD : C.faint, background: done ? C.brandBg : "transparent", padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}>{done ? <Check size={14} /> : null}{t.auto === "steps" && auto.steps != null ? `${auto.steps.toLocaleString()} · ` : ""}{t.auto === "water" && auto.water != null ? `${auto.water} · ` : ""}אוטומטי</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, color: done ? C.brandD : C.faint, background: done ? C.brandBg : "transparent", padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}>{done ? <Check size={14} /> : null}{t.auto === "steps" && auto.steps != null ? `${auto.steps.toLocaleString()} · ` : ""}{t.auto === "water" && auto.water != null ? `${auto.water} · ` : ""}אוטומטי</span>
                     ) : t.type === "number" ? (
                       <Stepper value={answers[t.id] || 0} set={(v) => setValue(t.id, v)} step={1} min={0} />
                     ) : (
@@ -2660,7 +2659,7 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
           );
         })}
       </div>
-      <button onClick={onClose} style={{ marginTop: 14, width: "100%", border: "none", borderRadius: 12, padding: "13px", background: C.brand, color: "#fff", fontSize: 16, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>סגירה</button>
+      <button onClick={onClose} style={{ marginTop: 14, width: "100%", border: "none", borderRadius: 12, padding: "13px", background: C.brand, color: "#fff", fontSize: 17, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>סגירה</button>
     </SheetShell>
   );
 }
@@ -2676,8 +2675,8 @@ function CheckinCheer({ name, onClose }) {
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", textAlign: "center", maxWidth: 300, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
         <img src={MEDAL_SRC} alt="" width={100} height={100} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.6s cubic-bezier(.2,1.3,.5,1) both" }} />
-        <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, marginTop: 10 }}>מדליה נכנסה לאוסף!</div>
-        <div style={{ fontSize: 14.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""}. עוד יום שהשלמת, אני איתך 💜<div style={{ marginTop: 2, color: C.faint, fontSize: 13 }}>ענת</div></div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginTop: 10 }}>מדליה נכנסה לאוסף!</div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""}. עוד יום שהשלמת, אני איתך 💜<div style={{ marginTop: 2, color: C.faint, fontSize: 14 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>
       </div>
     </div>
@@ -2697,8 +2696,8 @@ function TrophyCheer({ week, name, onClose }) {
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.35)" }}>
         <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
-        <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : "גביע השבוע נכנס לארון!"}</div>
-        <div style={{ fontSize: 14.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2, color: C.faint, fontSize: 13 }}>ענת</div></div>
+        <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : "גביע השבוע נכנס לארון!"}</div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2, color: C.faint, fontSize: 14 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>{champ ? "סגירה 💜" : "ממשיכות חזק 💜"}</Btn></div>
       </div>
     </div>
@@ -2739,10 +2738,10 @@ function CollectionModal({ checkins, startDate, today, onClose }) {
         ) : (
           <img src={MEDAL_SRC} alt="" width={64} height={64} style={{ filter: "grayscale(1) opacity(0.5)" }} />
         )}
-        <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginTop: 8 }}>{days} {days === 1 ? "מדליה" : "מדליות"}</div>
-        <div style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>כל יום שהשלמת שווה מדליה</div>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginTop: 8 }}>{days} {days === 1 ? "מדליה" : "מדליות"}</div>
+        <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>כל יום שהשלמת שווה מדליה</div>
       </div>
-      <div style={{ fontSize: 13, color: C.faint, margin: "8px 0 8px" }}>הגביעים שלך</div>
+      <div style={{ fontSize: 14, color: C.faint, margin: "8px 0 8px" }}>הגביעים שלך</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
         {Array.from({ length: 10 }).map((_, i) => {
           const w = i + 1; const earned = weekTrophyEarned(checkins, startDate, w, today);
@@ -2750,12 +2749,12 @@ function CollectionModal({ checkins, startDate, today, onClose }) {
           return (
             <div key={w} style={{ textAlign: "center", opacity: earned ? 1 : 0.32 }}>
               <img src={src} alt="" width={58} height={58} style={{ filter: earned ? "none" : "grayscale(1)" }} />
-              <div style={{ fontSize: 11, color: earned ? C.brandD : C.faint, marginTop: 2 }}>{w >= 10 ? "אלופה" : `שבוע ${w}`}</div>
+              <div style={{ fontSize: 12, color: earned ? C.brandD : C.faint, marginTop: 2 }}>{w >= 10 ? "אלופה" : `שבוע ${w}`}</div>
             </div>
           );
         })}
       </div>
-      <div style={{ fontSize: 12, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע נכנס לארון כשמשלימים את ימי השבוע (ראשון עד שישי). שבת לא חובה.</div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע נכנס לארון כשמשלימים את ימי השבוע (ראשון עד שישי). שבת לא חובה.</div>
     </SheetShell>
   );
 }
@@ -2858,9 +2857,15 @@ function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, w
   };
 }
 
-function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, onClose }) {
+function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, stepGoal, onClose }) {
   const week = Math.min(programWeekFor(startDate, date), 10);
   const data = weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget);
+  // One-time baseline sanity note: Friday of week 2 only. If she is tracking well BELOW her goal,
+  // gently suggest a more realistic baseline (set in the profile). Anat's gradual increases continue from it.
+  const wkStepAvg = data.avgs.steps ? data.avgs.steps.avg : null;
+  const stepRecheckDir = (week === 2 && stepGoal != null && wkStepAvg != null)
+    ? (wkStepAvg < stepGoal * 0.8 ? "low" : wkStepAvg > stepGoal * 1.2 ? "high" : null)
+    : null;
   const lines = [];
   if (data.avgs.steps) {
     let s = `הוצאת בממוצע ${data.avgs.steps.avg.toLocaleString()} צעדים ביום`;
@@ -2881,20 +2886,27 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
         <div style={{ textAlign: "center", color: C.sub, padding: "24px 12px", lineHeight: 1.7 }}>עוד אין נתונים לשבוע הזה.<br />ברגע שתתחילי למלא, הסיכום יופיע כאן.</div>
       ) : (
         <>
-          <div style={{ fontSize: 15, color: C.ink, fontWeight: 600, marginBottom: 12 }}>{name && name.trim() ? `${name.trim()}, הנה השבוע שלך:` : "הנה השבוע שלך:"}</div>
+          <div style={{ fontSize: 16, color: C.ink, fontWeight: 600, marginBottom: 12 }}>{name && name.trim() ? `${name.trim()}, הנה השבוע שלך:` : "הנה השבוע שלך:"}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 16 }}>
             {lines.map((ln, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 14.5, color: C.sub, lineHeight: 1.5 }}>
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 15.5, color: C.sub, lineHeight: 1.5 }}>
                 <span style={{ color: C.brand, flexShrink: 0, marginTop: 1 }}>✓</span><span>{ln}</span>
               </div>
             ))}
           </div>
         </>
       )}
+      {stepRecheckDir && (
+        <div style={{ background: C.amberBg, border: `1.5px solid ${C.amber}`, borderRadius: 14, padding: "14px", marginBottom: 14, fontSize: 15.5, color: C.ink, lineHeight: 1.65, textAlign: "right" }}>
+          {stepRecheckDir === "low"
+            ? <>שמנו לב שהשבוע הלכת בממוצע <b>{wkStepAvg.toLocaleString()}</b> צעדים ביום, מתחת ליעד הנוכחי ({stepGoal.toLocaleString()}). אם היעד מרגיש גבוה - אפשר לכוון בפרופיל בסיס ריאלי יותר שתנצחי אותו, וממנו נמשיך לעלות בהדרגה יחד 💜</>
+            : <>כל הכבוד - השבוע הלכת בממוצע <b>{wkStepAvg.toLocaleString()}</b> צעדים ביום, הרבה מעל היעד ({stepGoal.toLocaleString()}). את עוברת אותו שוב ושוב - אם בא לך אתגר, אפשר לכוון בפרופיל בסיס גבוה יותר, וממנו נמשיך לעלות בהדרגה יחד 💜</>}
+        </div>
+      )}
       {lines.length > 0 && (
-        <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 14.5, lineHeight: 1.6 }}>
+        <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 15.5, lineHeight: 1.6 }}>
           {motivation}
-          <div style={{ marginTop: 6, color: C.faint, fontSize: 13 }}>ענת</div>
+          <div style={{ marginTop: 6, color: C.faint, fontSize: 14 }}>ענת</div>
         </div>
       )}
     </SheetShell>
@@ -2908,25 +2920,25 @@ function StepSetupModal({ action, profile, stepsByDate, startDate, programWeek, 
     ? (measured != null ? measured : 3000)
     : ((profile.stepGoal != null ? profile.stepGoal : (profile.stepBaseline || 0)) + action.inc);
   const [val, setVal] = useState(Math.max(500, Math.round(suggested / 250) * 250));
-  const stepBtn = { width: 46, height: 46, borderRadius: 12, border: `1px solid ${C.line}`, background: C.panel, color: C.brand, fontSize: 24, fontWeight: 700, cursor: "pointer", fontFamily: fontStack };
+  const stepBtn = { width: 46, height: 46, borderRadius: 12, border: `1px solid ${C.line}`, background: C.panel, color: C.brand, fontSize: 25, fontWeight: 700, cursor: "pointer", fontFamily: fontStack };
   return (
     <SheetShell title={isBaseline ? "קביעת ממוצע צעדים יומי" : "היעד שלך עולה"} onClose={onClose}>
-      <div style={{ textAlign: "right", fontSize: 14.5, color: C.sub, lineHeight: 1.7, marginBottom: 16 }}>
+      <div style={{ textAlign: "right", fontSize: 15.5, color: C.sub, lineHeight: 1.7, marginBottom: 16 }}>
         {isBaseline
           ? (measured != null
             ? <>מדדנו את הצעדים שלך בשבוע הראשון - הקצב הטבעי שלך יצא בערך <b style={{ color: C.ink }}>{measured.toLocaleString()}</b> צעדים ביום. נתחיל מכאן, ומכאן נעלה יחד בהדרגה.</>
-            : <>כדי לבנות לך יעד אישי, בואי נקבע מאיפה מתחילים. כמה צעדים בערך את עושה ביום רגיל?<div style={{ fontSize: 12.5, color: C.faint, marginTop: 6 }}>לא בטוחה? בתחילת הדרך רוב הנשים נעות בין 2,000 ל-4,000. תמיד אפשר לעדכן.</div></>)
+            : <>כדי לבנות לך יעד אישי, בואי נקבע מאיפה מתחילים. כמה צעדים בערך את עושה ביום רגיל?<div style={{ fontSize: 13.5, color: C.faint, marginTop: 6 }}>לא בטוחה? בתחילת הדרך רוב הנשים נעות בין 2,000 ל-4,000. תמיד אפשר לעדכן.</div></>)
           : <>כל הכבוד על ההתמדה. השבוע מוסיפים לקצב - היעד עולה ב-<b style={{ color: C.ink }}>{action.inc.toLocaleString()}</b>. אפשר לאשר או לשנות. ממשיכות לעלות 💜</>}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 18 }}>
         <button onClick={() => setVal((v) => v + 250)} style={stepBtn}>+</button>
         <div style={{ textAlign: "center", minWidth: 110 }}>
-          <div style={{ fontSize: 30, fontWeight: 800, color: C.ink }}>{val.toLocaleString()}</div>
-          <div style={{ fontSize: 12.5, color: C.faint }}>צעדים ביום</div>
+          <div style={{ fontSize: 31, fontWeight: 800, color: C.ink }}>{val.toLocaleString()}</div>
+          <div style={{ fontSize: 13.5, color: C.faint }}>צעדים ביום</div>
         </div>
         <button onClick={() => setVal((v) => Math.max(500, v - 250))} style={stepBtn}>-</button>
       </div>
-      <button onClick={() => (isBaseline ? onBaseline(val) : onIncrease(action.week, val))} style={{ width: "100%", border: "none", borderRadius: 12, padding: "13px", background: C.brand, color: "#fff", fontSize: 16, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>
+      <button onClick={() => (isBaseline ? onBaseline(val) : onIncrease(action.week, val))} style={{ width: "100%", border: "none", borderRadius: 12, padding: "13px", background: C.brand, color: "#fff", fontSize: 17, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>
         {isBaseline ? `מאשרת, נתחיל מ-${val.toLocaleString()}` : `מאשרת - ${val.toLocaleString()} צעדים`}
       </button>
     </SheetShell>
@@ -2945,10 +2957,10 @@ function GoalBumpModal({ info, name, onClose }) {
         ))}
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
-        <div style={{ fontSize: 50 }}>👟</div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginTop: 6 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""} 🤍</div>
-        <div style={{ fontSize: 16, color: C.ink, marginTop: 10, lineHeight: 1.55 }}>היעד היומי שלך עלה היום ל-<b style={{ color: C.brandD }}>{newGoal.toLocaleString()} צעדים</b> (+{inc.toLocaleString()}).</div>
-        <div style={{ fontSize: 14, color: C.sub, marginTop: 8 }}>ממשיכות צעד אחרי צעד!</div>
+        <div style={{ fontSize: 51 }}>👟</div>
+        <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 6 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""} 🤍</div>
+        <div style={{ fontSize: 17, color: C.ink, marginTop: 10, lineHeight: 1.55 }}>היעד היומי שלך עלה היום ל-<b style={{ color: C.brandD }}>{newGoal.toLocaleString()} צעדים</b> (+{inc.toLocaleString()}).</div>
+        <div style={{ fontSize: 15, color: C.sub, marginTop: 8 }}>ממשיכות צעד אחרי צעד!</div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכה</Btn></div>
       </div>
     </div>
@@ -3179,12 +3191,12 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
               <button onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
               {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 12 }}>{t.label}</span></button>);
+                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
             </div>
 
@@ -3200,7 +3212,7 @@ export default function App() {
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
-            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} onClose={() => setSheet(null)} />}
+            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
@@ -3212,8 +3224,8 @@ export default function App() {
         {showExit && (
           <div onClick={() => setShowExit(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 50 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
-              <div style={{ fontSize: 19, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לצאת מ-MyPrime?</div>
-              <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>אפשר להישאר ולהמשיך בדיוק מאיפה שעצרת.</p>
+              <div style={{ fontSize: 20, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לצאת מ-MyPrime?</div>
+              <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>אפשר להישאר ולהמשיך בדיוק מאיפה שעצרת.</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <Btn onClick={() => setShowExit(false)}>להישאר</Btn>
                 <Btn variant="ghost" onClick={confirmExit}>לצאת</Btn>
