@@ -185,7 +185,16 @@ function prettyDate(dateStr) {
   const d = new Date(dateStr);
   return `${HE_DAYS[d.getDay()]}, ${d.getDate()} ב${HE_MONTHS[d.getMonth()]}`;
 }
-const TODAY = ymd(new Date());
+const DEV = (() => { try { return new URLSearchParams(window.location.search).has("dev"); } catch (e) { return false; } })();
+const TODAY = (() => {
+  try {
+    if (DEV) {
+      const o = window.localStorage.getItem("myprime_dev_today");
+      if (o && /^\d{4}-\d{2}-\d{2}$/.test(o)) return o; // dev-only simulated "today"
+    }
+  } catch (e) {}
+  return ymd(new Date());
+})();
 function sundayOf(dateStr) { const d = new Date(dateStr); d.setDate(d.getDate() - d.getDay()); return ymd(d); }
 function listSundays() {
   const base = sundayOf(TODAY);
@@ -349,7 +358,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.20";
+const VERSION = "1.23";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -867,7 +876,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "0 16px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", justifyItems: "center", alignItems: "start", rowGap: 10, columnGap: 6, marginTop: 2, marginBottom: 10 }}>
           <div style={{ gridColumn: 1, gridRow: 1 }}><Ring consumed={consumed} budget={budget} size={124} onPlus={onAddCalorie} /></div>
-          {stepsOpen && <div style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : "מודדת ממוצע"} onPlus={onEditSteps} size={124} /></div>}
+          {stepsOpen && <div style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : ""} onPlus={onEditSteps} size={124} /></div>}
           {macroOpen && <div style={{ gridColumn: 1, gridRow: 2 }}><ProteinRing consumed={macros.p} target={targets.protein} size={124} /></div>}
           {waterOpen && <div style={{ gridColumn: 2, gridRow: 2 }}><MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} verb="שתית" color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={124} /></div>}
         </div>
@@ -947,17 +956,16 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         const avg7 = steps7avg(stepsByDate, today);
         const maxStep = Math.max(goal || 0, ...sData.map((x) => x.steps), 1);
         const cells = [
-          { label: "צעדים היום", val: stepsToday.toLocaleString() },
-          { label: "היעד היומי", val: goal ? goal.toLocaleString() : "במדידה" },
+          { label: "היעד היומי", val: goal ? goal.toLocaleString() : "במדידה", hl: true },
           { label: "ממוצע 7 ימים", val: avg7.toLocaleString() },
         ];
         return (
           <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
             <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
               {cells.map((c, i) => (
-                <div key={i} style={{ flex: 1, textAlign: "center", padding: "12px 6px", borderInlineStart: i === 0 ? "none" : `1px solid ${C.line}`, background: i === 1 ? C.brandBg : "transparent" }}>
+                <div key={i} style={{ flex: 1, textAlign: "center", padding: "12px 6px", borderInlineStart: i === 0 ? "none" : `1px solid ${C.line}`, background: c.hl ? C.brandBg : "transparent" }}>
                   <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 5 }}>{c.label}</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: i === 1 ? C.brandD : C.ink, lineHeight: 1.1 }}>{c.val}</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: c.hl ? C.brandD : C.ink, lineHeight: 1.1 }}>{c.val}</div>
                 </div>
               ))}
             </div>
@@ -2967,6 +2975,21 @@ function GoalBumpModal({ info, name, onClose }) {
   );
 }
 
+function DevDateBar() {
+  const setDay = (d) => { try { window.localStorage.setItem("myprime_dev_today", d); } catch (e) {} window.location.reload(); };
+  const reset = () => { try { window.localStorage.removeItem("myprime_dev_today"); } catch (e) {} window.location.reload(); };
+  const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
+  return (
+    <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
+      <span style={{ opacity: 0.7 }}>DEV - יום מדומה</span>
+      <button onClick={() => setDay(addDays(TODAY, -1))} style={btn}>-1</button>
+      <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
+      <button onClick={() => setDay(addDays(TODAY, 1))} style={btn}>+1</button>
+      <button onClick={reset} style={btn}>איפוס</button>
+    </div>
+  );
+}
+
 export default function App() {
   const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, keepShabbat: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
@@ -3176,6 +3199,7 @@ export default function App() {
         .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
         @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;border-radius:0;box-shadow:none;border:none}}`}</style>
       <div className="phone-frame">
+        {DEV && <DevDateBar />}
         {gate !== "ok" ? (
           <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} />
         ) : !onboarded ? (

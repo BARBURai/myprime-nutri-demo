@@ -77,7 +77,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.10`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.23`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -355,7 +355,15 @@ NEW module ported from the ManyChat 10-week WhatsApp tracker. Built as an opt-in
 ## OPEN TASKS (tracked, not yet built)
 - **Weekly summary + trophies (NEXT, v0.88):** a warm end-of-week summary card (per-task counts for the week, avg steps vs HER last week, NO percentages), using `trophyForWeek(week)` (champion for week 10), celebration in Anat's voice. Trophy assets already in `public/medals/`.
 - **Daily 19:00 notification:** native-app phase only (web/PWA push unreliable, esp iOS; needs notification permission). The in-app card already gates today's report to 19:00.
+- **Onboarding required-field validation (owner-flagged; build AFTER owner finishes current testing):** the profile-setup / onboarding flow must verify ALL required fields are filled before the user can proceed past "המשך". If she taps "המשך" with anything missing, do NOT advance - instead show a small inline note at each missing field (e.g. "יש למלא את הנתון"). So: per-step required-field check; block/disable advance until complete; on attempted advance, mark the empty fields with the small note. (Lives in `Onboarding` - the "מסך פרופיל"/base-data steps where the המשך buttons are. Confirm exact required set per step when building.)
 - **QA automation (owner-flagged, important):** connect the two automatic checks (logic `qa/check-logic.mjs` + AI `qa/run-qa.mjs`) into one simple command, or have Claude run them before a release. Keep it solo-friendly (owner is the only tester).
+- **API cost controls (owner-flagged, MUST do before scale; real-app/server phase):** the AI is used two ways per customer - meal-photo analysis (vision) and nutrition-advice chat - so token cost scales with active users. Estimated cost/customer/month (May 2026 pricing: Haiku 4.5 $1/$5, Sonnet 4.6 $3/$15, Opus 4.8 $5/$25 per MTok): ~$0.5 on Haiku, ~$1.4 on Sonnet, assuming ~75 photos (~2,000 in incl ~1,500 image + 500 out) + ~30 chats (~1,500 in + 500 out). Negligible per customer vs a subscription; the real risks are scale, heavy/abusive users, and accidentally using an expensive model or full-res images. Implement ALL of these when wiring the live API (currently the demo calls `/api/ai`):
+  1. **Default model = Haiku 4.5 for photo analysis** (food ID + estimates); escalate to Sonnet only for genuinely complex advice. Do not use Opus for routine calls.
+  2. **Downsize images client-side to ~768px long side before upload** - image tokens scale with resolution (~w*h/750); this roughly halves the image cost, which is the biggest single input chunk. Calculator deliverable: `myprime-api-cost-calculator.html`.
+  3. **Prompt caching on the system prompt** (Anat's voice + instructions + grounding rules) - it repeats on every call (chat AND photo), 90% off the cached input portion. Highest-leverage lever given she both chats and sends photos.
+  4. **Cap output** - small `max_tokens` + ask for concise/structured output.
+  5. **Per-user daily usage cap** - DONE (v1.15): enforced server-side in `api/ai.js` via the same Upstash Redis as the access gate. Per-user daily cap (`AI_DAILY_LIMIT`, default 25) + per-minute burst cap (`AI_BURST_LIMIT`, default 10), keyed by the access email (sent as `x-user-id` header; falls back to IP). Daily quota resets at Israel-time midnight. Returns 429 `{error:'limit', message}`; the client shows a gentle Hebrew message. Limit is OFF until the Upstash env vars are set (app still works). The remaining cost levers (1-4, 6) are still open.
+  6. **(Optional) Batch API (-50%)** only for non-real-time work; NOT for live photo/chat (it's async and the user waits).
 
 
 ## v0.88 - Tracker clarity (week label, 10-week cap, reward hint)
@@ -414,6 +422,87 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.23 - DEV-only "simulated today" tool for testing (gated by ?dev=1)
+- Owner wanted to step through days and preview what a participant sees each day, WITHOUT this shipping to real users. Implemented as a URL-gated dev tool - no flag to remember to flip, inert in production:
+- `const DEV = URLSearchParams(location.search).has("dev")`. `TODAY` now reads an override from `localStorage["myprime_dev_today"]` (validated YYYY-MM-DD) ONLY when `?dev=1` is present; otherwise it is the real `ymd(new Date())`. Since TODAY is the single source (seeds, programWeek line ~3054, app `today`/`selectedDate` init, profile week calc, screen defaults), overriding it recomputes the whole app for the simulated day.
+- `DevDateBar` (rendered only when DEV) - a thin dark bar absolutely positioned at the top of the phone-frame with: -1 / date-picker / +1 / איפוס. Each writes `myprime_dev_today` and reloads so everything recomputes.
+- Production: real users never pass `?dev=1`, so the bar never shows and TODAY is always the real date. Nothing to remove before the PWA goes live. To use: open `...vercel.app/?dev=1`, set/step the day; "איפוס" clears the override.
+- VERSION 1.22->1.23. tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+
+## v1.22 - Remove "צעדים היום" cell from the report step summary
+- The report (ReportScreen) step-summary header had 3 cells: צעדים היום / היעד היומי / ממוצע 7 ימים. The "צעדים היום" cell showed 0 and was confusing in the report (the report is not tied to a specific day; today's steps belong on the יומן). Removed it - now 2 cells: היעד היומי (highlighted) + ממוצע 7 ימים.
+- Highlight now keyed off a `hl: true` flag on the היעד-היומי cell (was `i === 1`), so it stays correct with 2 cells. `stepsToday` const is now unused (harmless, left in place).
+- VERSION 1.21->1.22 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+
+## v1.21 - Drop "מודדת ממוצע" from the week-1 steps ring
+- In week 1 the steps `MetricRing` sub showed "מודדת ממוצע" (owner: confusing/unclear). Emptied it: `sub` is now "" when there is no goal, so the ring shows just the step count + "צעדים". The profile step-goal field still shows "מודדת ממוצע" as its value (owner only flagged the ring; left as-is, easy to change if he wants).
+- VERSION 1.20->1.21 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+
+## v1.20 - Bigger text app-wide + "שומרת שבת" moved into base-data section
+- "שומרת שבת" toggle moved from a standalone card in ProfileScreen INTO the collapsible "נתוני בסיס" section (as a row after תחילת התוכנית, before the week note). Onboarding shabbat question (step 0) unchanged.
+- Text enlarged app-wide: uniform +1px on EVERY `fontSize` (367 occurrences) via regex - the cleanest global bump given fonts are inline px with no single root knob. "A bit bigger everywhere" per owner.
+- Fold protection (owner: must still see the tracker/checkin card above the fold on the day screen): compensated the rings area so bigger text does not push the journal down - the 4 day-screen rings 130->124, grid rowGap 14->10, marginTop 6->2, marginBottom 14->10. Net day-screen vertical budget roughly unchanged while body text is larger.
+- VERSION 1.19->1.20 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+- NOTE: this is a first visual pass (sandbox cannot render). Magnitude (+1) and the ring/gap compensation should be eyeballed on device and tuned.
+
+## v1.19 - Week-2 baseline note: added the upward direction
+- The week-2 summary note (v1.18) now also fires when she is tracking >20% ABOVE her goal (`wkStepAvg > stepGoal * 1.2`): a congratulatory text suggesting she set a HIGHER baseline in the profile for more challenge (Anat's increases continue from it). Logic replaced `showStepRecheck` (below-only) with `stepRecheckDir` = "low" | "high" | null; the card renders the matching text. Still text-only, profile-driven, week 2 only, no recalculation/runaway.
+- VERSION 1.18->1.19 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+
+## v1.18 - One-time week-2 baseline sanity note in the weekly summary
+- Owner intent (after rejecting a broader ongoing recalibration as a "bypass" of Anat's methodology): the ONLY goal is that her baseline is sensible; from there Anat's fixed gradual increases run untouched. So this is a single, optional, text-only nudge - NOT an ongoing goal-vs-performance mechanism.
+- In `WeeklySummaryModal`: when viewing the WEEK 2 summary, if her week-2 actual step average is tracking >20% BELOW her current goal (`wkStepAvg < stepGoal * 0.8`), show one gentle amber text note suggesting she set a more realistic baseline in the profile ("a goal you'll win"), and noting Anat's increases continue from it. No button/recalibration math - she changes it herself via the existing profile step-goal edit; Anat's scheduled increases then add to whatever she sets.
+- Design choice: compares to the GOAL, not the bare baseline, and only flags the DOWNWARD/struggling case. Comparing to the bare baseline would false-positive whenever she simply succeeds at baseline+2000 (that is the goal, not a sign the baseline was wrong) and would push the goal up - the double-count/runaway the owner warned against. Downward-only serves the owner's principle: realistic goal, feeling of winning, not despair.
+- Gated to week === 2 (so it is effectively one-time; never appears week 3+). New prop `stepGoal` passed to WeeklySummaryModal.
+- VERSION 1.17->1.18 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+
+## v1.17 - Daily AI call limit default lowered 40 -> 25
+- `api/ai.js`: built-in `AI_DAILY_LIMIT` default changed from 40 to 25 per owner (40 felt high; a heavy-but-legit day of multi-turn chat logging is ~15-25 CALLS, so 25 gives headroom while halving the worst case). Still overridable via the `AI_DAILY_LIMIT` env var with no code change. Burst cap unchanged (10/min).
+- VERSION 1.16->1.17 (bumped per the every-code-change rule even though only api/ai.js changed; re-upload BOTH src/App.jsx and api/ai.js).
+
+## v1.16 - Bug fixes from owner testing: white-screen crash + day strip going before start
+- **CRASH (white screen) opening the steps entry:** `StepsModal` still passed `goal={curStepGoal || 0}`, but `curStepGoal` was DELETED in v1.14 (it was part of the old auto-bump block). So tapping the step ring "+" threw `ReferenceError: curStepGoal is not defined` and crashed React. Fixed: `goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0}` (single-source goal, `programWeek` is in App scope at line ~3043).
+- **Day strip showed days BEFORE the program start ("a week back"):** the strip range used `Math.max(10, programDayNumber(startDate, today) - 1)`. The `10` floor forced 10 days back even when the program started <10 days ago, so the strip extended before the start date. Fixed to `Math.max(0, ...)` so the earliest cell is always exactly day 1 (the start). New users now see just today + future (dimmed); no pre-start days.
+- QA LESSON: `tsc --jsx preserve --skipLibCheck` on the single .tsx did NOT flag the undefined `curStepGoal` (no TS2304). So tsc is NOT a reliable undefined-variable check here. New rule: whenever a `const`/variable is removed, `grep -c <name> src/App.jsx` must return 0 (verify no dangling refs). Done for this fix (curStepGoal -> 0, stepBase -> 0).
+- VERSION 1.15->1.16 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+- Note: the week-7 seen in the owner's screenshot is from the back-dated April-19 demo start; with a fresh May-31 start, today computes as week 1 (this was the strip bug, not the week calc).
+
+## v1.15 - Server-side per-user AI rate limit (cost protection)
+- `api/ai.js` rewritten: before proxying to Anthropic it enforces a per-user rate limit using the SAME Upstash Redis already used by `api/access.js` (no new infra). Per-user DAILY cap (`AI_DAILY_LIMIT`, default 25) and per-minute BURST cap (`AI_BURST_LIMIT`, default 10). Key = `x-user-id` header (the access email, lowercased), falling back to `ip:<x-forwarded-for>` then `anon`. Day key uses Israel-time date (`Intl` Asia/Jerusalem) so the quota resets at local midnight; keys expire (~48h day, 120s minute). Over-limit returns HTTP 429 `{error:'limit', scope, message}`. If the limiter itself throws, it fails OPEN (logs, does not block). If the Upstash vars are unset, the limit is OFF and the app works as before.
+- The key still lives only in `process.env.ANTHROPIC_API_KEY` (server side); never in the client. `AI_MODEL` env still overrides the model (set `claude-haiku-4-5` for the cheap path).
+- App.jsx: new `aiHeaders()` helper sends `x-user-id` (from `localStorage.myprime_access_email`) on ALL 5 `/api/ai` calls. 429 handled gracefully: `aiNutritionChat` returns the server's gentle message as the reply; `analyzeMeal` throws the message; `aiMealChat` returns `{error,limit,message}`.
+- Tuning: change `AI_DAILY_LIMIT` / `AI_BURST_LIMIT` in Vercel env (no code change). Splitting photo vs chat caps would need the client to tag request kind - easy follow-up if wanted.
+- VERSION 1.14->1.15. Files changed: src/App.jsx, api/ai.js. qa: tsc 0, brackets 0, 0 dashes, check-logic 7/7.
+
+## v1.14 - Step goal: user-confirmed baseline + transparent, button-driven increases
+- Methodology (confirmed by owner = Anat's): personal baseline, then +2000/+2000/+1000/+1000 over weeks 2/4/6/8 (+6000 cumulative). NOT capped at 8,000 - higher starters reach higher (2,000 -> 8,000; 4,000 -> 10,000).
+- The goal NEVER changes silently now. A prominent "important" banner appears on the day screen when a step action is pending (pendingStepAction): week>=2 with no baseline -> "קביעת ממוצע צעדים יומי"; an unacknowledged bump week (4/6/8) -> "היעד שלך עולה השבוע". She taps it to act.
+- New StepSetupModal: baseline-set (proposes the measured week-1 average, or asks her to estimate with a 2,000-4,000 hint if no data) and increase (shows the bump, lets her ACCEPT or CHANGE via a 250-step +/- stepper). Copy in Anat's voice (owner-approved drafts).
+- Data model: profile.stepBaseline (confirmed anchor) + profile.stepGoal (single source of truth for display, set on confirm = baseline + cumOffset(week), updated on each accepted bump or manual edit). effectiveStepGoal simplified to (stepGoal, week) - all screens read the one stored value (no more recompute drift). goalAckWeek tracks acknowledged bumps; confirmBaseline sets it to highestBumpAtOrBelow(week) so mid-program entry does not cascade retroactive prompts.
+- Removed the old silent auto-bump useEffect + the goalBump sheet (GoalBumpModal now unused).
+- Transparency: profile shows "התחלת ב-X" under the goal; modal explains the journey.
+- Profile keeps the goal edit; editing sets stepGoal and future bumps continue from her value (per owner).
+- VERSION 1.13->1.14 (App.jsx only). check-logic 7/7; tsc clean; 0 dashes.
+- Existing demo profiles have no stepBaseline -> the baseline banner will appear on load (intended: she confirms her start).
+
+## v1.13 - Step goal unified across all screens (bugfix)
+- BUG: day ring + report showed the dynamic goal (baseline + weekly offset, e.g. 6,740), but the PROFILE field showed "מודדת ממוצע" and the profile edit modal defaulted to 2,000 - because those two only read profile.stepGoal (null until a Sunday bump actually runs). Mid-program entry (back-dated April start, now week 7) never ran the bumps, so the three screens disagreed.
+- FIX: new single-source helper effectiveStepGoal(stepGoalStored, stepsByDate, startDate, week) = week<2 ? null : (stored ?? baseline+cumOffset). Now used by the day ring, report, profile display, profile edit init, AND the bump effect. All screens show the same number; the profile edit opens at the current effective goal (not 2,000), so saving no longer silently resets the goal.
+- ProfileScreen now receives stepsByDate + programWeek.
+- VERSION 1.12->1.13 (App.jsx only). check-logic 7/7; tsc clean; 0 dashes.
+- NOTE: the goal value itself (e.g. 6,740 = baseline 1,740 + 5,000 at week 7) depends on week-1 step data. A back-dated start with no real week-1 steps yields whatever baseline the seed/data gives; for a real user week 1 measures it properly.
+
+## v1.12 - Date line in the check-in modal
+- CheckinModal now shows the same date/day/week line as the card, under the title "המעקב היומי שלי" (relLabel + full weekday + d/month + "שבוע N, יום D"). Passed date={selectedDate} + startDate to the modal.
+- VERSION 1.11->1.12 (App.jsx only). check-logic 7/7; tsc clean; 0 dashes.
+
+## v1.11 - Card graphics: bigger cabinet trophy + fill button
+- Cabinet "ארון הגביעים" button: trophy image enlarged (44x44 -> 72x58, correct 1.25 aspect), padding reduced (10px6px -> 8px4px), gap 6->4, button width 80->84. Owner: trophy was too small with too much padding.
+- CheckinCard: replaced the "הקישי לפתיחה" + "כל יום שתמלאי, עוד מדליה לאוסף" hint lines with a solid square brand button "הקישי למילוי המעקב" (onClick -> onOpen, stopPropagation).
+- VERSION 1.10->1.11 (App.jsx only). check-logic 7/7; tsc clean; 0 dashes.
+
+## OPEN TASK (owner, planned): Xiaomi band -> health-platform step/sleep integration. Standard path: band -> Mi Fitness -> Apple Health (iOS) / Health Connect (Android) -> app reads steps+sleep. Requires the real app to be NATIVE/hybrid (Capacitor + a health plugin); NOT possible in the current web demo (keep manual step entry for now). Planning doc delivered: "MyPrime-חיבור-צמיד-שיאומי-תכנון.docx". Phase 2 of the real app.
 
 ## v1.10 - Summary button polish (Fri/Sat only) + trophy image on cabinet button
 - Weekly-summary bar now appears ONLY on Friday (dn 6) and Saturday (dn 0); hidden on other days.
