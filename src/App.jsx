@@ -358,7 +358,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.25";
+const VERSION = "1.27";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -792,6 +792,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const dow = dowOf(date);
   const progDay = programDayNumber(profile.startDate, date);
   const isShabbatRest = profile.keepShabbat && dow === 0;
+  const isIntro = progDay >= 1 && progDay <= 2;
   const baseline = stepBaseline(stepsByDate, profile.startDate);
   // Running goal: stored value if set, else baseline + cumulative offset; null in week 1 (still measuring).
   const dayStepGoal = effectiveStepGoal(profile.stepGoal, week);
@@ -801,10 +802,11 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const [tipIdx, setTipIdx] = useState(-1);
   useEffect(() => {
     if (tipIdx !== -1) return;
+    if (isIntro || isShabbatRest) return;
     const ctx = { progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBanner: stepBannerActive };
     const due = TIPS.filter((t) => t.due(ctx) && !(tipsSeen || []).includes(t.key));
     if (due.length) { setTipQueue(due); setTipIdx(0); }
-  }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBannerActive, tipsSeen, tipIdx]);
+  }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBannerActive, tipsSeen, tipIdx, isIntro, isShabbatRest]);
   const tipAdvance = () => setTipIdx((i) => { const n = i + 1; if (n >= tipQueue.length) { onTipsSeen && onTipsSeen(tipQueue.map((t) => t.key)); setTipQueue([]); return -1; } return n; });
   const ciWeek = Math.min(week, 10);
   const ciTasks = checkinOpen ? tasksForDate(profile.startDate, date, profile.keepShabbat) : [];
@@ -870,7 +872,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           <ChevronLeft size={18} color={C.amber} />
         </div>
       )}
-      {progDay >= 1 && progDay <= 2 ? (
+      {isIntro ? (
         <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "40px 24px 64px", textAlign: "center" }}>
           <div style={{ fontSize: 47, marginBottom: 12 }}>🤍</div>
           <div style={{ fontSize: 21, fontWeight: 700, color: C.ink }}>ברוכה הבאה למסע</div>
@@ -2994,17 +2996,18 @@ function GoalBumpModal({ info, name, onClose }) {
   );
 }
 
-function DevDateBar() {
+function DevDateBar({ onAnchor }) {
   const setDay = (d) => { try { window.localStorage.setItem("myprime_dev_today", d); } catch (e) {} window.location.reload(); };
   const reset = () => { try { window.localStorage.removeItem("myprime_dev_today"); } catch (e) {} window.location.reload(); };
   const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
   return (
-    <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
+    <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
       <span style={{ opacity: 0.7 }}>DEV - יום מדומה</span>
       <button onClick={() => setDay(addDays(TODAY, -1))} style={btn}>-1</button>
       <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
       <button onClick={() => setDay(addDays(TODAY, 1))} style={btn}>+1</button>
       <button onClick={reset} style={btn}>איפוס</button>
+      <button onClick={() => onAnchor && onAnchor()} style={{ ...btn, background: "#0a7" }}>קבע יום 1</button>
     </div>
   );
 }
@@ -3209,6 +3212,15 @@ export default function App() {
   const setWeightForDate = (date, kg) => { setWeights((w) => [...w.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
   const reportAddWeight = () => setSheet("weight");
   const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
+  const devAnchorDay1 = () => {
+    const sun = sundayOf(TODAY);
+    try {
+      const blob = { onboarded: true, profile: { ...profile, startDate: sun, tipsSeen: [] }, log, weights, activityLog, waterByDate, stepsByDate, favorites, checkins, goalAckWeek };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
+      localStorage.setItem("myprime_dev_today", sun);
+    } catch (e) {}
+    window.location.reload();
+  };
   const resetDemo = () => {
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
     try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
@@ -3259,7 +3271,7 @@ export default function App() {
         .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
         @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;border-radius:0;box-shadow:none;border:none}}`}</style>
       <div className="phone-frame">
-        {DEV && <DevDateBar />}
+        {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
         {gate !== "ok" ? (
           <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} />
         ) : !onboarded ? (
