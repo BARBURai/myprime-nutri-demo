@@ -358,7 +358,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.24";
+const VERSION = "1.25";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -770,7 +770,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tutorialSeen, onTutorialDone }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -791,14 +791,21 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const cupMlD = profile.cupMl || DEFAULT_CUP_ML;
   const dow = dowOf(date);
   const progDay = programDayNumber(profile.startDate, date);
-  const [tutStep, setTutStep] = useState(-1);
-  useEffect(() => { if (tutStep === -1 && !tutorialSeen && progDay >= 3) setTutStep(0); }, [tutorialSeen, progDay, tutStep]);
-  const tutAdvance = () => setTutStep((i) => { const n = i + 1; if (n >= TUTORIAL_STEPS.length) { onTutorialDone && onTutorialDone(); return 99; } return n; });
   const isShabbatRest = profile.keepShabbat && dow === 0;
   const baseline = stepBaseline(stepsByDate, profile.startDate);
   // Running goal: stored value if set, else baseline + cumulative offset; null in week 1 (still measuring).
   const dayStepGoal = effectiveStepGoal(profile.stepGoal, week);
   const checkinOpen = TRACKER_ENABLED && unlockedOn(profile.startDate, date, CHECKIN_UNLOCK);
+  const stepBannerActive = !!(stepAction && stepAction.kind === "baseline");
+  const [tipQueue, setTipQueue] = useState([]);
+  const [tipIdx, setTipIdx] = useState(-1);
+  useEffect(() => {
+    if (tipIdx !== -1) return;
+    const ctx = { progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBanner: stepBannerActive };
+    const due = TIPS.filter((t) => t.due(ctx) && !(tipsSeen || []).includes(t.key));
+    if (due.length) { setTipQueue(due); setTipIdx(0); }
+  }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBannerActive, tipsSeen, tipIdx]);
+  const tipAdvance = () => setTipIdx((i) => { const n = i + 1; if (n >= tipQueue.length) { onTipsSeen && onTipsSeen(tipQueue.map((t) => t.key)); setTipQueue([]); return -1; } return n; });
   const ciWeek = Math.min(week, 10);
   const ciTasks = checkinOpen ? tasksForDate(profile.startDate, date, profile.keepShabbat) : [];
   const ciAnswers = (checkins && checkins[date]) || {};
@@ -834,7 +841,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   };
   return (
     <div style={{ padding: "8px 0 24px" }}>
-      {tutStep >= 0 && tutStep < TUTORIAL_STEPS.length && <TutorialOverlay steps={TUTORIAL_STEPS} idx={tutStep} onNext={tutAdvance} />}
+      {tipIdx >= 0 && tipIdx < tipQueue.length && <TutorialOverlay steps={tipQueue} idx={tipIdx} onNext={tipAdvance} />}
       <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
           const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
@@ -854,7 +861,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       </div>
 
       {stepAction && (
-        <div onClick={onStepSetup} role="button" aria-label="קביעת יעד צעדים" style={{ margin: "10px 16px 0", background: C.amberBg, border: `1.5px solid ${C.amber}`, borderRadius: 14, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+        <div data-tut="stepbanner" onClick={onStepSetup} role="button" aria-label="קביעת יעד צעדים" style={{ margin: "10px 16px 0", background: C.amberBg, border: `1.5px solid ${C.amber}`, borderRadius: 14, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
           <span style={{ fontSize: 21 }}>⭐</span>
           <div style={{ flex: 1, textAlign: "right" }}>
             <div style={{ fontSize: 15.5, fontWeight: 700, color: C.ink }}>{stepAction.kind === "baseline" ? "קביעת ממוצע צעדים יומי" : "היעד שלך עולה השבוע"}</div>
@@ -881,8 +888,8 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", justifyItems: "center", alignItems: "start", rowGap: 10, columnGap: 6, marginTop: 2, marginBottom: 10 }}>
           <div data-tut="cal" style={{ gridColumn: 1, gridRow: 1 }}><Ring consumed={consumed} budget={budget} size={124} onPlus={onAddCalorie} /></div>
           {stepsOpen && <div data-tut="steps" style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : ""} onPlus={onEditSteps} size={124} /></div>}
-          {macroOpen && <div style={{ gridColumn: 1, gridRow: 2 }}><ProteinRing consumed={macros.p} target={targets.protein} size={124} /></div>}
-          {waterOpen && <div style={{ gridColumn: 2, gridRow: 2 }}><MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} verb="שתית" color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={124} /></div>}
+          {macroOpen && <div data-tut="protein" style={{ gridColumn: 1, gridRow: 2 }}><ProteinRing consumed={macros.p} target={targets.protein} size={124} /></div>}
+          {waterOpen && <div data-tut="water" style={{ gridColumn: 2, gridRow: 2 }}><MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} verb="שתית" color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={124} /></div>}
         </div>
         {SHOW_MACRO_STRIP && macroOpen && (
           <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", margin: "0 0 16px" }}>
@@ -2636,7 +2643,9 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   );
 }
 
-function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate }) {
+function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate, tipsSeen, onTipsSeen }) {
+  const hasAuto = tasks.some((t) => t.auto);
+  const showAutoNote = hasAuto && !(tipsSeen || []).includes("autotasks");
   const dd = new Date(date);
   const rel = relLabel(date);
   const wk = Math.min(programWeekFor(startDate, date), 10);
@@ -2645,6 +2654,12 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
   return (
     <SheetShell title="המעקב היומי שלי" onClose={onClose}>
       <div style={{ fontSize: 14, fontWeight: 500, color: C.sub, marginBottom: 8, textAlign: "right" }}>{dateLine}</div>
+      {showAutoNote && (
+        <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, fontSize: 13.5, color: C.ink, lineHeight: 1.55, textAlign: "right" }}>
+          חלק מהמשימות מסומנות "אוטומטי" - הן מתעדכנות לבד לפי מה שמילאת ביומן ובצעדים, בלי שתצטרכי לסמן אותן.
+          <div style={{ textAlign: "left", marginTop: 6 }}><button onClick={() => onTipsSeen && onTipsSeen(["autotasks"])} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 13.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", padding: 0 }}>הבנתי</button></div>
+        </div>
+      )}
       <div style={{ maxHeight: "58vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
         {CHECKIN_GROUPS.map((g) => {
           const items = tasks.filter((t) => t.group === g.id);
@@ -2994,11 +3009,14 @@ function DevDateBar() {
   );
 }
 
-const TUTORIAL_STEPS = [
-  { sel: "cal", text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת לאורך היום ואת הפעילות הגופנית שעשית (חוץ מהצעדים). אפשר לעדכן בכל פעם שאת מוסיפה משהו - לאורך כל היום." },
-  { sel: "steps", text: "כאן את ממלאת את הצעדים שלך. עדיף למלא מאוחר ככל האפשר במהלך היום, אחרי שבדקת את מספר הצעדים באפליקציית הבריאות שלך." },
-  { sel: "tracker", text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך כמה משימות קטנות - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
-  { sel: "cabinet", text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
+const TIPS = [
+  { key: "cal", sel: "cal", due: (c) => c.progDay >= 3, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת לאורך היום ואת הפעילות הגופנית שעשית (חוץ מהצעדים). אפשר לעדכן בכל פעם שאת מוסיפה משהו - לאורך כל היום." },
+  { key: "steps", sel: "steps", due: (c) => c.stepsOpen, text: "כאן את ממלאת את הצעדים שלך. עדיף למלא מאוחר ככל האפשר במהלך היום, אחרי שבדקת את מספר הצעדים באפליקציית הבריאות שלך." },
+  { key: "tracker", sel: "tracker", due: (c) => c.checkinOpen, text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך כמה משימות קטנות - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
+  { key: "cabinet", sel: "cabinet", due: (c) => c.checkinOpen, text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
+  { key: "stepbaseline", sel: "stepbanner", due: (c) => c.stepBanner, text: "הגיע הזמן לקבוע את נקודת ההתחלה שלך בצעדים. זו נקודת הבסיס שממנה נעלה יחד בהדרגה - ותמיד אפשר לשנות אותה בהמשך." },
+  { key: "water", sel: "water", due: (c) => c.waterOpen, text: "נוספה טבעת המים 💧 היעד הוא 2 ליטר ביום. בכל לחיצה על הפלוס מוסיפים כוס, ושם גם אפשר לקבוע את גודל הכוס שלך - כדי שהספירה תתאים בדיוק לכוס שאת שותה ממנה." },
+  { key: "protein", sel: "protein", due: (c) => c.macroOpen, text: "נוספה טבעת החלבון. אותה את לא ממלאת - היא מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי." },
 ];
 
 function TutorialOverlay({ steps, idx, onNext }) {
@@ -3033,7 +3051,7 @@ function TutorialOverlay({ steps, idx, onNext }) {
 }
 
 export default function App() {
-  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, tutorialSeen: false, keepShabbat: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: [], keepShabbat: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
@@ -3249,7 +3267,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} tutorialSeen={profile.tutorialSeen} onTutorialDone={() => setProfile({ ...profile, tutorialSeen: true })} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} />}
@@ -3275,7 +3293,7 @@ export default function App() {
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
-            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} />}
+            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} onClose={() => setSheet(null)} />}
