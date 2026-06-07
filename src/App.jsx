@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.43";
+const VERSION = "1.49";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -988,7 +988,10 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
     return { label: `${dd.getDate()}/${dd.getMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
   });
   const loggedDays = calSeries.filter((x) => x.kcal > 0);
-  const metDays = loggedDays.filter((x) => x.kcal <= goalKcal).length;
+  // A day counts as "met the calorie goal" only if she ate CLOSE to the target. Trivial/partial logging
+  // (e.g. a single item, far below target) or strong under-eating does not count as meeting the goal.
+  const calMet = (kc) => goalKcal > 0 && kc >= goalKcal * 0.8 && kc <= goalKcal * 1.05;
+  const metDays = loggedDays.filter((x) => calMet(x.kcal)).length;
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
   const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
   const proteinFocus = programWeek >= MACRO_UNLOCK.week;
@@ -1061,7 +1064,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
                 <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
                 <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 12, fill: C.brandD }} />
                 <Bar dataKey="kcal" radius={[6, 6, 0, 0]}>
-                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : d.kcal <= goalKcal ? C.brand : C.amber} />))}
+                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal) ? C.brand : C.amber} />))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -1819,7 +1822,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
     };
     reader.readAsDataURL(file);
   };
-  const [aiMsgs, setAiMsgs] = useState([{ role: "assistant", text: "היי! ספרי לי מה אכלת ואעזור להעריך 🙂 אפשר לדבר או לכתוב." }]);
+  const [aiMsgs, setAiMsgs] = useState([{ role: "assistant", text: "היי! ספרי לי מה אכלת ואעזור להעריך את הקלוריות 😋\nכדי שאוכל לדייק כבר מההתחלה, נסי לפרט כמה שיותר: איך האוכל הוכן (מטוגן / אפוי / מבושל / על הגריל), אם הוספת שמן / חמאה / רוטב, מה שתית, וכמות משוערת (גרמים, כוסות או כפות).\nככל שתפרטי יותר, ההערכה תהיה מדויקת יותר. אפשר לדבר או לכתוב." }]);
   const [aiApi, setAiApi] = useState([]);
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -2118,7 +2121,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
             <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
               {aiMsgs.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
-                  <div style={{ maxWidth: "82%", fontSize: 16, lineHeight: 1.5, padding: m.img ? 6 : "9px 12px", borderRadius: 14, background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>
+                  <div style={{ maxWidth: "82%", fontSize: 16, lineHeight: 1.5, padding: m.img ? 6 : "9px 12px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>
                     {m.img && <img src={m.img} alt="" style={{ width: "100%", maxWidth: 180, borderRadius: 10, display: "block", marginBottom: m.text ? 6 : 0 }} />}
                     {m.text && <div style={{ padding: m.img ? "0 6px 4px" : 0 }}>{m.text}</div>}
                   </div>
@@ -2222,7 +2225,7 @@ function EntryMenu({ onClose, onPick, mode }) {
 function SheetShell({ title, onClose, children }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 27 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "88vh", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexShrink: 0 }}>
           <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{title}</span>
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
@@ -3079,26 +3082,129 @@ function summaryTaskLine(key, week, data, fasting) {
   const avg = (id) => (A[id] ? A[id].avg : 0);
   const navg = (id) => (A[id] ? A[id].n : 0);
   const cnt = (id) => (K[id] || 0);
+  const amt = (v, one, many) => (v === 1 ? one : `${typeof v === "number" ? v.toLocaleString() : v} ${many}`); // singular-aware amount
   switch (key) {
-    case "steps": return { e: "💃", t: "משימת הצעדים", d: `השבוע דיווחת ${navg("steps")} פעמים על הצעדים. ממוצע הצעדים לימים שדיווחת - ${avg("steps").toLocaleString()} צעדים ביום בממוצע.` };
-    case "journal": return { e: "✍️", t: "משימת יומן תזונה", d: `במהלך ${cnt("journal") || data.journalDays || 0} ימים מילאת יומן מעקב תזונה.` };
-    case "strength": return { e: "🦾", t: "משימת אימוני כוח", d: `ביצעת השבוע ${cnt("strength")} אימוני כוח.` };
-    case "strength_mobility": return { e: "🦾", t: "משימת אימוני כוח ומוביליטי", d: `ביצעת השבוע ${cnt("strength")} אימוני כוח ו-${cnt("mobility")} אימוני מוביליטי 🤸‍♀️` };
-    case "veg_order": return { e: "🥦", t: "משימות תזונה - שילוב ירקות וסדר אכילה", d: `שילבת בממוצע ${avg("veg")} צבעים של ירקות בכל יום, וגם שילבת סדר אכילה ב-${avg("mealorder")} ארוחות בממוצע!` };
-    case "water_full": return { e: "🥛", t: "משימת שתיית מים", d: `בשבוע האחרון, ב-${cnt("drinkbefore")} ימים שתית מים לפני הארוחה, ובסך הכל בממוצע שתית ${avg("water")} כוסות מים.` };
-    case "water_simple": return { e: "🥛", t: "משימת שתיית מים", d: `בממוצע שתית ${avg("water")} כוסות מים.` };
-    case "protein": return { e: "🍶", t: "משימת יעד חלבון", d: `במהלך ${cnt("protein")} ימים עמדת ביעד החלבון שלך.` };
-    case "sleep_full": return { e: "😴", t: "משימת שיפור השינה", d: `במהלך ${data.sleepDays || 0} ימים ביצעת את משימות שיפור השינה וישנת בממוצע ${avg("sleephours")} שעות בימים שדיווחת.` };
-    case "sleep_simple": return { e: "😴", t: "משימת שיפור השינה", d: `ישנת בממוצע ${avg("sleephours")} שעות בימים שדיווחת.` };
-    case "breathing": return { e: "😮‍💨", t: "משימת תרגול נשימה", d: `במהלך ${cnt("breathing")} ימים ביצעת תרגילי נשימה.` };
-    case "gratitude": return { e: "🙏", t: "משימת הכרת התודה", d: `במהלך ${cnt("gratitude")} ימים ביצעת את המשימה.` };
-    case "grains_split": return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d: `במהלך ${cnt("goodfat")} ימים הוספת שומן בריא, וב-${cnt("grains")} ימים הוספת דגנים מלאים ו/או קטניות.` };
-    case "grains_combined": return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d: `במהלך ${data.grainsDays || 0} ימים הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא.` };
-    case "pelvic": return { e: "🧘‍♀️", t: "משימת רצפת האגן", d: `תרגלת את משימת רצפת האגן ${cnt("pelvic")} פעמים.`, isNew: week === 7 };
-    case "probiotics": return { e: "🪄", t: "משימת פרוביוטיקה", d: `הוספת פרוביוטיקה לתזונה במשך ${cnt("probiotics")} ימים.`, isNew: week === 7 };
-    case "antiinflam": return { e: "🙅‍♀️", t: "משימת מזון אנטי-דלקתי", d: `עשית את המשימה במשך ${cnt("antiinflam")} ימים.` };
-    case "bonedensity": return { e: "🦴", t: "משימת צפיפות העצם", d: `במשך ${cnt("calcium")} ימים הוספת לתזונה מזון עשיר בסידן, ובמשך ${cnt("sun")} ימים דאגת לחשיפה בריאה לשמש.` };
-    case "fasting": return fasting ? { e: "🕘", t: "משימת צום לסירוגין (רשות)", d: `חלון הצום שלך נמשך ${avg("fasting")} שעות בממוצע.` } : null;
+    case "steps": {
+      const n = navg("steps"), a = avg("steps").toLocaleString();
+      const d = n === 0 ? "השבוע עוד לא דיווחת על הצעדים."
+        : n === 1 ? `השבוע דיווחת פעם אחת על הצעדים - ${a} צעדים ביום.`
+        : `השבוע דיווחת ${n} פעמים על הצעדים. ממוצע הצעדים לימים שדיווחת - ${a} צעדים ביום בממוצע.`;
+      return { e: "💃", t: "משימת הצעדים", d };
+    }
+    case "journal": {
+      const c = cnt("journal") || data.journalDays || 0;
+      const d = c === 0 ? "השבוע עוד לא מילאת יומן מעקב תזונה."
+        : c === 1 ? "מילאת יומן מעקב תזונה ביום אחד."
+        : `במהלך ${c} ימים מילאת יומן מעקב תזונה.`;
+      return { e: "✍️", t: "משימת יומן תזונה", d };
+    }
+    case "strength": {
+      const c = cnt("strength");
+      const d = c === 0 ? "השבוע עוד לא ביצעת אימוני כוח."
+        : c === 1 ? "ביצעת השבוע אימון כוח אחד."
+        : `ביצעת השבוע ${c} אימוני כוח.`;
+      return { e: "🦾", t: "משימת אימוני כוח", d };
+    }
+    case "strength_mobility": {
+      const s = cnt("strength"), m = cnt("mobility");
+      const sTxt = s === 0 ? "לא ביצעת אימוני כוח" : s === 1 ? "ביצעת אימון כוח אחד" : `ביצעת ${s} אימוני כוח`;
+      const mTxt = m === 0 ? "ולא אימוני מוביליטי" : m === 1 ? "ואימון מוביליטי אחד" : `ו-${m} אימוני מוביליטי`;
+      const d = (s === 0 && m === 0) ? "השבוע עוד לא ביצעת אימוני כוח או מוביליטי." : `השבוע ${sTxt} ${mTxt} 🤸‍♀️`;
+      return { e: "🦾", t: "משימת אימוני כוח ומוביליטי", d };
+    }
+    case "veg_order": {
+      const v = avg("veg"), mo = avg("mealorder");
+      const d = (v === 0 && mo === 0) ? "השבוע עוד לא דיווחת על שילוב ירקות וסדר אכילה."
+        : `שילבת בממוצע ${amt(v, "צבע אחד", "צבעים")} של ירקות בכל יום, וגם שילבת סדר אכילה ב${mo === 1 ? "ארוחה אחת" : `-${mo} ארוחות`} בממוצע!`;
+      return { e: "🥦", t: "משימות תזונה - שילוב ירקות וסדר אכילה", d };
+    }
+    case "water_full": {
+      const db = cnt("drinkbefore"), cups = avg("water");
+      const cupsTxt = `בממוצע שתית ${amt(cups, "כוס אחת", "כוסות")} מים`;
+      const d = db === 0 ? `בשבוע האחרון עדיין לא דיווחת על מים לפני הארוחה. ${cupsTxt}.`
+        : db === 1 ? `בשבוע האחרון, ביום אחד שתית מים לפני הארוחה, ובסך הכל ${cupsTxt}.`
+        : `בשבוע האחרון, ב-${db} ימים שתית מים לפני הארוחה, ובסך הכל ${cupsTxt}.`;
+      return { e: "🥛", t: "משימת שתיית מים", d };
+    }
+    case "water_simple": {
+      const cups = avg("water");
+      const d = cups === 0 ? "השבוע עוד לא דיווחת על שתיית מים." : `בממוצע שתית ${amt(cups, "כוס אחת", "כוסות")} מים.`;
+      return { e: "🥛", t: "משימת שתיית מים", d };
+    }
+    case "protein": {
+      const c = cnt("protein");
+      const d = c === 0 ? "השבוע עוד לא עמדת ביעד החלבון."
+        : c === 1 ? "ביום אחד עמדת ביעד החלבון שלך."
+        : `במהלך ${c} ימים עמדת ביעד החלבון שלך.`;
+      return { e: "🍶", t: "משימת יעד חלבון", d };
+    }
+    case "sleep_full": {
+      const sd = data.sleepDays || 0, h = avg("sleephours");
+      const base = sd === 0 ? "השבוע עוד לא ביצעת את משימות שיפור השינה" : sd === 1 ? "ביום אחד ביצעת את משימות שיפור השינה" : `במהלך ${sd} ימים ביצעת את משימות שיפור השינה`;
+      const hTxt = h > 0 ? ` וישנת בממוצע ${amt(h, "שעה אחת", "שעות")} בימים שדיווחת` : "";
+      const d = (sd === 0 && h === 0) ? "השבוע עוד לא דיווחת על השינה." : `${base}${hTxt}.`;
+      return { e: "😴", t: "משימת שיפור השינה", d };
+    }
+    case "sleep_simple": {
+      const h = avg("sleephours");
+      const d = h === 0 ? "השבוע עוד לא דיווחת על שעות שינה." : `ישנת בממוצע ${amt(h, "שעה אחת", "שעות")} בימים שדיווחת.`;
+      return { e: "😴", t: "משימת שיפור השינה", d };
+    }
+    case "breathing": {
+      const c = cnt("breathing");
+      const d = c === 0 ? "השבוע עוד לא ביצעת תרגילי נשימה."
+        : c === 1 ? "ביום אחד ביצעת תרגילי נשימה."
+        : `במהלך ${c} ימים ביצעת תרגילי נשימה.`;
+      return { e: "😮‍💨", t: "משימת תרגול נשימה", d };
+    }
+    case "gratitude": {
+      const c = cnt("gratitude");
+      const d = c === 0 ? "השבוע עוד לא ביצעת את משימת הכרת התודה."
+        : c === 1 ? "ביום אחד ביצעת את משימת הכרת התודה."
+        : `במהלך ${c} ימים ביצעת את משימת הכרת התודה.`;
+      return { e: "🙏", t: "משימת הכרת התודה", d };
+    }
+    case "grains_split": {
+      const gf = cnt("goodfat"), gr = cnt("grains");
+      const part = (n, label) => n === 0 ? `עדיין לא הוספת ${label}` : n === 1 ? `ביום אחד הוספת ${label}` : `ב-${n} ימים הוספת ${label}`;
+      const d = (gf === 0 && gr === 0) ? "השבוע עוד לא הוספת שומן בריא או דגנים מלאים." : `${part(gf, "שומן בריא")}, ו${part(gr, "דגנים מלאים ו/או קטניות")}.`;
+      return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d };
+    }
+    case "grains_combined": {
+      const c = data.grainsDays || 0;
+      const d = c === 0 ? "השבוע עוד לא הוספת דגנים מלאים, קטניות או שומן בריא."
+        : c === 1 ? "ביום אחד הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא."
+        : `במהלך ${c} ימים הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא.`;
+      return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d };
+    }
+    case "pelvic": {
+      const c = cnt("pelvic");
+      const d = c === 0 ? "השבוע עוד לא תרגלת את משימת רצפת האגן."
+        : c === 1 ? "תרגלת את משימת רצפת האגן פעם אחת."
+        : `תרגלת את משימת רצפת האגן ${c} פעמים.`;
+      return { e: "🧘‍♀️", t: "משימת רצפת האגן", d, isNew: week === 7 };
+    }
+    case "probiotics": {
+      const c = cnt("probiotics");
+      const d = c === 0 ? "השבוע עוד לא הוספת פרוביוטיקה לתזונה."
+        : c === 1 ? "הוספת פרוביוטיקה לתזונה ביום אחד."
+        : `הוספת פרוביוטיקה לתזונה במשך ${c} ימים.`;
+      return { e: "🪄", t: "משימת פרוביוטיקה", d, isNew: week === 7 };
+    }
+    case "antiinflam": {
+      const c = cnt("antiinflam");
+      const d = c === 0 ? "השבוע עוד לא עשית את משימת המזון האנטי-דלקתי."
+        : c === 1 ? "עשית את משימת המזון האנטי-דלקתי ביום אחד."
+        : `עשית את משימת המזון האנטי-דלקתי במשך ${c} ימים.`;
+      return { e: "🙅‍♀️", t: "משימת מזון אנטי-דלקתי", d };
+    }
+    case "bonedensity": {
+      const ca = cnt("calcium"), su = cnt("sun");
+      const part = (n, verb) => n === 0 ? `עדיין לא ${verb}` : n === 1 ? `ביום אחד ${verb}` : `במשך ${n} ימים ${verb}`;
+      const d = (ca === 0 && su === 0) ? "השבוע עוד לא דיווחת על סידן וחשיפה לשמש." : `${part(ca, "הוספת לתזונה מזון עשיר בסידן")}, ו${part(su, "דאגת לחשיפה בריאה לשמש")}.`;
+      return { e: "🦴", t: "משימת צפיפות העצם", d };
+    }
+    case "fasting": return fasting ? { e: "🕘", t: "משימת צום לסירוגין (רשות)", d: avg("fasting") === 0 ? "השבוע עוד אין נתוני צום לסירוגין." : `חלון הצום שלך נמשך ${amt(avg("fasting"), "שעה אחת", "שעות")} בממוצע.` } : null;
     default: return null;
   }
 }
@@ -3113,6 +3219,35 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
     ? (wkStepAvg < stepGoal * 0.8 ? "low" : wkStepAvg > stepGoal * 1.2 ? "high" : null)
     : null;
   const wk1 = week === 1;
+  const WK_ORD = ["", "הראשון", "השני", "השלישי", "הרביעי", "החמישי", "השישי", "השביעי", "השמיני", "התשיעי", "העשירי"];
+  const titleEl = <div style={{ fontWeight: 800, color: C.brandD, textAlign: "center", fontSize: 16.5, lineHeight: 1.4, marginBottom: 12 }}>{`סיכום שבועי של משימות השבוע ${WK_ORD[week] || ""} שלך במיי פריים!`}</div>;
+  // Achievements earned THIS week: daily medals (completed days) + the weekly trophy.
+  let wkMedals = 0;
+  for (let dnum = (week - 1) * 7 + 1; dnum <= week * 7; dnum++) {
+    const d = addDays(startDate, dnum - 1);
+    if (d > today) break;
+    if (checkins[d] && checkins[d]._done) wkMedals++;
+  }
+  const wkTrophy = weekTrophyEarned(checkins, startDate, week, today);
+  const achievementsEl = (wkMedals > 0 || wkTrophy) ? (
+    <div style={{ borderTop: `1px solid ${C.line}`, marginTop: 14, paddingTop: 14, textAlign: "center" }}>
+      <div style={{ fontSize: 14.5, fontWeight: 800, color: C.brandD, marginBottom: 10 }}>ההישגים שלך השבוע 🏆</div>
+      {wkMedals > 0 && (
+        <div style={{ marginBottom: wkTrophy ? 14 : 0 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 4, marginBottom: 6 }}>
+            {Array.from({ length: wkMedals }).map((_, i) => (<img key={i} src={MEDAL_SRC} alt="" width={34} height={34} style={{ display: "block" }} />))}
+          </div>
+          <div style={{ fontSize: 13.5, color: C.sub }}>{wkMedals} {wkMedals === 1 ? "מדליה יומית" : "מדליות יומיות"} השבוע - כל יום שהשלמת 💜</div>
+        </div>
+      )}
+      {wkTrophy && (
+        <div>
+          <img src={trophyForWeek(week)} alt="" width={66} height={66} style={{ display: "block", margin: "0 auto", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.2))" }} />
+          <div style={{ fontSize: 13.5, color: C.brandD, fontWeight: 700, marginTop: 4 }}>{week >= 10 ? "גביע האלופה נכנס לארון! 🎉" : "גביע השבוע נכנס לארון!"}</div>
+        </div>
+      )}
+    </div>
+  ) : null;
   const stepsDays = data.avgs.steps ? data.avgs.steps.n : 0;
   const stepsAvg = data.avgs.steps ? data.avgs.steps.avg : 0;
   const journalDays = data.journalDays || 0;
@@ -3144,13 +3279,16 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
       {wk1 ? (
         !wk1HasData ? emptyState : (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 15.5, lineHeight: 1.7 }}>
+            {titleEl}
             {wk1Lines.map((ln, i) => (<div key={i} style={{ marginBottom: 8 }}>{ln}</div>))}
             <div style={{ fontWeight: 800, color: C.ink, marginBottom: 10 }}>ענת</div>
             <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6 }}>נ.ב. אל תחששי לצאת מאזור הנוחות שלך - זה פתח לדברים מדהימים שמחכים לך בהמשך הדרך!</div>
+            {achievementsEl}
           </div>
         )
       ) : !hasData ? emptyState : (
         <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 15.5, lineHeight: 1.7 }}>
+          {titleEl}
           {intro.map((p, i) => (<div key={`i${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
           <div style={{ display: "flex", flexDirection: "column", gap: 12, margin: "12px 0" }}>
             {taskLines.map((l, i) => (
@@ -3167,6 +3305,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
           {outro.lines.map((p, i) => (<div key={`o${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
           <div style={{ fontWeight: 800, color: C.ink, marginTop: 4 }}>ענת</div>
           {outro.ps && <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>נ.ב. {outro.ps}</div>}
+          {achievementsEl}
         </div>
       )}
     </SheetShell>

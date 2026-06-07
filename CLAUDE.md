@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.43`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.49`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,45 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.49 - Fix (desktop): sheet still cut off at top - cap height to the app frame, not the viewport
+- v1.43 used maxHeight 88vh on the SheetShell panel. On desktop the app is a FIXED 800px-tall .phone-frame (overflow hidden); 88vh of the tall desktop browser (~950px) is bigger than the 800px frame, so a long sheet (weekly summary) overflowed the frame's top and got clipped/hidden behind the DEV bar.
+- Fix: SheetShell panel maxHeight changed from "88vh" to "88%" - i.e. 88% of the app frame (which is 800px on desktop, 100vh on mobile). The sheet now always fits inside the frame with the header visible and the body scrolling internally, on both desktop and mobile.
+- VERSION 1.48->1.49 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test on desktop: open a long weekly summary -> title + intro visible at top, scrolls within the sheet, nothing hidden.
+
+## v1.48 - Weekly summary: natural Hebrew grammar for 0 / 1 in every task line
+- Owner: lines read oddly for 0 or 1 (e.g. "1 פעמים", "ביצעת השבוע 0 אימוני כוח"). Wanted "פעם אחת" for 1 and a "did not / not yet" phrasing for 0.
+- Rewrote summaryTaskLine so EVERY line branches on 0 / 1 / many:
+  * 1 -> singular ("פעם אחת", "יום אחד", "אימון כוח אחד", "כוס אחת", "שעה אחת", "צבע אחד", "ארוחה אחת").
+  * 0 -> a gentle "השבוע עוד לא..." / "עדיין לא..." phrasing instead of "0 ...".
+  * many -> the original plural wording.
+- Covers steps, journal, strength, strength+mobility, veg+order, water (full/simple), protein, sleep (full/simple), breathing, gratitude, grains (split/combined), pelvic, probiotics, antiinflam, bone-density, fasting. Added an `amt()` singular-aware helper for averaged amounts.
+- VERSION 1.47->1.48 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: a week with 0 strength + 1 step-report day now reads "השבוע עוד לא ביצעת אימוני כוח" and "דיווחת פעם אחת על הצעדים".
+
+## v1.47 - "ספרי לי מה אכלת": ask for all details up front (shorten the chat)
+- Owner: in the AI food chat, the opening message should ask her to give as many calorie-relevant details as possible right away (how it was prepared - fried/baked/etc, what she drank, approx grams), so there are fewer follow-up questions.
+- Rewrote the first assistant message (aiMsgs initial) to request: preparation method, added oil/butter/sauce, what she drank, and an approximate quantity (grams/cups/spoons), noting that more detail = more accurate estimate. Kept "אפשר לדבר או לכתוב".
+- Added whiteSpace:pre-wrap to the food-chat bubble so the multi-line message renders with its line breaks (matches the other chat bubbles).
+- The system prompt already instructs one-question-at-a-time and not to re-ask what was given, so providing details up front naturally reduces follow-ups; no system-prompt change needed.
+- VERSION 1.46->1.47 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.46 - Weekly summary: "ההישגים שלך השבוע" illustration at the end (medals + trophy)
+- Owner idea: end each weekly summary with a nice illustration of the medals/trophy she earned that week.
+- WeeklySummaryModal now computes wkMedals (completed days this program week, via checkins[date]._done over day-numbers (week-1)*7+1 .. week*7, capped at today) and wkTrophy (weekTrophyEarned for this week). Reuses the existing medal/trophy assets (MEDAL_SRC, trophyForWeek).
+- achievementsEl: a bottom section (top border) titled "ההישגים שלך השבוע 🏆" showing a row of this week's daily medals ("N מדליות יומיות השבוע") and, if earned, the week's trophy ("גביע השבוע נכנס לארון!" / "גביע האלופה..." at week 10). Hidden entirely if nothing earned that week. Appended at the very end of BOTH summary branches (week 1 and weeks 2-10), after the signature/PS.
+- VERSION 1.45->1.46 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: complete a few days in dev, open the weekly summary -> medals row + trophy at the bottom.
+
+## v1.45 - Unified bold title on every weekly summary
+- Owner: each weekly summary should open with the bold title "סיכום שבועי של משימות השבוע {הראשון} שלך במיי פריים!", where only the ordinal word changes per week.
+- Added WK_ORD (1..10 -> הראשון..העשירי) and a titleEl rendered as the first line of the summary box (bold, brand color, centered) in BOTH branches (week 1 and weeks 2-10). The SheetShell chrome header still shows "סיכום שבוע X" as a short identifier.
+- VERSION 1.44->1.45 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: open any week's summary -> the bold MyPrime title appears on top with the correct ordinal.
+
+## v1.44 - Fix: report "עמידה ביעד הקלורי" over-counted (partial logging shown as met)
+- Owner bug: the report showed "עמדת ביעד 2 מתוך 2" when the woman had only logged a tiny amount (filled the food journal once) and had NOT actually met the calorie goal.
+- Cause: metDays counted any logged day with kcal <= goalKcal as "met". A single small item -> total far below target -> counted as met.
+- Fix: a day counts as "met" only if intake is CLOSE to target: calMet(kc) = kc >= goalKcal*0.8 && kc <= goalKcal*1.05. Trivial/partial logging (far below target) or strong under-eating no longer counts. loggedDays (the "X מתוך Y" denominator) still = any day with food logged, so Ron's case now reads e.g. "0 מתוך 2". The calorie bar colors match the same rule (brand = met, amber = off-target either direction, line = no data).
+- Threshold (80%-105%) is tunable - tell me if you want it wider/narrower. Note: weeklySummaryData.calOnGoal uses a stricter +-5% band but is not currently displayed (curated summaries dropped the calorie line).
+- VERSION 1.43->1.44 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: log one small item on a day -> report shows that day as NOT met.
 
 ## v1.43 - Fix: long bottom-sheets (weekly summary) cut off at the top / unreadable
 - Owner (testing in dev): could not read the whole weekly-summary message - the top (title + intro + first tasks) was pushed above the screen and hidden behind the DEV bar (z99999).
