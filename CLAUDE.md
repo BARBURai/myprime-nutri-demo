@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.38`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.41`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,31 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.41 - Step guide: show all 3 options to everyone (no platform detection)
+- Owner: stop branching by detected phone - show every woman all three options together: Apple Health guide, Samsung Health guide, and the external app links.
+- StepGuideLink rewritten: no longer calls detectPlatform/currentStepGuide. It renders a button per guide (iterates STEP_GUIDES -> Apple Health, then Samsung Health), each opening the in-app image viewer for that guide (openKey state picks which images). Below them, the free-app line always shows both store links (Android / אייפון).
+- The intro line dropped the per-app name (generic "פתחי את אפליקציית הבריאות בטלפון"). Shown in all surfaces incl. the steps tip bubble (linkOnly).
+- detectPlatform / currentStepGuide / stepAppFor are no longer used by StepGuideLink (left in file, harmless) - can be removed later if nothing else needs them.
+- VERSION 1.40->1.41 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: on ANY device, open steps -> two guide buttons (Apple + Samsung) both open their image viewer, and the Android/אייפון app links appear.
+
+## v1.40 - Fallback step-counter app links (for women without Samsung Health / Apple Health)
+- Coverage gap raised by owner: iPhone always has Apple Health (covered), but a non-Samsung Android (Pixel, Xiaomi, etc.) has no Samsung Health, and desktop/other shows no guide at all.
+- Added STEP_APPS: free pedometer apps per store - Android "Pedometer - Step Counter" (play.google.com/.../pedometer.steptracker.calorieburner.stepcounter), iOS "StepsApp" (apps.apple.com/.../id1037595083). stepAppFor(platform) returns the right one.
+- StepGuideLink now shows fallback download links:
+  * When a native guide exists (ios/android): a small line under the מדריך button - "אין לך את {app}? אפשר להוריד אפליקציית צעדים חינמית: {store app}" (Play app on Android, StepsApp on iOS).
+  * When NO native guide (other/desktop), non-linkOnly: "אין לך אפליקציית בריאות בטלפון? ... Android / אייפון" with both store links. (linkOnly tip bubbles still render nothing when there is no guide.)
+- These store links open externally (the store app) - that is expected/correct for installing an app, and unrelated to the old PDF blank-page issue.
+- VERSION 1.39->1.40 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+- OPEN: owner to confirm the two chosen pedometer apps are good picks for MyPrime's audience (free, simple, Hebrew-friendly), and whether to surface the fallback link inside the tip bubble too.
+
+## v1.39 - Intermittent-fasting intro bubble + fasting now opt-in (gated in tracker)
+- checkins.js: fasting task startDow 5 -> 4, so it (and the intro) land on week 8 DAY 4 (Wednesday), per owner.
+- NEW FastingIntroModal: a one-time bubble on the day screen, fires from week 8 day 4 onward (dowOf>=4) or week>8, once (tipsSeen key "fastingintro"), only on the day tab with no other overlay, and skipped if she already opted in. Copy (Anat voice): "היום העליתי לך סרטון על משימת הצום לסירוגין. אם את מעוניינת לנסות את המשימה - אשרי זאת בכפתור. תמיד אפשר לשנות את הבחירה בפרופיל." Two buttons: "כן, אשמח לנסות" -> sets profile.fasting=true + marks seen; "לא עכשיו" -> marks seen, stays off. (Owner wrote "משימת הצעדים" - corrected to "הצום", confirmed the intent.)
+- FASTING IS NOW OPT-IN END-TO-END: tasksForDate gained a `fasting` arg and filters the fasting task out unless opted in. Wired into the daily tracker (DayScreen ciTasks + CheckinModal) and weeklySummaryData, so the fasting task shows in the tracker AND the summary line ONLY for women who opted in (via the bubble or the week-8 profile toggle). Default off -> never appears.
+- dayComplete + dayProgress now ignore optional tasks (filter !t.optional) - so the optional fasting task never blocks a medal or drags the progress ring (fixes a latent issue where the optional task could have blocked completion).
+- VERSION 1.38->1.39 (App.jsx + checkins.js). esbuild parse clean, brackets 0/0/0 both files, 0 em/en dashes, check-logic 7/7.
+- TEST (?dev=1, simulate to week 8 Wed): the bubble appears on the day screen; "כן" turns on fasting (toggle in profile reflects it, fasting task appears in tracker, fasting line in the weekly summary); "לא עכשיו" leaves everything off and the fasting task does not appear. Bubble does not reappear after either choice.
 
 ## v1.38 - Step guide is now IN-APP (two-image viewer), no external PDF/page
 - BUG (owner): tapping the guide button opened a blank page (the PDF link `/guides/*.pdf` opened a new tab; the in-app browser could not render it / file not deployed). Owner wants the guide to stay INSIDE the app - flip between the two instruction images in place, per phone.

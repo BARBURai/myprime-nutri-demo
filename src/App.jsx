@@ -284,6 +284,12 @@ function currentStepGuide() {
   const g = STEP_GUIDES[detectPlatform()];
   return g && g.images && g.images.length ? g : null;
 }
+// Free pedometer apps for women who do not have the built-in health app (e.g. non-Samsung Android) or are on another device.
+const STEP_APPS = {
+  android: { name: "Pedometer - Step Counter", url: "https://play.google.com/store/apps/details?id=pedometer.steptracker.calorieburner.stepcounter" },
+  ios: { name: "StepsApp", url: "https://apps.apple.com/il/app/stepsapp-pedometer/id1037595083" },
+};
+function stepAppFor(platform) { return STEP_APPS[platform] || null; }
 // Sundays when the running goal goes up, and by how much.
 const STEP_BUMP_WEEKS = { 2: 2000, 4: 2000, 6: 1000, 8: 1000 };
 function highestBumpAtOrBelow(week) { let h = 0; for (const w of [2, 4, 6, 8]) if (w <= week) h = w; return h; }
@@ -338,18 +344,19 @@ function taskDone(task, answers, auto) {
 }
 // Tasks shown for a given date. Saturday (dow 0): rest for Shabbat-keepers (none),
 // otherwise the same daily tasks as the Friday before it (activeTasks for dow 6).
-function tasksForDate(startDate, date, keepShabbat) {
+function tasksForDate(startDate, date, keepShabbat, fasting) {
   const wk = Math.min(programWeekFor(startDate, date), 10);
   const dw = dowOf(date);
-  if (dw === 0) return keepShabbat ? [] : activeTasks(wk, 6);
-  return activeTasks(wk, dw);
+  let list = dw === 0 ? (keepShabbat ? [] : activeTasks(wk, 6)) : activeTasks(wk, dw);
+  if (!fasting) list = list.filter((t) => t.id !== "fasting"); // fasting shows only if she opted in
+  return list;
 }
-// A day is complete (earns a medal) when every active task is done - automatically,
-// no "I finished" button needed. Works on all-auto days too.
+// A day is complete (earns a medal) when every REQUIRED active task is done - automatically,
+// no "I finished" button needed. Optional tasks (e.g. fasting) never block completion.
 function dayComplete(startDate, date, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl) {
   if (!TRACKER_ENABLED) return false;
   if (!unlockedOn(startDate, date, CHECKIN_UNLOCK)) return false;
-  const ts = tasksForDate(startDate, date, keepShabbat);
+  const ts = tasksForDate(startDate, date, keepShabbat).filter((t) => !t.optional);
   if (!ts.length) return false;
   const ans = (checkins && checkins[date]) || {};
   const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl);
@@ -386,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.38";
+const VERSION = "1.41";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -838,7 +845,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBannerActive, tipsSeen, tipIdx, isIntro, isShabbatRest, week, dow, overlayOpen]);
   const tipAdvance = () => setTipIdx((i) => { const n = i + 1; if (n >= tipQueue.length) { onTipsSeen && onTipsSeen(tipQueue.map((t) => t.key)); setTipQueue([]); return -1; } return n; });
   const ciWeek = Math.min(week, 10);
-  const ciTasks = checkinOpen ? tasksForDate(profile.startDate, date, profile.keepShabbat) : [];
+  const ciTasks = checkinOpen ? tasksForDate(profile.startDate, date, profile.keepShabbat, profile.fasting) : [];
   const ciAnswers = (checkins && checkins[date]) || {};
   const ciAuto = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMlD);
   const ciLocked = date === today && new Date().getHours() < CHECKIN_REVEAL_HOUR;
@@ -848,7 +855,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const dayProgress = (d) => {
     if (!TRACKER_ENABLED) return 0;
     if (!unlockedOn(profile.startDate, d, CHECKIN_UNLOCK)) return 0;
-    const ts = tasksForDate(profile.startDate, d, profile.keepShabbat);
+    const ts = tasksForDate(profile.startDate, d, profile.keepShabbat).filter((t) => !t.optional);
     if (!ts.length) return 0;
     const ans = (checkins && checkins[d]) || {};
     const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMlD);
@@ -2302,29 +2309,36 @@ function WeightModal({ weights, today, minDate, heightCm, onClose, onAdd }) {
 
 // Deeper steps explanation + per-platform health-app guide link (link appears once STEP_GUIDES is filled).
 function StepGuideLink({ style, linkOnly }) {
-  const guide = currentStepGuide();
-  const [open, setOpen] = useState(false);
+  const [openKey, setOpenKey] = useState(null);
   const [idx, setIdx] = useState(0);
-  if (linkOnly && !guide) return null;
-  const imgs = guide ? guide.images : [];
+  const guideKeys = Object.keys(STEP_GUIDES).filter((k) => STEP_GUIDES[k].images && STEP_GUIDES[k].images.length); // ios, android - shown to everyone
+  const og = openKey ? STEP_GUIDES[openKey] : null;
+  const imgs = og ? og.images : [];
   const last = idx >= imgs.length - 1;
   const navBtn = (on) => ({ border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: fontStack, fontSize: 15, fontWeight: 700, cursor: on ? "pointer" : "default", background: on ? C.brand : C.line, color: on ? "#fff" : C.faint });
+  const aLink = { color: C.brand, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 2 };
+  const guideBtn = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.amber}`, background: C.amberBg, color: C.amber, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 };
   return (
     <div style={style}>
       {!linkOnly && (
-        <div style={{ fontSize: 13, color: C.sub, textAlign: "center", lineHeight: 1.55, marginBottom: guide ? 8 : 0 }}>
-          כדי לראות כמה צעדים עשית היום: פתחי את אפליקציית הבריאות בטלפון{guide ? ` (${guide.app})` : ""}, מצאי את מספר הצעדים של היום, והזיני אותו כאן.
+        <div style={{ fontSize: 13, color: C.sub, textAlign: "center", lineHeight: 1.55, marginBottom: 8 }}>
+          כדי לראות כמה צעדים עשית היום: פתחי את אפליקציית הבריאות בטלפון, מצאי את מספר הצעדים של היום, והזיני אותו כאן.
         </div>
       )}
-      {guide && (
-        <button onClick={() => { setIdx(0); setOpen(true); }} style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.amber}`, background: C.amberBg, color: C.amber, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Info size={15} /> מדריך: איך מוצאים את הצעדים ב{guide.app}</button>
-      )}
-      {open && guide && (
-        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100001, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: fontStack, direction: "rtl" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {guideKeys.map((k) => (
+          <button key={k} onClick={() => { setOpenKey(k); setIdx(0); }} style={guideBtn}><Info size={15} /> מדריך: איך מוצאים את הצעדים ב{STEP_GUIDES[k].app}</button>
+        ))}
+      </div>
+      <div style={{ fontSize: 13, color: C.sub, textAlign: "center", lineHeight: 1.6, marginTop: 8 }}>
+        אין לך אפליקציית בריאות בטלפון? אפשר להוריד אפליקציית צעדים חינמית: <a href={STEP_APPS.android.url} target="_blank" rel="noreferrer" style={aLink}>Android</a> {" / "} <a href={STEP_APPS.ios.url} target="_blank" rel="noreferrer" style={aLink}>אייפון</a>
+      </div>
+      {og && (
+        <div onClick={() => setOpenKey(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100001, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: fontStack, direction: "rtl" }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: 14, maxWidth: 460, width: "100%", maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>איך מוצאים את הצעדים ב{guide.app}</span>
-              <button onClick={() => setOpen(false)} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>איך מוצאים את הצעדים ב{og.app}</span>
+              <button onClick={() => setOpenKey(null)} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
             </div>
             <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto", background: C.bg, borderRadius: 12, padding: 8 }}>
               <img src={imgs[idx]} alt="" style={{ maxWidth: "100%", maxHeight: "64vh", objectFit: "contain", borderRadius: 8 }} />
@@ -2332,7 +2346,7 @@ function StepGuideLink({ style, linkOnly }) {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, gap: 10 }}>
               <button onClick={() => setIdx((i) => Math.max(0, i - 1))} disabled={idx === 0} style={navBtn(idx > 0)}>הקודם</button>
               <span style={{ color: C.faint, fontSize: 14 }}>{idx + 1}/{imgs.length}</span>
-              <button onClick={() => (last ? setOpen(false) : setIdx((i) => i + 1))} style={navBtn(true)}>{last ? "סגירה" : "הבא"}</button>
+              <button onClick={() => (last ? setOpenKey(null) : setIdx((i) => i + 1))} style={navBtn(true)}>{last ? "סגירה" : "הבא"}</button>
             </div>
           </div>
         </div>
@@ -2826,6 +2840,27 @@ function TrophyCheer({ week, name, onClose }) {
   );
 }
 
+function FastingIntroModal({ onOptIn, onDismiss }) {
+  return (
+    <div onClick={onDismiss} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 48, fontFamily: fontStack, direction: "rtl" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", textAlign: "center", maxWidth: 330, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
+        <div style={{ fontSize: 40, lineHeight: 1 }}>🕘</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, marginTop: 10 }}>משימה חדשה: צום לסירוגין</div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 10, lineHeight: 1.65, textAlign: "right" }}>
+          היום העליתי לך סרטון על משימת הצום לסירוגין.<br />
+          אם את מעוניינת לנסות את המשימה - אשרי זאת בכפתור.<br />
+          תמיד אפשר לשנות את הבחירה בפרופיל.
+          <div style={{ marginTop: 8, color: C.faint, fontSize: 14 }}>ענת</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
+          <Btn onClick={onOptIn}>כן, אשמח לנסות 💜</Btn>
+          <button onClick={onDismiss} style={{ border: "none", background: "transparent", color: C.sub, fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer", padding: "6px" }}>לא עכשיו</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function trackerStats(checkins) {
   let days = 0;
   for (const d in checkins) if (checkins[d] && checkins[d]._done) days++;
@@ -2943,7 +2978,7 @@ function summaryStepsAvg(week, startDate, today, stepsByDate) {
   }
   return n ? Math.round(sum / n) : null;
 }
-function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget) {
+function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget, fasting) {
   const dates = summaryWeekDates(week, startDate, today, keepShabbat);
   const counts = {}, sums = {}, ns = {};
   let calSum = 0, calN = 0, protSum = 0, protN = 0, calOnGoal = 0, sleepDays = 0, grainsDays = 0;
@@ -2951,7 +2986,7 @@ function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, w
     const ans = checkins[d] || {};
     const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMl);
     let sleepDay = false, grainDay = false;
-    for (const t of tasksForDate(startDate, d, keepShabbat)) {
+    for (const t of tasksForDate(startDate, d, keepShabbat, fasting)) {
       if (t.type === "number") {
         let v = null;
         if (t.auto === "steps") v = stepsByDate[d];
@@ -3052,7 +3087,7 @@ function summaryTaskLine(key, week, data, fasting) {
 
 function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, stepGoal, fasting, onClose }) {
   const week = Math.min(programWeekFor(startDate, date), 10);
-  const data = weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget);
+  const data = weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget, fasting);
   // One-time baseline sanity note: Friday of week 2 only. If she is tracking well BELOW her goal,
   // gently suggest a more realistic baseline (set in the profile). Anat's gradual increases continue from it.
   const wkStepAvg = data.avgs.steps ? data.avgs.steps.avg : null;
@@ -3430,6 +3465,16 @@ export default function App() {
     if (tcount > celebRef.current.trophies) { celebRef.current.trophies = tcount; setCheerTrophyWeek(maxW); setSheet("trophyCheer"); }
     else if (celebrate) setSheet("checkinCheer");
   }, [checkins, log, stepsByDate, waterByDate, targets, profile.startDate, profile.keepShabbat, today]);
+  // Intermittent-fasting intro bubble: once, on the day screen, from week 8 day 4 (Wednesday) onward.
+  useEffect(() => {
+    if (!onboarded || showIntro || tab !== "day") return;
+    if (sheet || modal || showExit) return;
+    if (profile.fasting) return; // already opted in (e.g. via the profile toggle)
+    if ((profile.tipsSeen || []).includes("fastingintro")) return;
+    const wd = dowOf(today); // 0=Sat, 1=Sun .. 6=Fri
+    const eligible = (programWeek === 8 && wd >= 4) || programWeek > 8;
+    if (eligible) setSheet("fastingIntro");
+  }, [programWeek, today, tab, sheet, modal, showExit, onboarded, showIntro, profile.fasting, profile.tipsSeen]);
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
   const setWeightForDate = (date, kg) => { setWeights((w) => [...w.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
   const reportAddWeight = () => setSheet("weight");
@@ -3528,9 +3573,10 @@ export default function App() {
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
-            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
+            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
