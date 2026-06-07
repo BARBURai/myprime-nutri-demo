@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.41";
+const VERSION = "1.42";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2309,15 +2309,18 @@ function WeightModal({ weights, today, minDate, heightCm, onClose, onAdd }) {
 
 // Deeper steps explanation + per-platform health-app guide link (link appears once STEP_GUIDES is filled).
 function StepGuideLink({ style, linkOnly }) {
-  const [openKey, setOpenKey] = useState(null);
+  const [view, setView] = useState(null); // null | "menu" | "ios" | "android"
   const [idx, setIdx] = useState(0);
-  const guideKeys = Object.keys(STEP_GUIDES).filter((k) => STEP_GUIDES[k].images && STEP_GUIDES[k].images.length); // ios, android - shown to everyone
-  const og = openKey ? STEP_GUIDES[openKey] : null;
+  const guideKeys = Object.keys(STEP_GUIDES).filter((k) => STEP_GUIDES[k].images && STEP_GUIDES[k].images.length); // ios, android
+  const og = (view === "ios" || view === "android") ? STEP_GUIDES[view] : null;
   const imgs = og ? og.images : [];
   const last = idx >= imgs.length - 1;
   const navBtn = (on) => ({ border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: fontStack, fontSize: 15, fontWeight: 700, cursor: on ? "pointer" : "default", background: on ? C.brand : C.line, color: on ? "#fff" : C.faint });
-  const aLink = { color: C.brand, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 2 };
-  const guideBtn = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.amber}`, background: C.amberBg, color: C.amber, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 };
+  const box = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.amber}`, background: C.amberBg, color: C.amber, borderRadius: 12, padding: "12px", fontFamily: fontStack, fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, textAlign: "center", lineHeight: 1.4 };
+  const storeBtn = { flex: 1, textAlign: "center", border: `1px solid ${C.amber}`, background: C.panel, color: C.amber, borderRadius: 10, padding: "9px", fontFamily: fontStack, fontSize: 14.5, fontWeight: 700, textDecoration: "none" };
+  const overlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100001, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: fontStack, direction: "rtl" };
+  const card = { background: C.panel, borderRadius: 18, padding: 16, maxWidth: 460, width: "100%", maxHeight: "92vh", display: "flex", flexDirection: "column" };
+  const closeBtn = { border: "none", background: "transparent", cursor: "pointer", color: C.faint };
   return (
     <div style={style}>
       {!linkOnly && (
@@ -2325,20 +2328,35 @@ function StepGuideLink({ style, linkOnly }) {
           כדי לראות כמה צעדים עשית היום: פתחי את אפליקציית הבריאות בטלפון, מצאי את מספר הצעדים של היום, והזיני אותו כאן.
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {guideKeys.map((k) => (
-          <button key={k} onClick={() => { setOpenKey(k); setIdx(0); }} style={guideBtn}><Info size={15} /> מדריך: איך מוצאים את הצעדים ב{STEP_GUIDES[k].app}</button>
-        ))}
-      </div>
-      <div style={{ fontSize: 13, color: C.sub, textAlign: "center", lineHeight: 1.6, marginTop: 8 }}>
-        אין לך אפליקציית בריאות בטלפון? אפשר להוריד אפליקציית צעדים חינמית: <a href={STEP_APPS.android.url} target="_blank" rel="noreferrer" style={aLink}>Android</a> {" / "} <a href={STEP_APPS.ios.url} target="_blank" rel="noreferrer" style={aLink}>אייפון</a>
-      </div>
+      <button onClick={() => setView("menu")} style={box}><Info size={16} /> זקוקה להנחיות שימוש באפליקציית הצעדים? לחצי</button>
+      {view === "menu" && (
+        <div onClick={() => setView(null)} style={overlay}>
+          <div onClick={(e) => e.stopPropagation()} style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>הנחיות לאפליקציית הצעדים</span>
+              <button onClick={() => setView(null)} aria-label="סגירה" style={closeBtn}><X size={20} /></button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {guideKeys.map((k) => (
+                <button key={k} onClick={() => { setView(k); setIdx(0); }} style={box}><Info size={15} /> מדריך: איך מוצאים את הצעדים ב{STEP_GUIDES[k].app}</button>
+              ))}
+              <div style={{ border: `1px solid ${C.amber}`, background: C.amberBg, borderRadius: 12, padding: "12px" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, textAlign: "center", marginBottom: 9, lineHeight: 1.45 }}>אין לך אפליקציית בריאות בטלפון?<br />הורידי אפליקציית צעדים חינמית:</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <a href={STEP_APPS.android.url} target="_blank" rel="noreferrer" style={storeBtn}>Android</a>
+                  <a href={STEP_APPS.ios.url} target="_blank" rel="noreferrer" style={storeBtn}>אייפון</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {og && (
-        <div onClick={() => setOpenKey(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100001, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: fontStack, direction: "rtl" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: 14, maxWidth: 460, width: "100%", maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
+        <div onClick={() => setView("menu")} style={overlay}>
+          <div onClick={(e) => e.stopPropagation()} style={card}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>איך מוצאים את הצעדים ב{og.app}</span>
-              <button onClick={() => setOpenKey(null)} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+              <button onClick={() => setView("menu")} aria-label="חזרה" style={closeBtn}><X size={20} /></button>
             </div>
             <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto", background: C.bg, borderRadius: 12, padding: 8 }}>
               <img src={imgs[idx]} alt="" style={{ maxWidth: "100%", maxHeight: "64vh", objectFit: "contain", borderRadius: 8 }} />
@@ -2346,7 +2364,7 @@ function StepGuideLink({ style, linkOnly }) {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, gap: 10 }}>
               <button onClick={() => setIdx((i) => Math.max(0, i - 1))} disabled={idx === 0} style={navBtn(idx > 0)}>הקודם</button>
               <span style={{ color: C.faint, fontSize: 14 }}>{idx + 1}/{imgs.length}</span>
-              <button onClick={() => (last ? setOpenKey(null) : setIdx((i) => i + 1))} style={navBtn(true)}>{last ? "סגירה" : "הבא"}</button>
+              <button onClick={() => (last ? setView("menu") : setIdx((i) => i + 1))} style={navBtn(true)}>{last ? "חזרה" : "הבא"}</button>
             </div>
           </div>
         </div>
