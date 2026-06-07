@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.49";
+const VERSION = "1.50";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3220,7 +3220,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
     : null;
   const wk1 = week === 1;
   const WK_ORD = ["", "הראשון", "השני", "השלישי", "הרביעי", "החמישי", "השישי", "השביעי", "השמיני", "התשיעי", "העשירי"];
-  const titleEl = <div style={{ fontWeight: 800, color: C.brandD, textAlign: "center", fontSize: 16.5, lineHeight: 1.4, marginBottom: 12 }}>{`סיכום שבועי של משימות השבוע ${WK_ORD[week] || ""} שלך במיי פריים!`}</div>;
+  const titleEl = <div style={{ fontWeight: 800, color: C.brandD, textAlign: "center", fontSize: 17.5, lineHeight: 1.4, marginBottom: 12 }}>{`סיכום שבועי של משימות השבוע ${WK_ORD[week] || ""} שלך במיי פריים!`}</div>;
   // Achievements earned THIS week: daily medals (completed days) + the weekly trophy.
   let wkMedals = 0;
   for (let dnum = (week - 1) * 7 + 1; dnum <= week * 7; dnum++) {
@@ -3230,20 +3230,21 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
   }
   const wkTrophy = weekTrophyEarned(checkins, startDate, week, today);
   const achievementsEl = (wkMedals > 0 || wkTrophy) ? (
-    <div style={{ borderTop: `1px solid ${C.line}`, marginTop: 14, paddingTop: 14, textAlign: "center" }}>
-      <div style={{ fontSize: 14.5, fontWeight: 800, color: C.brandD, marginBottom: 10 }}>ההישגים שלך השבוע 🏆</div>
+    <div style={{ background: C.panel, border: `1.5px solid ${C.brand}`, borderRadius: 16, marginTop: 16, padding: "18px 14px", textAlign: "center", boxShadow: "0 2px 10px rgba(168,66,92,0.10)" }}>
+      <div style={{ fontSize: 18.5, fontWeight: 800, color: C.brandD, marginBottom: 14 }}>ההישגים שלך השבוע 🏆</div>
       {wkMedals > 0 && (
-        <div style={{ marginBottom: wkTrophy ? 14 : 0 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 4, marginBottom: 6 }}>
-            {Array.from({ length: wkMedals }).map((_, i) => (<img key={i} src={MEDAL_SRC} alt="" width={34} height={34} style={{ display: "block" }} />))}
+        <div style={{ marginBottom: wkTrophy ? 18 : 0 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6, marginBottom: 8 }}>
+            {Array.from({ length: wkMedals }).map((_, i) => (<img key={i} src={MEDAL_SRC} alt="" width={48} height={48} style={{ display: "block" }} />))}
           </div>
-          <div style={{ fontSize: 13.5, color: C.sub }}>{wkMedals} {wkMedals === 1 ? "מדליה יומית" : "מדליות יומיות"} השבוע - כל יום שהשלמת 💜</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>{wkMedals} {wkMedals === 1 ? "מדליה יומית" : "מדליות יומיות"} השבוע</div>
+          <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>כל יום שהשלמת 💜</div>
         </div>
       )}
       {wkTrophy && (
         <div>
-          <img src={trophyForWeek(week)} alt="" width={66} height={66} style={{ display: "block", margin: "0 auto", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.2))" }} />
-          <div style={{ fontSize: 13.5, color: C.brandD, fontWeight: 700, marginTop: 4 }}>{week >= 10 ? "גביע האלופה נכנס לארון! 🎉" : "גביע השבוע נכנס לארון!"}</div>
+          <img src={trophyForWeek(week)} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }} />
+          <div style={{ fontSize: 16, color: C.brandD, fontWeight: 800, marginTop: 6 }}>{week >= 10 ? "גביע האלופה נכנס לארון! 🎉" : "גביע השבוע נכנס לארון! 🎉"}</div>
         </div>
       )}
     </div>
@@ -3278,16 +3279,16 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
     <SheetShell title={`סיכום שבוע ${week}`} onClose={onClose}>
       {wk1 ? (
         !wk1HasData ? emptyState : (
-          <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 15.5, lineHeight: 1.7 }}>
+          <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
             {titleEl}
             {wk1Lines.map((ln, i) => (<div key={i} style={{ marginBottom: 8 }}>{ln}</div>))}
             <div style={{ fontWeight: 800, color: C.ink, marginBottom: 10 }}>ענת</div>
-            <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6 }}>נ.ב. אל תחששי לצאת מאזור הנוחות שלך - זה פתח לדברים מדהימים שמחכים לך בהמשך הדרך!</div>
+            <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, marginTop: 8 }}><b>נ.ב.</b> אל תחששי לצאת מאזור הנוחות שלך - זה פתח לדברים מדהימים שמחכים לך בהמשך הדרך!</div>
             {achievementsEl}
           </div>
         )
       ) : !hasData ? emptyState : (
-        <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 15.5, lineHeight: 1.7 }}>
+        <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
           {titleEl}
           {intro.map((p, i) => (<div key={`i${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
           <div style={{ display: "flex", flexDirection: "column", gap: 12, margin: "12px 0" }}>
@@ -3304,7 +3305,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
           {recheckBox}
           {outro.lines.map((p, i) => (<div key={`o${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
           <div style={{ fontWeight: 800, color: C.ink, marginTop: 4 }}>ענת</div>
-          {outro.ps && <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>נ.ב. {outro.ps}</div>}
+          {outro.ps && <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, marginTop: 8 }}><b>נ.ב.</b> {outro.ps}</div>}
           {achievementsEl}
         </div>
       )}
