@@ -240,7 +240,8 @@ function dowOf(dateStr) { const g = new Date(dateStr).getDay(); return g === 6 ?
 // Baseline = her average daily steps over week 1 (measured from day 2 onward).
 function stepBaseline(stepsByDate, startDate) {
   let sum = 0, n = 0;
-  for (let d = 2; d <= 6; d++) { const s = (stepsByDate && stepsByDate[addDays(startDate, d - 1)]) || 0; if (s > 0) { sum += s; n++; } }
+  // Week-1 days 2..7 (Mon..Sat). Saturday (day 7) is included if she logged it - some fill it, some don't.
+  for (let d = 2; d <= 7; d++) { const s = (stepsByDate && stepsByDate[addDays(startDate, d - 1)]) || 0; if (s > 0) { sum += s; n++; } }
   return n ? Math.ceil(sum / n / 100) * 100 : null;
 }
 // Cumulative step-goal offset above baseline: +2000 (w2-3), +4000 (w4-5), +5000 (w6-7), +6000 (w8+).
@@ -255,6 +256,34 @@ function steps7avg(stepsByDate, date) {
   let sum = 0, n = 0;
   for (let i = 0; i < 7; i++) { const s = (stepsByDate && stepsByDate[addDays(date, -i)]) || 0; if (s > 0) { sum += s; n++; } }
   return n ? Math.round(sum / n) : 0;
+}
+// Same rolling window, but also returns how many days actually had data (for the "ממוצע N ימים" label, capped at 7).
+function steps7stats(stepsByDate, date) {
+  let sum = 0, n = 0;
+  for (let i = 0; i < 7; i++) { const s = (stepsByDate && stepsByDate[addDays(date, -i)]) || 0; if (s > 0) { sum += s; n++; } }
+  return { avg: n ? Math.round(sum / n) : 0, n };
+}
+// Detect the phone platform so we can show the matching health-app guide.
+function detectPlatform() {
+  if (typeof navigator === "undefined") return "other";
+  const ua = (navigator.userAgent || "").toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return "ios";
+  if (/android/.test(ua)) return "android";
+  return "other";
+}
+// PDF guides for finding the step count in the phone's health app.
+// OWNER: drop the two PDFs in /public/guides and fill the paths (or external URLs). Empty string = link hidden.
+const STEP_GUIDES = {
+  ios: { url: "", app: "Apple Health" },
+  android: { url: "", app: "Samsung Health" },
+};
+// The guide for the current device (falls back to whichever guide is configured).
+function currentStepGuide() {
+  const p = detectPlatform();
+  const g = STEP_GUIDES[p];
+  if (g && g.url) return g;
+  const any = [STEP_GUIDES.ios, STEP_GUIDES.android].find((x) => x && x.url);
+  return any || null;
 }
 // Sundays when the running goal goes up, and by how much.
 const STEP_BUMP_WEEKS = { 2: 2000, 4: 2000, 6: 1000, 8: 1000 };
@@ -276,7 +305,7 @@ const TRACKER_ENABLED = true;
 const SHOW_MACRO_STRIP = false;
 const CHECKIN_UNLOCK = { week: 1, day: 3 };   // starts on day 3 of week 1
 const CHECKIN_REVEAL_HOUR = 19;               // today's report opens at 19:00
-const MEDAL_SRC = "/medals/medal.webp";
+const MEDAL_SRC = "/medal.png";
 function trophyForWeek(w) {
   if (w >= 10) return "/medals/trophy-champion.webp";
   return "/medals/trophy-" + Math.max(1, Math.min(9, w)) + ".webp";
@@ -358,7 +387,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.30";
+const VERSION = "1.35";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -562,7 +591,7 @@ function Onboarding({ onFinish, name }) {
     setStep(step + 1);
   };
 
-  const draft = { age, heightCm, weightKg: Math.max(minHealthyKg(heightCm), weightKg), activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : Math.max(minHealthyKg(heightCm), goalKg), returnPct: 50, startDate, keepShabbat, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes };
+  const draft = { age, heightCm, weightKg: Math.max(minHealthyKg(heightCm), weightKg), activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : Math.max(minHealthyKg(heightCm), goalKg), returnPct: 50, startDate, keepShabbat, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
   const targets = computeTargets(draft);
   const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
@@ -969,11 +998,13 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         const stepsToday = stepsByDate[today] || 0;
         const baseline = stepBaseline(stepsByDate, startDate);
         const goal = effectiveStepGoal(stepGoalStored, programWeek);
-        const avg7 = steps7avg(stepsByDate, today);
+        const avg7s = steps7stats(stepsByDate, today);
+        const avg7 = avg7s.avg;
+        const avg7Label = avg7s.n <= 0 ? "ממוצע 7 ימים" : avg7s.n === 1 ? "ממוצע יום אחד" : `ממוצע ${avg7s.n} ימים`;
         const maxStep = Math.max(goal || 0, ...sData.map((x) => x.steps), 1);
         const cells = [
           { label: "היעד היומי", val: goal ? goal.toLocaleString() : "במדידה", hl: true },
-          { label: "ממוצע 7 ימים", val: avg7.toLocaleString() },
+          { label: avg7Label, val: avg7.toLocaleString() },
         ];
         return (
           <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
@@ -1000,6 +1031,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
               </ResponsiveContainer>
             </div>
             <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onEditSteps} style={{ padding: "9px" }}>+ עדכון צעדים להיום</Btn></div>
+            <StepGuideLink style={{ marginTop: 10 }} />
           </div>
         );
       })()}
@@ -1248,7 +1280,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsByDate, programWeek }) {
+function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsByDate, programWeek, onOpenFaq }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   const [baseOpen, setBaseOpen] = useState(false);
@@ -1299,6 +1331,17 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
                 <div style={{ position: "absolute", top: 3, left: profile.keepShabbat ? 22 : 3, width: 21, height: 21, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
               </div>
             </div>
+            {programWeekFor(profile.startDate, TODAY) >= 8 && (
+              <div onClick={() => setProfile({ ...profile, fasting: !profile.fasting })} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+                <div>
+                  <div style={{ fontSize: 16, color: C.ink }}>צום לסירוגין</div>
+                  <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>מבצעת צום לסירוגין (רשות) - יופיע בסיכום השבועי</div>
+                </div>
+                <div style={{ width: 46, height: 27, borderRadius: 14, background: profile.fasting ? C.brand : C.line, position: "relative", transition: "background .2s", flexShrink: 0 }}>
+                  <div style={{ position: "absolute", top: 3, left: profile.fasting ? 22 : 3, width: 21, height: 21, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                </div>
+              </div>
+            )}
             <div style={{ fontSize: 14, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
           </div>
         )}
@@ -1352,6 +1395,11 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
             ))}
           </div>
         )}
+      </div>
+
+      <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, cursor: "pointer" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות ותשובות ועזרה</span>
+        <ChevronLeft size={18} color={C.faint} />
       </div>
 
       <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
@@ -2136,14 +2184,15 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
    ROOT APP
    ============================================================ */
 function EntryMenu({ onClose, onPick, mode }) {
+  const FOOD = { bg: C.brandBg, fg: C.brand };
+  const ACT = { bg: C.infoBg, fg: C.info };
   const items = mode === "calorie" ? [
-    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת" },
-    { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי" },
+    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת", tint: FOOD },
+    { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי", tint: ACT },
   ] : [
-    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת" },
-    { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי" },
-    { id: "recommend", ic: Sparkles, t: "מה כדאי לאכול?", s: "הצעות חכמות לפי היעדים שלך" },
-    { id: "weight", ic: TrendingDown, t: "הזיני משקל", s: "מעקב המשקל בפועל" },
+    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת", tint: FOOD },
+    { id: "recommend", ic: Sparkles, t: "מה כדאי לאכול?", s: "הצעות חכמות לפי היעדים שלך", tint: FOOD },
+    { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי", tint: ACT },
   ];
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 26 }} onClick={onClose}>
@@ -2153,10 +2202,10 @@ function EntryMenu({ onClose, onPick, mode }) {
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
         </div>
         {items.map((o) => (
-          <div key={o.id} onClick={() => onPick(o.id)} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13, marginBottom: 8, cursor: "pointer" }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><o.ic size={19} color={C.brand} /></div>
-            <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{o.t}</div>{o.s && <div style={{ fontSize: 14, color: C.sub }}>{o.s}</div>}</div>
-            <ChevronLeft size={18} color={C.faint} />
+          <div key={o.id} onClick={() => onPick(o.id)} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${o.tint.bg}`, borderInlineStart: `4px solid ${o.tint.fg}`, background: o.tint.bg, borderRadius: 14, padding: 13, marginBottom: 8, cursor: "pointer" }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><o.ic size={19} color={o.tint.fg} /></div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{o.t}</div>{o.s && <div style={{ fontSize: 14, color: C.sub }}>{o.s}</div>}</div>
+            <ChevronLeft size={18} color={o.tint.fg} />
           </div>
         ))}
       </div>
@@ -2180,8 +2229,6 @@ function SheetShell({ title, onClose, children }) {
 
 function ActivityModal({ onClose, onAdd, weightKg }) {
   const acts = [
-    { name: "הליכה", met: 3.5 },
-    { name: "הליכה מהירה", met: 5 },
     { name: "ריצה", met: 9.8 },
     { name: "אימון כוח", met: 5 },
     { name: "יוגה / פילאטיס", met: 3 },
@@ -2200,6 +2247,9 @@ function ActivityModal({ onClose, onAdd, weightKg }) {
   const chip = (on) => ({ fontSize: 15, padding: "7px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}`, display: "flex", alignItems: "center", gap: 6 });
   return (
     <SheetShell title="פעילות גופנית" onClose={onClose}>
+      <div style={{ background: C.infoBg, borderRadius: 12, padding: "11px 13px", marginBottom: 14, fontSize: 14, color: C.ink, lineHeight: 1.6 }}>
+        הקלוריות שאת שורפת באימון <b>מתווספות לתקציב הקלורי היומי שלך</b> - כלומר מגדילות את הכמות שמותר לך לאכול היום. <b>הליכה לא נמצאת כאן</b> - היא נספרת אוטומטית דרך הצעדים.
+      </div>
       <div style={{ fontSize: 14, color: C.sub, marginBottom: 8 }}>בחרי פעילות</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
         {acts.map((a, i) => (<span key={a.name} onClick={() => setSel(i)} style={chip(sel === i)}><Dumbbell size={14} /> {a.name}</span>))}
@@ -2251,6 +2301,24 @@ function WeightModal({ weights, today, minDate, heightCm, onClose, onAdd }) {
   );
 }
 
+// Deeper steps explanation + per-platform health-app guide link (link appears once STEP_GUIDES is filled).
+function StepGuideLink({ style, linkOnly }) {
+  const guide = currentStepGuide();
+  if (linkOnly && !guide) return null;
+  return (
+    <div style={style}>
+      {!linkOnly && (
+        <div style={{ fontSize: 13, color: C.sub, textAlign: "center", lineHeight: 1.55, marginBottom: guide ? 8 : 0 }}>
+          כדי לראות כמה צעדים עשית היום: פתחי את אפליקציית הבריאות בטלפון{guide ? ` (${guide.app})` : ""}, מצאי את מספר הצעדים של היום, והזיני אותו כאן.
+        </div>
+      )}
+      {guide && (
+        <a href={guide.url} target="_blank" rel="noreferrer" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.amber}`, background: C.amberBg, color: C.amber, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, textDecoration: "none" }}><Info size={15} /> מדריך: איך מוצאים את הצעדים ב{guide.app}</a>
+      )}
+    </div>
+  );
+}
+
 function StepsModal({ current, goal, weightKg, onClose, onAdd }) {
   const [val, setVal] = useState(current ? String(current) : "");
   const steps = Math.max(0, parseInt(val, 10) || 0);
@@ -2268,7 +2336,7 @@ function StepsModal({ current, goal, weightKg, onClose, onAdd }) {
       <div style={{ textAlign: "center", fontSize: 14, color: C.sub, marginBottom: 16 }}>{steps.toLocaleString()} מתוך יעד {goal.toLocaleString()} · מוסיף ~{kcal} קק״ל לתקציב</div>
       <Btn onClick={() => onAdd(steps)}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
       <div style={{ fontSize: 13, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>לשינוי יעד הצעדים - אפשר בפרופיל. הזנה חוזרת היום מעדכנת את הערך.</div>
-      <button disabled style={{ width: "100%", marginTop: 10, border: `1px dashed ${C.line}`, background: "transparent", color: C.faint, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 15, cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Footprints size={15} /> התחברות לאפליקציית הבריאות · זמין באפליקציה</button>
+      <StepGuideLink style={{ marginTop: 10 }} />
     </SheetShell>
   );
 }
@@ -2856,10 +2924,11 @@ function summaryStepsAvg(week, startDate, today, stepsByDate) {
 function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget) {
   const dates = summaryWeekDates(week, startDate, today, keepShabbat);
   const counts = {}, sums = {}, ns = {};
-  let calSum = 0, calN = 0, protSum = 0, protN = 0, calOnGoal = 0;
+  let calSum = 0, calN = 0, protSum = 0, protN = 0, calOnGoal = 0, sleepDays = 0, grainsDays = 0;
   for (const d of dates) {
     const ans = checkins[d] || {};
     const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMl);
+    let sleepDay = false, grainDay = false;
     for (const t of tasksForDate(startDate, d, keepShabbat)) {
       if (t.type === "number") {
         let v = null;
@@ -2869,8 +2938,12 @@ function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, w
         if (v != null && v > 0) { sums[t.id] = (sums[t.id] || 0) + v; ns[t.id] = (ns[t.id] || 0) + 1; }
       } else if (taskDone(t, ans, au)) {
         counts[t.id] = (counts[t.id] || 0) + 1;
+        if (t.id === "noscreens" || t.id === "stopeating") sleepDay = true; // at least one sleep-improvement task that day
+        if (t.id === "grains" || t.id === "goodfat") grainDay = true; // at least one of whole-grains / healthy-fat that day
       }
     }
+    if (sleepDay) sleepDays++;
+    if (grainDay) grainsDays++;
     const dl = log.filter((e) => e.date === d);
     if (dl.length) {
       const kc = dl.reduce((s, e) => s + (e.kcal || 0), 0);
@@ -2883,13 +2956,79 @@ function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, w
   for (const id in sums) avgs[id] = { avg: Math.round(sums[id] / ns[id]), n: ns[id] };
   return {
     days: dates.length, counts, avgs,
+    journalDays: calN, sleepDays, grainsDays,
     cal: calN ? { avg: Math.round(calSum / calN), target: Math.round(dailyTarget), onGoal: calOnGoal } : null,
     protein: protN ? { avg: Math.round(protSum / protN), target: targets.protein } : null,
     stepsPrev: summaryStepsAvg(week - 1, startDate, today, stepsByDate),
   };
 }
 
-function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, stepGoal, onClose }) {
+// ---- Weeks 2-10 weekly summary: curated per-week narrative (Anat voice). ----
+// Each week shows a CURATED subset of tasks (not every active task), matching the WhatsApp summaries.
+const WK_INTRO = {
+  2: ["שבועיים של תנועה קדימה - וכל פעולה שעשית בהם נחשבת! 🌱", "לא תמיד הכל נכנס בול לשגרה, וזה בסדר גמור. כל משימה שביצעת היא הוכחה שאת בוחרת בעצמך, וזה מה שבאמת חשוב.", "יש פה התקדמות, ויש רצון - וזה כל מה שצריך כדי לבנות יסודות חזקים לאורך זמן.", "בואי נעבור על המשימות:"],
+  3: ["השבוע הזה הוכחת לעצמך שאת מחויבת לתהליך ולשיפור באיכות החיים שלך, וכל משימה שביצעת היא הצלחה בפני עצמה.", "שימי לב למה כן עבד, תני מקום למה שפחות, ותזכרי: שינוי אמיתי נבנה עם גמישות וסבלנות 🙏", "בואי נעבור על המשימות ונראה איך את מעלה הילוך מכאן:"],
+  4: ["כבר חודש שלם של בחירה בעצמך - זה הישג ענק! 🎉", "ההתמדה שלך לאורך 4 שבועות מוכיחה שאת ממש בונה הרגלים שמחזיקים לאורך זמן. מה שעשית עד עכשיו הוא בסיס מצוין - זה הזמן להקשיב לעצמך, להתכוונן ולדייק את ההמשך. גם תהליך עמוק לוקח זמן להתייצב, ואת בתנועה הנכונה.", "בואי נעבור על המשימות ונראה איך את מעלה הילוך מכאן:"],
+  5: ["חמישה שבועות של עשייה, עקביות ובחירה מודעת בעצמך - זה הישג מרגש! 🌟", "כשאת מתמידה, את לא רק בונה תוצאות - את בונה אמון בעצמך. כל שבוע מחזק את הבסיס שלך, וכל צעד מעיד על עוצמה פנימית אמיתית. מה שביצעת חשוב, ומה שלא - לא מבטל שום דבר.", "בואי נעבור על המשימות:"],
+  6: ["שישה שבועות של התקדמות - זה כבר לא הרגל, זו דרך חיים 💪", "ההתמדה שלך מוכיחה שוב שאת מחויבת לעצמך ולבריאות שלך, וזה ניכר בכל רמה - בגוף, בנפש ובמחשבה. וזכרי, כל פעולה שעשית היא בחירה בעצמך, וכל בחירה כזו שווה המון. המסע הזה הוא לא מבחן - אלא תהליך שמתקדם בדיוק בקצב שלך 💛", "בואי נעבור על המשימות:"],
+  7: ["איזו דרך מרשימה עברת - 7 שבועות של מחויבות לעצמך! 👏", "את כבר לא בתחילת הדרך - את עמוק בתוך תהליך של שינוי אמיתי. ההתמדה שלך מוכיחה שוב ושוב שכשאת בוחרת בעצמך, את פורחת 🌸", "בואי נעבור על המשימות:"],
+  8: ["שמונה שבועות של בחירה מודעת בעצמך - זה מרשים ומעורר השראה ✨", "ההתמדה שלך היא לא רק עדות למחויבות - היא הדרך שבה את בונה שגרה חדשה ובריאה יותר. אולי לא הכל יצא לפי התכנון, אבל כל דבר שבחרת לעשות היה משמעותי. היופי בתהליך הזה הוא שהוא גמיש, נושם ומתאים את עצמו אלייך, לא להפך.", "בואי נעבור על המשימות:"],
+  9: ["כמעט 10 שבועות של התמדה - זה לא מובן מאליו, זה מרשים! 👏", "מהשבוע הראשון ועד עכשיו את מראה יציבות, נחישות והקשבה אמיתית לעצמך, והדרך שעשית עד כה היא כבר הישג בפני עצמו. וגם אם השבוע היה פחות מדויק - את עדיין ממשיכה בדרך שלך. החוכמה היא לא דווקא להספיק הכול, אלא לדעת לחזור לדברים שפספסת, ויש לך מספיק זמן לשם כך (עוד 3 חודשים שהאפליקציה פתוחה לך).", "בואי נעבור על המשימות:"],
+  10: ["10 שבועות של בחירה יומיומית בעצמך - וזה ניכר בכל צעד שלך 💪", "ההתמדה, המחויבות והנוכחות שלך הפכו את התהליך הזה למשהו עמוק ואמיתי. את יוצאת מהתוכנית לא רק עם תוצאות - אלא עם הרגלים, הבנה חדשה וכלים שילוו אותך קדימה. וזכרי, אין איחורים - יש לך עוד 3 חודשים לחזור למשימות, להשלים ולעבור שוב על התכנים, בזמן שלך.", "בואי נעבור על המשימות:"],
+};
+const WK_OUTRO = {
+  2: { lines: ["🌿 שבוע חדש = הזדמנות חדשה לזרוח!", "בחרי בעצמך גם השבוע, בצעד אחד בכל פעם - וזה כל מה שצריך 💫", "נמשיך ביום א' הקרוב, בינתיים מאחלת לך סוף שבוע מקסים ואל תשכחי את המשימות החדשות שלך 🙏"], ps: "כשאת עושה את הדברים בהדרגה - אין שום דבר שגדול עליך!" },
+  3: { lines: ["השבוע החדש שלפניך הוא הזדמנות לבחור שוב בעצמך - ולהוכיח לעצמך כמה את יכולה. המשיכי כך, את לגמרי בכיוון הנכון 🚀", "נמשיך ביום א' הקרוב, בינתיים תעשי כיף בסוף השבוע ואל תשכחי את המשימות החדשות שלך 🙏"], ps: "זכרי, הרגע שבו תתחילי להתייחס לכל קושי בדרך כעוד מדרגה שמאפשרת לך לצמוח - יהיה רגע שיכול לשנות את חייך!" },
+  4: { lines: ["השבוע הבא? הזדמנות לחגוג את הדרך ולהמשיך לעלות שלב 💪 דף חדש, אנרגיה חדשה - ממשיכים קדימה, עם חיוך ואמונה בך ✨", "נמשיך ביום א' הקרוב, בינתיים תעשי כיף בסוף השבוע ואל תשכחי את המשימות החדשות שלך 🙏"] },
+  5: { lines: ["השבוע הבא? הזדמנות להרגיש אפילו יותר קלילה, חזקה ומדויקת 💪 השבוע החדש הוא לא תיקון - הוא המשך.", "אני איתך - והדרך שלך פשוט מעוררת השראה ✨", "נמשיך ביום א' הקרוב, בינתיים תעשי כיף בסוף השבוע ואל תשכחי את המשימות החדשות שלך 🙏"] },
+  6: { lines: ["🌟 השבוע החדש מביא איתו הזדמנות לרענן, להתחזק, ולהתקרב עוד צעד למה שמדויק לך. אין צורך להיות מושלמת - רק להמשיך לבחור בעצמך, בכל יום מחדש 💖", "אני איתך - והדרך שלך פשוט מעוררת השראה ✨", "נמשיך ביום א' הקרוב..."] },
+  7: { lines: ["בשבוע הבא מזמינה אותך להמשיך ללטש, ליהנות מההישגים - ולהתאהב בתהליך עוד יותר 💪", "נמשיך ביום א' הקרוב...", "סופ\"ש נעים ✨"] },
+  8: { lines: ["השבוע הבא מחכה לך עם עוד שלב בהתפתחות - תני לעצמך ליהנות מהדרך 🌷", "נמשיך ביום א' הקרוב...", "סופ\"ש נעים ✨"] },
+  9: { lines: ["הזדמנות ליהנות מהפירות של כל מה שבנית עד עכשיו, ולהמשיך את התהליך בקצב שלך, בלי לחץ ועם הרבה אמונה 💛", "נמשיך ביום א' הקרוב...", "סופ\"ש נעים ✨"] },
+  10: { lines: ["זה אולי השבוע האחרון בתוכנית - אבל זו רק ההתחלה שלך 💫", "תזכרי: את יודעת להוביל את עצמך. כל מה שאת צריכה כבר נמצא בתוכך - יש לך את הזמן, יש לך את הכלים, ובעיקר יש לך את עצמך.", "אני גאה בך, ונרגשת לראות איך תמשיכי לפרוח גם בהמשך 🌸", "אני איתך 💜"] },
+};
+const WK_TASKS = {
+  2: ["steps", "journal", "strength", "veg_order"],
+  3: ["steps", "journal", "strength", "veg_order", "water_full", "protein"],
+  4: ["steps", "strength", "veg_order", "water_full", "protein", "sleep_full", "breathing"],
+  5: ["steps", "strength", "water_full", "protein", "sleep_full", "breathing", "gratitude"],
+  6: ["steps", "strength", "water_full", "grains_split", "sleep_full", "gratitude", "protein"],
+  7: ["steps", "strength", "pelvic", "water_full", "grains_combined", "sleep_full", "gratitude", "protein", "probiotics"],
+  8: ["steps", "strength", "pelvic", "water_simple", "grains_combined", "sleep_simple", "protein", "probiotics", "antiinflam", "fasting"],
+  9: ["steps", "strength_mobility", "pelvic", "water_simple", "grains_combined", "sleep_simple", "protein", "probiotics", "antiinflam", "bonedensity", "fasting"],
+  10: ["steps", "strength_mobility", "pelvic", "water_simple", "grains_combined", "sleep_simple", "protein", "probiotics", "antiinflam", "bonedensity", "fasting"],
+};
+// Build one summary line {t:title, e:emoji, d:detail, isNew?} from app data. Returns null to skip (e.g. fasting when off).
+function summaryTaskLine(key, week, data, fasting) {
+  const A = data.avgs || {}, K = data.counts || {};
+  const avg = (id) => (A[id] ? A[id].avg : 0);
+  const navg = (id) => (A[id] ? A[id].n : 0);
+  const cnt = (id) => (K[id] || 0);
+  switch (key) {
+    case "steps": return { e: "💃", t: "משימת הצעדים", d: `השבוע דיווחת ${navg("steps")} פעמים על הצעדים. ממוצע הצעדים לימים שדיווחת - ${avg("steps").toLocaleString()} צעדים ביום בממוצע.` };
+    case "journal": return { e: "✍️", t: "משימת יומן תזונה", d: `במהלך ${cnt("journal") || data.journalDays || 0} ימים מילאת יומן מעקב תזונה.` };
+    case "strength": return { e: "🦾", t: "משימת אימוני כוח", d: `ביצעת השבוע ${cnt("strength")} אימוני כוח.` };
+    case "strength_mobility": return { e: "🦾", t: "משימת אימוני כוח ומוביליטי", d: `ביצעת השבוע ${cnt("strength")} אימוני כוח ו-${cnt("mobility")} אימוני מוביליטי 🤸‍♀️` };
+    case "veg_order": return { e: "🥦", t: "משימות תזונה - שילוב ירקות וסדר אכילה", d: `שילבת בממוצע ${avg("veg")} צבעים של ירקות בכל יום, וגם שילבת סדר אכילה ב-${avg("mealorder")} ארוחות בממוצע!` };
+    case "water_full": return { e: "🥛", t: "משימת שתיית מים", d: `בשבוע האחרון, ב-${cnt("drinkbefore")} ימים שתית מים לפני הארוחה, ובסך הכל בממוצע שתית ${avg("water")} כוסות מים.` };
+    case "water_simple": return { e: "🥛", t: "משימת שתיית מים", d: `בממוצע שתית ${avg("water")} כוסות מים.` };
+    case "protein": return { e: "🍶", t: "משימת יעד חלבון", d: `במהלך ${cnt("protein")} ימים עמדת ביעד החלבון שלך.` };
+    case "sleep_full": return { e: "😴", t: "משימת שיפור השינה", d: `במהלך ${data.sleepDays || 0} ימים ביצעת את משימות שיפור השינה וישנת בממוצע ${avg("sleephours")} שעות בימים שדיווחת.` };
+    case "sleep_simple": return { e: "😴", t: "משימת שיפור השינה", d: `ישנת בממוצע ${avg("sleephours")} שעות בימים שדיווחת.` };
+    case "breathing": return { e: "😮‍💨", t: "משימת תרגול נשימה", d: `במהלך ${cnt("breathing")} ימים ביצעת תרגילי נשימה.` };
+    case "gratitude": return { e: "🙏", t: "משימת הכרת התודה", d: `במהלך ${cnt("gratitude")} ימים ביצעת את המשימה.` };
+    case "grains_split": return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d: `במהלך ${cnt("goodfat")} ימים הוספת שומן בריא, וב-${cnt("grains")} ימים הוספת דגנים מלאים ו/או קטניות.` };
+    case "grains_combined": return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d: `במהלך ${data.grainsDays || 0} ימים הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא.` };
+    case "pelvic": return { e: "🧘‍♀️", t: "משימת רצפת האגן", d: `תרגלת את משימת רצפת האגן ${cnt("pelvic")} פעמים.`, isNew: week === 7 };
+    case "probiotics": return { e: "🪄", t: "משימת פרוביוטיקה", d: `הוספת פרוביוטיקה לתזונה במשך ${cnt("probiotics")} ימים.`, isNew: week === 7 };
+    case "antiinflam": return { e: "🙅‍♀️", t: "משימת מזון אנטי-דלקתי", d: `עשית את המשימה במשך ${cnt("antiinflam")} ימים.` };
+    case "bonedensity": return { e: "🦴", t: "משימת צפיפות העצם", d: `במשך ${cnt("calcium")} ימים הוספת לתזונה מזון עשיר בסידן, ובמשך ${cnt("sun")} ימים דאגת לחשיפה בריאה לשמש.` };
+    case "fasting": return fasting ? { e: "🕘", t: "משימת צום לסירוגין (רשות)", d: `חלון הצום שלך נמשך ${avg("fasting")} שעות בממוצע.` } : null;
+    default: return null;
+  }
+}
+
+function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, stepGoal, fasting, onClose }) {
   const week = Math.min(programWeekFor(startDate, date), 10);
   const data = weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget);
   // One-time baseline sanity note: Friday of week 2 only. If she is tracking well BELOW her goal,
@@ -2898,47 +3037,61 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
   const stepRecheckDir = (week === 2 && stepGoal != null && wkStepAvg != null)
     ? (wkStepAvg < stepGoal * 0.8 ? "low" : wkStepAvg > stepGoal * 1.2 ? "high" : null)
     : null;
-  const lines = [];
-  if (data.avgs.steps) {
-    let s = `הוצאת בממוצע ${data.avgs.steps.avg.toLocaleString()} צעדים ביום`;
-    if (data.stepsPrev != null) s += data.avgs.steps.avg > data.stepsPrev ? " - יותר מהשבוע שעבר" : data.avgs.steps.avg < data.stepsPrev ? " - מעט פחות מהשבוע שעבר" : " - כמו השבוע שעבר";
-    lines.push(s);
-  }
-  if (data.cal) lines.push(`צרכת בממוצע ${data.cal.avg.toLocaleString()} קלוריות ביום (היעד ${data.cal.target.toLocaleString()})${data.cal.onGoal ? ` - על היעד ב-${data.cal.onGoal} ימים` : ""}`);
-  if (data.protein) lines.push(`בממוצע ${data.protein.avg} גרם חלבון ביום (היעד ${data.protein.target})`);
-  for (const t of CHECKIN_TASKS) {
-    if (t.id === "steps") continue;
-    if (SUMMARY_COUNT_PHRASE[t.id] && data.counts[t.id]) lines.push(SUMMARY_COUNT_PHRASE[t.id](data.counts[t.id]));
-    else if (SUMMARY_AVG_PHRASE[t.id] && data.avgs[t.id]) lines.push(SUMMARY_AVG_PHRASE[t.id](data.avgs[t.id]));
-  }
-  const motivation = WEEKLY_MOTIVATION[Math.max(0, Math.min(9, week - 1))];
+  const wk1 = week === 1;
+  const stepsDays = data.avgs.steps ? data.avgs.steps.n : 0;
+  const stepsAvg = data.avgs.steps ? data.avgs.steps.avg : 0;
+  const journalDays = data.journalDays || 0;
+  const wk1HasData = stepsDays > 0 || journalDays > 0;
+  const wk1Lines = [
+    "סיימת את השבוע הראשון שלך - וזה לגמרי שווה חגיגה! 🎉",
+    "כל פעולה שביצעת השבוע היא משמעותית, ועוד צעד בכיוון הנכון 🌱",
+    "ההתחלה הזו מראה שיש לך את כל מה שצריך בשביל להצליח.",
+    `השבוע דיווחת ${stepsDays} פעמים על הצעדים. ממוצע הצעדים לימים שדיווחת - ${stepsAvg.toLocaleString()} צעדים ביום בממוצע.`,
+    `ב-${journalDays} ימים מילאת יומן מעקב תזונה.`,
+    "אני גאה בך - תמשיכי להוביל את עצמך קדימה 💖",
+    "נמשיך ביום א' הקרוב, בינתיים תעשי כיף בסוף השבוע ואל תשכחי את המשימות החדשות שלך 🙏",
+    "אני איתך,",
+  ];
+  const emptyState = <div style={{ textAlign: "center", color: C.sub, padding: "24px 12px", lineHeight: 1.7 }}>עוד אין נתונים לשבוע הזה.<br />ברגע שתתחילי למלא, הסיכום יופיע כאן.</div>;
+  const hasData = (data.avgs && Object.keys(data.avgs).length > 0) || (data.counts && Object.keys(data.counts).length > 0) || !!data.journalDays;
+  const intro = WK_INTRO[week] || [];
+  const outro = WK_OUTRO[week] || { lines: [] };
+  const taskLines = (WK_TASKS[week] || []).map((k) => summaryTaskLine(k, week, data, fasting)).filter(Boolean);
+  const recheckBox = stepRecheckDir && (
+    <div style={{ background: C.amberBg, border: `1.5px solid ${C.amber}`, borderRadius: 14, padding: "14px", margin: "4px 0 14px", fontSize: 15.5, color: C.ink, lineHeight: 1.65, textAlign: "right" }}>
+      {stepRecheckDir === "low"
+        ? <>שמנו לב שהשבוע הלכת בממוצע <b>{wkStepAvg.toLocaleString()}</b> צעדים ביום, מתחת ליעד הנוכחי ({stepGoal.toLocaleString()}). אם היעד מרגיש גבוה - אפשר לכוון בפרופיל בסיס ריאלי יותר שתנצחי אותו, וממנו נמשיך לעלות בהדרגה יחד 💜</>
+        : <>כל הכבוד - השבוע הלכת בממוצע <b>{wkStepAvg.toLocaleString()}</b> צעדים ביום, הרבה מעל היעד ({stepGoal.toLocaleString()}). את עוברת אותו שוב ושוב - אם בא לך אתגר, אפשר לכוון בפרופיל בסיס גבוה יותר, וממנו נמשיך לעלות בהדרגה יחד 💜</>}
+    </div>
+  );
   return (
     <SheetShell title={`סיכום שבוע ${week}`} onClose={onClose}>
-      {lines.length === 0 ? (
-        <div style={{ textAlign: "center", color: C.sub, padding: "24px 12px", lineHeight: 1.7 }}>עוד אין נתונים לשבוע הזה.<br />ברגע שתתחילי למלא, הסיכום יופיע כאן.</div>
-      ) : (
-        <>
-          <div style={{ fontSize: 16, color: C.ink, fontWeight: 600, marginBottom: 12 }}>{name && name.trim() ? `${name.trim()}, הנה השבוע שלך:` : "הנה השבוע שלך:"}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 16 }}>
-            {lines.map((ln, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 15.5, color: C.sub, lineHeight: 1.5 }}>
-                <span style={{ color: C.brand, flexShrink: 0, marginTop: 1 }}>✓</span><span>{ln}</span>
+      {wk1 ? (
+        !wk1HasData ? emptyState : (
+          <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 15.5, lineHeight: 1.7 }}>
+            {wk1Lines.map((ln, i) => (<div key={i} style={{ marginBottom: 8 }}>{ln}</div>))}
+            <div style={{ fontWeight: 800, color: C.ink, marginBottom: 10 }}>ענת</div>
+            <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6 }}>נ.ב. אל תחששי לצאת מאזור הנוחות שלך - זה פתח לדברים מדהימים שמחכים לך בהמשך הדרך!</div>
+          </div>
+        )
+      ) : !hasData ? emptyState : (
+        <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 15.5, lineHeight: 1.7 }}>
+          {intro.map((p, i) => (<div key={`i${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, margin: "12px 0" }}>
+            {taskLines.map((l, i) => (
+              <div key={`t${i}`}>
+                <div style={{ fontWeight: 700, color: C.ink, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  {l.isNew && <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: C.brand, borderRadius: 8, padding: "1px 8px" }}>חדש</span>}
+                  <span>{l.t} {l.e}</span>
+                </div>
+                <div style={{ color: C.sub, marginTop: 2 }}>{l.d}</div>
               </div>
             ))}
           </div>
-        </>
-      )}
-      {stepRecheckDir && (
-        <div style={{ background: C.amberBg, border: `1.5px solid ${C.amber}`, borderRadius: 14, padding: "14px", marginBottom: 14, fontSize: 15.5, color: C.ink, lineHeight: 1.65, textAlign: "right" }}>
-          {stepRecheckDir === "low"
-            ? <>שמנו לב שהשבוע הלכת בממוצע <b>{wkStepAvg.toLocaleString()}</b> צעדים ביום, מתחת ליעד הנוכחי ({stepGoal.toLocaleString()}). אם היעד מרגיש גבוה - אפשר לכוון בפרופיל בסיס ריאלי יותר שתנצחי אותו, וממנו נמשיך לעלות בהדרגה יחד 💜</>
-            : <>כל הכבוד - השבוע הלכת בממוצע <b>{wkStepAvg.toLocaleString()}</b> צעדים ביום, הרבה מעל היעד ({stepGoal.toLocaleString()}). את עוברת אותו שוב ושוב - אם בא לך אתגר, אפשר לכוון בפרופיל בסיס גבוה יותר, וממנו נמשיך לעלות בהדרגה יחד 💜</>}
-        </div>
-      )}
-      {lines.length > 0 && (
-        <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 15.5, lineHeight: 1.6 }}>
-          {motivation}
-          <div style={{ marginTop: 6, color: C.faint, fontSize: 14 }}>ענת</div>
+          {recheckBox}
+          {outro.lines.map((p, i) => (<div key={`o${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
+          <div style={{ fontWeight: 800, color: C.ink, marginTop: 4 }}>ענת</div>
+          {outro.ps && <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>נ.ב. {outro.ps}</div>}
         </div>
       )}
     </SheetShell>
@@ -2952,17 +3105,20 @@ function StepSetupModal({ action, profile, stepsByDate, startDate, programWeek, 
     ? (measured != null ? measured : 3000)
     : ((profile.stepGoal != null ? profile.stepGoal : (profile.stepBaseline || 0)) + action.inc);
   const [val, setVal] = useState(Math.max(500, Math.round(suggested / 250) * 250));
+  const offset = stepGoalCumOffset(programWeek); // how much we add above the average to set the goal (e.g. +2,000 in week 2)
+  const goalVal = val + offset;
   const stepBtn = { width: 46, height: 46, borderRadius: 12, border: `1px solid ${C.line}`, background: C.panel, color: C.brand, fontSize: 25, fontWeight: 700, cursor: "pointer", fontFamily: fontStack };
   return (
-    <SheetShell title={isBaseline ? "קביעת ממוצע צעדים יומי" : "היעד שלך עולה"} onClose={onClose}>
-      <div style={{ textAlign: "right", fontSize: 15.5, color: C.sub, lineHeight: 1.7, marginBottom: 16 }}>
+    <SheetShell title={isBaseline ? "יעד הצעדים שלך" : "היעד שלך עולה"} onClose={onClose}>
+      <div style={{ textAlign: "right", fontSize: 15.5, color: C.sub, lineHeight: 1.7, marginBottom: 14 }}>
         {isBaseline
           ? (measured != null
-            ? <>לפי נתוני הצעדים שנמדדו עד כה, הקצב הטבעי שלך הוא בערך <b style={{ color: C.ink }}>{measured.toLocaleString()}</b> צעדים ביום. נתחיל מכאן ונעלה יחד בהדרגה. אפשר גם לשנות את המספר למטה - בהוספה או הורדה של צעדים.</>
-            : <>כדי לבנות לך יעד אישי, בואי נקבע מאיפה מתחילים. כמה צעדים בערך את עושה ביום רגיל?<div style={{ fontSize: 13.5, color: C.faint, marginTop: 6 }}>לא בטוחה? בתחילת הדרך רוב הנשים נעות בין 2,000 ל-4,000. תמיד אפשר לעדכן.</div></>)
+            ? <>לפי הצעדים שמדדנו עד כה, הממוצע שלך הוא בערך <b style={{ color: C.ink }}>{val.toLocaleString()}</b> צעדים ביום. המשימה לשבוע הקרוב: להוסיף עוד <b style={{ color: C.ink }}>{offset.toLocaleString()}</b> צעדים. אפשר לשנות את הממוצע למטה אם הוא לא מדויק.</>
+            : <>בואי נקבע מאיפה מתחילים. כמה צעדים בערך את עושה ביום רגיל? למספר הזה נוסיף <b style={{ color: C.ink }}>{offset.toLocaleString()}</b> צעדים, וזה יהיה היעד שלך לשבוע הקרוב.<div style={{ fontSize: 13.5, color: C.faint, marginTop: 6 }}>לא בטוחה? בתחילת הדרך רוב הנשים נעות בין 2,000 ל-4,000. תמיד אפשר לעדכן.</div></>)
           : <>כל הכבוד על ההתמדה. השבוע מוסיפים לקצב - היעד עולה ב-<b style={{ color: C.ink }}>{action.inc.toLocaleString()}</b>. אפשר לאשר או לשנות. ממשיכות לעלות 💜</>}
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 18 }}>
+      <div style={{ fontSize: 13.5, color: C.faint, textAlign: "center", marginBottom: 4 }}>{isBaseline ? "הממוצע שלך" : "היעד החדש"}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: isBaseline ? 12 : 18 }}>
         <button onClick={() => setVal((v) => v + 250)} style={stepBtn}>+</button>
         <div style={{ textAlign: "center", minWidth: 110 }}>
           <div style={{ fontSize: 31, fontWeight: 800, color: C.ink }}>{val.toLocaleString()}</div>
@@ -2970,8 +3126,13 @@ function StepSetupModal({ action, profile, stepsByDate, startDate, programWeek, 
         </div>
         <button onClick={() => setVal((v) => Math.max(500, v - 250))} style={stepBtn}>-</button>
       </div>
+      {isBaseline && offset > 0 && (
+        <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 12, padding: "11px 13px", marginBottom: 16, textAlign: "center", fontSize: 15.5, color: C.ink }}>
+          היעד שלך לשבוע הקרוב: <b style={{ color: C.amber }}>{goalVal.toLocaleString()} צעדים</b> <span style={{ color: C.sub, fontSize: 14 }}>({val.toLocaleString()} + {offset.toLocaleString()})</span>
+        </div>
+      )}
       <button onClick={() => (isBaseline ? onBaseline(val) : onIncrease(action.week, val))} style={{ width: "100%", border: "none", borderRadius: 12, padding: "13px", background: C.brand, color: "#fff", fontSize: 17, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>
-        {isBaseline ? `מאשרת, נתחיל מ-${val.toLocaleString()}` : `מאשרת - ${val.toLocaleString()} צעדים`}
+        {isBaseline ? (offset > 0 ? `מאשרת - היעד שלי ${goalVal.toLocaleString()}` : `מאשרת, נתחיל מ-${val.toLocaleString()}`) : `מאשרת - ${val.toLocaleString()} צעדים`}
       </button>
     </SheetShell>
   );
@@ -3016,15 +3177,48 @@ function DevDateBar({ onAnchor }) {
 }
 
 const TIPS = [
-  { key: "cal", sel: "cal", due: (c) => c.progDay >= 3, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת ואת הפעילות הגופנית שעשית (חוץ מהצעדים). יש כמה דרכים: לספר במילים או בדיבור מה אכלת, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה. אפשר לעדכן בכל פעם שאת מוסיפה משהו, לאורך כל היום." },
-  { key: "steps", sel: "steps", due: (c) => c.stepsOpen, text: "כאן את ממלאת את הצעדים שלך. עדיף למלא מאוחר ככל האפשר במהלך היום, אחרי שבדקת את מספר הצעדים באפליקציית הבריאות שלך. אפשר תמיד לעדכן את כמות הצעדים של היום - אל דאגה." },
-  { key: "tracker", sel: "tracker", due: (c) => c.checkinOpen, text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך המשימות שלך בשלב הזה - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
-  { key: "cabinet", sel: "cabinet", due: (c) => c.checkinOpen, text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
-  { key: "stepbaseline", sel: "stepbanner", due: (c) => c.stepBanner, text: "הגיע הזמן לקבוע את נקודת ההתחלה שלך במשימת הצעדים. זו נקודת הבסיס שממנה נעלה יחד בהדרגה - ותמיד אפשר לשנות אותה בהמשך." },
-  { key: "water", sel: "water", due: (c) => c.waterOpen, text: "נוספה טבעת המים 💧 היעד הוא 2 ליטר ביום. בכל לחיצה על הפלוס מוסיפים כוס, ושם גם אפשר לקבוע את גודל הכוס שלך - כדי שהספירה תתאים בדיוק לכוס שאת שותה ממנה." },
-  { key: "protein", sel: "protein", due: (c) => c.macroOpen, text: "נוספה טבעת החלבון. אותה את לא ממלאת - היא מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי." },
-  { key: "weeklysummary", sel: "weeklysummary", due: (c) => c.week === 1 && c.weeklySummaryShown, text: "זה השבוע הראשון שלך בתוכנית! כאן מחכה לך סיכום שבועי קצר. ואם שכחת למלא משהו בימים שעברו - אפשר להשלים ולפתוח שוב את הסיכום, והוא יתעדכן." },
+  { key: "cal", sel: "cal", title: "הוספת מזון ופעילות (כפתור +)", due: (c) => c.progDay >= 3, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת ואת הפעילות הגופנית שעשית (חוץ מהצעדים). יש כמה דרכים: לספר במילים או בדיבור מה אכלת, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה. אפשר לעדכן בכל פעם שאת מוסיפה משהו, לאורך כל היום." },
+  { key: "steps", sel: "steps", title: "מילוי הצעדים", guide: true, due: (c) => c.stepsOpen, text: "כאן את ממלאת את הצעדים שלך. כדי לדעת כמה צעדים עשית, פתחי את אפליקציית הבריאות בטלפון (Apple Health באייפון, Samsung Health בסמסונג), מצאי את מספר הצעדים של היום, והזיני אותו כאן. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן - אל דאגה." },
+  { key: "tracker", sel: "tracker", title: "המשימות היומיות", due: (c) => c.checkinOpen, text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך המשימות שלך בשלב הזה - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
+  { key: "cabinet", sel: "cabinet", title: "ארון ההישגים", due: (c) => c.checkinOpen, text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
+  { key: "stepbaseline", sel: "stepbanner", title: "קביעת בסיס הצעדים", due: (c) => c.stepBanner, text: "הגיע הזמן לקבוע את נקודת ההתחלה שלך במשימת הצעדים. זו נקודת הבסיס שממנה נעלה יחד בהדרגה - ותמיד אפשר לשנות אותה בהמשך." },
+  { key: "water", sel: "water", title: "טבעת המים", due: (c) => c.waterOpen, text: "נוספה טבעת המים 💧 היעד הוא 2 ליטר ביום. בכל לחיצה על הפלוס מוסיפים כוס, ושם גם אפשר לקבוע את גודל הכוס שלך - כדי שהספירה תתאים בדיוק לכוס שאת שותה ממנה." },
+  { key: "protein", sel: "protein", title: "טבעת החלבון", due: (c) => c.macroOpen, text: "נוספה טבעת החלבון. אותה את לא ממלאת - היא מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי." },
+  { key: "weeklysummary", sel: "weeklysummary", title: "הסיכום השבועי", due: (c) => c.week === 1 && c.weeklySummaryShown, text: "זה השבוע הראשון שלך בתוכנית! כאן מחכה לך סיכום שבועי קצר. ואם שכחת למלא משהו בימים שעברו - אפשר להשלים ולפתוח שוב את הסיכום, והוא יתעדכן." },
 ];
+
+// FAQ / help screen content (Profile). OWNER: add more Q&A entries here over time.
+// Entries below restate copy already in the app (no new claims).
+const FAQ_ITEMS = [
+  { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון (Apple Health באייפון, Samsung Health בסמסונג), בודקים את מספר הצעדים של היום, ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן." },
+  { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
+  { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
+];
+
+function FaqModal({ onClose }) {
+  const [open, setOpen] = useState(-1);
+  const topics = TIPS.filter((t) => t.title);
+  const Item = ({ q, a, i }) => (
+    <div onClick={() => setOpen(open === i ? -1 : i)} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 13px", marginBottom: 8, cursor: "pointer" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 15.5, fontWeight: 600, color: C.ink }}>{q}</span>
+        <ChevronDown size={18} color={C.sub} style={{ flexShrink: 0, transform: open === i ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+      </div>
+      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>{a}</div>}
+    </div>
+  );
+  return (
+    <SheetShell title="שאלות ותשובות" onClose={onClose}>
+      <div style={{ maxHeight: "62vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 10, lineHeight: 1.6 }}>כל מה שכדאי לדעת על השימוש באפליקציה, במקום אחד. הקישי על שאלה כדי לפתוח.</div>
+        {FAQ_ITEMS.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} i={i} />)}
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: "16px 0 8px" }}>מסכים באפליקציה</div>
+        {topics.map((t, j) => <Item key={`t${j}`} q={t.title} a={t.text} i={100 + j} />)}
+        <StepGuideLink style={{ marginTop: 12 }} />
+      </div>
+    </SheetShell>
+  );
+}
 
 function TutorialOverlay({ steps, idx, onNext }) {
   const [rect, setRect] = useState(null);
@@ -3048,6 +3242,7 @@ function TutorialOverlay({ steps, idx, onNext }) {
       {!rect && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
       <div style={{ position: "fixed", left: 16, right: 16, ...bubblePos, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
         <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>{cur.text}</div>
+        {cur.guide && <StepGuideLink linkOnly style={{ marginBottom: 12 }} />}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: 12.5, color: C.faint }}>{idx + 1}/{steps.length}</span>
           <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הבנתי</button>
@@ -3058,7 +3253,7 @@ function TutorialOverlay({ steps, idx, onNext }) {
 }
 
 export default function App() {
-  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: [], keepShabbat: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: [], keepShabbat: false, fasting: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
@@ -3287,7 +3482,7 @@ export default function App() {
               {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} />}
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>
               {tabs.slice(0, 2).map((t) => {
@@ -3302,6 +3497,7 @@ export default function App() {
             </div>
 
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
+            {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); }} />}
             {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onSetMl={(ml) => setWaterForDate(selectedDate, ml)} onSetCup={(cup) => setProfile({ ...profile, cupMl: cup })} onClose={() => setSheet(null)} />}
@@ -3313,7 +3509,7 @@ export default function App() {
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
-            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} onClose={() => setSheet(null)} />}
+            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />

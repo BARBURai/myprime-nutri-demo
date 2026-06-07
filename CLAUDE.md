@@ -75,9 +75,10 @@ The AI features only work when deployed (or with the functions running), since t
 ## Working rules (owner preferences — important)
 
 - **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
+- **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.23`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.35`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -359,11 +360,20 @@ NEW module ported from the ManyChat 10-week WhatsApp tracker. Built as an opt-in
 - **QA automation (owner-flagged, important):** connect the two automatic checks (logic `qa/check-logic.mjs` + AI `qa/run-qa.mjs`) into one simple command, or have Claude run them before a release. Keep it solo-friendly (owner is the only tester).
 - **API cost controls (owner-flagged, MUST do before scale; real-app/server phase):** the AI is used two ways per customer - meal-photo analysis (vision) and nutrition-advice chat - so token cost scales with active users. Estimated cost/customer/month (May 2026 pricing: Haiku 4.5 $1/$5, Sonnet 4.6 $3/$15, Opus 4.8 $5/$25 per MTok): ~$0.5 on Haiku, ~$1.4 on Sonnet, assuming ~75 photos (~2,000 in incl ~1,500 image + 500 out) + ~30 chats (~1,500 in + 500 out). Negligible per customer vs a subscription; the real risks are scale, heavy/abusive users, and accidentally using an expensive model or full-res images. Implement ALL of these when wiring the live API (currently the demo calls `/api/ai`):
   1. **Default model = Haiku 4.5 for photo analysis** (food ID + estimates); escalate to Sonnet only for genuinely complex advice. Do not use Opus for routine calls.
-  2. **Downsize images client-side to ~768px long side before upload** - image tokens scale with resolution (~w*h/750); this roughly halves the image cost, which is the biggest single input chunk. Calculator deliverable: `myprime-api-cost-calculator.html`.
+  2. **Downsize images client-side to ~768px long side before upload** - image tokens scale with resolution (~w*h/750); this roughly halves the image cost, which is the biggest single input chunk. Calculator deliverable: `docs/myprime-api-cost-calculator.html` (in the handoff zip).
   3. **Prompt caching on the system prompt** (Anat's voice + instructions + grounding rules) - it repeats on every call (chat AND photo), 90% off the cached input portion. Highest-leverage lever given she both chats and sends photos.
   4. **Cap output** - small `max_tokens` + ask for concise/structured output.
   5. **Per-user daily usage cap** - DONE (v1.15): enforced server-side in `api/ai.js` via the same Upstash Redis as the access gate. Per-user daily cap (`AI_DAILY_LIMIT`, default 25) + per-minute burst cap (`AI_BURST_LIMIT`, default 10), keyed by the access email (sent as `x-user-id` header; falls back to IP). Daily quota resets at Israel-time midnight. Returns 429 `{error:'limit', message}`; the client shows a gentle Hebrew message. Limit is OFF until the Upstash env vars are set (app still works). The remaining cost levers (1-4, 6) are still open.
   6. **(Optional) Batch API (-50%)** only for non-real-time work; NOT for live photo/chat (it's async and the user waits).
+- **Cross-device backup / restore (owner-flagged; architecture decision, build as a separate feature):** all data is in `localStorage` today, so a lost/wiped/replaced phone = data gone. An on-device backup (even automatic) does NOT survive phone loss - the backup must leave the device. Constraint: restore must work WITHOUT the owner holding readable personal health data (Israel privacy/consent sensitivity). Options:
+  - (A) Manual export/import JSON file - zero infra, fully private, but manual and only survives phone loss if SHE moves the file off-device.
+  - (B) **E2E-encrypted backup keyed by email + passphrase [RECOMMENDED for this constraint]** - client encrypts the state blob (WebCrypto: PBKDF2 from her passphrase to AES-GCM), uploads ciphertext to a new Vercel `/api` route storing it in the EXISTING Upstash Redis keyed by hash(email). Restore on a new device = email + passphrase, GET, decrypt. Owner stores only unreadable bytes. Automatic after a one-time setup. TRADEOFF: forgotten passphrase = unrecoverable by design (no readable copy on the server). Offer manual export as a backup-to-the-backup.
+  - (C) User's own Google Drive (appDataFolder) - data lives in HER cloud, owner stores nothing ($0 storage), auto-sync after one-time Google sign-in; downside: OAuth complexity + Google dependency.
+  - AVOID: plain server storage keyed by email - simplest but then the owner DOES hold readable health data (privacy/consent obligations).
+  - **Cost (option B, Upstash, checked June 2026):** negligible at beta scale. Storage ~100-150 KB/user (one overwritten blob); 1,000 users ~150 MB = within the free 1 GB ~ $0 (10k users ~ $0.13/mo). Commands $0.20/100K, 500K/mo free; with debounced writes (~few per user/day) 1,000 active users ~ $0-2/mo. Switch to the $10/mo fixed plan (unlimited commands) once above ~10M commands/mo. Keep cheap: debounce writes (on app close / every few min), one blob per user overwritten.
+  - **UX:** offer as a one-time choice in onboarding ("בלי גיבוי" vs "גיבוי עם מייל + סיסמה") with a clear explanation ("מוצפן, גם אנחנו לא רואים את הנתונים, ושכחת סיסמה = אין שחזור").
+  - STATUS: pending owner go-ahead on which option; then full spec + build. Connects to the previously-deferred "localStorage to server-side by email/ID" architectural note.
+- **DEV-only test-fidelity bug (RESOLVED v1.30):** during `?dev=1` simulation the tracker card showed the REAL date instead of the simulated `TODAY` (owner saw "שבת 6 ביוני" while simulating 2/6). Root cause was the v0.44 midnight-rollover interval clobbering the simulated `today` after ~60s; fixed by skipping that interval in DEV (see v1.30). This also fixed the weekly-summary tip misfiring on day 3.
 
 
 ## v0.88 - Tracker clarity (week label, 10-week cap, reward hint)
@@ -422,6 +432,108 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.35 - New daily-medal artwork (gold rosette, woman silhouette, brand colors)
+- Owner supplied a medal graphic to use everywhere the daily medal appears. Source was RGB with a solid white background; removed the OUTER white via border flood-fill (kept the inner white silhouette), autocropped, padded to square, resized to 360x360, saved transparent at public/medal.png (~175KB).
+- MEDAL_SRC changed from "/medals/medal.webp" to "/medal.png". This single constant drives every daily-medal spot: MedalCheer ("מדליה נכנסה לאוסף"), and CollectionModal (the earned-medals grid + the empty-state grayscale). No other code changes needed.
+- Weekly trophies (גביעים: /medals/trophy-*.webp) and the cabinet icon are SEPARATE and left unchanged - owner said "the medal". Can swap those too if asked.
+- OWNER: add the file public/medal.png to the repo (included in the zip). Square asset so the existing width=height sizing renders undistorted.
+- VERSION 1.34->1.35 (App.jsx + new asset). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. VISUAL pass: see the medal in the cabinet + day-complete cheer.
+
+## v1.34 - Combined grains/fats summary count = days with at least one (owner)
+- "במהלך X ימים הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא" (grains_combined, weeks 7+): X was a rough max(grains, goodfat). Owner chose: count a day if she did AT LEAST ONE of grains/goodfat.
+- weeklySummaryData now computes `grainsDays` per-day (grains OR goodfat done that day), returned and used by grains_combined. This resolves the last v1.32 mapping assumption. Week 6 stays split (two separate counts), unchanged.
+- VERSION 1.33->1.34 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.33 - Sleep-improvement summary count = days with at least one sleep task (owner)
+- "במהלך X ימים ביצעת את משימות שיפור השינה" (weeks 4-7 sleep_full line): X was approximated by counts.noscreens. There are two sleep-improvement tasks (noscreens + stopeating; "שעות שינה" is the separate hours metric). Owner chose: count a day if she did AT LEAST ONE of them.
+- weeklySummaryData now computes `sleepDays` properly per-day (a day counts if noscreens OR stopeating was done that day) and returns it; sleep_full uses data.sleepDays. This replaces the noscreens approximation (one of the two v1.32 flagged assumptions resolved). The grains_combined max(grains,goodfat) assumption still stands pending owner.
+- VERSION 1.32->1.33 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+
+Wired the owner-supplied WhatsApp weekly summaries (weeks 2-10) into the in-app WeeklySummaryModal, in Anat's voice. Source: feedback/weekly-summaries-unified.md (the merged copy, approved approach).
+- DECISIONS APPLIED: two %-variants unified into ONE warm/inclusive narrative per week; the "X% מהמשימות" line DROPPED everywhere (owner, like week 1); short hyphens only.
+- Replaced the old generic checklist (weeks 2+) with a CURATED per-week narrative: WK_INTRO/WK_OUTRO/WK_TASKS configs + summaryTaskLine() builder. Week 1 keeps its v1.31 unified narrative. The summary lists only the tasks Anat recaps that week (NOT every active task) - e.g. journal drops from the summary at week 4, veg/order at week 5 - matching the source.
+- Per-week task sets reconciled against checkins.js (all tasks exist there): W2 steps/journal/strength/veg+order; W3 +water+protein; W4 swaps journal->sleep+breathing; W5 +gratitude (drops veg/order); W6 grains(split)+gratitude; W7 +pelvic(NEW)+probiotics(NEW), grains becomes combined; W8 +antiinflam +fasting(optional), water/sleep wording simplifies; W9-10 strength+mobility, +bone-density(calcium/sun). "חדש" pill shown on pelvic+probiotics at week 7 only.
+- Wording variants by week handled in the builder: water_full (W3-7) vs water_simple (W8+); sleep_full (W4-7) vs sleep_simple (W8+); grains_split (W6) vs grains_combined (W7+); strength vs strength_mobility (W9+).
+- INTERMITTENT FASTING: new profile field `fasting` (bool, default false; added to DEFAULT_PROFILE + onboarding draft). Toggle added in Profile > "נתוני בסיס" (next to "שומרת שבת"), rendered ONLY when programWeek >= 8 (fully hidden before, not greyed). When ON, the "*משימת צום לסירוגין (רשות)* 🕘" line shows in the W8-10 summaries (WeeklySummaryModal now takes a `fasting` prop = profile.fasting).
+- The week-2 step-baseline-sanity amber box (stepRecheckDir) is preserved, now rendered between the task lines and the outro.
+- ASSUMPTIONS (flagged for Anat to validate): "ימים שביצעת את משימות שיפור השינה" uses counts.noscreens as the representative count; grains_combined day-count uses max(grains, goodfat). These map a single WhatsApp field onto the app's split tasks.
+- OPEN (owner): week 4 & 7 copy received and merged. Weeks-2+ copy approval still welcome. Fasting coachmark BUBBLE still TODO (create a TIPS entry when the fasting task UI first appears, week 8). Old SUMMARY_COUNT_PHRASE/SUMMARY_AVG_PHRASE/WEEKLY_MOTIVATION now unused (left in place, harmless).
+- VERSION 1.31->1.32 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. VISUAL pass needed - eyeball weeks 2-10 summaries (use ?dev=1 + simulate weeks) and the week-8 fasting toggle.
+
+
+Owner accumulated 12 fixes and said execute all in one pass. Week-1 summary copy implemented now; weeks 2+ keep the checklist format until owner sends their copy. Two content dependencies remain (owner-supplied): the 2 health-app PDFs and more FAQ Q&A.
+1. EntryMenu (the bottom "+" / `sheet:"menu"`, default mode): removed the "הזיני משקל" item (weight stays in the report). `onPickEntry` still has a dead "weight" branch (harmless); `TrendingDown` import now unused (harmless).
+2. EntryMenu color-coding + prominence: food family (הוספת מזון + מה כדאי לאכול) tinted brand pink (C.brandBg/C.brand), activity tinted purple (C.infoBg/C.info). Each row got a tinted background + 4px colored start-border + white icon tile. Reordered so recommend sits with food, activity last.
+3. ActivityModal: removed "הליכה" + "הליכה מהירה" from `acts[]` (ריצה is now first, default `sel=0`). Walking is covered by steps.
+4. ActivityModal: added a C.infoBg note box - workout calories ADD to the daily calorie budget, and walking is auto-counted via steps.
+5. Weekly summary: protein line gated to `week >= 3` (`if (data.protein && week >= 3)`). Weeks 1-2 show no protein line.
+6. Weekly summary signature "ענת" is now black + bold everywhere (week-1 narrative fontWeight 800/C.ink; weeks 2+ motivation box C.faint -> C.ink fontWeight 700).
+7. Weeks 2+ steps line verb: "הוצאת בממוצע" -> "צעדת בממוצע" (week 1 uses the new narrative).
+8. `stepBaseline` loop d=2..6 -> d=2..7 so Saturday (program day 7) is included if logged. StepSetupModal baseline branch rewritten: states "your average is X, the task is +offset, so your goal = X+offset", with a live amber goal box (offset = `stepGoalCumOffset(programWeek)`, =2000 in week 2) and a button that shows the resulting goal. `confirmBaseline` already stored `stepGoal = val + offset`, so no logic change there.
+9. Report steps card: added `steps7stats()` (returns {avg,n}); the average label is now dynamic - "ממוצע N ימים" (n<=0 -> "7", n===1 -> "יום אחד", else N), reflecting actual days-with-data in the rolling 7-window. Average still over days-with-data only (a skipped day is not counted as 0). `steps7avg` kept (now unused, harmless).
+10. Health-app step guides (structure done; PDFs PENDING owner): added `detectPlatform()` (ios/android/other), `STEP_GUIDES = {ios:{url:"",app:"Apple Health"}, android:{url:"",app:"Samsung Health"}}` (empty urls = link hidden), `currentStepGuide()`, and a reusable `StepGuideLink({style,linkOnly})`. Deeper steps explanation now shown; the per-platform PDF button auto-appears once a STEP_GUIDES url is filled. Placed in: StepsModal (replaced the old disabled "התחברות לאפליקציית הבריאות" button), the report steps card, and the "steps" tip bubble (linkOnly). Steps tip text deepened. **OWNER TODO: drop the 2 PDFs in /public/guides and fill the two STEP_GUIDES urls.**
+11. FAQ / help (structure done; more Q&A PENDING owner): added `title` to every TIPS entry; `FAQ_ITEMS` (3 seeded entries that restate existing app copy); `FaqModal` (accordion of FAQ_ITEMS + app-screen tips from TIPS + StepGuideLink, scrollable). ProfileScreen got `onOpenFaq`; a "שאלות ותשובות ועזרה" row sits above the reset button; root renders `sheet === "faq" && <FaqModal/>`. **OWNER TODO: expand FAQ_ITEMS.**
+12. WeeklySummaryModal week 1: single unified Anat-voice narrative (no 80%/100% branching - owner dropped it) in a C.brandBg box. Merge fields: stepsDays = `data.avgs.steps.n`, stepsAvg = `data.avgs.steps.avg`, journalDays = `data.journalDays` (= calN, days with >=1 food entry; added to `weeklySummaryData` return). Empty-state fallback when week 1 has no data. Weeks 2+ keep the checklist + motivation box. Verbatim copy lives in `wk1Lines[]`. **OWNER: approve/adjust the week-1 wording.**
+- VERSION 1.30->1.31 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. NOTE: heavy UI pass - eyeball on device (entry menu colors, activity sheet, week-1 summary, step-goal modal, FAQ).
+
+
+- BUG (owner, ?dev=1): after reset + "קבע יום 1", stepping to program day 3 (filled it, got a medal), then tapping "+" to add food, the WEEK-1 weekly-summary tip popped up over the food sheet with a full dim and no spotlight - on what should have been a Tuesday (day 3), not a Friday/Saturday. The tracker card also showed the REAL date ("שבת, 6 ביוני") instead of the simulated day.
+- ROOT CAUSE: the v0.44 midnight-rollover interval (root, ~line 3079) ran `ymd(new Date())` every 60s and did NOT respect DEV. ~60s after load it overwrote the simulated `today` (2.6) with the real date (Sat 6.6) and advanced `selectedDate` to it. Sat -> `dow===0` -> the weekly-summary tip's `weeklySummaryShown = checkinOpen && (dow===6||dow===0)` became true on week 1 -> the tip fired. TutorialOverlay sits at zIndex ~99999 (above all sheets), so it rendered on top of the open food sheet; the target bar was hidden behind the sheet so `rect` was unusable -> the no-rect full-dim fallback. This was also the source of the parked "tracker shows the real date during ?dev=1" test-fidelity bug.
+- FIX 1 (root cause): the rollover interval now early-returns when `DEV` (the simulated date is fixed; the DevDateBar reloads to change it). Production behavior is unchanged. The simulated day stays put, so day 3 stays Tuesday and the tip is no longer due.
+- FIX 2 (robustness, also production-relevant): the tip-start effect now early-returns when an overlay is open (`overlayOpen` prop = `!!(sheet||modal||showExit||showIntro)`, added to the effect guard + deps), mirroring the existing isIntro/isShabbat gate (v1.26). So a tip can never start over an open sheet/modal - including a real week-1 Friday where the user happens to be mid food-add. The tip re-evaluates and can appear once the overlay closes.
+- VERSION 1.29->1.30 (App.jsx only). tsc/parse clean, brackets 0 0 0, 0 dashes, check-logic 7/7. No prompt change (qa harness unaffected). No visual pass needed - logic-only.
+1. Steps tip: appended "אפשר תמיד לעדכן את כמות הצעדים של היום - אל דאגה."
+2a. Tracker tip: "כמה משימות קטנות" -> "המשימות שלך בשלב הזה".
+2b. Tracker spotlight excludes the trophy-cabinet rail: moved `data-tut="tracker"` from the CheckinCard root to the inner main-content div (the cabinet keeps its own `data-tut="cabinet"`).
+3. Calorie tip: now lists the logging methods - "לספר במילים או בדיבור (AI), לצלם, לסרוק ברקוד, או לחפש מזון" (matches the caloriemenu options: Mic/Camera/Barcode/History/Search).
+4. NEW weekly-summary tip (`key:"weeklysummary"`, `data-tut="weeklysummary"` on the summary bar): fires once on week 1 when the summary bar is visible (`due: week===1 && weeklySummaryShown`, where `weeklySummaryShown = checkinOpen && (dow===6||dow===0)`). Tip ctx gained `week` + `weeklySummaryShown`; effect deps gained `week, dow`. Text: "זה השבוע הראשון שלך בתוכנית! ... ואם שכחת למלא ... אפשר להשלים ולפתוח שוב את הסיכום, והוא יתעדכן."
+5. StepSetupModal baseline copy: "מדדנו את הצעדים שלך בשבוע הראשון..." -> "לפי נתוני הצעדים שנמדדו עד כה, הקצב הטבעי שלך הוא בערך X... אפשר גם לשנות את המספר למטה - בהוספה או הורדה של צעדים." AND `stepBaseline` now rounds UP to the nearest 100 (`Math.ceil(sum/n/100)*100`); `steps7avg` (report 7-day avg) stays `Math.round` (unchanged).
+6. Step banner tip: "נקודת ההתחלה שלך בצעדים" -> "נקודת ההתחלה שלך במשימת הצעדים".
+7. DEV "קבע יום 1" is now a true clean slate: clears log/stepsByDate/waterByDate/checkins/activityLog, resets `weights` to `initWeights(profile.weightKg, sun)`, and resets the program-progress profile fields (`stepBaseline:null, stepGoal:null, calorieOverride:null, tipsSeen:[]`, `goalAckWeek:0`). Keeps her base stats (age/height/weight/diet). This fixes both the "leftover 2,000 steps / 165 kcal on day 3" and the "step baseline banner vanished after reset" reports (it had preserved a previously-set stepBaseline). Not a production issue - real users start empty.
+- VERSION 1.28->1.29 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7. data-tut targets now 8 (added weeklysummary). NOTE: the new weekly-summary tip + the tracker-spotlight change are a first VISUAL pass - eyeball on device.
+
+## v1.28 - Report weight label: "משקל נוכחי" -> "משקל (עדכון אחרון: <date>)"
+- Owner: "current weight" was misleading since the shown value is the last logged weight, not necessarily today's. Relabeled the ReportScreen weight card to "משקל (עדכון אחרון: D.M.YYYY)" using the date of the latest weight entry (`weights[last].date`). The parenthetical is smaller/fainter. The onboarding "משקל נוכחי" Field (step 0) is unchanged - appropriate there.
+- `lastWUpdate` derived from `weights[weights.length - 1].date`.
+- VERSION 1.27->1.28 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+
+## v1.27 - DEV: "קבע יום 1" button (anchor this week's Sunday as day 1)
+- Testing helper so the owner can simulate a participant starting fresh, without the access+onboarding round-trip. Added a teal "קבע יום 1" button to DevDateBar.
+- `devAnchorDay1` (App): computes `sundayOf(TODAY)`, then writes the full state blob to STORAGE_KEY directly (synchronous, no React-effect race) with `profile.startDate = that Sunday`, `profile.tipsSeen = []` (so the tour/tips re-appear), `onboarded: true`; also sets `myprime_dev_today` to that Sunday; then reloads. Result: lands on day 1 = that Sunday, onboarded, tips re-armed. Stepping +1 walks the progression (day 3 tour, week-2 step banner, week-3 water/protein).
+- Why needed: `startDate` is `sundayOf(TODAY)`, so resetting on a Saturday snapped day 1 to the PREVIOUS Sunday (today became day 7). The button removes the weekday dependency for testing. DevDateBar got `flexWrap` to fit the extra button. Still entirely behind `?dev=1`.
+- VERSION 1.26->1.27 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+
+## v1.26 - Fix: tips must not fire on the intro / shabbat screens
+- BUG (owner screenshot): on program day 2 the steps tip popped up over the "ברוכה הבאה" welcome screen with a full dim and no spotlight. Cause: `STEPS_UNLOCK = {week:1,day:2}` so `stepsOpen` is true from day 2, but days 1-2 render the intro placeholder (no rings), so the tip was "due" with no on-screen target -> TutorialOverlay's no-rect fallback (full dim + bottom bubble). It was alone (1/1) because checkin/cal unlock only on day 3.
+- Fix: added `const isIntro = progDay >= 1 && progDay <= 2;` and the tip-start effect now early-returns when `isIntro || isShabbatRest` (also added both to its deps). The render branch reuses `isIntro` (single source). So the steps tip now appears on day 3 as part of the day-3 tour, when the ring is actually visible.
+- VERSION 1.25->1.26 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+
+## v1.25 - Contextual tips: explainer bubble for every feature on its first-appearance day
+- Generalized the day-3 tour into a one-time TIP SYSTEM. Replaced the fixed `TUTORIAL_STEPS` with a `TIPS` registry (module-level, before App): each `{ key, sel, due:(ctx)=>bool, text }`. 7 tips:
+  - cal (progDay>=3), steps (stepsOpen), tracker (checkinOpen), cabinet (checkinOpen) - the original day-3 four.
+  - stepbaseline (sel "stepbanner", due when the week-2 step banner is active) - owner wanted emphasis even though the banner is self-explanatory.
+  - water (due when waterOpen) - fuller text per owner: states the 2-liter goal AND that cup size is set via the water + (onSetCup -> profile.cupMl).
+  - protein (due when macroOpen) - explains it is NOT filled manually; auto-calculated and auto-updated from logged food.
+- DayScreen: `stepBannerActive`, `tipQueue`/`tipIdx` state. An effect (guarded by `tipIdx === -1`) snapshots all due+unseen tips into a queue and starts; `tipAdvance` walks the queue and on finish calls `onTipsSeen(keys)` to persist. If several tips are due the same day they queue in registry order (e.g. day 3 still shows cal->steps->tracker->cabinet). Reuses the existing `TutorialOverlay` (spotlight + bubble) - now fed `steps={tipQueue}`.
+- data-tut added: protein (ProteinRing wrapper), water (water MetricRing wrapper), stepbanner (the step-goal banner). Existing: cal/steps/tracker/cabinet.
+- Persistence: replaced the `tutorialSeen` boolean with `profile.tipsSeen` (array of seen tip keys). DEFAULT_PROFILE `tipsSeen: []`; existing profiles (undefined) are treated as [] so tips show once for them too. App passes `tipsSeen` + an `onTipsSeen` that appends keys.
+- CheckinModal: one-time amber note at the top ("חלק מהמשימות מסומנות 'אוטומטי' - הן מתעדכנות לבד...") with a "הבנתי" that marks `tipsSeen` key "autotasks". Shown only when the day has auto tasks and the note was not yet dismissed. Modal now receives `tipsSeen` + `onTipsSeen`.
+- VERSION 1.24->1.25. tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7; grep confirms 0 refs to the removed tutStep/tutAdvance/TUTORIAL_STEPS/tutorialSeen/onTutorialDone.
+- NOTE: the day-3 bubbles are owner-confirmed good; the NEW bubbles (water/protein/stepbanner) are a first visual pass - eyeball positioning on device (esp. the step banner near the top, and protein/water in row 2).
+
+## v1.24 - First-day tutorial (coachmark tour) on program day 3
+- On the first data-filling day (progDay >= 3, the w1d3 unlock), a 4-step guided tour appears automatically, once. Sequence + texts (owner-specified for 1-2, drafted in Anat's voice for 3-4):
+  1. cal ring: "בלחיצה על הפלוס את ממלאת את המזון... והפעילות הגופנית (חוץ מהצעדים)..."
+  2. steps ring: "כאן את ממלאת את הצעדים... עדיף מאוחר ביום אחרי בדיקה באפליקציית הבריאות..."
+  3. tracker (יומן המעקב): daily-tasks + medal explanation.
+  4. cabinet (ארון הגביעים): medals + trophies collection.
+- Implementation: targets tagged with `data-tut="cal|steps|tracker|cabinet"`; `TutorialOverlay` querySelectors the current target, `scrollIntoView` (handles tracker/cabinet below fold), measures rect, draws a box-shadow spotlight + "2px white" ring, and a bubble (positioned below the target if it is in the top half, else above) with the text + "הבנתי" + a step counter. A full-screen click-blocker prevents app interaction mid-tour. If a target is not found it falls back to a full dim + centered-ish bubble.
+- Trigger/persist: DayScreen `tutStep` state (-1 idle, 0..3 active, 99 done); effect starts it when `!tutorialSeen && progDay >= 3`; "הבנתי" advances; after the last, calls `onTutorialDone` -> sets `profile.tutorialSeen = true` (persisted, never shows again). DEFAULT_PROFILE gets `tutorialSeen: false`; existing profiles (undefined) are falsy so it shows once for them too.
+- To RE-TEST: reset the demo (clears tutorialSeen). Use ?dev=1 to set today to program day 3.
+- VERSION 1.23->1.24. tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
+- NOTE: first VISUAL pass (sandbox cannot render). Bubble positioning, the spotlight fit, and scroll-into-view for the tracker/cabinet (below the fold) should be eyeballed on device and tuned.
 
 ## v1.23 - DEV-only "simulated today" tool for testing (gated by ?dev=1)
 - Owner wanted to step through days and preview what a participant sees each day, WITHOUT this shipping to real users. Implemented as a URL-gated dev tool - no flag to remember to flip, inert in production:
@@ -502,7 +614,32 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - CheckinCard: replaced the "הקישי לפתיחה" + "כל יום שתמלאי, עוד מדליה לאוסף" hint lines with a solid square brand button "הקישי למילוי המעקב" (onClick -> onOpen, stopPropagation).
 - VERSION 1.10->1.11 (App.jsx only). check-logic 7/7; tsc clean; 0 dashes.
 
-## OPEN TASK (owner, planned): Xiaomi band -> health-platform step/sleep integration. Standard path: band -> Mi Fitness -> Apple Health (iOS) / Health Connect (Android) -> app reads steps+sleep. Requires the real app to be NATIVE/hybrid (Capacitor + a health plugin); NOT possible in the current web demo (keep manual step entry for now). Planning doc delivered: "MyPrime-חיבור-צמיד-שיאומי-תכנון.docx". Phase 2 of the real app.
+## OPEN TASK / DECISION (Phase 2): PWA vs Native + health-band (Xiaomi) integration + migration steps
+Full detailed planning doc: **"MyPrime-חיבור-צמיד-שיאומי-תכנון.docx"** (+ .pdf) - included in the handoff zip. The key conclusions and the migration plan, captured here so they survive in CLAUDE.md:
+
+**Why a band needs native:** A PWA on iOS CANNOT read Apple Health / step data (HealthKit is native-only), and cannot read the phone's own pedometer (Core Motion is native-only; there is no reliable web pedometer). So automatic steps from a band or the phone require a native/hybrid app. The current web demo therefore uses MANUAL step entry (chosen for beta - the user reads her daily total from Mi Fitness at end of day and types it in; works with any band).
+
+**Capacitor (the recommended hybrid path):** wraps the SAME React/Vite code in a WebView - it keeps debugging like a web app (Safari Web Inspector on a real iPhone). Only the thin health plugin needs Mac + Xcode and a REAL device (the simulator has no health data; the health permission is a one-shot prompt). The plugin writes steps into the SAME `stepsByDate` store, so the UI is unchanged (there is already a disabled "התחברות לאפליקציית הבריאות" placeholder slot in StepsModal). Native also unlocks the daily 19:00 push notification (the in-app card already gates the report to 19:00 as a placeholder).
+
+**Real "native tax":** a Mac + Apple Developer account ($99/yr) + slower release cadence through app-store review (mitigated with a live-update / OTA mechanism).
+
+**The Xiaomi problem specifically:** the weak link is the flaky Mi Fitness -> Apple Health sync (Xiaomi's own hop; Xiaomi has no public cloud API), NOT the band's measurement.
+
+**Band options:** (a) manual entry [chosen for beta]; (b) the phone's own steps [native only]; (c) band-via-Health as a fill-in [native + flaky for Xiaomi].
+
+**Aggregators (Terra / Rook / Spike):** a ~$400-500/mo floor (Terra: $399 annual / $499 monthly incl ~100k credits) - only worth it at scale; they absorb vendor-API churn. They do NOT cover current Xiaomi/Mi-Fitness cloud (only legacy Mi Bands via Zepp Life). **Amazfit** (same maker, Zepp app, same cheap price) IS cloud-supported by Terra server-to-server, which is **PWA-compatible** (no native needed). Fitbit has a cloud API but is mid-migration to the Google Health API (legacy dies ~Sept 2026) - churn risk.
+
+**DECISION:** Beta = PWA + manual step entry (any band). Auto-steps deferred. If/when pursued: use a cloud band (Amazfit + Terra) to STAY a PWA; otherwise go native (Capacitor + health plugin).
+
+**Migration steps (PWA -> native, when the time comes):**
+1. Wrap the existing React/Vite app in Capacitor (same codebase, WebView).
+2. Build env: Mac + Xcode (iOS) and/or Android Studio (Android); Apple Developer account ($99/yr).
+3. Add a health plugin (HealthKit / Health Connect) that writes into the existing `stepsByDate` store - UI stays the same.
+4. Test on a REAL device only (simulator has no health data); handle the one-shot permission prompt.
+5. Add a live-update / OTA channel to keep releases fast despite store review.
+6. Turn on the native daily 19:00 notification (card already gates to 19:00).
+7. Pick the band path per the decision above (cloud band stays PWA-compatible; Mi/Apple-Health is native + flaky).
+8. Run the full QA pass (qa/QA-CHECKLIST.md) on a phone AND a computer before any real users / dietitians.
 
 ## v1.10 - Summary button polish (Fri/Sat only) + trophy image on cabinet button
 - Weekly-summary bar now appears ONLY on Friday (dn 6) and Saturday (dn 0); hidden on other days.
