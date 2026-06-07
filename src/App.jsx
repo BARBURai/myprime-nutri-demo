@@ -274,16 +274,13 @@ function detectPlatform() {
 // PDF guides for finding the step count in the phone's health app.
 // OWNER: drop the two PDFs in /public/guides and fill the paths (or external URLs). Empty string = link hidden.
 const STEP_GUIDES = {
-  ios: { url: "", app: "Apple Health" },
-  android: { url: "", app: "Samsung Health" },
+  ios: { url: "/guides/apple-health-steps.pdf", app: "Apple Health" },
+  android: { url: "/guides/samsung-health-steps.pdf", app: "Samsung Health" },
 };
-// The guide for the current device (falls back to whichever guide is configured).
+// The guide for the current device. No cross-platform fallback - an iPhone must never get the Samsung guide.
 function currentStepGuide() {
-  const p = detectPlatform();
-  const g = STEP_GUIDES[p];
-  if (g && g.url) return g;
-  const any = [STEP_GUIDES.ios, STEP_GUIDES.android].find((x) => x && x.url);
-  return any || null;
+  const g = STEP_GUIDES[detectPlatform()];
+  return g && g.url ? g : null;
 }
 // Sundays when the running goal goes up, and by how much.
 const STEP_BUMP_WEEKS = { 2: 2000, 4: 2000, 6: 1000, 8: 1000 };
@@ -387,7 +384,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.35";
+const VERSION = "1.37";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================

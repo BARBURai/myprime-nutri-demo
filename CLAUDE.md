@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.35`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.37`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,19 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.37 - Apple Health step guide wired (iOS) - both platforms now complete
+- Owner supplied the Apple Health (iPhone) "find your steps" instructions as two images (step 1: open the Health app; step 2: the Steps card with Today vs Average). Built public/guides/apple-health-steps.pdf (2 pages, ~120KB), same layout as the Samsung guide.
+- STEP_GUIDES.ios.url set to "/guides/apple-health-steps.pdf". Both ios + android guides are now live: iPhone -> Apple Health PDF, Android -> Samsung Health PDF. Item 10 guide content fully complete.
+- OWNER: add public/guides/apple-health-steps.pdf to the repo (in the zip, alongside the Samsung one from v1.36).
+- VERSION 1.36->1.37 (App.jsx + new asset). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test on an iPhone/iOS UA: open steps -> "מדריך: איך מוצאים את הצעדים ב-Apple Health" opens the PDF.
+
+## v1.36 - Samsung Health step guide wired (android)
+- Owner supplied the Samsung Health "find your steps" instructions as two images (step 1: open the app; step 2: where the step count is + scroll for history). Built a 2-page PDF (step 1 then step 2, each centered on a white A4 page) at public/guides/samsung-health-steps.pdf (~140KB).
+- STEP_GUIDES.android.url set to "/guides/samsung-health-steps.pdf". iOS (Apple Health) url still empty - pending owner. So on Android the guide link/button now appears (StepsModal, report steps card, steps tip bubble); on iOS it stays hidden until the Apple guide is supplied.
+- FIXED currentStepGuide(): removed the cross-platform fallback so an iPhone never gets shown the Samsung guide. Now returns the guide only for the detected platform (else null). Desktop/other shows no guide link.
+- OWNER: add public/guides/samsung-health-steps.pdf to the repo (in the zip). Apple Health guide still TODO (send the iOS instructions and I'll build + fill STEP_GUIDES.ios.url).
+- VERSION 1.35->1.36 (App.jsx + new asset). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test on an Android device/UA: open steps -> the "מדריך" button opens the PDF.
 
 ## v1.35 - New daily-medal artwork (gold rosette, woman silhouette, brand colors)
 - Owner supplied a medal graphic to use everywhere the daily medal appears. Source was RGB with a solid white background; removed the OUTER white via border flood-fill (kept the inner white silhouette), autocropped, padded to square, resized to 360x360, saved transparent at public/medal.png (~175KB).
