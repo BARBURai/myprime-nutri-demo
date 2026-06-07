@@ -273,14 +273,16 @@ function detectPlatform() {
 }
 // PDF guides for finding the step count in the phone's health app.
 // OWNER: drop the two PDFs in /public/guides and fill the paths (or external URLs). Empty string = link hidden.
+// In-app step guides: the two instruction images per platform (shown inside the app, no external link).
+// OWNER: drop the 4 images in /public/guides. Empty images array = guide hidden for that platform.
 const STEP_GUIDES = {
-  ios: { url: "/guides/apple-health-steps.pdf", app: "Apple Health" },
-  android: { url: "/guides/samsung-health-steps.pdf", app: "Samsung Health" },
+  ios: { app: "Apple Health", images: ["/guides/apple-1.png", "/guides/apple-2.png"] },
+  android: { app: "Samsung Health", images: ["/guides/samsung-1.png", "/guides/samsung-2.png"] },
 };
 // The guide for the current device. No cross-platform fallback - an iPhone must never get the Samsung guide.
 function currentStepGuide() {
   const g = STEP_GUIDES[detectPlatform()];
-  return g && g.url ? g : null;
+  return g && g.images && g.images.length ? g : null;
 }
 // Sundays when the running goal goes up, and by how much.
 const STEP_BUMP_WEEKS = { 2: 2000, 4: 2000, 6: 1000, 8: 1000 };
@@ -384,7 +386,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.37";
+const VERSION = "1.38";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2301,7 +2303,12 @@ function WeightModal({ weights, today, minDate, heightCm, onClose, onAdd }) {
 // Deeper steps explanation + per-platform health-app guide link (link appears once STEP_GUIDES is filled).
 function StepGuideLink({ style, linkOnly }) {
   const guide = currentStepGuide();
+  const [open, setOpen] = useState(false);
+  const [idx, setIdx] = useState(0);
   if (linkOnly && !guide) return null;
+  const imgs = guide ? guide.images : [];
+  const last = idx >= imgs.length - 1;
+  const navBtn = (on) => ({ border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: fontStack, fontSize: 15, fontWeight: 700, cursor: on ? "pointer" : "default", background: on ? C.brand : C.line, color: on ? "#fff" : C.faint });
   return (
     <div style={style}>
       {!linkOnly && (
@@ -2310,7 +2317,25 @@ function StepGuideLink({ style, linkOnly }) {
         </div>
       )}
       {guide && (
-        <a href={guide.url} target="_blank" rel="noreferrer" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.amber}`, background: C.amberBg, color: C.amber, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, textDecoration: "none" }}><Info size={15} /> מדריך: איך מוצאים את הצעדים ב{guide.app}</a>
+        <button onClick={() => { setIdx(0); setOpen(true); }} style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.amber}`, background: C.amberBg, color: C.amber, borderRadius: 12, padding: "11px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}><Info size={15} /> מדריך: איך מוצאים את הצעדים ב{guide.app}</button>
+      )}
+      {open && guide && (
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100001, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: fontStack, direction: "rtl" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: 14, maxWidth: 460, width: "100%", maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>איך מוצאים את הצעדים ב{guide.app}</span>
+              <button onClick={() => setOpen(false)} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto", background: C.bg, borderRadius: 12, padding: 8 }}>
+              <img src={imgs[idx]} alt="" style={{ maxWidth: "100%", maxHeight: "64vh", objectFit: "contain", borderRadius: 8 }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, gap: 10 }}>
+              <button onClick={() => setIdx((i) => Math.max(0, i - 1))} disabled={idx === 0} style={navBtn(idx > 0)}>הקודם</button>
+              <span style={{ color: C.faint, fontSize: 14 }}>{idx + 1}/{imgs.length}</span>
+              <button onClick={() => (last ? setOpen(false) : setIdx((i) => i + 1))} style={navBtn(true)}>{last ? "סגירה" : "הבא"}</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
