@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.53";
+const VERSION = "1.54";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -832,6 +832,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   // Running goal: stored value if set, else baseline + cumulative offset; null in week 1 (still measuring).
   const dayStepGoal = effectiveStepGoal(profile.stepGoal, week);
   const checkinOpen = TRACKER_ENABLED && unlockedOn(profile.startDate, date, CHECKIN_UNLOCK);
+  const hasManualTask = checkinOpen && tasksForDate(profile.startDate, date, profile.keepShabbat, profile.fasting).some((t) => !t.auto);
   const stepBannerActive = !!(stepAction && stepAction.kind === "baseline");
   const [tipQueue, setTipQueue] = useState([]);
   const [tipIdx, setTipIdx] = useState(-1);
@@ -839,10 +840,10 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
     if (tipIdx !== -1) return;
     if (isIntro || isShabbatRest) return;
     if (overlayOpen) return; // never start a tip over an open sheet/modal (no on-screen target -> no spotlight)
-    const ctx = { progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBanner: stepBannerActive, week, weeklySummaryShown: checkinOpen && (dow === 6 || dow === 0) };
+    const ctx = { progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, manualTracker: hasManualTask, stepBanner: stepBannerActive, week, weeklySummaryShown: checkinOpen && (dow === 6 || dow === 0) };
     const due = TIPS.filter((t) => t.due(ctx) && !(tipsSeen || []).includes(t.key) && !["cal", "steps", "tracker", "cabinet"].includes(t.key));
     if (due.length) { setTipQueue(due); setTipIdx(0); }
-  }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBannerActive, tipsSeen, tipIdx, isIntro, isShabbatRest, week, dow, overlayOpen]);
+  }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, hasManualTask, stepBannerActive, tipsSeen, tipIdx, isIntro, isShabbatRest, week, dow, overlayOpen]);
   const tipAdvance = () => setTipIdx((i) => { const n = i + 1; if (n >= tipQueue.length) { onTipsSeen && onTipsSeen(tipQueue.map((t) => t.key)); setTipQueue([]); return -1; } return n; });
   // First-bubble choice ("רוצה שאראה לך דוגמה?"). For now both continue to the next bubble;
   // the step-by-step food-example bubbles (the YES path) will be inserted here once their content is provided.
@@ -2736,6 +2737,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
 
 function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary }) {
   const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
+  const hasManual = tasks.some((t) => !t.auto);
   const total = tasks.length;
   const r = 54, circ = 2 * Math.PI * r;
   const frac = total ? done / total : 0;
@@ -2763,7 +2765,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 15, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
               <div style={{ fontSize: 14.5, color: C.sub, marginTop: 2 }}>{allDone ? "סיימת את כל המשימות להיום!" : "המשימות של היום"}</div>
-              <button onClick={(e) => { e.stopPropagation(); onOpen && onOpen(); }} style={{ marginTop: 10, border: "none", borderRadius: 10, padding: "10px 12px", background: C.brand, color: "#fff", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", width: "100%" }}>הקישי למילוי המעקב</button>
+              <button onClick={(e) => { e.stopPropagation(); onOpen && onOpen(); }} style={{ marginTop: 10, border: "none", borderRadius: 10, padding: "10px 12px", background: C.brand, color: "#fff", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", width: "100%" }}>{hasManual ? "הקישי למילוי המעקב" : "הקישי לצפייה במעקב"}</button>
             </div>
           </div>
         )}
@@ -3407,6 +3409,7 @@ const TIPS = [
   { key: "steps", sel: "steps", title: "מילוי הצעדים", guide: true, due: (c) => c.stepsOpen, text: "כאן את ממלאת את הצעדים שלך. כדי לדעת כמה צעדים עשית, פתחי את אפליקציית הבריאות בטלפון (Apple Health באייפון, Samsung Health בסמסונג), מצאי את מספר הצעדים של היום, והזיני אותו כאן. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן - אל דאגה." },
   { key: "tracker", sel: "tracker", title: "המשימות היומיות", due: (c) => c.checkinOpen, text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך המשימות שלך בשלב הזה - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
   { key: "cabinet", sel: "cabinet", title: "ארון ההישגים", due: (c) => c.checkinOpen, text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
+  { key: "trackerfill", sel: "tracker", due: (c) => c.manualTracker, text: "מהיום אנחנו מתחילות למלא את יומן המעקב במשימות שלא נכנסות באופן אוטומטי. היום לדוגמה נוספה משימת אימון כוח, ולאחר שתבצעי אימון כוח את יכולה לסמן וי במעקב." },
   { key: "stepbaseline", sel: "stepbanner", title: "קביעת בסיס הצעדים", due: (c) => c.stepBanner, text: "הגיע הזמן לקבוע את נקודת ההתחלה שלך במשימת הצעדים. זו נקודת הבסיס שממנה נעלה יחד בהדרגה - ותמיד אפשר לשנות אותה בהמשך." },
   { key: "water", sel: "water", title: "טבעת המים", due: (c) => c.waterOpen, text: "נוספה טבעת המים 💧 היעד הוא 2 ליטר ביום. בכל לחיצה על הפלוס מוסיפים כוס, ושם גם אפשר לקבוע את גודל הכוס שלך - כדי שהספירה תתאים בדיוק לכוס שאת שותה ממנה." },
   { key: "protein", sel: "protein", title: "טבעת החלבון", due: (c) => c.macroOpen, text: "נוספה טבעת החלבון. אותה את לא ממלאת - היא מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי." },
