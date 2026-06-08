@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.65";
+const VERSION = "1.69";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -629,7 +629,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const [heightCm, setHeightCm] = useState("");
   const [weightKg, setWeightKg] = useState("");
   const [rate, setRate] = useState(250);
-  const [goalKg, setGoalKg] = useState(66);
+  const [goalKg, setGoalKg] = useState(null);
   const [err0, setErr0] = useState(false);
   const [showInstall, setShowInstall] = useState(false);
   const [startDate, setStartDate] = useState(fixedStart || sundayOf(TODAY));
@@ -654,6 +654,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
   const hasSens = allergies.length > 0 || customSens.length > 0;
   const ageN = +age, heightN = +heightCm, weightN = +weightKg;
+  const goalEff = goalKg == null ? weightN : goalKg;
   const ageOk = ageN >= 33 && ageN <= 80;
   const heightOk = heightN >= 120 && heightN <= 210;
   const weightOk = weightN >= 50 && weightN <= 150;
@@ -664,9 +665,9 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
     setStep(step + 1);
   };
 
-  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightN : Math.max(minHealthyKg(heightN), goalKg), returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
+  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightN : Math.max(minHealthyKg(heightN), goalEff), returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
   const targets = computeTargets(draft);
-  const proj = projection(weightN, rate === 0 ? weightN : goalKg, rate);
+  const proj = projection(weightN, rate === 0 ? weightN : goalEff, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
   const backupSetup = wantBackup ? { enabled: true, email: bkEmail.trim().toLowerCase(), code: bkCode } : { enabled: false };
 
@@ -746,7 +747,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
                 </div>
               );
             })}
-            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalKg} set={(v) => setGoalKg(Math.max(minHealthyKg(heightN), Math.min(weightN - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightN)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
+            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalEff} set={(v) => setGoalKg(Math.max(minHealthyKg(heightN), Math.min(weightN - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightN)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
           </>
         )}
 
@@ -801,10 +802,10 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
         {step === 3 && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Lock size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>גיבוי מאובטח</span></div>
-            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 10 }}>
+            <p style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.65, marginTop: 0, marginBottom: 10 }}>
               מה שאת ממלאת פה באפליקציה נשמר במכשיר שלך בלבד ורק לך יש גישה לנתונים האלה. לחברת מיי פריים אין אפשרות לראות את הנתונים או להשתמש בהם.
             </p>
-            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 14 }}>
+            <p style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.65, marginTop: 0, marginBottom: 14 }}>
               אם תרצי, נשמור גיבוי <b>מוצפן</b> בענן - כך שאם תחליפי טלפון או יקרה משהו למכשיר, תוכלי לשחזר הכל. הגיבוי מוצפן כך ש<b>רק את</b> יכולה לפתוח אותו.
             </p>
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -838,7 +839,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           <>
             <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>התוכנית שלך</span>
             <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 12 }}>
-              {proj.maintain ? "תוכנית לשמירה על המשקל הנוכחי." : `בקצב של ${rate} ג׳ בשבוע, תגיעי ל־${goalKg} ק״ג בעוד כ־${proj.weeks} שבועות.`}
+              {proj.maintain ? "תוכנית לשמירה על המשקל הנוכחי." : `בקצב של ${rate} ג׳ בשבוע, תגיעי ל־${goalEff} ק״ג בעוד כ־${proj.weeks} שבועות.`}
             </p>
 
             <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "14px 10px 6px", marginBottom: 12 }}>
@@ -867,7 +868,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
               </div>
             )}
 
-            <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.7, textAlign: "right", display: "flex", alignItems: "flex-start", gap: 6 }}>
+            <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.7, textAlign: "right", display: "flex", alignItems: "flex-start", gap: 6 }}>
               <Info size={13} style={{ flexShrink: 0, marginTop: 2 }} />
               <span>ההמלצות בתוכנית מבוססות על הנתונים שהזנת, ובאחריותך להזין נתונים מדויקים ועדכניים. האפליקציה היא כלי עזר בלבד ואינה מהווה ייעוץ רפואי או תזונתי, ואינה תחליף להם.</span>
             </div>
@@ -1868,8 +1869,8 @@ function IntroOverlay({ onClose, name }) {
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 22, zIndex: 40 }}>
       <div style={{ background: C.panel, borderRadius: 18, padding: 20, fontFamily: fontStack }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>דמו MyPrime · v{VERSION}</span></div>
-        <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.7, margin: "0 0 12px" }}>שלום {name ? name + " " : ""}🙂 זו גרסת הדגמה (בטה) להתנסות.</p>
-        <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.7, margin: "0 0 16px" }}>ייתכן ויתבצעו עדכוני גרסה לאפליקציה, לכן ממליצה לך לרענן את מסך האפליקציה פעם ביום ע״י משיכה למטה של המסך במהלך השימוש באפליקציה - כך תהיה לך הגרסה המעודכנת ביותר.</p>
+        <p style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, margin: "0 0 12px" }}>שלום {name ? name + " " : ""}🙂 זו גרסת הדגמה (בטה) להתנסות.</p>
+        <p style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, margin: "0 0 16px" }}>ייתכן ויתבצעו עדכוני גרסה לאפליקציה, לכן ממליצה לך לרענן את מסך האפליקציה פעם ביום ע״י משיכה למטה של המסך במהלך השימוש באפליקציה - כך תהיה לך הגרסה המעודכנת ביותר.</p>
         <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "11px 13px", margin: "0 0 16px", fontSize: 15, color: C.brandD, fontWeight: 600, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 8 }}>
           <MessageCircle size={20} style={{ flexShrink: 0, marginTop: 1 }} />
           <span>זו גרסת בטה - נשמח מאוד לקבל כל הערה לתיקון! בכל מקום באפליקציה את יכולה להשאיר הערה בלחיצה על כפתור הבועה <MessageCircle size={15} style={{ display: "inline", verticalAlign: "-2px" }} /> בצד שמאל, ואנחנו נקבל את ההערות ונטפל בהן בהקדם האפשרי.</span>
@@ -2635,13 +2636,13 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
           <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>הזיני שם פרטי והמייל שאיתו נרשמת לתוכנית.</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם פרטי" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 10 }} />
           <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל שלך" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
-          <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.7, textAlign: "right", marginBottom: 4 }}>
+          <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.7, textAlign: "right", marginBottom: 4 }}>
             <Lock size={13} style={{ display: "inline", verticalAlign: "-2px", marginInlineEnd: 5 }} />
             מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
           </div>
           <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 0 12px", textAlign: "right" }}>
             <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
-            <span style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
+            <span style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
           </div>
           <div style={{ width: "100%" }}><Btn onClick={onSubmit}>כניסה</Btn></div>
           {msg && <div style={{ fontSize: 14, color: C.amber, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}

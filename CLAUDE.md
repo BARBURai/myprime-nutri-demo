@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.62`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.69`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,36 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.69 - Intro modal text black
+- The two IntroOverlay (demo intro) paragraphs (greeting + daily-refresh recommendation) changed from gray (C.sub) to black (C.ink) per owner. Feedback box unchanged.
+- VERSION 1.68->1.69. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.68 - Backup-step privacy text black
+- The two privacy/backup paragraphs on onboarding step 3 ("מה שאת ממלאת... נשמר במכשיר שלך בלבד..." and the encrypted-cloud-backup paragraph) changed from gray (C.sub) to black (C.ink) per owner.
+- VERSION 1.67->1.68. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.67 - Summary disclaimer text black
+- The liability disclaimer on the onboarding summary ("ההמלצות בתוכנית מבוססות...") changed from gray (C.faint) to black (C.ink) per owner.
+- VERSION 1.66->1.67. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.66 - Goal-weight default = entered current weight + gate consent text black
+- **Goal weight no longer defaults to a fixed 66.** `goalKg` now starts null; `goalEff = goalKg == null ? weightN : goalKg` is used for the stepper value, draft goalWeightKg, projection, and the summary text. So the "משקל רצוי" stepper starts at her entered current weight and she lowers it from there. If left at current weight, projection() returns maintain (goal>=current) so the summary reads as a maintenance plan rather than odd "0 weeks". Change still clamps to Math.max(minHealthyKg, Math.min(weightN-0.5, v)).
+- **Gate consent now black (per owner):** the privacy disclosure paragraph (C.faint -> C.ink) and the "קראתי ואני מאשרת" label (C.sub -> C.ink) on the access gate are now black instead of gray.
+- VERSION 1.65->1.66. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.65 - Liability disclaimer on summary
+- Added a disclaimer line on the onboarding summary step (step 4, under the kcal target): recommendations are based on the data she entered, she is responsible for accurate/current data, and the app is a tool only - not medical/nutritional advice or a substitute for it. Faint text + Info icon. Owner to pass wording to their lawyer; can be upgraded to an acknowledged checkbox if the lawyer prefers.
+- VERSION 1.64->1.65. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.64 - Tighter onboarding ranges (owner)
+- Adjusted step-0 validation ranges per owner: age 33-80 (was 18-120), height 120-210 cm (was 120-230), weight 50-150 kg (was 30-300). Age invalid-note made generic ("יש להזין גיל תקין"). NOTE: owner said height "can't be more than 1.20m" - interpreted as a 120 cm MINIMUM (literal reading would block everyone); confirm if a different bound was meant.
+- VERSION 1.63->1.64. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.63 - Fix onboarding number inputs (one-digit bug) + sensible ranges
+- **Fixed the "can only type one digit" bug** on the step-0 age/height/weight inputs. Root cause: `Field` was defined INSIDE Onboarding, so it was a new component type on every render; typing a digit -> setState -> re-render -> React remounted Field and its <input>, dropping focus after each keystroke. Fix: moved `Field` to module scope (stable reference). It now keeps focus and accepts multi-digit input.
+- **Sensible range validation** on step 0 (was just >0, which accepted 1 cm / 1 kg / age 1): age 18-120, height 120-230 cm, weight 30-300 kg. Error notes are now range-aware: empty -> "יש למלא את הנתון"; filled-but-invalid -> "יש להזין גיל תקין (18 ומעלה)" / "יש להזין גובה תקין בסנטימטרים" / "יש להזין משקל תקין בק״ג". The amber field outline + block-on-המשך use the same per-field ok flags (ageOk/heightOk/weightOk).
+- VERSION 1.62->1.63. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
 
 ## v1.62 - Splash screen + install-as-app guide + favicon/PWA icons + cancelled-member block
 - **Splash screen** (`SplashScreen`): full-screen overlay shown for 2s on every app open - big medal (MEDAL_SRC, 150px), "ברוכה הבאה לאפליקציית המעקב היומי של מיי פריים", and a small "דמו" badge top-left. Fades in/out via `@keyframes splashFade`. App state `showSplash` (init true) + a 2000ms setTimeout to dismiss; rendered as the first child of `.phone-frame` (zIndex 200).
