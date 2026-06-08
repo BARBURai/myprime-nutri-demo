@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.55";
+const VERSION = "1.56";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2798,7 +2798,7 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
       <div style={{ fontSize: 14, fontWeight: 500, color: C.sub, marginBottom: 8, textAlign: "right" }}>{dateLine}</div>
       {showAutoNote && (
         <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, fontSize: 13.5, color: C.ink, lineHeight: 1.55, textAlign: "right" }}>
-          חלק מהמשימות מסומנות "אוטומטי" - הן מתעדכנות לבד לפי מה שמילאת ביומן ובצעדים, בלי שתצטרכי לסמן אותן.
+          חלק מהמשימות מסומנות "אוטומטי" - הן מתעדכנות לבד לפי מה שמילאת בפלוס של הקלוריות והצעדים, בלי שתצטרכי למלא שוב.
           <div style={{ textAlign: "left", marginTop: 6 }}><button onClick={() => onTipsSeen && onTipsSeen(["autotasks"])} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 13.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", padding: 0 }}>הבנתי</button></div>
         </div>
       )}
@@ -2811,9 +2811,13 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
               <div style={{ fontSize: 13.5, color: C.faint, margin: "12px 0 2px" }}>{g.label}</div>
               {items.map((t) => {
                 const done = taskDone(t, answers, auto);
+                const autoNote = t.auto === "steps" ? "יש למלא בעיגול הצעדים" : t.auto === "water" ? "יש לעדכן בעיגול המים" : "יש למלא בעיגול הקלוריות";
                 return (
                   <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
-                    <span style={{ fontSize: 16, color: C.ink }}>{t.label}{t.optional ? <span style={{ color: C.faint, fontSize: 13 }}> (רשות)</span> : null}</span>
+                    <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                      <span style={{ fontSize: 16, color: C.ink }}>{t.label}{t.optional ? <span style={{ color: C.faint, fontSize: 13 }}> (רשות)</span> : null}</span>
+                      {t.auto && !done && <span style={{ fontSize: 12.5, color: C.amber, marginTop: 2 }}>{autoNote}</span>}
+                    </div>
                     {t.auto ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, color: done ? C.brandD : C.faint, background: done ? C.brandBg : "transparent", padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}>{done ? <Check size={14} /> : null}{t.auto === "steps" && auto.steps != null ? `${auto.steps.toLocaleString()} · ` : ""}{t.auto === "water" && auto.water != null ? `${auto.water} · ` : ""}אוטומטי</span>
                     ) : t.type === "number" ? (
@@ -3428,7 +3432,7 @@ const TOUR_YES = [
   { view: "caloriemenu", open: "caloriemenu", sel: "entry-activity", text: "ובאותו כפתור אפשר גם להוסיף פעילות גופנית. כל אימון או פעילות שתזיני מתווספים לתקציב הקלוריות היומי שלך, כלומר מגדילים את הכמות שמותר לך לאכול באותו יום. הליכה לא נספרת כאן - היא נמדדת לבד דרך הצעדים 💜" },
   { view: "day", open: "day", sel: "steps", tap: true, event: "opensteps", text: "עכשיו הצעדים 👟 לחצי על הפלוס של הצעדים." },
   { view: "steps", open: "steps", sel: "steps-input", text: "כאן מזינים את מספר הצעדים. פותחים את אפליקציית הבריאות בטלפון, רואים כמה צעדים נצברו היום, ומזינים את המספר כאן. אפשר לעדכן בכל שלב במהלך היום - אל דאגה." },
-  { view: "day", open: "day", sel: "tracker", text: "וכאן המשימות היומיות. ברגע שמילאת צעדים ומזון - שתי המשימות הראשונות מסומנות אוטומטית וכבר רשומות, אין צורך לפתוח את היומן בעצמך 💜" },
+  { view: "day", open: "day", sel: "tracker", text: "וכאן המשימות היומיות. שתי המשימות הראשונות מסומנות אוטומטית כשאת ממלאת בפלוס את הצעדים והקלוריות 💜" },
 ];
 const TOUR_NO = [
   { view: "day", open: "day", sel: "steps", text: "כאן את ממלאת את הצעדים שלך. כדי לדעת כמה צעדים עשית, פתחי את אפליקציית הבריאות בטלפון, מצאי את מספר הצעדים של היום, והזיני אותו כאן. תמיד אפשר לעדכן." },
@@ -3452,31 +3456,37 @@ function buildTour(path) {
 
 // Entries below restate copy already in the app (no new claims).
 const FAQ_ITEMS = [
-  { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון (Apple Health באייפון, Samsung Health בסמסונג), בודקים את מספר הצעדים של היום, ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן." },
+  { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
   { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
+  { q: "כמה קלוריות מותר לי לאכול היום?", a: "היעד הקלורי היומי מחושב לפי הגיל, המשקל, הגובה ורמת הפעילות שלך, ומופיע בעיגול הקלוריות ('מתוך ...'). אפשר לראות אותו גם במסך הפרופיל." },
+  { q: "שכחתי להזין יום שלם - מה עושים?", a: "אפשר לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך, ולמלא בדיעבד." },
+  { q: "איך עורכים או מוחקים פריט שהוספתי?", a: "בהקשה על הפריט ברשימת 'מה שהוזן' ביומן אפשר לערוך אותו או למחוק אותו." },
+  { q: "מה זה המדליות והגביעים?", a: "על כל יום שבו תשלימי את כל המשימות מקבלים מדליה, ועל שבוע שלם - גביע. הכל נאסף בארון ההישגים." },
+  { q: "למה משימות חדשות מופיעות לאורך התוכנית?", a: "המשימות נפתחות בהדרגה כדי לא להעמיס בבת אחת. כל כמה ימים מצטרפת משימה חדשה, צעד אחרי צעד." },
 ];
 
-function FaqModal({ onClose }) {
+function FaqModal({ onClose, onStartTour }) {
   const [open, setOpen] = useState(-1);
-  const topics = TIPS.filter((t) => t.title);
-  const Item = ({ q, a, i }) => (
+  const topics = TIPS.filter((t) => t.key === "cal");
+  const Item = ({ q, a, guide, i }) => (
     <div onClick={() => setOpen(open === i ? -1 : i)} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 13px", marginBottom: 8, cursor: "pointer" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 15.5, fontWeight: 600, color: C.ink }}>{q}</span>
         <ChevronDown size={18} color={C.sub} style={{ flexShrink: 0, transform: open === i ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
       </div>
-      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>{a}</div>}
+      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>{a}{guide && <StepGuideLink style={{ marginTop: 10 }} />}</div>}
     </div>
   );
   return (
     <SheetShell title="שאלות ותשובות" onClose={onClose}>
       <div style={{ maxHeight: "62vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
         <div style={{ fontSize: 14, color: C.sub, marginBottom: 10, lineHeight: 1.6 }}>כל מה שכדאי לדעת על השימוש באפליקציה, במקום אחד. הקישי על שאלה כדי לפתוח.</div>
-        {FAQ_ITEMS.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} i={i} />)}
+        <div style={{ background: C.infoBg, borderRadius: 12, padding: "11px 13px", marginBottom: 12, fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}>יש לך שאלה נוספת שלא מופיעה כאן? אפשר לשלוח אותה בקבוצה ולקבל מענה.</div>
+        {onStartTour && <button onClick={onStartTour} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: "none", borderRadius: 12, padding: "13px", marginBottom: 14, background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={17} /> סיור באפליקציה <span style={{ fontWeight: 400, fontSize: 13, opacity: 0.9 }}>(מעבר לשבוע ראשון, יום שלישי)</span></button>}
+        {FAQ_ITEMS.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} guide={f.guide} i={i} />)}
         <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: "16px 0 8px" }}>מסכים באפליקציה</div>
         {topics.map((t, j) => <Item key={`t${j}`} q={t.title} a={t.text} i={100 + j} />)}
-        <StepGuideLink style={{ marginTop: 12 }} />
       </div>
     </SheetShell>
   );
@@ -3498,8 +3508,9 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const tap = !!cur.tap;
   const stop = (e) => e.stopPropagation();
-  // Bubble position: element high -> below it; element low -> pinned near the top so it never hides the options below.
-  const bubblePos = !rect ? { bottom: 28 } : (rect.top < vh * 0.5 ? { top: rect.bottom + 12 } : { top: 12 });
+  // Bubble position: nav-bar steps sit just above the bottom bar; element high -> below it; element low -> pinned to top.
+  const isNav = cur.sel && (cur.sel.indexOf("nav-") === 0);
+  const bubblePos = !rect ? { bottom: 28 } : (isNav ? { bottom: vh - rect.top + 12 } : (rect.top < vh * 0.5 ? { top: rect.bottom + 12 } : { top: 12 }));
   const pad = 8;
   const hT = rect ? Math.max(0, rect.top - pad) : 0, hB = rect ? rect.bottom + pad : 0, hL = rect ? Math.max(0, rect.left - pad) : 0, hR = rect ? rect.right + pad : 0;
   return (
@@ -3853,7 +3864,7 @@ export default function App() {
             </div>
 
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
-            {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} />}
+            {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} onStartTour={() => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} autoFocusInput={!tour} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
             {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onSetMl={(ml) => setWaterForDate(selectedDate, ml)} onSetCup={(cup) => setProfile({ ...profile, cupMl: cup })} onClose={() => setSheet(null)} />}
