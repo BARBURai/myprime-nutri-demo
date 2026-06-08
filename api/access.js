@@ -58,7 +58,7 @@ export default async function handler(req, res) {
   if (!sheetUrl) return res.status(200).json({ allowed: true, reason: "not_configured", configured: false });
   if (!email) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
 
-  let startStr = null, found = false;
+  let startStr = null, found = false, cancelled = false;
   try {
     const r = await fetch(sheetUrl, { redirect: "follow" });
     const text = await r.text();
@@ -68,11 +68,13 @@ export default async function handler(req, res) {
       found = true;
       const dm = (line.match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0];
       if (dm) startStr = dm;
+      if (/(^|,)\s*TRUE\s*(,|$)/i.test(line)) cancelled = true; // cancellation column = TRUE
     });
   } catch (e) {
     return res.status(200).json({ allowed: false, reason: "fetch_failed", configured: true });
   }
   if (!found) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
+  if (cancelled) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
 
   // 2) usage window (only when a parseable start date exists for this participant)
   const startSunday = parseDateToSunday(startStr);

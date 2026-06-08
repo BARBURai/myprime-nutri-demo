@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.59";
+const VERSION = "1.62";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -617,14 +617,15 @@ function Stepper({ value, set, step = 1, min = 0, suffix }) {
    ============================================================ */
 function Onboarding({ onFinish, name, email, fixedStart }) {
   const [step, setStep] = useState(0);
-  const [age, setAge] = useState(50);
-  const [heightCm, setHeightCm] = useState(165);
-  const [weightKg, setWeightKg] = useState(72);
+  const [age, setAge] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [weightKg, setWeightKg] = useState("");
   const [rate, setRate] = useState(250);
   const [goalKg, setGoalKg] = useState(66);
-  const [agree, setAgree] = useState(false);
+  const [err0, setErr0] = useState(false);
+  const [showInstall, setShowInstall] = useState(false);
   const [startDate, setStartDate] = useState(fixedStart || sundayOf(TODAY));
-  const [keepShabbat, setKeepShabbat] = useState(false);
+  const [keepShabbat, setKeepShabbat] = useState(null);
   const [diet, setDiet] = useState([]);
   const [allergies, setAllergies] = useState([]);
   const [dislikes, setDislikes] = useState("");
@@ -644,14 +645,17 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setDislikes([...customSens, t].join(", ")); setNewSens(""); };
   const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
   const hasSens = allergies.length > 0 || customSens.length > 0;
+  const ageN = +age, heightN = +heightCm, weightN = +weightKg;
+  const step0Valid = ageN >= 18 && heightN > 0 && weightN > 0 && keepShabbat !== null;
   const next = () => {
+    if (step === 0 && !step0Valid) { setErr0(true); return; }
     if (step === 2) { if (hasSens) setConfirmSens(true); else setConfirmNoSens(true); return; }
     setStep(step + 1);
   };
 
-  const draft = { age, heightCm, weightKg: Math.max(minHealthyKg(heightCm), weightKg), activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightKg : Math.max(minHealthyKg(heightCm), goalKg), returnPct: 50, startDate, keepShabbat, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
+  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightN : Math.max(minHealthyKg(heightN), goalKg), returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
   const targets = computeTargets(draft);
-  const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
+  const proj = projection(weightN, rate === 0 ? weightN : goalKg, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
   const backupSetup = wantBackup ? { enabled: true, email: bkEmail.trim().toLowerCase(), code: bkCode } : { enabled: false };
 
@@ -660,6 +664,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
       <span style={{ fontSize: 18, color: C.ink }}>{label}</span>{children}
     </div>
   );
+  const numStyle = (bad) => ({ width: 96, textAlign: "center", border: `1.5px solid ${bad ? C.amber : C.line}`, borderRadius: 10, padding: "9px 10px", fontSize: 18, fontFamily: fontStack, color: C.ink, outline: "none" });
+  const errNote = (txt) => <div style={{ fontSize: 13, color: C.amber, marginTop: 4, lineHeight: 1.4 }}>{txt}</div>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -668,6 +674,9 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           {[0, 1, 2, 3, 4].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
         </div>
         <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginBottom: 6 }}>v{VERSION}</div>
+        <div style={{ textAlign: "center", marginBottom: 10 }}>
+          <button onClick={() => setShowInstall(true)} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 13.5, textDecoration: "underline", cursor: "pointer", fontFamily: fontStack }}>📲 איך מתקינים כאפליקציה?</button>
+        </div>
         <div style={{ textAlign: "center", marginBottom: 12 }}>
           <button onClick={() => onFinish(draft, { enabled: false })} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 15, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
         </div>
@@ -676,10 +685,12 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>{name && name.trim() ? `היי ${name.trim()}, נעים להכיר!` : "נעים להכיר"}</span></div>
             <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
-            <Field label="גיל"><Stepper value={age} set={(v) => setAge(Math.max(18, v))} min={18} /></Field>
-            <Field label="גובה"><Stepper value={heightCm} set={setHeightCm} suffix="ס״מ" /></Field>
-            <Field label="משקל נוכחי"><Stepper value={weightKg} set={(v) => setWeightKg(Math.max(minHealthyKg(heightCm), v))} step={0.5} suffix="ק״ג" /></Field>
-            <div style={{ fontSize: 13.5, color: C.faint, marginTop: -2, marginBottom: 4, lineHeight: 1.5 }}>לא ניתן להזין משקל נמוך מ-{minHealthyKg(heightCm)} ק״ג, הטווח הבריא לגובה שלך.</div>
+            <Field label="גיל"><input type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} placeholder="" style={numStyle(err0 && !(ageN >= 18))} /></Field>
+            {err0 && !(ageN >= 18) && errNote(ageN > 0 ? "יש להזין גיל 18 ומעלה" : "יש למלא את הנתון")}
+            <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !(heightN > 0))} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
+            {err0 && !(heightN > 0) && errNote("יש למלא את הנתון")}
+            <Field label="משקל נוכחי"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="decimal" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="" style={numStyle(err0 && !(weightN > 0))} /><span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></span></Field>
+            {err0 && !(weightN > 0) && errNote("יש למלא את הנתון")}
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
               {fixedStart ? (
@@ -705,6 +716,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
                 })}
               </div>
               <div style={{ fontSize: 14, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>אם תבחרי "יום מנוחה", שבת תופיע אפורה ובלי מעקב. תמיד אפשר לשנות בפרופיל.</div>
+              {err0 && keepShabbat === null && errNote("יש לבחור תשובה")}
             </div>
             <p style={{ fontSize: 14, color: C.faint, marginTop: 14, lineHeight: 1.6 }}>התוכנית מותאמת לנשים, ולכן אין צורך בשאלת מין.</p>
           </>
@@ -728,7 +740,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
                 </div>
               );
             })}
-            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalKg} set={(v) => setGoalKg(Math.max(minHealthyKg(heightCm), Math.min(weightKg - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightCm)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
+            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalKg} set={(v) => setGoalKg(Math.max(minHealthyKg(heightN), Math.min(weightN - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightN)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
           </>
         )}
 
@@ -848,22 +860,13 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
                 <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>הקצב שבחרת מהיר מהמומלץ עבור הנתונים שלך. היעד הוגבל ל־{KCAL_FLOOR} קק״ל לשמירה על בריאותך - שקלי קצב מתון יותר.</span>
               </div>
             )}
-
-            <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.7, textAlign: "right" }}>
-              <Lock size={13} style={{ display: "inline", verticalAlign: "-2px", marginInlineEnd: 5 }} />
-              מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
-            </div>
-            <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "12px 0 2px", marginTop: 12, borderTop: `1px solid ${C.line}` }}>
-              <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
-              <span style={{ fontSize: 15, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
-            </div>
           </>
         )}
       </div>
 
       <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", gap: 10, alignItems: "center" }}>
         {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
-        {step < 4 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn disabled={!agree} onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
+        {step < 4 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
       </div>
 
       {confirmNoSens && (
@@ -896,13 +899,32 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           </div>
         </div>
       )}
+      {showInstall && (
+        <div onClick={() => setShowInstall(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", maxHeight: "82%", overflowY: "auto", textAlign: "right", fontFamily: fontStack }}>
+            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 4 }}>התקנה כאפליקציה במסך הבית</div>
+            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>אפשר להוסיף את MyPrime למסך הבית כדי לפתוח אותה כמו אפליקציה רגילה, עם אייקון משלה.</p>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אנדרואיד (Chrome)</div>
+            <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
+              <li>פתחי את האפליקציה בדפדפן Chrome.</li>
+              <li>הקישי על תפריט שלוש הנקודות (⋮) בפינה העליונה.</li>
+              <li>בחרי "הוספה למסך הבית" (או "התקנת אפליקציה").</li>
+              <li>אשרי - והאייקון יופיע במסך הבית.</li>
+            </ol>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
+            <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 16px", paddingInlineStart: 20 }}>
+              <li>פתחי את האפליקציה בדפדפן Safari.</li>
+              <li>הקישי על כפתור השיתוף (ריבוע עם חץ כלפי מעלה).</li>
+              <li>גללי ובחרי "הוספה למסך הבית".</li>
+              <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
+            </ol>
+            <Btn onClick={() => setShowInstall(false)}>סגירה</Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-/* ============================================================
-   SCREENS
-   ============================================================ */
 function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, introLock = false, overlayOpen = false }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
@@ -1398,7 +1420,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup }) {
+function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, maxStart }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   const [baseOpen, setBaseOpen] = useState(false);
@@ -1573,7 +1595,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
             {edit.type === "date" && (
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
                 <select value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", width: "100%" }}>
-                  {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
+                  {listSundays().filter((s) => !maxStart || s.value <= maxStart).map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
                 </select>
               </div>
             )}
@@ -1820,19 +1842,27 @@ async function reconcileWithDb(items) {
   }));
 }
 
-function IntroOverlay({ onClose }) {
+function SplashScreen() {
+  return (
+    <div style={{ position: "absolute", inset: 0, zIndex: 200, background: C.panel, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28, textAlign: "center", fontFamily: fontStack, animation: "splashFade 2s ease forwards" }}>
+      <div style={{ position: "absolute", top: 14, left: 14, background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, padding: "4px 12px", borderRadius: 999 }}>דמו</div>
+      <img src={MEDAL_SRC} alt="" width={150} height={150} style={{ display: "block", marginBottom: 20 }} />
+      <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.45, maxWidth: 320 }}>ברוכה הבאה לאפליקציית המעקב היומי של מיי פריים</div>
+    </div>
+  );
+}
+
+function IntroOverlay({ onClose, name }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 22, zIndex: 40 }}>
       <div style={{ background: C.panel, borderRadius: 18, padding: 20, fontFamily: fontStack }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>דמו MyPrime · v{VERSION}</span></div>
-        <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.7, margin: "0 0 12px" }}>שלום ענת 🙂 זו גרסת הדגמה לשחק איתה. כמה דברים:</p>
-        <ul style={{ fontSize: 16, color: C.sub, lineHeight: 1.8, margin: "0 0 14px", paddingInlineStart: 18 }}>
-          <li>הנתונים לא נשמרים - רענון מתחיל מחדש.</li>
-          <li>אפשר לצלם צלחת אמיתית ולקבל הערכת ערכים (ניתוח ע״י AI).</li>
-          <li>אפשר לסרוק ברקוד של מוצר ולקבל ערכים מהמאגר.</li>
-          <li>מעקב צעדים, מים ומשקל מופיע לפי התקדמות התוכנית.</li>
-          <li>אפשר להשאיר הערות בכפתור ההערות, ולהעתיק אותן לשליחה.</li>
-        </ul>
+        <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.7, margin: "0 0 12px" }}>שלום {name ? name + " " : ""}🙂 זו גרסת הדגמה (בטה) להתנסות.</p>
+        <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.7, margin: "0 0 16px" }}>ייתכן ויתבצעו עדכוני גרסה לאפליקציה, לכן ממליצה לך לרענן את מסך האפליקציה פעם ביום ע״י משיכה למטה של המסך במהלך השימוש באפליקציה - כך תהיה לך הגרסה המעודכנת ביותר.</p>
+        <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "11px 13px", margin: "0 0 16px", fontSize: 15, color: C.brandD, fontWeight: 600, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <MessageCircle size={20} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>זו גרסת בטה - נשמח מאוד לקבל כל הערה לתיקון! בכל מקום באפליקציה את יכולה להשאיר הערה בלחיצה על כפתור הבועה <MessageCircle size={15} style={{ display: "inline", verticalAlign: "-2px" }} /> בצד שמאל, ואנחנו נקבל את ההערות ונטפל בהן בהקדם האפשרי.</span>
+        </div>
         <Btn onClick={onClose}>הבנתי, בואי נתחיל</Btn>
       </div>
     </div>
@@ -2573,12 +2603,15 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
   );
 }
 
-function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg }) {
+function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg, attempts = 0, agree, setAgree }) {
   const deniedText = reason === "device_limit"
     ? "המייל שלך כבר מחובר בשני מכשירים. ניתן להשתמש ב-MyPrime בו-זמנית בשני מכשירים בלבד. התנתקי במכשיר אחר ונסי שוב, או פני למנהלת התוכנית."
     : reason === "expired"
     ? "תקופת השימוש באפליקציה הסתיימה. תודה שהיית חלק מהמסע שלנו 💜"
-    : "המייל הזה לא נמצא ברשימת המשתתפות בתוכנית. אם נרשמת לאחרונה, או שיש בעיה - פני למנהלת התוכנית.";
+    : reason === "cancelled"
+    ? "המנוי שלך בתוכנית אינו פעיל. אם לדעתך מדובר בטעות, פני בבקשה לצוות הטכני בווטסאפ 0547304177 או במייל support@myprime.co.il."
+    : "המייל הזה לא נמצא ברשימת המשתתפות בתוכנית. אם את רשומה לתוכנית, או שיש בעיה - פני בבקשה לצוות הטכני בווטסאפ 0547304177 או במייל support@myprime.co.il.";
+  const locked = reason === "not_registered" && attempts >= 5;
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center", fontFamily: fontStack }}>
       <div style={{ width: 64, height: 64, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><Sparkles size={28} color={C.brand} /></div>
@@ -2591,18 +2624,22 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
           <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>הזיני שם פרטי והמייל שאיתו נרשמת לתוכנית.</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם פרטי" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 10 }} />
           <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל שלך" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
+          <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.7, textAlign: "right", marginBottom: 4 }}>
+            <Lock size={13} style={{ display: "inline", verticalAlign: "-2px", marginInlineEnd: 5 }} />
+            מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
+          </div>
+          <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 0 12px", textAlign: "right" }}>
+            <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
+            <span style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
+          </div>
           <div style={{ width: "100%" }}><Btn onClick={onSubmit}>כניסה</Btn></div>
           {msg && <div style={{ fontSize: 14, color: C.amber, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}
-          <div style={{ fontSize: 13, color: C.faint, marginTop: 18, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, textAlign: "right" }}>
-            <Lock size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-            <span>כל הנתונים שאת מזינה נשמרים רק במכשיר שלך, ואינם נשמרים בשרתי החברה. <a href={PRIVACY_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> · <a href={COOKIE_URL} target="_blank" rel="noreferrer" style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
-          </div>
         </>
       )}
       {status === "denied" && (
         <>
           <div style={{ fontSize: 15, lineHeight: 1.7, margin: "12px 0 18px", background: C.amberBg, color: C.amber, padding: 12, borderRadius: 12 }}>{deniedText}</div>
-          {reason !== "expired" && <div style={{ width: "100%" }}><Btn variant="ghost" onClick={onRetry}>נסי שוב / כתובת אחרת</Btn></div>}
+          {reason !== "expired" && reason !== "cancelled" && !locked && <div style={{ width: "100%" }}><Btn variant="ghost" onClick={onRetry}>נסי שוב / כתובת אחרת</Btn></div>}
         </>
       )}
     </div>
@@ -3776,6 +3813,10 @@ export default function App() {
   const [gateName, setGateName] = useState("");
   const [gateMsg, setGateMsg] = useState("");
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
+  const [gateAttempts, setGateAttempts] = useState(0);
+  const [gateAgree, setGateAgree] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  useEffect(() => { const t = setTimeout(() => setShowSplash(false), 2000); return () => clearTimeout(t); }, []);
 
   // Android/Samsung hardware "back": intercept so the app doesn't close instantly.
   // Back first closes an open sheet/modal; otherwise it asks whether to leave.
@@ -3808,7 +3849,11 @@ export default function App() {
         try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
         if (d.startDate) { setGateStartDate(d.startDate); try { localStorage.setItem("myprime_start_date", d.startDate); } catch (e) {} }
         setGateReason(""); setGate("ok");
-      } else { setGateReason(d.reason || "not_registered"); setGate("denied"); }
+      } else {
+        const rsn = d.reason || "not_registered";
+        if (rsn === "not_registered") setGateAttempts((n) => n + 1);
+        setGateReason(rsn); setGate("denied");
+      }
     } catch (e) { setGateMsg("תקלת תקשורת. נסי שוב."); setGate("form"); }
   };
   useEffect(() => {
@@ -3820,13 +3865,14 @@ export default function App() {
   // Keep the program start date aligned with the registration sheet for returning users.
   useEffect(() => {
     if (gate !== "ok" || !onboarded || !gateStartDate) return;
-    if (profile.startDate === gateStartDate) return;
+    if (profile.startDate && profile.startDate <= gateStartDate) return;
     setProfile((p) => ({ ...p, startDate: gateStartDate }));
   }, [gate, onboarded, gateStartDate]);
   const submitGate = () => {
     const e = gateEmail.trim().toLowerCase(); const n = gateName.trim();
     if (!n) { setGateMsg("נא להזין שם פרטי."); return; }
     if (!e || !e.includes("@")) { setGateMsg("נא להזין כתובת מייל תקינה."); return; }
+    if (!gateAgree) { setGateMsg("יש לאשר את מדיניות הפרטיות כדי להמשיך."); return; }
     checkAccess(e, n);
   };
   const retryGate = () => { try { localStorage.removeItem("myprime_access_email"); localStorage.removeItem("myprime_start_date"); } catch (e) {} setGateEmail(""); setGateMsg(""); setGateReason(""); setGateStartDate(""); setGate("form"); };
@@ -4066,7 +4112,7 @@ export default function App() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
     try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
     try { localStorage.removeItem("myprime_start_date"); } catch (e) {}
-    setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg(""); setGateStartDate("");
+    setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg(""); setGateStartDate(""); setGateAttempts(0);
     setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
     setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate)); setSelectedDate(TODAY);
     setCheckins({});
@@ -4109,13 +4155,15 @@ export default function App() {
         @keyframes cheerPop{0%{transform:scale(0.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
         @keyframes medalIn{0%{transform:scale(0) rotate(-25deg);opacity:0}55%{transform:scale(1.2) rotate(8deg)}75%{transform:scale(0.95) rotate(-3deg)}100%{transform:scale(1) rotate(0);opacity:1}}
         @keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(150px) rotate(360deg);opacity:0}}
+        @keyframes splashFade{0%{opacity:0}12%{opacity:1}82%{opacity:1}100%{opacity:0}}
         .app-outer{min-height:100vh;min-height:100dvh;background:${C.bg};display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;font-family:${fontStack}}
         .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
         @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;border-radius:0;box-shadow:none;border:none}}`}</style>
       <div className="phone-frame">
+        {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
         {gate !== "ok" ? (
-          <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} />
+          <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} attempts={gateAttempts} agree={gateAgree} setAgree={setGateAgree} />
         ) : !onboarded ? (
           bkRestore === "offer" ? (
             <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={() => setBkRestore("none")} />
@@ -4130,7 +4178,7 @@ export default function App() {
               {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={gateStartDate} />}
             </div>
             <div style={{ position: "relative", flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", opacity: introLock ? 0.4 : 1, pointerEvents: introLock ? "none" : "auto" }}>
@@ -4171,7 +4219,7 @@ export default function App() {
           </>
         )}
         {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
-        {gate === "ok" && showIntro && <IntroOverlay onClose={() => setShowIntro(false)} />}
+        {gate === "ok" && showIntro && <IntroOverlay name={profile.name || gateName} onClose={() => setShowIntro(false)} />}
         {showExit && (
           <div onClick={() => setShowExit(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 50 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
