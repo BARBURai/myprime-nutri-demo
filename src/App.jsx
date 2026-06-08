@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.62";
+const VERSION = "1.65";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -615,6 +615,14 @@ function Stepper({ value, set, step = 1, min = 0, suffix }) {
 /* ============================================================
    ONBOARDING
    ============================================================ */
+function Field({ label, children }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
+      <span style={{ fontSize: 18, color: C.ink }}>{label}</span>{children}
+    </div>
+  );
+}
+
 function Onboarding({ onFinish, name, email, fixedStart }) {
   const [step, setStep] = useState(0);
   const [age, setAge] = useState("");
@@ -646,7 +654,10 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
   const hasSens = allergies.length > 0 || customSens.length > 0;
   const ageN = +age, heightN = +heightCm, weightN = +weightKg;
-  const step0Valid = ageN >= 18 && heightN > 0 && weightN > 0 && keepShabbat !== null;
+  const ageOk = ageN >= 33 && ageN <= 80;
+  const heightOk = heightN >= 120 && heightN <= 210;
+  const weightOk = weightN >= 50 && weightN <= 150;
+  const step0Valid = ageOk && heightOk && weightOk && keepShabbat !== null;
   const next = () => {
     if (step === 0 && !step0Valid) { setErr0(true); return; }
     if (step === 2) { if (hasSens) setConfirmSens(true); else setConfirmNoSens(true); return; }
@@ -659,11 +670,6 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
   const backupSetup = wantBackup ? { enabled: true, email: bkEmail.trim().toLowerCase(), code: bkCode } : { enabled: false };
 
-  const Field = ({ label, children }) => (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
-      <span style={{ fontSize: 18, color: C.ink }}>{label}</span>{children}
-    </div>
-  );
   const numStyle = (bad) => ({ width: 96, textAlign: "center", border: `1.5px solid ${bad ? C.amber : C.line}`, borderRadius: 10, padding: "9px 10px", fontSize: 18, fontFamily: fontStack, color: C.ink, outline: "none" });
   const errNote = (txt) => <div style={{ fontSize: 13, color: C.amber, marginTop: 4, lineHeight: 1.4 }}>{txt}</div>;
 
@@ -685,12 +691,12 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>{name && name.trim() ? `היי ${name.trim()}, נעים להכיר!` : "נעים להכיר"}</span></div>
             <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
-            <Field label="גיל"><input type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} placeholder="" style={numStyle(err0 && !(ageN >= 18))} /></Field>
-            {err0 && !(ageN >= 18) && errNote(ageN > 0 ? "יש להזין גיל 18 ומעלה" : "יש למלא את הנתון")}
-            <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !(heightN > 0))} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
-            {err0 && !(heightN > 0) && errNote("יש למלא את הנתון")}
-            <Field label="משקל נוכחי"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="decimal" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="" style={numStyle(err0 && !(weightN > 0))} /><span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></span></Field>
-            {err0 && !(weightN > 0) && errNote("יש למלא את הנתון")}
+            <Field label="גיל"><input type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} placeholder="" style={numStyle(err0 && !ageOk)} /></Field>
+            {err0 && !ageOk && errNote(age === "" ? "יש למלא את הנתון" : "יש להזין גיל תקין")}
+            <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !heightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
+            {err0 && !heightOk && errNote(heightCm === "" ? "יש למלא את הנתון" : "יש להזין גובה תקין בסנטימטרים")}
+            <Field label="משקל נוכחי"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="decimal" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="" style={numStyle(err0 && !weightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></span></Field>
+            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "יש להזין משקל תקין בק״ג")}
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
               {fixedStart ? (
@@ -860,6 +866,11 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
                 <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>הקצב שבחרת מהיר מהמומלץ עבור הנתונים שלך. היעד הוגבל ל־{KCAL_FLOOR} קק״ל לשמירה על בריאותך - שקלי קצב מתון יותר.</span>
               </div>
             )}
+
+            <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.7, textAlign: "right", display: "flex", alignItems: "flex-start", gap: 6 }}>
+              <Info size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>ההמלצות בתוכנית מבוססות על הנתונים שהזנת, ובאחריותך להזין נתונים מדויקים ועדכניים. האפליקציה היא כלי עזר בלבד ואינה מהווה ייעוץ רפואי או תזונתי, ואינה תחליף להם.</span>
+            </div>
           </>
         )}
       </div>
