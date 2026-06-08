@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.50`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.53`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,35 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.53 - Tour reworked to demo-driven + intro-days lock (owner fix batch 1-11)
+- The tour no longer asks the user to fill anything in. It now DRIVES the screens itself (demo): each step carries `open` ("day"/"caloriemenu"/"addfood"/"steps") and an App effect syncs the live screen to it. Only the very first step is a real tap (the calorie ➕), with NO "המשך" button - tapping the ➕ opens the menu and advances (tap steps render no advance button now).
+- Bubbles are anchored to real elements (spotlight) on each demo screen: ➕ ring -> calorie menu "הוספת מזון" -> add-food "האחרונים והמועדפים" -> add-food "ספרי לי מה אכלת" (this single bubble now explains the AI chat; no real chat screen is opened, no API) -> day "מה שהוזן" (diarylist) -> calorie menu "פעילות גופנית" (NEW activity bubble) -> day steps ring -> steps screen (demo, autofocus disabled so no keyboard) -> tracker -> cabinet -> nav יומן/דוח/➕/מתכונים/פרופיל -> day strip -> finish.
+- New data-tut anchors: diarylist ("מה שהוזן" header), entry-activity (calorie-menu activity item), steps-input (steps field). Removed reliance on the old ai-chat/real-tap-advance for the inner steps.
+- Every bubble now has a "סיים את הסיור" link (except the final bubble); it jumps straight to the final bubble (the restart/FAQ message), which then closes via "סיימנו". Default advance button label is now "המשך".
+- Daystrip bubble text updated: "...דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך (סוויפ)" (dropped the side-arrows wording).
+- "סיור באפליקציה" button now shows ONLY on program day 3 of week 1 (was always shown).
+- Intro days lock: on week 1 days 1-2 (`introLock`), the top day strip and the bottom nav bar + FAB are grayed (opacity 0.4) and non-interactive (pointerEvents none), each with a small "בקרוב" pill.
+- VERSION 1.52->1.53 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Cross-screen UX still needs device testing.
+
+
+- Replaces the old day-3 coachmark set (cal/steps/tracker/cabinet) with a single App-level guided tour that walks across screens. Auto-triggers once on program week 1, day>=3 (700ms after the day screen settles), and is restartable anytime via a permanent "סיור באפליקציה" button under the day strip (data-tut="tourbtn", Sparkles icon).
+- Bubble 1 (cal ring): explains the + and asks "רוצה שאראה לך דוגמה?" with [כן, בבקשה]/[אין צורך, נמשיך].
+- YES path is hands-on across real screens: tap cal + (opens calorie menu) -> tap "הוספת מזון" (opens add-food) -> bubble on "האחרונים והמועדפים" -> tap "ספרי לי מה אכלת" (opens AI chat) -> explain the chat (NO API call in the demo; she does not send) -> back on day: edit/delete note -> steps explain -> tap steps + and enter a number -> daily-tasks auto-check note.
+- NO path: steps bubble + tracker bubble (original texts).
+- Shared tail (both paths): cabinet -> nav buttons יומן/דוח/+/מתכונים/פרופיל -> day strip (time travel) -> finish bubble that points at the "סיור באפליקציה" button and mentions FAQ.
+- Architecture: tour state lifted to App `{steps,i}`; builder `buildTour(path)` + TOUR_YES/TOUR_NO/TOUR_TAIL consts. `tourView` derives the live screen from sheet/modal. Steps render only when `step.view === tourView`. `tap:true` steps render WITHOUT a screen-blocking backdrop (lighter dim, real UI tappable) and advance via `tourEvent(key)` fired from the real handlers (addcalorie / pickfood / pickai / addsteps); button steps advance via onNext; `closeModal` steps close the add-food modal on advance. Tour-seen flag = "appTour" in profile.tipsSeen (auto-trigger only; restart ignores it).
+- TutorialOverlay generalized: optional `cur.btn` label (default "הבנתי"), `cur.tap` (no block, lighter dim), `cur.sel===null` centered bubble, counter hidden when a single step. Existing later-day tips (water/protein/stepbaseline/weeklysummary) unchanged; DayScreen queue now excludes the four tour keys (kept in TIPS only for the FAQ list).
+- data-tut tags added: EntryMenu food item (entry-food), add-food method items (method-history, method-ai) + AI chat area (ai-chat), day strip (daystrip), restart button (tourbtn), nav tabs (nav-day/report/recipes/profile) + FAB (nav-fab).
+- NOTE: cross-screen UX could not be runtime-tested here; needs owner testing (see chat checklist). Likely one fix round.
+- VERSION 1.51->1.52 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.51 - Day-3 tutorial rework (step 1): first bubble offers an example with yes/no choice
+- Start of the owner's multi-stage day-3 tutorial redesign. First bubble (the "cal" tip) now ends with the prompt "רוצה שאראה לך דוגמה?" and shows TWO buttons instead of "הבנתי": "כן, בבקשה" / "אין צורך, נמשיך".
+- TutorialOverlay extended: a tip with a `choice: {yes,no}` (and optional `prompt`) renders the prompt (bold) + two buttons; non-choice tips keep the single "הבנתי". Added onChoice prop.
+- DayScreen: added tipChoose(yes). FOR NOW both yes and no just continue to the next bubble - the step-by-step food-example bubbles (the YES path) and the NO=skip-past-them wiring will be inserted in tipChoose once the owner provides the example bubbles' content.
+- Owner is feeding this bubble-by-bubble; remaining: the example/food bubbles, and confirming the post-example flow (steps bubble, then the journal/tracker, no extra bubbles).
+- VERSION 1.50->1.51 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
 
 ## v1.50 - Weekly summary polish: bigger achievements card, normal P.S., larger body text
 - Owner feedback on the weekly summary:
