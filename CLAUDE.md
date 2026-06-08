@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.56`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.59`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -433,7 +433,28 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - VERSION 0.92->0.93 (App.jsx only).
 
 
-## v1.56 - Tracker copy/notes + FAQ rework (owner fix batch)
+## v1.59 - Sheet start date + usage window (expiry)
+- `api/access.js` now reads each participant's program START DATE from her row in the registration sheet (same ACCESS_SHEET_CSV_URL). It matches the email per row and extracts a date (DD/MM/YYYY or YYYY-MM-DD, any column order, header row ok), snapped to its Sunday. Returns `startDate` on allowed responses.
+- Usage window enforced SERVER-SIDE: access ends 70 days (10 weeks) + 3 months after the start date (inclusive of the last day). Past that, the gate returns allowed:false reason "expired" (tamper-proof vs device clock). Participants with no parseable date stay allowed with no expiry (graceful fallback).
+- Client: stores the gate's startDate (localStorage myprime_start_date). Onboarding now LOCKS the start date when provided by the sheet (read-only display "התאריך נקבע לפי ההרשמה שלך", no selector); falls back to the Sunday picker in demo mode. Returning users sync profile.startDate to the sheet value on each gate pass. Cleared on retry/reset.
+- AccessGate: new "expired" state -> "תקופת השימוש באפליקציה הסתיימה. תודה שהיית חלק מהמסע שלנו 💜" (no retry button).
+- Setup note for owner: add a start-date column to the SAME registration sheet, format DD/MM/YYYY, re-publish CSV (ACCESS_SHEET_CSV_URL env stays the same).
+- VERSION 1.58->1.59. Changed: src/App.jsx, api/access.js (api/backup.js unchanged, included for a complete deploy drop). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+
+- Onboarding backup screen (step 3): added a required acknowledgment checkbox "קראתי והבנתי את מדיניות שמירת הנתונים של מיי פריים." The "המשך" button is now gated on it (in addition to the existing backup yes/no choice and, if backup chosen, a valid email + matching code). The backup yes/no choice and Profile enable flow (email + code + confirm via BackupModal, shown when backup is off) were already in place.
+- VERSION 1.57->1.58 (App.jsx only). api/backup.js unchanged from v1.57 (still needs deploying). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+
+- New end-to-end encrypted backup. User data is encrypted IN THE BROWSER (AES-GCM, key derived from a personal backup code via PBKDF2, Web Crypto - no external library) before upload. The server (Upstash) stores ONLY ciphertext + salt + iv, keyed by email. No one, including MyPrime, can read the contents without the user's code. The code lives in its own localStorage key (myprime_bk_code) and is never sent to the server.
+- New serverless endpoint `api/backup.js` on the SAME Upstash as the access gate (UPSTASH_REDIS_REST_URL/TOKEN). Email must be on the registered list (ACCESS_SHEET_CSV_URL) to read/write, matching the gate. GET ?email -> {exists, blob}; POST {email, blob} -> stores. While Upstash is unset, backup is simply off.
+- Onboarding: new screen (now step 3 of 5, before the plan-graph + privacy screen). Explains that data is stored only on her device and only she can access it; offers optional encrypted cloud backup. If she opts in: confirm/edit email (prefilled from the gate) + set a backup code with double-entry confirmation, plus a clear warning that the code cannot be recovered. Progress bar is now 5 dots; the plan-graph + privacy approval moved to step 4.
+- New-device restore: when there is no local data but a cloud backup exists for the gate email, a Restore screen asks for the backup code, decrypts locally and loads the data (skipping onboarding). Wrong code -> "קוד שגוי, נסי שוב." Option to start fresh without restoring.
+- Profile > נתוני בסיס: new "גיבוי מוצפן" status row (מופעל/כבוי) opening a manage sheet (BackupModal): enable (email+code+confirm), "גבה עכשיו", and "איפוס קוד" (re-keys from the current device and overwrites the cloud copy - the E2E-compatible reset).
+- Auto-backup: once a day, a few seconds after the first load/change of the day (not on every keystroke), when backup is enabled and a code is present locally. Tracked via myprime_bk_last.
+- VERSION 1.56->1.57. New file api/backup.js included in the zip (deploy it). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+
 - Tour tracker bubble (the daily-tasks step) text -> "וכאן המשימות היומיות. שתי המשימות הראשונות מסומנות אוטומטית כשאת ממלאת בפלוס את הצעדים והקלוריות 💜".
 - Tour bubbles whose target is a bottom-nav item (sel starts with "nav-") now sit just ABOVE the bottom bar instead of being pinned to the top.
 - Tracker modal yellow note -> "חלק מהמשימות מסומנות 'אוטומטי' - הן מתעדכנות לבד לפי מה שמילאת בפלוס של הקלוריות והצעדים, בלי שתצטרכי למלא שוב."

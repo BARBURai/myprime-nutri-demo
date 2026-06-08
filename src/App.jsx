@@ -393,8 +393,52 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.56";
+const VERSION = "1.59";
 const STORAGE_KEY = "myprime_demo_state_v1";
+
+/* ============================================================
+   ENCRYPTED CLOUD BACKUP (end-to-end)
+   The user's data is encrypted IN THE BROWSER with a key derived from her
+   personal backup code (PBKDF2 -> AES-GCM). The server (Upstash) stores ONLY
+   ciphertext + salt + iv. The code never leaves the device, so no one - not
+   even MyPrime - can read the data. The code is kept in its own localStorage
+   key so it is NOT part of the (backed-up) app state blob.
+   ============================================================ */
+const BK_CODE_KEY = "myprime_bk_code";
+const BK_LAST_KEY = "myprime_bk_last";
+const bkSubtle = (typeof window !== "undefined" && window.crypto && window.crypto.subtle) ? window.crypto.subtle : null;
+function bkGetCode() { try { return localStorage.getItem(BK_CODE_KEY) || ""; } catch (e) { return ""; } }
+function bkSetCode(code) { try { if (code) localStorage.setItem(BK_CODE_KEY, code); else localStorage.removeItem(BK_CODE_KEY); } catch (e) {} }
+function bkB64(buf) { let s = ""; const b = new Uint8Array(buf); for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
+function bkUnb64(str) { const s = atob(str); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
+async function bkDeriveKey(code, salt) {
+  const base = await bkSubtle.importKey("raw", new TextEncoder().encode(code), { name: "PBKDF2" }, false, ["deriveKey"]);
+  return bkSubtle.deriveKey({ name: "PBKDF2", salt, iterations: 150000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function bkEncrypt(code, plaintext) {
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const key = await bkDeriveKey(code, salt);
+  const ct = await bkSubtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext));
+  return { ct: bkB64(ct), salt: bkB64(salt), iv: bkB64(iv), v: 1 };
+}
+async function bkDecrypt(code, blob) {
+  const key = await bkDeriveKey(code, bkUnb64(blob.salt));
+  const pt = await bkSubtle.decrypt({ name: "AES-GCM", iv: bkUnb64(blob.iv) }, key, bkUnb64(blob.ct));
+  return new TextDecoder().decode(pt);
+}
+async function bkUpload(email, code, plaintext) {
+  if (!bkSubtle) return false;
+  const blob = await bkEncrypt(code, plaintext);
+  const r = await fetch("/api/backup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, blob }) });
+  if (!r.ok) return false;
+  const d = await r.json().catch(() => ({}));
+  return !!d.ok;
+}
+async function bkFetch(email) {
+  try { const r = await fetch(`/api/backup?email=${encodeURIComponent(email)}`); if (!r.ok) return { exists: false }; return await r.json(); }
+  catch (e) { return { exists: false }; }
+}
 
 /* ============================================================
    PRIMITIVES
@@ -571,7 +615,7 @@ function Stepper({ value, set, step = 1, min = 0, suffix }) {
 /* ============================================================
    ONBOARDING
    ============================================================ */
-function Onboarding({ onFinish, name }) {
+function Onboarding({ onFinish, name, email, fixedStart }) {
   const [step, setStep] = useState(0);
   const [age, setAge] = useState(50);
   const [heightCm, setHeightCm] = useState(165);
@@ -579,7 +623,7 @@ function Onboarding({ onFinish, name }) {
   const [rate, setRate] = useState(250);
   const [goalKg, setGoalKg] = useState(66);
   const [agree, setAgree] = useState(false);
-  const [startDate, setStartDate] = useState(sundayOf(TODAY));
+  const [startDate, setStartDate] = useState(fixedStart || sundayOf(TODAY));
   const [keepShabbat, setKeepShabbat] = useState(false);
   const [diet, setDiet] = useState([]);
   const [allergies, setAllergies] = useState([]);
@@ -588,6 +632,14 @@ function Onboarding({ onFinish, name }) {
   const [confirmNoSens, setConfirmNoSens] = useState(false);
   const [confirmSens, setConfirmSens] = useState(false);
   const [ack, setAck] = useState(false);
+  const [wantBackup, setWantBackup] = useState(null); // null = not chosen yet
+  const [ackData, setAckData] = useState(false);
+  const [bkEmail, setBkEmail] = useState((email || "").trim());
+  const [bkCode, setBkCode] = useState("");
+  const [bkCode2, setBkCode2] = useState("");
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bkEmail.trim());
+  const codeOk = bkCode.trim().length >= 4 && bkCode === bkCode2;
+  const backupStepOk = ackData && (wantBackup === false || (wantBackup === true && emailOk && codeOk));
   const customSens = dislikes.split(",").map((s) => s.trim()).filter(Boolean);
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setDislikes([...customSens, t].join(", ")); setNewSens(""); };
   const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
@@ -601,6 +653,7 @@ function Onboarding({ onFinish, name }) {
   const targets = computeTargets(draft);
   const proj = projection(weightKg, rate === 0 ? weightKg : goalKg, rate);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
+  const backupSetup = wantBackup ? { enabled: true, email: bkEmail.trim().toLowerCase(), code: bkCode } : { enabled: false };
 
   const Field = ({ label, children }) => (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
@@ -612,11 +665,11 @@ function Onboarding({ onFinish, name }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "10px 20px 16px" }}>
         <div style={{ display: "flex", gap: 6, margin: "6px 0 8px" }}>
-          {[0, 1, 2, 3].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
+          {[0, 1, 2, 3, 4].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
         </div>
         <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginBottom: 6 }}>v{VERSION}</div>
         <div style={{ textAlign: "center", marginBottom: 12 }}>
-          <button onClick={() => onFinish(draft)} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 15, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
+          <button onClick={() => onFinish(draft, { enabled: false })} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 15, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
         </div>
 
         {step === 0 && (
@@ -629,10 +682,19 @@ function Onboarding({ onFinish, name }) {
             <div style={{ fontSize: 13.5, color: C.faint, marginTop: -2, marginBottom: 4, lineHeight: 1.5 }}>לא ניתן להזין משקל נמוך מ-{minHealthyKg(heightCm)} ק״ג, הטווח הבריא לגובה שלך.</div>
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
-              <select value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 18, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
-                {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
-              </select>
-              <div style={{ fontSize: 14, color: C.faint, marginTop: 6 }}>התוכנית מתחילה בימי ראשון בלבד.</div>
+              {fixedStart ? (
+                <>
+                  <div style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 18, color: C.ink, background: C.infoBg, display: "flex", alignItems: "center", gap: 8 }}><Lock size={16} color={C.sub} />{new Date(startDate).toLocaleDateString("he-IL")}</div>
+                  <div style={{ fontSize: 14, color: C.faint, marginTop: 6 }}>התאריך נקבע לפי ההרשמה שלך לתוכנית.</div>
+                </>
+              ) : (
+                <>
+                  <select value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 18, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
+                    {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
+                  </select>
+                  <div style={{ fontSize: 14, color: C.faint, marginTop: 6 }}>התוכנית מתחילה בימי ראשון בלבד.</div>
+                </>
+              )}
             </div>
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>האם את מעוניינת להשתמש באפליקציה בכל ימות השבוע (כולל שבת)?</div>
@@ -720,6 +782,42 @@ function Onboarding({ onFinish, name }) {
 
         {step === 3 && (
           <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Lock size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>גיבוי מאובטח</span></div>
+            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 10 }}>
+              מה שאת ממלאת פה באפליקציה נשמר במכשיר שלך בלבד ורק לך יש גישה לנתונים האלה. לחברת מיי פריים אין אפשרות לראות את הנתונים או להשתמש בהם.
+            </p>
+            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 14 }}>
+              אם תרצי, נשמור גיבוי <b>מוצפן</b> בענן - כך שאם תחליפי טלפון או יקרה משהו למכשיר, תוכלי לשחזר הכל. הגיבוי מוצפן כך ש<b>רק את</b> יכולה לפתוח אותו.
+            </p>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {[{ v: true, label: "כן, רוצה גיבוי מוצפן" }, { v: false, label: "לא תודה, רק במכשיר הזה" }].map((o) => {
+                const sel = wantBackup === o.v;
+                return (<button key={String(o.v)} onClick={() => setWantBackup(o.v)} style={{ flex: 1, border: `2px solid ${sel ? C.brand : C.line}`, background: sel ? C.brandBg : C.panel, color: sel ? C.brandD : C.ink, borderRadius: 12, padding: "12px 8px", fontSize: 15, fontWeight: sel ? 600 : 400, cursor: "pointer", fontFamily: fontStack, lineHeight: 1.4 }}>{o.label}</button>);
+              })}
+            </div>
+            {wantBackup === true && (
+              <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
+                <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>אימייל לגיבוי</div>
+                <input value={bkEmail} onChange={(e) => setBkEmail(e.target.value)} inputMode="email" placeholder="name@example.com" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${emailOk || !bkEmail ? C.line : C.amber}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", direction: "ltr", textAlign: "left" }} />
+                <div style={{ fontSize: 13, color: C.faint, marginTop: 4, marginBottom: 12 }}>הגיבוי ישויך לאימייל הזה. אפשר לאשר או לתקן.</div>
+                <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
+                <input value={bkCode} onChange={(e) => setBkCode(e.target.value)} type="password" placeholder="קוד אישי שתזכרי" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+                <input value={bkCode2} onChange={(e) => setBkCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב לאישור" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${bkCode2 && bkCode !== bkCode2 ? C.amber : C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", marginTop: 8 }} />
+                {bkCode2 && bkCode !== bkCode2 && <div style={{ fontSize: 13, color: C.amber, marginTop: 4 }}>הקודים אינם תואמים.</div>}
+                <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: "10px 12px", borderRadius: 10, lineHeight: 1.55, marginTop: 10, display: "flex", gap: 6 }}>
+                  <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>בחרי קוד פשוט שתזכרי. אי אפשר לשחזר אותו - אם תשכחי, לא נוכל לפתוח את הגיבוי בטלפון חדש. רשמי אותו במקום בטוח.</span>
+                </div>
+              </div>
+            )}
+            <div onClick={() => setAckData(!ackData)} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", padding: "12px 0 2px", marginTop: 14, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${ackData ? C.brand : C.line}`, background: ackData ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{ackData && <Check size={14} color="#fff" />}</div>
+              <span style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.55 }}>קראתי והבנתי את מדיניות שמירת הנתונים של מיי פריים.</span>
+            </div>
+          </>
+        )}
+
+        {step === 4 && (
+          <>
             <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>התוכנית שלך</span>
             <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 12 }}>
               {proj.maintain ? "תוכנית לשמירה על המשקל הנוכחי." : `בקצב של ${rate} ג׳ בשבוע, תגיעי ל־${goalKg} ק״ג בעוד כ־${proj.weeks} שבועות.`}
@@ -765,7 +863,7 @@ function Onboarding({ onFinish, name }) {
 
       <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", gap: 10, alignItems: "center" }}>
         {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
-        {step < 3 ? (<Btn onClick={next}>המשך</Btn>) : (<Btn disabled={!agree} onClick={() => onFinish(draft)}>בואי נתחיל</Btn>)}
+        {step < 4 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn disabled={!agree} onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
       </div>
 
       {confirmNoSens && (
@@ -1300,7 +1398,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsByDate, programWeek, onOpenFaq }) {
+function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   const [baseOpen, setBaseOpen] = useState(false);
@@ -1362,6 +1460,13 @@ function ProfileScreen({ profile, setProfile, targets, onReset, userName, stepsB
                 </div>
               </div>
             )}
+            <div onClick={onOpenBackup} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Lock size={15} color={C.sub} />גיבוי מוצפן: {profile.backup && profile.backup.enabled ? "מופעל" : "כבוי"}{profile.backup && profile.backup.enabled ? <Check size={15} color={C.brand} /> : null}</div>
+                <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{profile.backup && profile.backup.enabled ? "מגובה אוטומטית, רק את יכולה לפתוח" : "הפעלת גיבוי מוצפן בענן"}</div>
+              </div>
+              <ChevronDown size={20} color={C.sub} style={{ transform: "rotate(-90deg)", flexShrink: 0 }} />
+            </div>
             <div style={{ fontSize: 14, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
           </div>
         )}
@@ -2471,6 +2576,8 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
 function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg }) {
   const deniedText = reason === "device_limit"
     ? "המייל שלך כבר מחובר בשני מכשירים. ניתן להשתמש ב-MyPrime בו-זמנית בשני מכשירים בלבד. התנתקי במכשיר אחר ונסי שוב, או פני למנהלת התוכנית."
+    : reason === "expired"
+    ? "תקופת השימוש באפליקציה הסתיימה. תודה שהיית חלק מהמסע שלנו 💜"
     : "המייל הזה לא נמצא ברשימת המשתתפות בתוכנית. אם נרשמת לאחרונה, או שיש בעיה - פני למנהלת התוכנית.";
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center", fontFamily: fontStack }}>
@@ -2495,7 +2602,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
       {status === "denied" && (
         <>
           <div style={{ fontSize: 15, lineHeight: 1.7, margin: "12px 0 18px", background: C.amberBg, color: C.amber, padding: 12, borderRadius: 12 }}>{deniedText}</div>
-          <div style={{ width: "100%" }}><Btn variant="ghost" onClick={onRetry}>נסי שוב / כתובת אחרת</Btn></div>
+          {reason !== "expired" && <div style={{ width: "100%" }}><Btn variant="ghost" onClick={onRetry}>נסי שוב / כתובת אחרת</Btn></div>}
         </>
       )}
     </div>
@@ -3563,6 +3670,72 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
   );
 }
 
+function RestoreScreen({ email, busy, onRestore, onSkip }) {
+  const [code, setCode] = useState("");
+  const [err, setErr] = useState("");
+  const submit = async () => { setErr(""); const r = await onRestore(code); if (!r.ok) setErr(r.msg || "שגיאה."); };
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", fontFamily: fontStack }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "26px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Lock size={22} color={C.brand} /><span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>מצאנו גיבוי מוצפן</span></div>
+        <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 16 }}>קיים גיבוי מוצפן עבור <span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{email}</span>. הזיני את קוד הגיבוי כדי לשחזר את כל הנתונים שלך למכשיר הזה.</p>
+        <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
+        <input value={code} onChange={(e) => { setCode(e.target.value); setErr(""); }} type="password" placeholder="הקוד שבחרת" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${err ? C.amber : C.line}`, borderRadius: 10, padding: "12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+        {err && <div style={{ fontSize: 14, color: C.amber, marginTop: 6 }}>{err}</div>}
+      </div>
+      <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", flexDirection: "column", gap: 8 }}>
+        <Btn disabled={busy || !code.trim()} onClick={submit}>{busy ? "משחזר..." : "שחזרי את הנתונים"}</Btn>
+        <Btn variant="ghost" onClick={onSkip} style={{ color: C.sub }}>התחלה מחדש (בלי שחזור)</Btn>
+      </div>
+    </div>
+  );
+}
+
+function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCode, onClose }) {
+  const enabled = !!(backup && backup.enabled);
+  const [mode, setMode] = useState(enabled ? "view" : "enable"); // view | enable | reset
+  const [email, setEmail] = useState(((backup && backup.email) || gateEmail || "").trim());
+  const [code, setCode] = useState("");
+  const [code2, setCode2] = useState("");
+  const [msg, setMsg] = useState(null);
+  const run = async (fn) => { setMsg(null); const r = await fn(); setMsg({ ok: r.ok, text: r.msg }); return r; };
+  const codeOk = code.trim().length >= 4 && code === code2;
+  const inputS = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", marginBottom: 8 };
+  return (
+    <SheetShell title="גיבוי מוצפן" onClose={onClose}>
+      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 14 }}>הנתונים שלך נשמרים במכשיר. גיבוי מוצפן שומר עותק בענן שרק את יכולה לפתוח - אף אחד, גם לא מיי פריים, לא רואה את התוכן.</p>
+      {enabled && mode === "view" && (
+        <>
+          <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 14.5, color: C.brandD, lineHeight: 1.6 }}>הגיבוי המוצפן מופעל ומגובה אוטומטית פעם ביום. משויך ל-<span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{(backup && backup.email) || gateEmail}</span>.</div>
+          <Btn disabled={busy} onClick={() => run(onBackupNow)}>{busy ? "מגבה..." : "גבה עכשיו"}</Btn>
+          <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setMsg(null); setCode(""); setCode2(""); setMode("reset"); }} style={{ color: C.sub }}>איפוס קוד</Btn></div>
+        </>
+      )}
+      {mode === "reset" && (
+        <>
+          <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>בחרי קוד חדש. הנתונים שבמכשיר יגובו מחדש עם הקוד החדש.</div>
+          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="קוד חדש" style={inputS} />
+          <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב" style={inputS} />
+          <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onResetCode(code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מעדכן..." : "עדכון קוד"}</Btn>
+          <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setMsg(null); setMode("view"); }} style={{ color: C.sub }}>ביטול</Btn></div>
+        </>
+      )}
+      {!enabled && mode === "enable" && (
+        <>
+          <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>אימייל לגיבוי</div>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="name@example.com" style={{ ...inputS, direction: "ltr", textAlign: "left" }} />
+          <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
+          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="קוד אישי שתזכרי" style={inputS} />
+          <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב" style={inputS} />
+          <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: "10px 12px", borderRadius: 10, lineHeight: 1.55, marginBottom: 12, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>אי אפשר לשחזר את הקוד. אם תשכחי אותו, לא נוכל לפתוח את הגיבוי בטלפון חדש. רשמי אותו במקום בטוח.</span></div>
+          <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onEnable(email, code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מפעיל..." : "הפעלת גיבוי מוצפן"}</Btn>
+        </>
+      )}
+      {msg && <div style={{ fontSize: 14, color: msg.ok ? C.brandD : C.amber, marginTop: 10, textAlign: "center" }}>{msg.text}</div>}
+    </SheetShell>
+  );
+}
+
 export default function App() {
   const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: [], keepShabbat: false, fasting: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
@@ -3595,11 +3768,14 @@ export default function App() {
   const [tour, setTour] = useState(null);
   const [showIntro, setShowIntro] = useState(saved ? false : true);
   const [notes, setNotes] = useState([]);
+  const [bkRestore, setBkRestore] = useState("idle"); // idle | checking | offer | none
+  const [bkBusy, setBkBusy] = useState(false);
   const [gate, setGate] = useState("checking");
   const [gateReason, setGateReason] = useState("");
   const [gateEmail, setGateEmail] = useState("");
   const [gateName, setGateName] = useState("");
   const [gateMsg, setGateMsg] = useState("");
+  const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
 
   // Android/Samsung hardware "back": intercept so the app doesn't close instantly.
   // Back first closes an open sheet/modal; otherwise it asks whether to leave.
@@ -3630,6 +3806,7 @@ export default function App() {
       const d = await r.json();
       if (d.allowed) {
         try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
+        if (d.startDate) { setGateStartDate(d.startDate); try { localStorage.setItem("myprime_start_date", d.startDate); } catch (e) {} }
         setGateReason(""); setGate("ok");
       } else { setGateReason(d.reason || "not_registered"); setGate("denied"); }
     } catch (e) { setGateMsg("תקלת תקשורת. נסי שוב."); setGate("form"); }
@@ -3640,13 +3817,19 @@ export default function App() {
     if (nm) setGateName(nm);
     if (em) { setGateEmail(em); checkAccess(em, nm); } else { setGate("form"); }
   }, []);
+  // Keep the program start date aligned with the registration sheet for returning users.
+  useEffect(() => {
+    if (gate !== "ok" || !onboarded || !gateStartDate) return;
+    if (profile.startDate === gateStartDate) return;
+    setProfile((p) => ({ ...p, startDate: gateStartDate }));
+  }, [gate, onboarded, gateStartDate]);
   const submitGate = () => {
     const e = gateEmail.trim().toLowerCase(); const n = gateName.trim();
     if (!n) { setGateMsg("נא להזין שם פרטי."); return; }
     if (!e || !e.includes("@")) { setGateMsg("נא להזין כתובת מייל תקינה."); return; }
     checkAccess(e, n);
   };
-  const retryGate = () => { try { localStorage.removeItem("myprime_access_email"); } catch (e) {} setGateEmail(""); setGateMsg(""); setGateReason(""); setGate("form"); };
+  const retryGate = () => { try { localStorage.removeItem("myprime_access_email"); localStorage.removeItem("myprime_start_date"); } catch (e) {} setGateEmail(""); setGateMsg(""); setGateReason(""); setGateStartDate(""); setGate("form"); };
 
   const targets = useMemo(() => computeTargets(profile), [profile]);
   const dailyTarget = profile.calorieOverride || targets.targetKcal;
@@ -3708,7 +3891,101 @@ export default function App() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, checkins, goalAckWeek })); } catch (e) {}
   }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, checkins, goalAckWeek]);
 
-  const finishOnboarding = (p) => { setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "" }); setWeights(initWeights(p.weightKg, p.startDate)); setOnboarded(true); };
+  // New device: if there is no local data yet but a cloud backup exists for this email, offer restore.
+  useEffect(() => {
+    if (gate !== "ok" || onboarded || saved) return;
+    if (bkRestore !== "idle") return;
+    const email = (gateEmail || "").trim().toLowerCase();
+    if (!email || !bkSubtle) { setBkRestore("none"); return; }
+    setBkRestore("checking");
+    (async () => { const r = await bkFetch(email); setBkRestore(r && r.exists ? "offer" : "none"); })();
+  }, [gate, onboarded, saved, gateEmail, bkRestore]);
+
+  // Auto-backup: once a day, a few seconds after the first load/change of the day.
+  useEffect(() => {
+    if (gate !== "ok" || !onboarded) return;
+    if (!(profile.backup && profile.backup.enabled)) return;
+    const code = bkGetCode();
+    const email = ((profile.backup && profile.backup.email) || gateEmail || "").trim().toLowerCase();
+    if (!code || !email || !bkSubtle) return;
+    let last = ""; try { last = localStorage.getItem(BK_LAST_KEY) || ""; } catch (e) {}
+    if (last === today) return;
+    const t = setTimeout(async () => {
+      try {
+        const plaintext = localStorage.getItem(STORAGE_KEY);
+        if (!plaintext) return;
+        const ok = await bkUpload(email, code, plaintext);
+        if (ok) { try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} }
+      } catch (e) {}
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [gate, onboarded, profile, log, checkins, stepsByDate, waterByDate, weights, today]);
+
+  const doRestore = async (code) => {
+    const email = (gateEmail || "").trim().toLowerCase();
+    if (!code.trim()) return { ok: false, msg: "יש להזין קוד." };
+    setBkBusy(true);
+    try {
+      const r = await bkFetch(email);
+      if (!r || !r.exists) { setBkBusy(false); return { ok: false, msg: "לא נמצא גיבוי לאימייל הזה." }; }
+      const plaintext = await bkDecrypt(code, r.blob);
+      JSON.parse(plaintext); // sanity
+      localStorage.setItem(STORAGE_KEY, plaintext);
+      bkSetCode(code);
+      try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {}
+      window.location.reload();
+      return { ok: true };
+    } catch (e) { setBkBusy(false); return { ok: false, msg: "קוד שגוי, נסי שוב." }; }
+  };
+  const backupNow = async () => {
+    const code = bkGetCode();
+    const email = ((profile.backup && profile.backup.email) || gateEmail || "").trim().toLowerCase();
+    if (!code || !email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
+    setBkBusy(true);
+    try {
+      const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "");
+      setBkBusy(false);
+      if (ok) { try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} return { ok: true, msg: "גובה בהצלחה." }; }
+      return { ok: false, msg: "הגיבוי נכשל, נסי שוב." };
+    } catch (e) { setBkBusy(false); return { ok: false, msg: "הגיבוי נכשל, נסי שוב." }; }
+  };
+  const enableBackup = async (email, code) => {
+    const em = (email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return { ok: false, msg: "אימייל לא תקין." };
+    if (code.trim().length < 4) return { ok: false, msg: "קוד קצר מדי." };
+    if (!bkSubtle) return { ok: false, msg: "הדפדפן אינו תומך בהצפנה." };
+    bkSetCode(code);
+    setBkBusy(true);
+    try {
+      const ok = await bkUpload(em, code, localStorage.getItem(STORAGE_KEY) || "");
+      setBkBusy(false);
+      if (!ok) { bkSetCode(""); return { ok: false, msg: "ההפעלה נכשלה, נסי שוב." }; }
+      setProfile((p) => ({ ...p, backup: { enabled: true, email: em } }));
+      try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {}
+      return { ok: true, msg: "הגיבוי המוצפן הופעל." };
+    } catch (e) { setBkBusy(false); bkSetCode(""); return { ok: false, msg: "ההפעלה נכשלה, נסי שוב." }; }
+  };
+  const resetBackupCode = async (newCode) => {
+    if (newCode.trim().length < 4) return { ok: false, msg: "קוד קצר מדי." };
+    const email = ((profile.backup && profile.backup.email) || gateEmail || "").trim().toLowerCase();
+    if (!email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
+    setBkBusy(true);
+    try {
+      const ok = await bkUpload(email, newCode, localStorage.getItem(STORAGE_KEY) || "");
+      setBkBusy(false);
+      if (!ok) return { ok: false, msg: "האיפוס נכשל, נסי שוב." };
+      bkSetCode(newCode);
+      try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {}
+      return { ok: true, msg: "הקוד עודכן והנתונים גובו מחדש." };
+    } catch (e) { setBkBusy(false); return { ok: false, msg: "האיפוס נכשל, נסי שוב." }; }
+  };
+
+  const finishOnboarding = (p, bk) => {
+    const backup = { enabled: !!(bk && bk.enabled), email: (bk && bk.email) || (gateEmail || "").trim().toLowerCase() };
+    if (bk && bk.enabled && bk.code) { bkSetCode(bk.code); try { localStorage.removeItem(BK_LAST_KEY); } catch (e) {} }
+    setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "", backup });
+    setWeights(initWeights(p.weightKg, p.startDate)); setOnboarded(true);
+  };
   const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
   const editEntry = (e) => setModal(e.unit === "serving" ? { kind: "recipe", recipe: null, editEntry: e } : { kind: "food", preMeal: null, editEntry: e });
   const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
@@ -3788,7 +4065,8 @@ export default function App() {
   const resetDemo = () => {
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
     try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
-    setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg("");
+    try { localStorage.removeItem("myprime_start_date"); } catch (e) {}
+    setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg(""); setGateStartDate("");
     setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
     setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate)); setSelectedDate(TODAY);
     setCheckins({});
@@ -3839,14 +4117,20 @@ export default function App() {
         {gate !== "ok" ? (
           <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} />
         ) : !onboarded ? (
-          <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} /></div>
+          bkRestore === "offer" ? (
+            <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={() => setBkRestore("none")} />
+          ) : bkRestore === "checking" ? (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.faint, fontFamily: fontStack }}>טוען...</div>
+          ) : (
+            <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} email={gateEmail} fixedStart={gateStartDate} /></div>
+          )
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
               {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} />}
             </div>
             <div style={{ position: "relative", flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", opacity: introLock ? 0.4 : 1, pointerEvents: introLock ? "none" : "auto" }}>
@@ -3865,6 +4149,7 @@ export default function App() {
 
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} onStartTour={() => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
+            {sheet === "backup" && <BackupModal backup={profile.backup} gateEmail={gateEmail} busy={bkBusy} onEnable={enableBackup} onBackupNow={backupNow} onResetCode={resetBackupCode} onClose={() => setSheet(null)} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} autoFocusInput={!tour} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
             {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onSetMl={(ml) => setWaterForDate(selectedDate, ml)} onSetCup={(cup) => setProfile({ ...profile, cupMl: cup })} onClose={() => setSheet(null)} />}
