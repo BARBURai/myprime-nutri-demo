@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.54";
+const VERSION = "1.55";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -922,10 +922,9 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       )}
       {isIntro ? (
         <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "40px 24px 64px", textAlign: "center" }}>
-          <div style={{ fontSize: 47, marginBottom: 12 }}>🤍</div>
-          <div style={{ fontSize: 21, fontWeight: 700, color: C.ink }}>ברוכה הבאה למסע</div>
-          <div style={{ fontSize: 16, color: C.sub, marginTop: 10, lineHeight: 1.75 }}>היומיים הראשונים רכים - בלי מעקב ובלי מדידות.<br />רק להכיר את האפליקציה ולהתרגל.<br />מחרתיים מתחילות יחד, צעד אחרי צעד.</div>
-          <div style={{ fontSize: 13.5, color: C.faint, marginTop: 18 }}>(כאן יופיע ההסבר הראשוני - טקסט זמני)</div>
+          <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto 14px" }} />
+          <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>ברוכה הבאה לאפליקציית המעקב של מיי פריים 360</div>
+          <div style={{ fontSize: 16, color: C.sub, marginTop: 12, lineHeight: 1.75 }}>ביומיים הראשונים עדיין אין מעקב. {progDay === 1 ? "מחרתיים" : "מחר"} מתחילות יחד, צעד אחרי צעד, ותקבלי כאן ביום שלישי את כל ההסברים על השימוש באפליקציה.</div>
         </div>
       ) : isShabbatRest ? (
         <div style={{ padding: "36px 24px 60px", textAlign: "center", color: C.faint }}>
@@ -3421,13 +3420,13 @@ const TIPS = [
 // open = the screen the tour itself opens when this step becomes active (demo-driven nav). undefined = leave as-is.
 // tap:true = no screen-blocking backdrop; advances when the real action fires (event). Otherwise a button advances.
 const TOUR_YES = [
-  { view: "day", sel: "cal", tap: true, event: "addcalorie", text: "בואי ננסה יחד 🙂 לחצי על כפתור ה-➕ של הקלוריות." },
+  { view: "day", open: "day", sel: "cal", tap: true, event: "addcalorie", text: "בואי ננסה יחד 🙂 לחצי על כפתור ה-➕ של הקלוריות." },
   { view: "caloriemenu", open: "caloriemenu", sel: "entry-food", text: "בוחרים 'הוספת מזון'." },
   { view: "addfood", open: "addfood", sel: "method-history", text: "הדרך הכי מהירה - מוצרים שכבר הוספת נשמרים כאן וחוזרים בהקשה אחת. מושלם לדברים שחוזרים על עצמם 💜" },
   { view: "addfood", open: "addfood", sel: "method-ai", text: "ובשביל משהו חדש - הכי פשוט לספר לי. בהקשה על 'ספרי לי מה אכלת' אפשר לכתוב או לדבר בחופשיות, למשל 'חביתה משתי ביצים וכוס קפה'. אני אעריך את הקלוריות ואוסיף ליומן - וככל שתפרטי יותר, ההערכה מדויקת יותר." },
   { view: "day", open: "day", sel: "diarylist", text: "כל פריט שתוסיפי מופיע כאן ביומן שלך - ובלחיצה עליו תמיד אפשר לערוך או למחוק אותו." },
   { view: "caloriemenu", open: "caloriemenu", sel: "entry-activity", text: "ובאותו כפתור אפשר גם להוסיף פעילות גופנית. כל אימון או פעילות שתזיני מתווספים לתקציב הקלוריות היומי שלך, כלומר מגדילים את הכמות שמותר לך לאכול באותו יום. הליכה לא נספרת כאן - היא נמדדת לבד דרך הצעדים 💜" },
-  { view: "day", open: "day", sel: "steps", text: "עכשיו הצעדים 👟 בואי נראה איך מזינים אותם." },
+  { view: "day", open: "day", sel: "steps", tap: true, event: "opensteps", text: "עכשיו הצעדים 👟 לחצי על הפלוס של הצעדים." },
   { view: "steps", open: "steps", sel: "steps-input", text: "כאן מזינים את מספר הצעדים. פותחים את אפליקציית הבריאות בטלפון, רואים כמה צעדים נצברו היום, ומזינים את המספר כאן. אפשר לעדכן בכל שלב במהלך היום - אל דאגה." },
   { view: "day", open: "day", sel: "tracker", text: "וכאן המשימות היומיות. ברגע שמילאת צעדים ומזון - שתי המשימות הראשונות מסומנות אוטומטית וכבר רשומות, אין צורך לפתוח את היומן בעצמך 💜" },
 ];
@@ -3483,7 +3482,7 @@ function FaqModal({ onClose }) {
   );
 }
 
-function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd }) {
+function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
   const [rect, setRect] = useState(null);
   const cur = steps[idx];
   useEffect(() => {
@@ -3497,14 +3496,30 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd }) {
     return () => { cancelled = true; clearTimeout(t); };
   }, [idx, cur.sel]);
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-  const below = rect ? rect.top < vh * 0.5 : true;
-  const bubblePos = rect ? (below ? { top: rect.bottom + 12 } : { bottom: vh - rect.top + 12 }) : { bottom: 28 };
   const tap = !!cur.tap;
+  const stop = (e) => e.stopPropagation();
+  // Bubble position: element high -> below it; element low -> pinned near the top so it never hides the options below.
+  const bubblePos = !rect ? { bottom: 28 } : (rect.top < vh * 0.5 ? { top: rect.bottom + 12 } : { top: 12 });
+  const pad = 8;
+  const hT = rect ? Math.max(0, rect.top - pad) : 0, hB = rect ? rect.bottom + pad : 0, hL = rect ? Math.max(0, rect.left - pad) : 0, hR = rect ? rect.right + pad : 0;
   return (
     <>
-      {!tap && <div style={{ position: "fixed", inset: 0, zIndex: 99996 }} onClick={(e) => e.stopPropagation()} />}
-      {rect && <div style={{ position: "fixed", top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 16, boxShadow: tap ? "0 0 0 9999px rgba(0,0,0,0.45)" : "0 0 0 9999px rgba(0,0,0,0.62)", border: "2px solid #fff", zIndex: 99997, pointerEvents: "none", transition: "all .2s" }} />}
-      {!rect && !tap && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
+      {tap && rect ? (
+        // Tap steps: dim everything EXCEPT the highlighted element (4 strips), so only that element (and the bubble) are tappable.
+        <>
+          <div onClick={stop} style={{ position: "fixed", top: 0, left: 0, right: 0, height: hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div onClick={stop} style={{ position: "fixed", top: hB, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div onClick={stop} style={{ position: "fixed", top: hT, left: 0, width: hL, height: hB - hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div onClick={stop} style={{ position: "fixed", top: hT, left: hR, right: 0, height: hB - hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div style={{ position: "fixed", top: hT, left: hL, width: hR - hL, height: hB - hT, borderRadius: 16, border: "2px solid #fff", zIndex: 99997, pointerEvents: "none" }} />
+        </>
+      ) : (
+        <>
+          {!tap && <div onClick={stop} style={{ position: "fixed", inset: 0, zIndex: 99996 }} />}
+          {rect && <div style={{ position: "fixed", top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 16, boxShadow: "0 0 0 9999px rgba(0,0,0,0.62)", border: "2px solid #fff", zIndex: 99997, pointerEvents: "none", transition: "all .2s" }} />}
+          {!rect && !tap && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
+        </>
+      )}
       <div style={{ position: "fixed", left: 16, right: 16, ...bubblePos, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
         <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>{cur.text}</div>
         {cur.guide && <StepGuideLink linkOnly style={{ marginBottom: 12 }} />}
@@ -3521,13 +3536,16 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd }) {
             </div>
           </>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 12.5, color: C.faint }}>{steps.length > 1 ? `${idx + 1}/${steps.length}` : ""}</span>
-              {onEnd && !cur.last && <button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button>}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {idx > 0 && onBack && <button onClick={onBack} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 16px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
+                {!tap && <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.btn || "המשך"}</button>}
+              </div>
             </div>
-            {!cur.tap && <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.btn || "המשך"}</button>}
-          </div>
+            {onEnd && !cur.last && <div style={{ marginTop: 10, textAlign: "center" }}><button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button></div>}
+          </>
         )}
       </div>
     </>
@@ -3637,6 +3655,7 @@ export default function App() {
     const steps = (tour && tour.steps.length > 1) ? tour.steps : buildTour("no");
     setTour({ steps, i: steps.length - 1 });
   };
+  const tourBack = () => { if (tour && tour.i > 0) setTour({ ...tour, i: tour.i - 1 }); };
   const tourEvent = (key) => {
     if (!tour) return;
     const cur = tour.steps[tour.i];
@@ -3813,7 +3832,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} />}
@@ -3852,7 +3871,7 @@ export default function App() {
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
               : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} />)}
-            {tour && tour.steps[tour.i] && tour.steps[tour.i].view === tourView && <TutorialOverlay steps={tour.steps} idx={tour.i} onNext={tourAdvance} onChoice={tourChoice} onEnd={tourEnd} />}
+            {tour && tour.steps[tour.i] && tour.steps[tour.i].view === tourView && <TutorialOverlay steps={tour.steps} idx={tour.i} onNext={tourAdvance} onChoice={tourChoice} onEnd={tourEnd} onBack={tourBack} />}
           </>
         )}
         {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
