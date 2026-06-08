@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.50";
+const VERSION = "1.52";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -805,7 +805,7 @@ function Onboarding({ onFinish, name }) {
 /* ============================================================
    SCREENS
    ============================================================ */
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, overlayOpen = false }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, overlayOpen = false }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -840,10 +840,13 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
     if (isIntro || isShabbatRest) return;
     if (overlayOpen) return; // never start a tip over an open sheet/modal (no on-screen target -> no spotlight)
     const ctx = { progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBanner: stepBannerActive, week, weeklySummaryShown: checkinOpen && (dow === 6 || dow === 0) };
-    const due = TIPS.filter((t) => t.due(ctx) && !(tipsSeen || []).includes(t.key));
+    const due = TIPS.filter((t) => t.due(ctx) && !(tipsSeen || []).includes(t.key) && !["cal", "steps", "tracker", "cabinet"].includes(t.key));
     if (due.length) { setTipQueue(due); setTipIdx(0); }
   }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, stepBannerActive, tipsSeen, tipIdx, isIntro, isShabbatRest, week, dow, overlayOpen]);
   const tipAdvance = () => setTipIdx((i) => { const n = i + 1; if (n >= tipQueue.length) { onTipsSeen && onTipsSeen(tipQueue.map((t) => t.key)); setTipQueue([]); return -1; } return n; });
+  // First-bubble choice ("רוצה שאראה לך דוגמה?"). For now both continue to the next bubble;
+  // the step-by-step food-example bubbles (the YES path) will be inserted here once their content is provided.
+  const tipChoose = (yes) => { tipAdvance(); };
   const ciWeek = Math.min(week, 10);
   const ciTasks = checkinOpen ? tasksForDate(profile.startDate, date, profile.keepShabbat, profile.fasting) : [];
   const ciAnswers = (checkins && checkins[date]) || {};
@@ -879,8 +882,8 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   };
   return (
     <div style={{ padding: "8px 0 24px" }}>
-      {tipIdx >= 0 && tipIdx < tipQueue.length && <TutorialOverlay steps={tipQueue} idx={tipIdx} onNext={tipAdvance} />}
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
+      {tipIdx >= 0 && tipIdx < tipQueue.length && <TutorialOverlay steps={tipQueue} idx={tipIdx} onNext={tipAdvance} onChoice={tipChoose} />}
+      <div data-tut="daystrip" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
           const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
           return (
@@ -896,6 +899,9 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
             </button>
           );
         })}
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", padding: "6px 16px 0" }}>
+        <button data-tut="tourbtn" onClick={onStartTour} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 999, padding: "5px 14px", fontSize: 13, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={15} /> סיור באפליקציה</button>
       </div>
 
       {stepAction && (
@@ -1783,7 +1789,7 @@ function NotesFab({ notes, setNotes, screen, userName }) {
 /* ============================================================
    ADD / EDIT MODAL
    ============================================================ */
-function AddModal({ state, close, commit, removeAndClose, favorites }) {
+function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
   const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || "בוקר");
   const [food, setFood] = useState(state.editEntry ? (FOODS.find((f) => f.name === state.editEntry.name) || foodFromEntry(state.editEntry)) : null);
@@ -1982,12 +1988,12 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
         </div>
         {step === "method" && (
           <>
-            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", bg: C.infoBg, color: C.info, go: () => setStep("ai") },
+            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
               { ic: Camera, t: "צילום ארוחה", s: "המהיר ביותר", tag: "מהיר", bg: C.amberBg, color: C.amber, go: () => setStep("photo") },
               { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
-              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, go: () => setStep("history") },
+              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => setStep("history") },
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") }].map((o) => (
-              <div key={o.t} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
+              <div key={o.t} data-tut={o.tut} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
                 <div style={{ width: 46, height: 46, borderRadius: 13, background: o.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 3px 9px ${o.color}55` }}><o.ic size={23} color="#fff" strokeWidth={2.2} /></div>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{o.t}</div><div style={{ fontSize: 14, color: C.sub }}>{o.s}</div></div>
                 {o.tag && <span style={{ fontSize: 13, background: C.panel, color: o.color, padding: "3px 10px", borderRadius: 8, fontWeight: 500 }}>{o.tag}</span>}
@@ -2117,7 +2123,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites }) {
           </div>
         )}
         {step === "ai" && (
-          <div style={{ display: "flex", flexDirection: "column", height: 380 }}>
+          <div data-tut="ai-chat" style={{ display: "flex", flexDirection: "column", height: 380 }}>
             <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
               {aiMsgs.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
@@ -2211,7 +2217,7 @@ function EntryMenu({ onClose, onPick, mode }) {
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
         </div>
         {items.map((o) => (
-          <div key={o.id} onClick={() => onPick(o.id)} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${o.tint.bg}`, borderInlineStart: `4px solid ${o.tint.fg}`, background: o.tint.bg, borderRadius: 14, padding: 13, marginBottom: 8, cursor: "pointer" }}>
+          <div key={o.id} data-tut={o.id === "food" ? "entry-food" : undefined} onClick={() => onPick(o.id)} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${o.tint.bg}`, borderInlineStart: `4px solid ${o.tint.fg}`, background: o.tint.bg, borderRadius: 14, padding: 13, marginBottom: 8, cursor: "pointer" }}>
             <div style={{ width: 38, height: 38, borderRadius: 10, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><o.ic size={19} color={o.tint.fg} /></div>
             <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{o.t}</div>{o.s && <div style={{ fontSize: 14, color: C.sub }}>{o.s}</div>}</div>
             <ChevronLeft size={18} color={o.tint.fg} />
@@ -3392,7 +3398,7 @@ function DevDateBar({ onAnchor }) {
 }
 
 const TIPS = [
-  { key: "cal", sel: "cal", title: "הוספת מזון ופעילות (כפתור +)", due: (c) => c.progDay >= 3, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת ואת הפעילות הגופנית שעשית (חוץ מהצעדים). יש כמה דרכים: לספר במילים או בדיבור מה אכלת, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה. אפשר לעדכן בכל פעם שאת מוסיפה משהו, לאורך כל היום." },
+  { key: "cal", sel: "cal", title: "הוספת מזון ופעילות (כפתור +)", due: (c) => c.progDay >= 3, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת ואת הפעילות הגופנית שעשית (חוץ מהצעדים). יש כמה דרכים: לספר במילים או בדיבור מה אכלת, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה. אפשר לעדכן בכל פעם שאת מוסיפה משהו, לאורך כל היום.", prompt: "רוצה שאראה לך דוגמה?", choice: { yes: "כן, בבקשה", no: "אין צורך, נמשיך" } },
   { key: "steps", sel: "steps", title: "מילוי הצעדים", guide: true, due: (c) => c.stepsOpen, text: "כאן את ממלאת את הצעדים שלך. כדי לדעת כמה צעדים עשית, פתחי את אפליקציית הבריאות בטלפון (Apple Health באייפון, Samsung Health בסמסונג), מצאי את מספר הצעדים של היום, והזיני אותו כאן. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן - אל דאגה." },
   { key: "tracker", sel: "tracker", title: "המשימות היומיות", due: (c) => c.checkinOpen, text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך המשימות שלך בשלב הזה - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
   { key: "cabinet", sel: "cabinet", title: "ארון ההישגים", due: (c) => c.checkinOpen, text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
@@ -3402,7 +3408,41 @@ const TIPS = [
   { key: "weeklysummary", sel: "weeklysummary", title: "הסיכום השבועי", due: (c) => c.week === 1 && c.weeklySummaryShown, text: "זה השבוע הראשון שלך בתוכנית! כאן מחכה לך סיכום שבועי קצר. ואם שכחת למלא משהו בימים שעברו - אפשר להשלים ולפתוח שוב את הסיכום, והוא יתעדכן." },
 ];
 
-// FAQ / help screen content (Profile). OWNER: add more Q&A entries here over time.
+// ===== Day-3 guided app tour ("סיור באפליקציה") =====
+// view = which screen the bubble belongs to: "day" | "caloriemenu" | "addfood" | "steps".
+// tap:true = no screen-blocking backdrop; advances when the matching real action fires (event).
+const TOUR_YES = [
+  { view: "day", sel: "cal", tap: true, event: "addcalorie", text: "בואי ננסה יחד 🙂 לחצי על כפתור ה-➕ של הקלוריות." },
+  { view: "caloriemenu", sel: "entry-food", tap: true, event: "pickfood", text: "בחרי 'הוספת מזון'." },
+  { view: "addfood", sel: "method-history", text: "הדרך הכי מהירה - מוצרים שכבר הוספת נשמרים כאן, וחוזרים בהקשה אחת. מושלם לדברים שחוזרים על עצמם 💜" },
+  { view: "addfood", sel: "method-ai", tap: true, event: "pickai", text: "ובשביל משהו חדש - הכי פשוט לספר לי. לחצי על 'ספרי לי מה אכלת'." },
+  { view: "addfood", sel: "ai-chat", btn: "הבנתי, סיימנו", closeModal: true, text: "כאן כותבים או מדברים בחופשיות, למשל 'חביתה משתי ביצים וכוס קפה'. אני אעריך את הקלוריות ואוסיף ליומן. ככל שתפרטי יותר - ההערכה מדויקת יותר." },
+  { view: "day", sel: null, text: "כל פריט שתוסיפי מופיע ביומן שלך - ובלחיצה עליו תמיד אפשר לערוך או למחוק אותו." },
+  { view: "day", sel: "steps", text: "עכשיו הצעדים. את מספר הצעדים אפשר לעדכן בכל שלב במהלך היום - אל דאגה." },
+  { view: "day", sel: "steps", tap: true, event: "addsteps", text: "לחצי על ה-➕ של הצעדים והזיני את מספר הצעדים שלך." },
+  { view: "day", sel: "tracker", text: "וכאן המשימות היומיות. ברגע שמילאת צעדים ומזון - שתי המשימות הראשונות מסומנות אוטומטית וכבר רשומות, אין צורך לפתוח את היומן בעצמך 💜" },
+];
+const TOUR_NO = [
+  { view: "day", sel: "steps", text: "כאן את ממלאת את הצעדים שלך. כדי לדעת כמה צעדים עשית, פתחי את אפליקציית הבריאות בטלפון, מצאי את מספר הצעדים של היום, והזיני אותו כאן. תמיד אפשר לעדכן." },
+  { view: "day", sel: "tracker", text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך המשימות שלך - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
+];
+const TOUR_TAIL = [
+  { view: "day", sel: "cabinet", text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
+  { view: "day", sel: "nav-day", text: "כפתור 'היומן' תמיד יחזיר אותך לכאן - למסך מילוי המשימות היומיות." },
+  { view: "day", sel: "nav-report", text: "ב'דוח' תוכלי לעקוב אחרי ההתקדמות שלך לאורך זמן, במגוון מדדים." },
+  { view: "day", sel: "nav-fab", text: "ה-➕ שבמרכז הוא קיצור דרך מהיר לכל הפעולות החשובות, מכל מסך באפליקציה." },
+  { view: "day", sel: "nav-recipes", text: "ב'מתכונים' מחכים לך כל המתכונים של התוכנית - ואם תרצי, אפשר להוסיף אותם ליומן בלחיצה." },
+  { view: "day", sel: "nav-profile", text: "ב'פרופיל' נמצאות ההעדפות התזונתיות שלך ונתונים נוספים, כמו היעד הקלורי המומלץ ויעד הצעדים היומי." },
+  { view: "day", sel: "daystrip", text: "את יכולה תמיד לחזור לימים קודמים דרך סרגל הזמן שלמעלה - בהחלקה ימינה ושמאלה, או בעזרת שני החיצים שבצדדים." },
+  { view: "day", sel: "tourbtn", btn: "סיימנו", text: "ואם לא הספקת לקלוט הכל - אל דאגה 💜 תמיד אפשר להתחיל את הסיור מחדש דרך כפתור 'סיור באפליקציה' כאן במסך, או למצוא תשובות ב'שאלות ותשובות' שבפרופיל." },
+];
+function buildTour(path) {
+  const intro = { view: "day", sel: "cal", prompt: "רוצה שאראה לך דוגמה?", choice: { yes: "כן, בבקשה", no: "אין צורך, נמשיך" }, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת ואת הפעילות הגופנית שעשית (חוץ מהצעדים). יש כמה דרכים: לספר במילים או בדיבור מה אכלת, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה." };
+  if (!path) return [intro];
+  return [intro, ...(path === "yes" ? TOUR_YES : TOUR_NO), ...TOUR_TAIL];
+}
+
+
 // Entries below restate copy already in the app (no new claims).
 const FAQ_ITEMS = [
   { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון (Apple Health באייפון, Samsung Health בסמסונג), בודקים את מספר הצעדים של היום, ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן." },
@@ -3435,12 +3475,13 @@ function FaqModal({ onClose }) {
   );
 }
 
-function TutorialOverlay({ steps, idx, onNext }) {
+function TutorialOverlay({ steps, idx, onNext, onChoice }) {
   const [rect, setRect] = useState(null);
   const cur = steps[idx];
   useEffect(() => {
     let cancelled = false;
     setRect(null);
+    if (!cur.sel) return;
     const el = document.querySelector(`[data-tut="${cur.sel}"]`);
     if (!el) return;
     try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
@@ -3450,18 +3491,30 @@ function TutorialOverlay({ steps, idx, onNext }) {
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const below = rect ? rect.top < vh * 0.5 : true;
   const bubblePos = rect ? (below ? { top: rect.bottom + 12 } : { bottom: vh - rect.top + 12 }) : { bottom: 28 };
+  const tap = !!cur.tap;
   return (
     <>
-      <div style={{ position: "fixed", inset: 0, zIndex: 99996 }} onClick={(e) => e.stopPropagation()} />
-      {rect && <div style={{ position: "fixed", top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 16, boxShadow: "0 0 0 9999px rgba(0,0,0,0.62)", border: "2px solid #fff", zIndex: 99997, pointerEvents: "none", transition: "all .2s" }} />}
-      {!rect && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
+      {!tap && <div style={{ position: "fixed", inset: 0, zIndex: 99996 }} onClick={(e) => e.stopPropagation()} />}
+      {rect && <div style={{ position: "fixed", top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 16, boxShadow: tap ? "0 0 0 9999px rgba(0,0,0,0.45)" : "0 0 0 9999px rgba(0,0,0,0.62)", border: "2px solid #fff", zIndex: 99997, pointerEvents: "none", transition: "all .2s" }} />}
+      {!rect && !tap && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
       <div style={{ position: "fixed", left: 16, right: 16, ...bubblePos, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
         <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>{cur.text}</div>
         {cur.guide && <StepGuideLink linkOnly style={{ marginBottom: 12 }} />}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 12.5, color: C.faint }}>{idx + 1}/{steps.length}</span>
-          <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הבנתי</button>
-        </div>
+        {cur.prompt && <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 10 }}>{cur.prompt}</div>}
+        {cur.choice ? (
+          <>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => onChoice && onChoice(true)} style={{ flex: 1, border: "none", borderRadius: 10, padding: "11px", background: C.brand, color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.choice.yes}</button>
+              <button onClick={() => onChoice && onChoice(false)} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.choice.no}</button>
+            </div>
+            {steps.length > 1 && <div style={{ fontSize: 12.5, color: C.faint, marginTop: 8, textAlign: "left" }}>{idx + 1}/{steps.length}</div>}
+          </>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 12.5, color: C.faint }}>{steps.length > 1 ? `${idx + 1}/${steps.length}` : ""}</span>
+            <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.btn || "הבנתי"}</button>
+          </div>
+        )}
       </div>
     </>
   );
@@ -3496,6 +3549,7 @@ export default function App() {
   }, [today]);
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
+  const [tour, setTour] = useState(null);
   const [showIntro, setShowIntro] = useState(saved ? false : true);
   const [notes, setNotes] = useState([]);
   const [gate, setGate] = useState("checking");
@@ -3554,6 +3608,34 @@ export default function App() {
   const targets = useMemo(() => computeTargets(profile), [profile]);
   const dailyTarget = profile.calorieOverride || targets.targetKcal;
   const programWeek = programWeekFor(profile.startDate, TODAY);
+  // ===== App tour controller (day-3 guided "סיור באפליקציה") =====
+  const tourView = sheet === "caloriemenu" ? "caloriemenu" : sheet === "steps" ? "steps" : (modal && modal.kind && modal.kind !== "recipe") ? "addfood" : "day";
+  const markTourSeen = () => setProfile((p) => (p.tipsSeen || []).includes("appTour") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "appTour"] });
+  const startTour = () => setTour({ steps: buildTour(null), i: 0 });
+  const tourChoice = (yes) => setTour({ steps: buildTour(yes ? "yes" : "no"), i: 1 });
+  const tourAdvance = () => {
+    if (!tour) return;
+    const cur = tour.steps[tour.i];
+    if (cur && cur.closeModal) setModal(null);
+    const ni = tour.i + 1;
+    if (ni >= tour.steps.length) { setTour(null); markTourSeen(); } else setTour({ ...tour, i: ni });
+  };
+  const tourEvent = (key) => {
+    if (!tour) return;
+    const cur = tour.steps[tour.i];
+    if (!cur || !cur.tap || cur.event !== key) return;
+    const ni = tour.i + 1;
+    if (ni >= tour.steps.length) { setTour(null); markTourSeen(); } else setTour({ ...tour, i: ni });
+  };
+  useEffect(() => {
+    if (gate !== "ok" || !onboarded || showIntro || tab !== "day" || tour) return;
+    const pd = programDayNumber(profile.startDate, TODAY);
+    const wk = programWeekFor(profile.startDate, TODAY);
+    if (wk === 1 && pd >= 3 && !(profile.tipsSeen || []).includes("appTour")) {
+      const t = setTimeout(() => setTour({ steps: buildTour(null), i: 0 }), 700);
+      return () => clearTimeout(t);
+    }
+  }, [gate, onboarded, showIntro, tab, tour, profile.tipsSeen, profile.startDate]);
   const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
   const stepsOpenToday = unlockedOn(profile.startDate, selectedDate, STEPS_UNLOCK);
   // Step goal: she sets the baseline once, then accepts increases via a prominent banner (never silent).
@@ -3656,7 +3738,7 @@ export default function App() {
     setProfile(DEFAULT_PROFILE);
   };
   const onPickEntry = (id) => {
-    if (id === "food") openAdd("food", null);
+    if (id === "food") { openAdd("food", null); tourEvent("pickfood"); }
     else if (id === "ai") openAdd("ai", null);
     else if (id === "activity") setSheet("activity");
     else if (id === "recommend") setSheet("recommend");
@@ -3704,7 +3786,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => setSheet("caloriemenu")} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => setSheet("steps")} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} />}
@@ -3712,19 +3794,19 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", flexShrink: 0 }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
-              <button onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
+              <button data-tut="nav-fab" onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
               {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
-                return (<button key={t.id} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
             </div>
 
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
-            {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); }} />}
+            {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
             {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onSetMl={(ml) => setWaterForDate(selectedDate, ml)} onSetCup={(cup) => setProfile({ ...profile, cupMl: cup })} onClose={() => setSheet(null)} />}
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
@@ -3739,7 +3821,8 @@ export default function App() {
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
-              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />)}
+              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} />)}
+            {tour && tour.steps[tour.i] && tour.steps[tour.i].view === tourView && <TutorialOverlay steps={tour.steps} idx={tour.i} onNext={tourAdvance} onChoice={tourChoice} />}
           </>
         )}
         {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
