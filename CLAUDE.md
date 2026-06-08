@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.69`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.70`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,13 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.70 - Hide skip-to-demo for real users + prominent install CTA + install FAQ
+- **"דלג ישר לדמו" skip button is now DEV-only** (wrapped in `{DEV && ...}`), so real participants can't bypass onboarding into demo mode; still available with ?dev=1 for testing.
+- **Install-as-app CTA upgraded** from a small underlined link to a prominent brandBg box at the top of onboarding: "📲 מומלץ מאוד להתקין את האפליקציה בטלפון" + "תרצי הנחיות? הקישי כאן" + chevron; opens the existing install modal.
+- **New FAQ item (first)** in profile Q&A: "איך מתקינים את האפליקציה בטלפון" with Android(Chrome)/iPhone(Safari) Add-to-Home-Screen steps.
+- VERSION 1.69->1.70. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+- NOTE (no code): the 2-device limit not blocking the 3rd login is an env/deploy issue, not code - device id is sent correctly (myprime_device_id UUID per browser). Requires UPSTASH_REDIS_REST_URL + _TOKEN set AND a redeploy.
 
 ## v1.69 - Intro modal text black
 - The two IntroOverlay (demo intro) paragraphs (greeting + daily-refresh recommendation) changed from gray (C.sub) to black (C.ink) per owner. Feedback box unchanged.

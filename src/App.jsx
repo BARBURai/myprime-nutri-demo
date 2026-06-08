@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.69";
+const VERSION = "1.70";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -680,13 +680,20 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
         <div style={{ display: "flex", gap: 6, margin: "6px 0 8px" }}>
           {[0, 1, 2, 3, 4].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
         </div>
-        <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginBottom: 6 }}>v{VERSION}</div>
-        <div style={{ textAlign: "center", marginBottom: 10 }}>
-          <button onClick={() => setShowInstall(true)} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 13.5, textDecoration: "underline", cursor: "pointer", fontFamily: fontStack }}>📲 איך מתקינים כאפליקציה?</button>
+        <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginBottom: 8 }}>v{VERSION}</div>
+        <div onClick={() => setShowInstall(true)} style={{ background: C.brandBg, border: `1.5px solid ${C.brand}`, borderRadius: 14, padding: "12px 14px", marginBottom: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 24 }}>📲</span>
+          <div style={{ flex: 1, textAlign: "right" }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>מומלץ מאוד להתקין את האפליקציה בטלפון</div>
+            <div style={{ fontSize: 13.5, color: C.brandD, textDecoration: "underline", marginTop: 2 }}>תרצי הנחיות? הקישי כאן</div>
+          </div>
+          <ChevronLeft size={20} color={C.brand} style={{ flexShrink: 0 }} />
         </div>
-        <div style={{ textAlign: "center", marginBottom: 12 }}>
-          <button onClick={() => onFinish(draft, { enabled: false })} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 15, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
-        </div>
+        {DEV && (
+          <div style={{ textAlign: "center", marginBottom: 12 }}>
+            <button onClick={() => onFinish(draft, { enabled: false })} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 15, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
+          </div>
+        )}
 
         {step === 0 && (
           <>
@@ -3612,6 +3619,7 @@ function buildTour(path) {
 
 // Entries below restate copy already in the app (no new claims).
 const FAQ_ITEMS = [
+  { q: "איך מתקינים את האפליקציה בטלפון (כמו אפליקציה רגילה)?", a: "באנדרואיד פותחים בדפדפן Chrome, נכנסים לתפריט שלוש הנקודות ובוחרים 'הוספה למסך הבית'. באייפון פותחים ב-Safari, מקישים על כפתור השיתוף ובוחרים 'הוספה למסך הבית'. כך נוצר אייקון של האפליקציה במסך הבית, ואפשר לפתוח אותה בלחיצה אחת כמו אפליקציה רגילה." },
   { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
   { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
