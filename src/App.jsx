@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.84";
+const VERSION = "1.86";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -631,8 +631,6 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const [rate, setRate] = useState(250);
   const [goalKg, setGoalKg] = useState(null);
   const [err0, setErr0] = useState(false);
-  const [coach, setCoach] = useState(false);
-  const [coachSeen, setCoachSeen] = useState(false);
   const [showInstall, setShowInstall] = useState(false);
   const [startDate, setStartDate] = useState(fixedStart || sundayOf(TODAY));
   const [keepShabbat, setKeepShabbat] = useState(null);
@@ -663,7 +661,6 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const step0Valid = ageOk && heightOk && weightOk && keepShabbat !== null;
   const next = () => {
     if (step === 0 && !step0Valid) { setErr0(true); return; }
-    if (step === 0 && !coachSeen) { setCoach(true); setCoachSeen(true); return; }
     if (step === 2) { if (hasSens) setConfirmSens(true); else setConfirmNoSens(true); return; }
     setStep(step + 1);
   };
@@ -890,16 +887,6 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
         {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
         {step < 4 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
       </div>
-
-      {coach && (
-        <TutorialOverlay
-          steps={[{ sel: "notesfab", text: "יש לך הערה? נשמח לשמוע כדי לשפר 💜 כפתור הבועה כאן בצד שמאל זמין לך בכל מסך באפליקציה.", btn: "המשך" }]}
-          idx={0}
-          forceBack
-          onNext={() => { setCoach(false); setStep(1); }}
-          onBack={() => setCoach(false)}
-        />
-      )}
 
       {confirmNoSens && (
         <div onClick={() => setConfirmNoSens(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -1970,7 +1957,7 @@ function NotesFab({ notes, setNotes, screen, userName }) {
   };
   return (
     <>
-      <button data-tut="notesfab" onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 230, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
+      <button data-tut="notesfab" onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 420, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
         <MessageCircle size={20} />
         {notes.length > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: C.ink, color: "#fff", fontSize: 13, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length}</span>}
       </button>
@@ -3696,6 +3683,7 @@ const TOUR_TAIL = [
   { view: "day", open: "day", sel: "nav-fab", text: "ה-➕ שבמרכז הוא קיצור דרך מהיר לכל הפעולות החשובות, מכל מסך באפליקציה." },
   { view: "day", open: "day", sel: "nav-recipes", text: "ב'מתכונים' מחכים לך כל המתכונים של התוכנית - ואם תרצי, אפשר להוסיף אותם ליומן בלחיצה." },
   { view: "day", open: "day", sel: "nav-profile", text: "ב'פרופיל' נמצאות ההעדפות התזונתיות שלך ונתונים נוספים, כמו היעד הקלורי המומלץ ויעד הצעדים היומי. ניתן לעדכן את נתוני הפרופיל בכל זמן שתרצי :)" },
+  { view: "day", open: "day", sel: "notesfab", text: "ויש לך הערה? נשמח מאוד לשמוע כדי לשפר 💜 כפתור הבועה כאן בצד שמאל זמין לך בכל מסך - אפשר להשאיר לנו הערה מכל מקום באפליקציה." },
   { view: "day", open: "day", sel: "daystrip", text: "את יכולה תמיד לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך (סוויפ)." },
   { view: "day", open: "day", sel: "tourbtn", btn: "סיימנו", last: true, text: "ואם לא הספקת לקלוט הכל - אל דאגה 💜 תמיד אפשר להתחיל את הסיור מחדש דרך כפתור 'סיור באפליקציה' כאן במסך, או למצוא תשובות ב'שאלות ותשובות' שבפרופיל." },
 ];
@@ -3744,7 +3732,7 @@ function FaqModal({ onClose, onStartTour }) {
   );
 }
 
-function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack, forceBack }) {
+function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
   const [rect, setRect] = useState(null);
   const cur = steps[idx];
   useEffect(() => {
@@ -3803,7 +3791,7 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack, forceBac
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 12.5, color: C.faint }}>{steps.length > 1 ? `${idx + 1}/${steps.length}` : ""}</span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {(idx > 0 || forceBack) && onBack && <button onClick={onBack} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 16px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
+                {idx > 0 && onBack && <button onClick={onBack} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 16px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
                 {!tap && <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.btn || "המשך"}</button>}
               </div>
             </div>
