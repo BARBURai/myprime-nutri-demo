@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.76";
+const VERSION = "1.78";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1104,7 +1104,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </>
         )}
 
-        <div data-tut="diarylist" style={{ fontSize: 14, color: C.faint, margin: "16px 0 2px" }}>מה שהוזן</div>
+        <div data-tut="diarylist" style={{ fontSize: 14, fontWeight: 700, color: C.ink, margin: "16px 0 2px" }}>מה שהוזן היום</div>
         {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 16, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה - הקישי על כפתור ה־+ להוספה</div>}
         {dayLog.map((e) => (
           <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
@@ -1175,6 +1175,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
                 </div>
               ))}
             </div>
+            <div style={{ fontSize: 12.5, color: C.faint, textAlign: "center", marginTop: -6, marginBottom: 12 }}>הממוצע מחושב לפי הימים שהזנת בהם צעדים, מתוך 7 הימים האחרונים</div>
             <div style={{ fontSize: 13, color: C.faint, marginBottom: 2 }}>צעדים יומיים - 14 הימים האחרונים</div>
             <div style={{ height: 150, margin: "6px -6px 0" }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -3491,12 +3492,22 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
   const stepsAvg = data.avgs.steps ? data.avgs.steps.avg : 0;
   const journalDays = data.journalDays || 0;
   const wk1HasData = stepsDays > 0 || journalDays > 0;
+  const wk1StepsLine = stepsDays === 0
+    ? "השבוע עוד לא דיווחת על הצעדים."
+    : stepsDays === 1
+    ? `השבוע דיווחת פעם אחת על הצעדים - ${stepsAvg.toLocaleString()} צעדים ביום.`
+    : `השבוע דיווחת ${stepsDays} פעמים על הצעדים. ממוצע הצעדים לימים שדיווחת - ${stepsAvg.toLocaleString()} צעדים ביום בממוצע.`;
+  const wk1JournalLine = journalDays === 0
+    ? "השבוע עוד לא מילאת יומן מעקב תזונה."
+    : journalDays === 1
+    ? "מילאת יומן מעקב תזונה ביום אחד."
+    : `במהלך ${journalDays} ימים מילאת יומן מעקב תזונה.`;
   const wk1Lines = [
     "סיימת את השבוע הראשון שלך - וזה לגמרי שווה חגיגה! 🎉",
     "כל פעולה שביצעת השבוע היא משמעותית, ועוד צעד בכיוון הנכון 🌱",
     "ההתחלה הזו מראה שיש לך את כל מה שצריך בשביל להצליח.",
-    `השבוע דיווחת ${stepsDays} פעמים על הצעדים. ממוצע הצעדים לימים שדיווחת - ${stepsAvg.toLocaleString()} צעדים ביום בממוצע.`,
-    `ב-${journalDays} ימים מילאת יומן מעקב תזונה.`,
+    wk1StepsLine,
+    wk1JournalLine,
     "אני גאה בך - תמשיכי להוביל את עצמך קדימה 💖",
     "נמשיך ביום א' הקרוב, בינתיים תעשי כיף בסוף השבוע ואל תשכחי את המשימות החדשות שלך 🙏",
     "אני איתך,",
@@ -3684,7 +3695,7 @@ const FAQ_ITEMS = [
   { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
   { q: "כמה קלוריות מותר לי לאכול היום?", a: "היעד הקלורי היומי מחושב לפי הגיל, המשקל, הגובה ורמת הפעילות שלך, ומופיע בעיגול הקלוריות ('מתוך ...'). אפשר לראות אותו גם במסך הפרופיל." },
   { q: "שכחתי להזין יום שלם - מה עושים?", a: "אפשר לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך, ולמלא בדיעבד." },
-  { q: "איך עורכים או מוחקים פריט שהוספתי?", a: "בהקשה על הפריט ברשימת 'מה שהוזן' ביומן אפשר לערוך אותו או למחוק אותו." },
+  { q: "איך עורכים או מוחקים פריט שהוספתי?", a: "בהקשה על הפריט ברשימת 'מה שהוזן היום' ביומן אפשר לערוך אותו או למחוק אותו." },
   { q: "מה זה המדליות והגביעים?", a: "על כל יום שבו תשלימי את כל המשימות מקבלים מדליה, ועל שבוע שלם - גביע. הכל נאסף בארון ההישגים." },
   { q: "למה משימות חדשות מופיעות לאורך התוכנית?", a: "המשימות נפתחות בהדרגה כדי לא להעמיס בבת אחת. כל כמה ימים מצטרפת משימה חדשה, צעד אחרי צעד." },
 ];

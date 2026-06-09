@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.75`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.78`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,22 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.78 - Report steps-average clarification + diary "מה שהוזן היום"
+- **Report (steps card):** added a small gray clarification under the goal/average card: "הממוצע מחושב לפי הימים שהזנת בהם צעדים, מתוך 7 הימים האחרונים". (The "ממוצע X ימים" card uses steps7stats = rolling last-7-days average over days that have data; the X is the count of days-with-data in that window, which confused testing.)
+- **Diary:** the "מה שהוזן" section header is now BLACK + BOLD (was C.faint/gray) and renamed to "מה שהוזן היום". FAQ reference updated to match.
+- VERSION 1.77->1.78. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter ( -1 = the ":)" smiley in the profile coachmark.)
+
+## v1.77 - Week-1 summary singular/plural fix
+- Bug: the WEEK 1 summary lines used raw interpolation (`${stepsDays} פעמים`, `ב-${journalDays} ימים`), so a value of 1 read as "1 פעמים" / "1 ימים". The singular handling existed for weeks 2-10 (summaryTaskLine) but week 1 (wk1Lines) was missed.
+- Fix: added wk1StepsLine / wk1JournalLine with 0 / 1 / many variants matching the week 2+ phrasing ("פעם אחת" / "ביום אחד" / "X פעמים"|"X ימים").
+- Note: SUMMARY_COUNT_PHRASE / SUMMARY_AVG_PHRASE (top of summary section) also lack singular handling but are DEAD CODE (defined, never used) - not rendered, left as-is.
+- VERSION 1.76->1.77. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter ( -1 = the ":)" smiley in the profile coachmark.)
+
+## v1.76 - DEV: don't cap the simulated start date
+- Bug: in DEV mode, "קבע יום 1" (devAnchorDay1) sets profile.startDate to the Sunday of the simulated TODAY, but the startDate-cap effect immediately forced it back to gateStartDate (the sheet date), making it impossible to simulate "I just started this week" - broke testing of early weeks.
+- Fix (both DEV-only, zero effect on real users): (1) the cap effect now `if (DEV) return;` before aligning startDate to the sheet date; (2) ProfileScreen receives `maxStart={DEV ? null : gateStartDate}` so the start-date editor offers all Sundays in DEV.
+- VERSION 1.75->1.76. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter ( -1 = the ":)" smiley in the profile coachmark string.)
 
 ## v1.75 - Photo UX: program-window gate + gentle nudges (client side of v1.73)
 - **Photos only during the 10-week program (days 1-70).** `sendAiImage` and the "צילום ארוחה" entry button both check `programDayNumber(startDate, TODAY) > 70`; if the window is closed they show the Anat end-message in chat instead of opening the camera / calling AI. (AddModal now receives a `startDate` prop, passed from `profile.startDate`.)
