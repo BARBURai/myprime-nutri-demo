@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.81";
+const VERSION = "1.84";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -631,6 +631,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const [rate, setRate] = useState(250);
   const [goalKg, setGoalKg] = useState(null);
   const [err0, setErr0] = useState(false);
+  const [coach, setCoach] = useState(false);
+  const [coachSeen, setCoachSeen] = useState(false);
   const [showInstall, setShowInstall] = useState(false);
   const [startDate, setStartDate] = useState(fixedStart || sundayOf(TODAY));
   const [keepShabbat, setKeepShabbat] = useState(null);
@@ -661,6 +663,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const step0Valid = ageOk && heightOk && weightOk && keepShabbat !== null;
   const next = () => {
     if (step === 0 && !step0Valid) { setErr0(true); return; }
+    if (step === 0 && !coachSeen) { setCoach(true); setCoachSeen(true); return; }
     if (step === 2) { if (hasSens) setConfirmSens(true); else setConfirmNoSens(true); return; }
     setStep(step + 1);
   };
@@ -671,8 +674,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
   const backupSetup = wantBackup ? { enabled: true, email: bkEmail.trim().toLowerCase(), code: bkCode } : { enabled: false };
 
-  const numStyle = (bad) => ({ width: 96, textAlign: "center", border: `1.5px solid ${bad ? C.amber : C.line}`, borderRadius: 10, padding: "9px 10px", fontSize: 18, fontFamily: fontStack, color: C.ink, outline: "none" });
-  const errNote = (txt) => <div style={{ fontSize: 13, color: C.amber, marginTop: 4, lineHeight: 1.4 }}>{txt}</div>;
+  const numStyle = (bad) => ({ width: 96, textAlign: "center", border: `1.5px solid ${bad ? "#D7263D" : C.line}`, borderRadius: 10, padding: "9px 10px", fontSize: 18, fontFamily: fontStack, color: C.ink, outline: "none" });
+  const errNote = (txt) => <div style={{ fontSize: 14.5, fontWeight: 700, color: "#D7263D", marginTop: 5, lineHeight: 1.4 }}>{txt}</div>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -729,8 +732,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
                   return (<button key={String(o.v)} onClick={() => setKeepShabbat(o.v)} style={{ flex: 1, border: `2px solid ${sel ? C.brand : C.line}`, background: sel ? C.brandBg : C.panel, color: sel ? C.brandD : C.ink, borderRadius: 12, padding: "11px 8px", fontSize: 16, fontWeight: sel ? 600 : 400, cursor: "pointer", fontFamily: fontStack }}>{o.label}</button>);
                 })}
               </div>
-              <div style={{ fontSize: 14, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>אם תבחרי "יום מנוחה", שבת תופיע אפורה ובלי מעקב. תמיד אפשר לשנות בפרופיל.</div>
               {err0 && keepShabbat === null && errNote("יש לבחור תשובה")}
+              <div style={{ fontSize: 14, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>אם תבחרי "יום מנוחה", שבת תופיע אפורה ובלי מעקב. תמיד אפשר לשנות בפרופיל.</div>
             </div>
             <p style={{ fontSize: 14, color: C.faint, marginTop: 14, lineHeight: 1.6 }}>התוכנית מותאמת לנשים, ולכן אין צורך בשאלת מין.</p>
           </>
@@ -887,6 +890,16 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
         {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
         {step < 4 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
       </div>
+
+      {coach && (
+        <TutorialOverlay
+          steps={[{ sel: "notesfab", text: "יש לך הערה? נשמח לשמוע כדי לשפר 💜 כפתור הבועה כאן בצד שמאל זמין לך בכל מסך באפליקציה.", btn: "המשך" }]}
+          idx={0}
+          forceBack
+          onNext={() => { setCoach(false); setStep(1); }}
+          onBack={() => setCoach(false)}
+        />
+      )}
 
       {confirmNoSens && (
         <div onClick={() => setConfirmNoSens(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -1957,18 +1970,18 @@ function NotesFab({ notes, setNotes, screen, userName }) {
   };
   return (
     <>
-      <button onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 78, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
+      <button data-tut="notesfab" onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 230, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
         <MessageCircle size={20} />
         {notes.length > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: C.ink, color: "#fff", fontSize: 13, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length}</span>}
       </button>
       {open && (
-        <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 45 }} onClick={() => setOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "80%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", overflowY: "auto", fontFamily: fontStack }}>
+        <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 45 }} onClick={() => setOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxWidth: 460, maxHeight: "82%", borderRadius: 20, padding: "20px 22px 24px", overflowY: "auto", fontFamily: fontStack, border: `2.5px solid ${C.brand}`, boxShadow: "0 14px 44px rgba(0,0,0,0.34)", boxSizing: "border-box" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>הערות לדמו</span>
               <button onClick={() => setOpen(false)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
             </div>
-            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={3} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
+            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={4} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
             <Btn onClick={add}>הוסיפי הערה</Btn>
             {notes.length > 0 && (
               <div style={{ marginTop: 14 }}>
@@ -2207,8 +2220,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
         </div>
         {step === "method" && (
           <>
-            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", tag: "חדש", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
-              { ic: Camera, t: "צילום ארוחה", s: "המהיר ביותר", tag: "מהיר", bg: C.amberBg, color: C.amber, go: () => { if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
+            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
+              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
               { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
               { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => setStep("history") },
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") }].map((o) => (
@@ -2702,7 +2715,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
         <>
           <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>הזיני שם פרטי והמייל שאיתו נרשמת לתוכנית.</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם פרטי" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 10 }} />
-          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל שלך" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל איתו נרשמת לתוכנית" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
           <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.7, textAlign: "right", marginBottom: 4 }}>
             <Lock size={13} style={{ display: "inline", verticalAlign: "-2px", marginInlineEnd: 5 }} />
             מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
@@ -3731,7 +3744,7 @@ function FaqModal({ onClose, onStartTour }) {
   );
 }
 
-function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
+function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack, forceBack }) {
   const [rect, setRect] = useState(null);
   const cur = steps[idx];
   useEffect(() => {
@@ -3790,7 +3803,7 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 12.5, color: C.faint }}>{steps.length > 1 ? `${idx + 1}/${steps.length}` : ""}</span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {idx > 0 && onBack && <button onClick={onBack} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 16px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
+                {(idx > 0 || forceBack) && onBack && <button onClick={onBack} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 16px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
                 {!tap && <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.btn || "המשך"}</button>}
               </div>
             </div>
