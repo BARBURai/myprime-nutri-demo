@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.70`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.75`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,42 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.75 - Photo UX: program-window gate + gentle nudges (client side of v1.73)
+- **Photos only during the 10-week program (days 1-70).** `sendAiImage` and the "צילום ארוחה" entry button both check `programDayNumber(startDate, TODAY) > 70`; if the window is closed they show the Anat end-message in chat instead of opening the camera / calling AI. (AddModal now receives a `startDate` prop, passed from `profile.startDate`.)
+- **Gentle in-chat nudges (Anat voice), on a real photo analysis only (`!r.limited`):**
+  - EVERY time she reaches 3 photos in one day (`bumpPhotosToday()` -> localStorage `myprime_photos_today` {date,n}; fires when n===3).
+  - ONCE at 35 total photos (`r.photoCount` from the server `x-photo-count` header; flag `myprime_photo_hs35`).
+  - Both show: "הערה קטנה ממני אלייך 💜 ... מוגבלת ל-70 תמונות. לאחר מכן תמיד אפשר לתאר לי בטקסט מה אכלת." (single note even if both triggers coincide).
+- `aiNutritionChat` now returns `limited` (true on 429) and `photoCount` (parsed from the `x-photo-count` response header) so the client can drive nudges without double-counting on limit hits.
+- The HARD 70 cap + the end/daily messages live server-side (v1.73); this version is the soft pacing UX so she doesn't binge to the wall.
+- VERSION 1.74->1.75. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter ( -1 is the ":)" smiley in the v1.74 profile string; esbuild confirms a clean parse.)
+
+
+- **Steps coachmark**: reworded to "כאן מזינים את מספר הצעדים. פותחים את אפליקציית הבריאות בטלפון, רואים כמה צעדים נצברו היום, ומזינים את המספר כאן." + a BOLD reassurance line "אפשר לעדכן את הצעדים כמה פעמים שתרצי במהלך היום (וגם לימים קודמים) - אל דאגה." (tip `text` is rendered as `{cur.text}` so it accepts a JSX fragment with `<b>`).
+- **Profile coachmark**: appended "ניתן לעדכן את נתוני הפרופיל בכל זמן שתרצי :)".
+- OPEN (owner to raise with Anat): how weight is referred to / where it's updated. The profile coachmark's "update profile data anytime" could confuse a user into thinking weight is updated in the profile rather than in the report (דוח). Wording to be finalized with Anat.
+- VERSION 1.73->1.74. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter shows ( -1 purely from the intentional ":)" smiley inside the profile string - not a code issue; esbuild confirms a clean parse.)
+
+
+- **api/ai.js: 70-photo hard cap per user** (`AI_PHOTO_LIMIT`, default 70). A "photo" call is detected by an image block in `body.messages`. Counted server-side in Upstash (`ai:photos:<email>` INCR, EXPIRE ~210d) so it CANNOT be reset by clearing the browser - this is the real cost guarantee on the expensive (image) calls. On the call past the budget, returns 429 `scope:photos` with the Anat end-message ("סיימת את צילומי הארוחה לתקופת הליווי 💜 ... אפשר לתאר לי בטקסט..."), which the existing `aiNutritionChat` 429 handler shows in chat. Also sets `x-photo-count` response header (for the upcoming client nudges).
+- **Daily cap lowered 25 -> 10** (`AI_DAILY_LIMIT` default). Caps the theoretical worst-case bill (~$10.7k -> ~$4.3k/mo at full scale) with negligible impact on a normal user. New daily-cap message: "הגעת למכסת ניתוחי ה-AI להיום 💜 אפשר להמשיך לתעד ארוחות דרך חיפוש או ברקוד, ומחר המכסה מתאפסת."
+- Body is now parsed once at the top of the handler (needed for photo detection); the final API-call block reuses it.
+- The matching CLIENT photo-UX (program-window gate + the 3/day and 35 nudges) ships separately in v1.75 (see below). v1.73 here is the SERVER hard cap only. Even before v1.75 is deployed, the server still caps cost (70 photos) and the end/daily messages still surface via the existing aiNutritionChat 429 handler - the client just lacks the pre-emptive camera gate and the gentle nudges. (An earlier draft of this entry wrongly claimed the client UX was already present in the delivered App.jsx - it was not; it landed in v1.75.)
+- VERSION 1.72->1.73. Changed: api/ai.js (real change), src/App.jsx (VERSION bump only). esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7, ai.js node --check ok.
+
+
+- **Client-side image downscale before AI photo analysis** (biggest cost lever). New module helper `downscaleImage(file, maxDim, quality)` draws the photo onto a canvas capped at 1024px longest side and re-encodes JPEG q=0.82; `onPhoto` now downscales (1024 / 0.82) before `sendAiImage`, with a fallback to the original file if the canvas path errors. Full-resolution phone photos were being sent as-is (huge image input-token cost); this cuts it several-fold with negligible food-recognition impact. (Meal photo has a single entry path: the `<input type=file capture>`; the getUserMedia video is only the barcode scanner.)
+- **max_tokens trimmed 1000 -> 800** on `aiNutritionChat` (the shared photo+chat call). 800 (not 700) to avoid truncating multi-item meal JSON.
+- Deferred per owner: switching `AI_MODEL` to Haiku (env, owner to A/B test accuracy). Prompt caching discussed separately.
+- VERSION 1.71->1.72. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
+
+## v1.71 - Device logout (free the slot)
+- Added a "התנתקות מהמכשיר הזה" button in ProfileScreen (below the reset button). It frees this device's slot server-side and returns to the gate, WITHOUT deleting her data (logging back in with the email restores everything).
+- Client `logoutDevice()`: calls `${ACCESS_ENDPOINT}?email=&device=&logout=1`, then clears the stored access email/start-date and resets gate state (keeps STORAGE_KEY profile data + device id). Passed to ProfileScreen as onLogout.
+- api/access.js: new early `logout` branch - `ZREM devices:<email> <device>` (when Upstash configured) and returns {ok:true}, before any sheet lookup.
+- Solves the real beta gap: a user on her 3rd device (or replacing a device) can free a slot herself instead of waiting for the 24h TTL.
+- VERSION 1.70->1.71. Changed: src/App.jsx, api/access.js. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7, access.js node --check ok.
 
 ## v1.70 - Hide skip-to-demo for real users + prominent install CTA + install FAQ
 - **"דלג ישר לדמו" skip button is now DEV-only** (wrapped in `{DEV && ...}`), so real participants can't bypass onboarding into demo mode; still available with ?dev=1 for testing.

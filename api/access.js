@@ -54,6 +54,13 @@ export default async function handler(req, res) {
   const device = String((req.query && req.query.device) || "").trim();
   const sheetUrl = process.env.ACCESS_SHEET_CSV_URL;
 
+  // Logout: free this device's slot. No sheet lookup needed.
+  if (req.query && req.query.logout) {
+    const RU = process.env.UPSTASH_REDIS_REST_URL, RT = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (RU && RT && email && device) { try { await redis(RU, RT, "ZREM", `devices:${email}`, device); } catch (e) {} }
+    return res.status(200).json({ ok: true });
+  }
+
   // 1) registration + start-date lookup
   if (!sheetUrl) return res.status(200).json({ allowed: true, reason: "not_configured", configured: false });
   if (!email) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
