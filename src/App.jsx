@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.75";
+const VERSION = "1.76";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3943,6 +3943,7 @@ export default function App() {
   }, []);
   // Keep the program start date aligned with the registration sheet for returning users.
   useEffect(() => {
+    if (DEV) return; // in DEV the start date is simulated for testing - never cap it to the sheet date
     if (gate !== "ok" || !onboarded || !gateStartDate) return;
     if (profile.startDate && profile.startDate <= gateStartDate) return;
     setProfile((p) => ({ ...p, startDate: gateStartDate }));
@@ -4263,7 +4264,7 @@ export default function App() {
               {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={gateStartDate} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={DEV ? null : gateStartDate} />}
             </div>
             <div style={{ position: "relative", flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", opacity: introLock ? 0.4 : 1, pointerEvents: introLock ? "none" : "auto" }}>
