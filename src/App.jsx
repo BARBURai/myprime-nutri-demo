@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.86";
+const VERSION = "1.87";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1565,7 +1565,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
       </div>
 
       <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, cursor: "pointer" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות ותשובות ועזרה</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות, תשובות ועזרה</span>
         <ChevronLeft size={18} color={C.faint} />
       </div>
 
@@ -3683,7 +3683,7 @@ const TOUR_TAIL = [
   { view: "day", open: "day", sel: "nav-fab", text: "ה-➕ שבמרכז הוא קיצור דרך מהיר לכל הפעולות החשובות, מכל מסך באפליקציה." },
   { view: "day", open: "day", sel: "nav-recipes", text: "ב'מתכונים' מחכים לך כל המתכונים של התוכנית - ואם תרצי, אפשר להוסיף אותם ליומן בלחיצה." },
   { view: "day", open: "day", sel: "nav-profile", text: "ב'פרופיל' נמצאות ההעדפות התזונתיות שלך ונתונים נוספים, כמו היעד הקלורי המומלץ ויעד הצעדים היומי. ניתן לעדכן את נתוני הפרופיל בכל זמן שתרצי :)" },
-  { view: "day", open: "day", sel: "notesfab", text: "ויש לך הערה? נשמח מאוד לשמוע כדי לשפר 💜 כפתור הבועה כאן בצד שמאל זמין לך בכל מסך - אפשר להשאיר לנו הערה מכל מקום באפליקציה." },
+  { view: "day", open: "day", sel: "notesfab", text: "יש לך הערה? נשמח מאוד לשמוע כדי לשפר 💜 כפתור הבועה כאן בצד שמאל זמין לך בכל מסך - אפשר להשאיר לנו הערה מכל מקום באפליקציה." },
   { view: "day", open: "day", sel: "daystrip", text: "את יכולה תמיד לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך (סוויפ)." },
   { view: "day", open: "day", sel: "tourbtn", btn: "סיימנו", last: true, text: "ואם לא הספקת לקלוט הכל - אל דאגה 💜 תמיד אפשר להתחיל את הסיור מחדש דרך כפתור 'סיור באפליקציה' כאן במסך, או למצוא תשובות ב'שאלות ותשובות' שבפרופיל." },
 ];

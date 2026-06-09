@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.84`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.87`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,23 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.87 - App (home-screen) name + two small text fixes
+- PWA home-screen name was just "MyPrime" (confusing). Changed to "MyPrime מעקב": manifest.webmanifest short_name "MyPrime" -> "MyPrime מעקב" and name "MyPrime - מעקב יומי" -> "MyPrime מעקב"; index.html apple-mobile-web-app-title "MyPrime" -> "MyPrime מעקב" and <title> -> "MyPrime מעקב" (also removed an em-dash that was in the old title).
+- Profile FAQ row label: "שאלות ותשובות ועזרה" -> "שאלות, תשובות ועזרה" (comma instead of first vav).
+- Tour feedback step: dropped the leading vav -> "יש לך הערה? ...".
+- CHANGED FILES THIS ZIP: src/App.jsx, CLAUDE.md, public/manifest.webmanifest, index.html. (Note: manifest+index are NEW files in the zip vs recent App.jsx-only zips - both must be deployed for the home-screen name to update.)
+- VERSION 1.86->1.87. esbuild clean, check-logic 7/7, 0 em/en dashes.
+
+## v1.86 - Feedback coachmark moved from onboarding to the TOUR
+- Owner clarified: the feedback-bubble coachmark belongs in the guided TOUR (סיור), not the onboarding. Reverted ALL the v1.84 onboarding bits (coach/coachSeen state, next() routing, the in-onboarding TutorialOverlay render, and the forceBack prop on TutorialOverlay).
+- Added it as a normal TOUR step in TOUR_TAIL, right AFTER the nav-profile step (i.e. after the whole bottom bar incl. the profile explanation), before the daystrip step: { sel: "notesfab", text: "ויש לך הערה? נשמח מאוד לשמוע ..." }. Uses the existing tour mechanism exactly. data-tut="notesfab" on the NotesFab button is kept.
+- VERSION 1.85->1.86. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
+
+## v1.85 - Feedback bubble raised again
+- Bubble button bottom 230 -> 420 (was sitting on the trophy in the collection; owner wants it just below the calorie ring + steps ring). Still a best-guess pixel value; fine-tune on device.
+- NOTE re: the onboarding feedback coachmark "not showing / skipped" - it was added in v1.84; if testing on <=1.83 (the 230-px bubble) the coachmark does not exist yet. Code verified intact (coach/coachSeen state, next() routes step0 through it, data-tut="notesfab", forceBack). Should appear once v1.84+ is deployed.
+- VERSION 1.84->1.85. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
 
 ## v1.84 - Add-method button labels + onboarding feedback coachmark
 - AddModal method buttons: removed "חדש" tag from "ספרי לי מה אכלת" (keeps "(AI)" subtitle). On "צילום ארוחה": removed "מהיר" tag and changed subtitle "המהיר ביותר" -> "זיהוי אוטומטי (AI)" to mark it AI-powered like the other.
