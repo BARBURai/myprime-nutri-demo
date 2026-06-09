@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.89";
+const VERSION = "1.90";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1487,7 +1487,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
 
 function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, maxStart }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
-  const [weightAck, setWeightAck] = useState(false);
+  const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   const [baseOpen, setBaseOpen] = useState(false);
   const [newSens, setNewSens] = useState("");
@@ -1495,7 +1495,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
-  const commit = () => { const k = edit.key; setProfile({ ...profile, [k]: edit.value }); setEdit(null); if (k === "weightKg" || k === "goalWeightKg") setWeightAck(true); };
+  const commit = () => { const k = edit.key; if (k === "weightKg" || k === "goalWeightKg") { setPendingWeight({ key: k, value: edit.value }); setEdit(null); return; } setProfile({ ...profile, [k]: edit.value }); setEdit(null); };
+  const confirmWeight = () => { if (pendingWeight) setProfile({ ...profile, [pendingWeight.key]: pendingWeight.value }); setPendingWeight(null); };
   const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
   const startLabel = (listSundays().find((s) => s.value === profile.startDate) || {}).label || profile.startDate;
   const calNow = profile.calorieOverride || targets.targetKcal;
@@ -1672,12 +1673,13 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
           </div>
         </div>
       )}
-      {weightAck && (
-        <div onClick={() => setWeightAck(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+      {pendingWeight && (
+        <div onClick={() => setPendingWeight(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>רק לוודא 💜</div>
             <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>את עדכון המשקל השוטף עושים בדוח, לא כאן. השדה הזה הוא הנתון שאיתו התחלת או היעד שלך. למעקב אחרי המשקל בפועל - היכנסי לדוח ולחצי "הזיני משקל".</div>
-            <Btn onClick={() => setWeightAck(false)}>הבנתי</Btn>
+            <Btn onClick={confirmWeight}>אני רוצה לשנות בכל זאת</Btn>
+            <Btn variant="ghost" onClick={() => setPendingWeight(null)} style={{ marginTop: 8 }}>צאי בלי לשנות</Btn>
           </div>
         </div>
       )}
