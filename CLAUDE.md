@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.87`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.88`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,13 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.88 - Report restructure (titled cards) + weight flow
+- ReportScreen: every card now has a big bold heading with an underline divider + stronger card frame (1.5px border, radius 16, more spacing, light shadow) for clearer separation. New CardHeading component. Headings: "דוח צעדים" (Footprints), "עמידה ביעד הקלורי" (Target, kept wording, now big), "דוח משקל" (TrendingDown).
+- Protein goal promoted from a tiny gray footer box to its own titled card "יעד חלבון" (Dumbbell, macroP color), shown from week 3 (proteinFocus). Bottom mini-row now always shows ימים-ביעד + ירידה-מתחילת-המעקב.
+- WEIGHT DECISION (Ron): weight tracking is in the report only. New WeighInTips box (3 rules: once a week / same day / morning, no clothes) shown under "דוח משקל" AND inside the "הזנת משקל" modal.
+- Profile: saving "משקל התחלתי" or "משקל יעד" now shows a non-blocking ack modal ("רק לוודא גג") clarifying ongoing weight updates are done in the report. Change is still saved; she taps "הבנתי". Fires on every such save.
+- VERSION 1.87->1.88. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
 
 ## v1.87 - App (home-screen) name + two small text fixes
 - PWA home-screen name was just "MyPrime" (confusing). Changed to "MyPrime מעקב": manifest.webmanifest short_name "MyPrime" -> "MyPrime מעקב" and name "MyPrime - מעקב יומי" -> "MyPrime מעקב"; index.html apple-mobile-web-app-title "MyPrime" -> "MyPrime מעקב" and <title> -> "MyPrime מעקב" (also removed an em-dash that was in the old title).

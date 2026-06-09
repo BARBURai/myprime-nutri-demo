@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.87";
+const VERSION = "1.88";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1123,6 +1123,28 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   );
 }
 
+function CardHeading({ icon: Icon, text, color = C.brand }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 9, marginBottom: 13, borderBottom: `1.5px solid ${C.line}` }}>
+      {Icon && <Icon size={20} color={color} />}
+      <span style={{ fontSize: 18.5, fontWeight: 700, color: C.ink }}>{text}</span>
+    </div>
+  );
+}
+
+function WeighInTips({ style }) {
+  return (
+    <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", marginBottom: 14, ...style }}>
+      <div style={{ fontSize: 14.5, fontWeight: 700, color: C.brandD, marginBottom: 8 }}>כדי לעקוב נכון אחרי השינויים במשקל, ההמלצה שלנו:</div>
+      <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.75 }}>
+        <div>1. להישקל פעם אחת בשבוע בלבד</div>
+        <div>2. תמיד באותו יום בשבוע</div>
+        <div>3. דבר ראשון בבוקר, רצוי ללא בגדים</div>
+      </div>
+    </div>
+  );
+}
+
 function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDate = {}, startDate, stepGoalStored, stepsOpen, today = TODAY, onEditSteps }) {
   const data = weights.map((w) => ({ ...w, label: `${new Date(w.date).getDate()}/${new Date(w.date).getMonth() + 1}` }));
   const change = Math.round((weights[weights.length - 1].kg - weights[0].kg) * 10) / 10;
@@ -1145,6 +1167,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
   const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
   const proteinFocus = programWeek >= MACRO_UNLOCK.week;
+  const cardBox = { border: `1.5px solid ${C.line}`, borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" };
   return (
     <div style={{ padding: "8px 16px 16px" }}>
       <Header title="דוח והתקדמות" />
@@ -1166,7 +1189,8 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
           { label: avg7Label, val: avg7.toLocaleString() },
         ];
         return (
-          <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+          <div style={cardBox}>
+            <CardHeading icon={Footprints} text="דוח צעדים" />
             <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
               {cells.map((c, i) => (
                 <div key={i} style={{ flex: 1, textAlign: "center", padding: "12px 6px", borderInlineStart: i === 0 ? "none" : `1px solid ${C.line}`, background: c.hl ? C.brandBg : "transparent" }}>
@@ -1196,11 +1220,8 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         );
       })()}
 
-      <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-          <Target size={16} color={C.brand} />
-          <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>עמידה ביעד הקלורי</span>
-        </div>
+      <div style={cardBox}>
+        <CardHeading icon={Target} text="עמידה ביעד הקלורי" />
         <div style={{ fontSize: 14, color: C.sub, marginBottom: 10 }}>
           {loggedDays.length > 0
             ? <>עמדת ביעד <b style={{ color: C.brandD }}>{metDays} מתוך {loggedDays.length}</b> הימים האחרונים 🎯</>
@@ -1222,7 +1243,9 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
           </div>
         )}
       </div>
-      <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, marginBottom: 12 }}>
+      <div style={cardBox}>
+        <CardHeading icon={TrendingDown} text="דוח משקל" />
+        <WeighInTips />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
           <div><div style={{ fontSize: 14, color: C.sub }}>משקל <span style={{ fontSize: 12.5, color: C.faint }}>(עדכון אחרון: {lastWUpdate})</span></div><div style={{ fontSize: 29, fontWeight: 600, color: C.ink }}>{current} <span style={{ fontSize: 16, color: C.sub }}>ק״ג</span></div></div>
           <span style={{ fontSize: 15, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 8, display: "flex", alignItems: "center", gap: 3 }}><ArrowDownRight size={14} /> {Math.abs(change)} ק״ג</span>
@@ -1241,11 +1264,16 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         </div>
         <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={addWeight} style={{ padding: "9px" }}>+ הזיני משקל</Btn></div>
       </div>
+      {proteinFocus && (
+        <div style={cardBox}>
+          <CardHeading icon={Dumbbell} text="יעד חלבון" color={C.macroP} />
+          <div style={{ fontSize: 29, fontWeight: 700, color: C.macroP }}>{targets.protein} <span style={{ fontSize: 16, color: C.sub }}>ג׳</span></div>
+          <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>היעד היומי שלך לחלבון בשבוע הנוכחי</div>
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, color: C.sub }}>ימים ביעד</div><div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div></div>
-        {proteinFocus
-          ? <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, color: C.sub }}>יעד חלבון</div><div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{targets.protein} ג׳</div></div>
-          : <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, color: C.sub }}>ירידה מתחילת המעקב</div><div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{Math.abs(change)} ק״ג</div></div>}
+        <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, color: C.sub }}>ירידה מתחילת המעקב</div><div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{Math.abs(change)} ק״ג</div></div>
       </div>
     </div>
   );
@@ -1442,6 +1470,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
 
 function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, maxStart }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
+  const [weightAck, setWeightAck] = useState(false);
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   const [baseOpen, setBaseOpen] = useState(false);
   const [newSens, setNewSens] = useState("");
@@ -1449,7 +1478,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
-  const commit = () => { setProfile({ ...profile, [edit.key]: edit.value }); setEdit(null); };
+  const commit = () => { const k = edit.key; setProfile({ ...profile, [k]: edit.value }); setEdit(null); if (k === "weightKg" || k === "goalWeightKg") setWeightAck(true); };
   const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
   const startLabel = (listSundays().find((s) => s.value === profile.startDate) || {}).label || profile.startDate;
   const calNow = profile.calorieOverride || targets.targetKcal;
@@ -1623,6 +1652,15 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
             )}
 
             <Btn onClick={commit}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+          </div>
+        </div>
+      )}
+      {weightAck && (
+        <div onClick={() => setWeightAck(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>רק לוודא 💜</div>
+            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>את עדכון המשקל השוטף עושים בדוח, לא כאן. השדה הזה הוא הנתון שאיתו התחלת או היעד שלך. למעקב אחרי המשקל בפועל - היכנסי לדוח ולחצי "הזיני משקל".</div>
+            <Btn onClick={() => setWeightAck(false)}>הבנתי</Btn>
           </div>
         </div>
       )}
@@ -2520,6 +2558,7 @@ function WeightModal({ weights, today, minDate, heightCm, onClose, onAdd }) {
   const low = valid && bmiOf(num, heightCm) < UNDERWEIGHT_BMI;
   return (
     <SheetShell title="הזנת משקל" onClose={onClose}>
+      <WeighInTips style={{ marginTop: 2 }} />
       <div style={{ margin: "2px 0 12px" }}>
         <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>תאריך</div>
         <input type="date" value={date} min={minDate} max={today} onChange={(e) => onDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center" }} />
