@@ -112,8 +112,8 @@ function nutritionFor(food, grams) {
 function unitLabelFor(unit) { return unit === "ml" ? "מ\"ל" : "ג׳"; }
 function measuresForUnit(unit) {
   return unit === "ml"
-    ? [{ label: "כוס", g: 250 }, { label: "פחית", g: 330 }, { label: "חצי ליטר", g: 500 }, { label: "בקבוק גדול", g: 1500 }]
-    : [{ label: "100 ג׳", g: 100 }, { label: "מנה קטנה", g: 80 }, { label: "מנה בינונית", g: 150 }, { label: "מנה גדולה", g: 250 }];
+    ? [{ label: "כוס", g: 250 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }, { label: "פחית", g: 330 }, { label: "חצי ליטר", g: 500 }, { label: "בקבוק גדול", g: 1500 }]
+    : [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }, { label: "מנה קטנה", g: 80 }, { label: "מנה בינונית", g: 150 }, { label: "מנה גדולה", g: 250 }];
 }
 function foodFromEntry(e) {
   const g = e.g || 100;
@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.79";
+const VERSION = "1.81";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1809,7 +1809,7 @@ async function searchIsraeliDB(q) {
     id: "il_" + i,
     name: it.name,
     per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
-    measures: [{ label: "100 ג׳", g: 100 }],
+    measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
     def: 0,
   }));
 }
@@ -1829,7 +1829,7 @@ async function searchOpenFoodFacts(q) {
       id: "off_" + (p.code || out.length),
       name,
       per100: { kcal: Math.round(kcal), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) },
-      measures: [{ label: "100 ג׳", g: 100 }],
+      measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
       def: 0,
     });
     if (out.length >= 12) break;
@@ -1846,7 +1846,7 @@ async function searchUSDA(q) {
       id: "usda_" + i,
       name: it.name + (it.brand ? ` · ${it.brand}` : ""),
       per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
-      measures: [{ label: "100 ג׳", g: 100 }],
+      measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
       def: 0,
     }));
   } catch (e) { return []; }
@@ -2135,7 +2135,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
       if (d.status !== 1 || !d.product) { setScanState("notfound"); return; }
       const p = d.product, n = p.nutriments || {};
       const name = (p.product_name_he || p.generic_name_he || p.product_name || p.generic_name || p.brands || "מוצר").trim();
-      const food = { id: "bc_" + code, name, per100: { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) }, measures: [{ label: "100 ג׳", g: 100 }], def: 0 };
+      const food = { id: "bc_" + code, name, per100: { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) }, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0 };
       pickFood(food, 100);
     } catch (e) { setScanState("error"); }
   };
@@ -3332,7 +3332,7 @@ function summaryTaskLine(key, week, data, fasting) {
       const n = navg("steps"), a = avg("steps").toLocaleString();
       const d = n === 0 ? "השבוע עוד לא דיווחת על הצעדים."
         : n === 1 ? `השבוע דיווחת פעם אחת על הצעדים - ${a} צעדים ביום.`
-        : `השבוע דיווחת ${sumTimes(n)} על הצעדים. ממוצע הצעדים לימים שדיווחת - ${a} צעדים ביום בממוצע.`;
+        : <>השבוע דיווחת {sumTimes(n)} על הצעדים. ממוצע הצעדים לימים שדיווחת <b>השבוע</b> - {a} צעדים ביום בממוצע.</>;
       return { e: "💃", t: "משימת הצעדים", d };
     }
     case "journal": {
@@ -3501,7 +3501,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
     ? "השבוע עוד לא דיווחת על הצעדים."
     : stepsDays === 1
     ? `השבוע דיווחת פעם אחת על הצעדים - ${stepsAvg.toLocaleString()} צעדים ביום.`
-    : `השבוע דיווחת ${sumTimes(stepsDays)} על הצעדים. ממוצע הצעדים לימים שדיווחת - ${stepsAvg.toLocaleString()} צעדים ביום בממוצע.`;
+    : <>השבוע דיווחת {sumTimes(stepsDays)} על הצעדים. ממוצע הצעדים לימים שדיווחת <b>השבוע</b> - {stepsAvg.toLocaleString()} צעדים ביום בממוצע.</>;
   const wk1JournalLine = journalDays === 0
     ? "השבוע עוד לא מילאת יומן מעקב תזונה."
     : journalDays === 1
@@ -4144,7 +4144,7 @@ export default function App() {
           const g = p.g;
           if (!name || !g) return;
           const per100 = { kcal: Math.round((p.kcal || 0) / g * 100), p: Math.round((p.p || 0) / g * 100), f: Math.round((p.f || 0) / g * 100), c: Math.round((p.c || 0) / g * 100) };
-          const fav = { id: "fav_" + name, name, per100, measures: [{ label: "100 ג׳", g: 100 }], def: 0, unit: p.unit || "g", lastG: g };
+          const fav = { id: "fav_" + name, name, per100, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0, unit: p.unit || "g", lastG: g };
           next = next.filter((x) => x.name !== name);
           next.unshift(fav);
         });

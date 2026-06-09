@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.79`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.81`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,18 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.81 - Household measures: כף / כפית on external products
+- Anat approved the proposal: add כף (15g) + כפית (5g) universally; כוס stays liquids-only (avoids big calorie errors on powders, e.g. a cup of PB2 powder != 240g).
+- External products (IL-food il_, Open Food Facts off_, USDA usda_, barcode bc_, favorites fav_) previously offered ONLY "100 ג׳"; this is the PB2 case. Appended כף(15)/כפית(5) to all 5 builders (def stays 0 -> 100ג׳ default). Also added כף/כפית to measuresForUnit (both unit branches; כוס already only on the ml branch).
+- Local FOODS were left as-is (curated per-product measures; relevant items already carry כף/כוס). Did NOT force כף/כפית onto items like banana/steak. Can extend specific local items (e.g. add כפית to tahini) if wanted.
+- Measure pills auto-append " · {g} ג׳" when the label has no number, so כף shows as "כף · 15 ג׳". User can still fine-tune exact grams.
+- VERSION 1.80->1.81. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
+
+## v1.80 - Weekly summary steps: bold "השבוע"
+- Per owner, instead of changing the report's averaging window, the weekly SUMMARY steps line now says "ממוצע הצעדים לימים שדיווחת **השבוע**" with "השבוע" in bold, clarifying the summary average is for THIS program week (vs the report's rolling 7-day). Applied to summaryTaskLine steps (n>=2) and the week-1 steps line; both detail fields became JSX fragments (the modal renders {l.d} and {ln}, so JSX is fine).
+- OPEN/parked: the report card itself still uses the rolling last-7-days window; owner chose the wording route over re-aligning the report. Can revisit if still confusing.
+- VERSION 1.79->1.80. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
 
 ## v1.79 - Weekly summary: Hebrew dual form (פעמיים / יומיים)
 - Bug: counts of exactly 2 read as "2 פעמים" / "2 ימים" instead of the Hebrew dual "פעמיים" / "יומיים". Code handled 1 (singular) and 3+ (plural) but not 2 (dual).
