@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.88";
+const VERSION = "1.89";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1168,10 +1168,18 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
   const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
   const proteinFocus = programWeek >= MACRO_UNLOCK.week;
   const cardBox = { border: `1.5px solid ${C.line}`, borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" };
+  const jumpBtn = { flex: 1, border: `1.5px solid ${C.line}`, background: C.panel, color: C.ink, borderRadius: 12, padding: "10px 6px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 };
+  const stepsRef = useRef(null), calRef = useRef(null), weightRef = useRef(null);
+  const jump = (r) => r.current && r.current.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
     <div style={{ padding: "8px 16px 16px" }}>
-      <Header title="דוח והתקדמות" />
+      <Header title="דוח התקדמות" />
       <div style={{ marginBottom: 12 }}><span style={{ fontSize: 14, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 20 }}>שבוע {programWeek} בתוכנית</span></div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {stepsOpen && <button onClick={() => jump(stepsRef)} style={jumpBtn}><Footprints size={15} color={C.brand} /> דוח צעדים</button>}
+        <button onClick={() => jump(calRef)} style={jumpBtn}><Target size={15} color={C.brand} /> יעד קלורי</button>
+        <button onClick={() => jump(weightRef)} style={jumpBtn}><TrendingDown size={15} color={C.brand} /> משקל</button>
+      </div>
       {stepsOpen && (() => {
         const sData = Array.from({ length: 14 }, (_, i) => {
           const d = addDays(today, -13 + i);
@@ -1189,7 +1197,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
           { label: avg7Label, val: avg7.toLocaleString() },
         ];
         return (
-          <div style={cardBox}>
+          <div ref={stepsRef} style={cardBox}>
             <CardHeading icon={Footprints} text="דוח צעדים" />
             <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
               {cells.map((c, i) => (
@@ -1220,7 +1228,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         );
       })()}
 
-      <div style={cardBox}>
+      <div ref={calRef} style={cardBox}>
         <CardHeading icon={Target} text="עמידה ביעד הקלורי" />
         <div style={{ fontSize: 14, color: C.sub, marginBottom: 10 }}>
           {loggedDays.length > 0
@@ -1243,7 +1251,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
           </div>
         )}
       </div>
-      <div style={cardBox}>
+      <div ref={weightRef} style={cardBox}>
         <CardHeading icon={TrendingDown} text="דוח משקל" />
         <WeighInTips />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
@@ -1264,17 +1272,26 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         </div>
         <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={addWeight} style={{ padding: "9px" }}>+ הזיני משקל</Btn></div>
       </div>
-      {proteinFocus && (
+      {proteinFocus ? (
         <div style={cardBox}>
           <CardHeading icon={Dumbbell} text="יעד חלבון" color={C.macroP} />
-          <div style={{ fontSize: 29, fontWeight: 700, color: C.macroP }}>{targets.protein} <span style={{ fontSize: 16, color: C.sub }}>ג׳</span></div>
-          <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>היעד היומי שלך לחלבון בשבוע הנוכחי</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 29, fontWeight: 700, color: C.macroP }}>{targets.protein} <span style={{ fontSize: 16, color: C.sub }}>ג׳</span></div>
+              <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>היעד היומי שלך לחלבון</div>
+            </div>
+            <div style={{ flex: 1, borderInlineStart: `1px solid ${C.line}`, paddingInlineStart: 14 }}>
+              <div style={{ fontSize: 29, fontWeight: 700, color: C.ink }}>{daysOnTarget}</div>
+              <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>ימים ביעד</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10 }}>
+          <div style={{ fontSize: 13, color: C.sub }}>ימים ביעד</div>
+          <div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div>
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, color: C.sub }}>ימים ביעד</div><div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div></div>
-        <div style={{ flex: 1, background: C.bg, borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, color: C.sub }}>ירידה מתחילת המעקב</div><div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{Math.abs(change)} ק״ג</div></div>
-      </div>
     </div>
   );
 }
