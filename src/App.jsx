@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.78";
+const VERSION = "1.79";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3316,6 +3316,11 @@ const WK_TASKS = {
   10: ["steps", "strength_mobility", "pelvic", "water_simple", "grains_combined", "sleep_simple", "protein", "probiotics", "antiinflam", "bonedensity", "fasting"],
 };
 // Build one summary line {t:title, e:emoji, d:detail, isNew?} from app data. Returns null to skip (e.g. fasting when off).
+// Hebrew dual-aware count phrases for the weekly summary (0 and 1 are handled inline below; these add the dual form for exactly 2).
+function sumDays(n) { return n === 1 ? "יום אחד" : n === 2 ? "יומיים" : `${n} ימים`; }
+function sumBDays(n) { return n === 1 ? "ביום אחד" : n === 2 ? "ביומיים" : `ב-${n} ימים`; }
+function sumTimes(n) { return n === 1 ? "פעם אחת" : n === 2 ? "פעמיים" : `${n} פעמים`; }
+
 function summaryTaskLine(key, week, data, fasting) {
   const A = data.avgs || {}, K = data.counts || {};
   const avg = (id) => (A[id] ? A[id].avg : 0);
@@ -3327,14 +3332,14 @@ function summaryTaskLine(key, week, data, fasting) {
       const n = navg("steps"), a = avg("steps").toLocaleString();
       const d = n === 0 ? "השבוע עוד לא דיווחת על הצעדים."
         : n === 1 ? `השבוע דיווחת פעם אחת על הצעדים - ${a} צעדים ביום.`
-        : `השבוע דיווחת ${n} פעמים על הצעדים. ממוצע הצעדים לימים שדיווחת - ${a} צעדים ביום בממוצע.`;
+        : `השבוע דיווחת ${sumTimes(n)} על הצעדים. ממוצע הצעדים לימים שדיווחת - ${a} צעדים ביום בממוצע.`;
       return { e: "💃", t: "משימת הצעדים", d };
     }
     case "journal": {
       const c = cnt("journal") || data.journalDays || 0;
       const d = c === 0 ? "השבוע עוד לא מילאת יומן מעקב תזונה."
         : c === 1 ? "מילאת יומן מעקב תזונה ביום אחד."
-        : `במהלך ${c} ימים מילאת יומן מעקב תזונה.`;
+        : `במהלך ${sumDays(c)} מילאת יומן מעקב תזונה.`;
       return { e: "✍️", t: "משימת יומן תזונה", d };
     }
     case "strength": {
@@ -3362,7 +3367,7 @@ function summaryTaskLine(key, week, data, fasting) {
       const cupsTxt = `בממוצע שתית ${amt(cups, "כוס אחת", "כוסות")} מים`;
       const d = db === 0 ? `בשבוע האחרון עדיין לא דיווחת על מים לפני הארוחה. ${cupsTxt}.`
         : db === 1 ? `בשבוע האחרון, ביום אחד שתית מים לפני הארוחה, ובסך הכל ${cupsTxt}.`
-        : `בשבוע האחרון, ב-${db} ימים שתית מים לפני הארוחה, ובסך הכל ${cupsTxt}.`;
+        : `בשבוע האחרון, ${sumBDays(db)} שתית מים לפני הארוחה, ובסך הכל ${cupsTxt}.`;
       return { e: "🥛", t: "משימת שתיית מים", d };
     }
     case "water_simple": {
@@ -3374,12 +3379,12 @@ function summaryTaskLine(key, week, data, fasting) {
       const c = cnt("protein");
       const d = c === 0 ? "השבוע עוד לא עמדת ביעד החלבון."
         : c === 1 ? "ביום אחד עמדת ביעד החלבון שלך."
-        : `במהלך ${c} ימים עמדת ביעד החלבון שלך.`;
+        : `במהלך ${sumDays(c)} עמדת ביעד החלבון שלך.`;
       return { e: "🍶", t: "משימת יעד חלבון", d };
     }
     case "sleep_full": {
       const sd = data.sleepDays || 0, h = avg("sleephours");
-      const base = sd === 0 ? "השבוע עוד לא ביצעת את משימות שיפור השינה" : sd === 1 ? "ביום אחד ביצעת את משימות שיפור השינה" : `במהלך ${sd} ימים ביצעת את משימות שיפור השינה`;
+      const base = sd === 0 ? "השבוע עוד לא ביצעת את משימות שיפור השינה" : sd === 1 ? "ביום אחד ביצעת את משימות שיפור השינה" : `במהלך ${sumDays(sd)} ביצעת את משימות שיפור השינה`;
       const hTxt = h > 0 ? ` וישנת בממוצע ${amt(h, "שעה אחת", "שעות")} בימים שדיווחת` : "";
       const d = (sd === 0 && h === 0) ? "השבוע עוד לא דיווחת על השינה." : `${base}${hTxt}.`;
       return { e: "😴", t: "משימת שיפור השינה", d };
@@ -3393,19 +3398,19 @@ function summaryTaskLine(key, week, data, fasting) {
       const c = cnt("breathing");
       const d = c === 0 ? "השבוע עוד לא ביצעת תרגילי נשימה."
         : c === 1 ? "ביום אחד ביצעת תרגילי נשימה."
-        : `במהלך ${c} ימים ביצעת תרגילי נשימה.`;
+        : `במהלך ${sumDays(c)} ביצעת תרגילי נשימה.`;
       return { e: "😮‍💨", t: "משימת תרגול נשימה", d };
     }
     case "gratitude": {
       const c = cnt("gratitude");
       const d = c === 0 ? "השבוע עוד לא ביצעת את משימת הכרת התודה."
         : c === 1 ? "ביום אחד ביצעת את משימת הכרת התודה."
-        : `במהלך ${c} ימים ביצעת את משימת הכרת התודה.`;
+        : `במהלך ${sumDays(c)} ביצעת את משימת הכרת התודה.`;
       return { e: "🙏", t: "משימת הכרת התודה", d };
     }
     case "grains_split": {
       const gf = cnt("goodfat"), gr = cnt("grains");
-      const part = (n, label) => n === 0 ? `עדיין לא הוספת ${label}` : n === 1 ? `ביום אחד הוספת ${label}` : `ב-${n} ימים הוספת ${label}`;
+      const part = (n, label) => n === 0 ? `עדיין לא הוספת ${label}` : n === 1 ? `ביום אחד הוספת ${label}` : `${sumBDays(n)} הוספת ${label}`;
       const d = (gf === 0 && gr === 0) ? "השבוע עוד לא הוספת שומן בריא או דגנים מלאים." : `${part(gf, "שומן בריא")}, ו${part(gr, "דגנים מלאים ו/או קטניות")}.`;
       return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d };
     }
@@ -3413,33 +3418,33 @@ function summaryTaskLine(key, week, data, fasting) {
       const c = data.grainsDays || 0;
       const d = c === 0 ? "השבוע עוד לא הוספת דגנים מלאים, קטניות או שומן בריא."
         : c === 1 ? "ביום אחד הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא."
-        : `במהלך ${c} ימים הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא.`;
+        : `במהלך ${sumDays(c)} הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא.`;
       return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d };
     }
     case "pelvic": {
       const c = cnt("pelvic");
       const d = c === 0 ? "השבוע עוד לא תרגלת את משימת רצפת האגן."
         : c === 1 ? "תרגלת את משימת רצפת האגן פעם אחת."
-        : `תרגלת את משימת רצפת האגן ${c} פעמים.`;
+        : `תרגלת את משימת רצפת האגן ${sumTimes(c)}.`;
       return { e: "🧘‍♀️", t: "משימת רצפת האגן", d, isNew: week === 7 };
     }
     case "probiotics": {
       const c = cnt("probiotics");
       const d = c === 0 ? "השבוע עוד לא הוספת פרוביוטיקה לתזונה."
         : c === 1 ? "הוספת פרוביוטיקה לתזונה ביום אחד."
-        : `הוספת פרוביוטיקה לתזונה במשך ${c} ימים.`;
+        : `הוספת פרוביוטיקה לתזונה במשך ${sumDays(c)}.`;
       return { e: "🪄", t: "משימת פרוביוטיקה", d, isNew: week === 7 };
     }
     case "antiinflam": {
       const c = cnt("antiinflam");
       const d = c === 0 ? "השבוע עוד לא עשית את משימת המזון האנטי-דלקתי."
         : c === 1 ? "עשית את משימת המזון האנטי-דלקתי ביום אחד."
-        : `עשית את משימת המזון האנטי-דלקתי במשך ${c} ימים.`;
+        : `עשית את משימת המזון האנטי-דלקתי במשך ${sumDays(c)}.`;
       return { e: "🙅‍♀️", t: "משימת מזון אנטי-דלקתי", d };
     }
     case "bonedensity": {
       const ca = cnt("calcium"), su = cnt("sun");
-      const part = (n, verb) => n === 0 ? `עדיין לא ${verb}` : n === 1 ? `ביום אחד ${verb}` : `במשך ${n} ימים ${verb}`;
+      const part = (n, verb) => n === 0 ? `עדיין לא ${verb}` : n === 1 ? `ביום אחד ${verb}` : `במשך ${sumDays(n)} ${verb}`;
       const d = (ca === 0 && su === 0) ? "השבוע עוד לא דיווחת על סידן וחשיפה לשמש." : `${part(ca, "הוספת לתזונה מזון עשיר בסידן")}, ו${part(su, "דאגת לחשיפה בריאה לשמש")}.`;
       return { e: "🦴", t: "משימת צפיפות העצם", d };
     }
@@ -3496,12 +3501,12 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
     ? "השבוע עוד לא דיווחת על הצעדים."
     : stepsDays === 1
     ? `השבוע דיווחת פעם אחת על הצעדים - ${stepsAvg.toLocaleString()} צעדים ביום.`
-    : `השבוע דיווחת ${stepsDays} פעמים על הצעדים. ממוצע הצעדים לימים שדיווחת - ${stepsAvg.toLocaleString()} צעדים ביום בממוצע.`;
+    : `השבוע דיווחת ${sumTimes(stepsDays)} על הצעדים. ממוצע הצעדים לימים שדיווחת - ${stepsAvg.toLocaleString()} צעדים ביום בממוצע.`;
   const wk1JournalLine = journalDays === 0
     ? "השבוע עוד לא מילאת יומן מעקב תזונה."
     : journalDays === 1
     ? "מילאת יומן מעקב תזונה ביום אחד."
-    : `במהלך ${journalDays} ימים מילאת יומן מעקב תזונה.`;
+    : `במהלך ${sumDays(journalDays)} מילאת יומן מעקב תזונה.`;
   const wk1Lines = [
     "סיימת את השבוע הראשון שלך - וזה לגמרי שווה חגיגה! 🎉",
     "כל פעולה שביצעת השבוע היא משמעותית, ועוד צעד בכיוון הנכון 🌱",
