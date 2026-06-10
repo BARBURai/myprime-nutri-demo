@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.93";
+const VERSION = "1.97";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -646,6 +646,7 @@ function OnboardNotify({ email }) {
         : st === "on" ? <div style={{ background: "#E8F3EC", borderRadius: 12, padding: "12px 14px", fontSize: 15, color: "#3B7A57", fontWeight: 600 }}>מצוין! נזכיר לך כל ערב ב-19:00 💜</div>
         : st === "denied" ? note("ההתראות חסומות במכשיר. אפשר לאפשר אותן בהגדרות, או להמשיך בלי.")
         : <Btn onClick={turnOn} disabled={st === "busy"}>{st === "busy" ? "רגע..." : "אפשרי תזכורת יומית"}</Btn>}
+      {supported && isIOS && !needInstall && st !== "on" && st !== "denied" && <div style={{ fontSize: 13, color: C.faint, marginTop: 8, lineHeight: 1.5 }}>כשיופיע חלון של הטלפון - בחרי "אישור".</div>}
       {st === "err" && <div style={{ fontSize: 13.5, color: C.sub, marginTop: 8 }}>לא הצלחנו להפעיל כרגע. אפשר לנסות שוב מהפרופיל.</div>}
     </>
   );
@@ -966,6 +967,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
               <li>גללי ובחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
             </ol>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>לרענון האפליקציה באייפון</div>
+            <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.7, margin: "0 0 16px" }}>באייפון משיכה למטה לא מרעננת את האפליקציה. כדי לרענן: סגרי אותה לגמרי (החליקי מלמטה למעלה ועצרי באמצע, ואז החליקי את הכרטיס של האפליקציה כלפי מעלה), ופתחי שוב מהאייקון.</p>
             <Btn onClick={() => setShowInstall(false)}>סגירה</Btn>
           </div>
         </div>
@@ -1072,7 +1075,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       </div>
       {introLock && <div style={{ position: "absolute", top: 10, left: 16, background: C.faint, color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 11px", borderRadius: 999, fontFamily: fontStack }}>בקרוב</div>}
       </div>
-      {week === 1 && progDay >= 3 && !(tipsSeen || []).includes("appTour") && (
+      {week === 1 && progDay >= 3 && (
       <div style={{ display: "flex", justifyContent: "center", padding: "6px 16px 0" }}>
         <button data-tut="tourbtn" onClick={onStartTour} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 999, padding: "5px 14px", fontSize: 13, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={15} /> סיור באפליקציה</button>
       </div>
@@ -3785,6 +3788,7 @@ function buildTour(path) {
 // Entries below restate copy already in the app (no new claims).
 const FAQ_ITEMS = [
   { q: "איך מתקינים את האפליקציה בטלפון (כמו אפליקציה רגילה)?", a: "באנדרואיד פותחים בדפדפן Chrome, נכנסים לתפריט שלוש הנקודות ובוחרים 'הוספה למסך הבית'. באייפון פותחים ב-Safari, מקישים על כפתור השיתוף ובוחרים 'הוספה למסך הבית'. כך נוצר אייקון של האפליקציה במסך הבית, ואפשר לפתוח אותה בלחיצה אחת כמו אפליקציה רגילה." },
+  { q: "האפליקציה נראית ישנה או לא מתעדכנת - איך מרעננים?", a: "באנדרואיד אפשר למשוך את המסך כלפי מטה כדי לרענן, או לסגור את האפליקציה ולפתוח שוב. באייפון משיכה למטה לא עובדת - צריך לסגור את האפליקציה לגמרי (להחליק מלמטה למעלה, לעצור באמצע, ולהחליק את הכרטיס של האפליקציה כלפי מעלה), ואז לפתוח שוב מהאייקון. אם גם אחרי זה היא עדיין נראית ישנה, אפשר להסיר אותה ממסך הבית ולהוסיף מחדש - אבל שימי לב שזה מאפס את הנתונים במכשיר, אז כדאי לעשות קודם גיבוי במסך הפרופיל." },
   { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
   { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
@@ -4046,7 +4050,7 @@ export default function App() {
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
   const [profile, setProfile] = useState(saved?.profile || DEFAULT_PROFILE);
-  const [log, setLog] = useState(saved?.log || INITIAL_LOG);
+  const [log, setLog] = useState(saved?.log || (DEV ? INITIAL_LOG : []));
   const [weights, setWeights] = useState(saved?.weights || initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate));
   const [activityLog, setActivityLog] = useState(saved?.activityLog || []);
   const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
@@ -4520,6 +4524,7 @@ export default function App() {
               <div style={{ fontSize: 34, marginBottom: 6 }}>🔔</div>
               <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 8 }}>שנזכיר לך כל ערב?</div>
               <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>נשמח לשלוח לך תזכורת קטנה כל יום ב-19:00, כשיומן המעקב נפתח. אפשר לכבות בכל רגע בפרופיל.</p>
+              {/iphone|ipad|ipod/i.test(navigator.userAgent || "") && <p style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, margin: "0 0 14px" }}>כשיופיע חלון של הטלפון - בחרי "אישור".</p>}
               <Btn onClick={acceptNotify}>כן, הזכירו לי</Btn>
               <Btn variant="ghost" onClick={dismissNotify} style={{ marginTop: 8 }}>לא עכשיו</Btn>
             </div>
