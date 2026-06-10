@@ -9,14 +9,14 @@
 //  Reuses the SAME Upstash Redis used by the access gate. Set in Vercel env:
 //    UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
 //  Optional tuning (defaults in code):
-//    AI_DAILY_LIMIT  = max AI calls per user per day        (default 10)
+//    AI_DAILY_LIMIT  = max AI calls per user per day        (default 30)
 //    AI_BURST_LIMIT  = max AI calls per user per minute     (default 10)
 //    AI_PHOTO_LIMIT  = max meal PHOTOS per user (program)   (default 70)
 //  While the Upstash vars are unset, the limit is simply OFF (the app still works).
 //  The photo budget is a hard server-side cap (per email) so it cannot be reset by clearing the browser.
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 10);
+const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 30);
 const BURST_LIMIT = Number(process.env.AI_BURST_LIMIT || 10);
 const PHOTO_LIMIT = Number(process.env.AI_PHOTO_LIMIT || 70);
 
@@ -57,6 +57,7 @@ export default async function handler(req, res) {
       if (dayCount > DAILY_LIMIT) {
         return res.status(429).json({ error: "limit", scope: "day", message: "הגעת למכסת ניתוחי ה-AI להיום 💜 אפשר להמשיך לתעד ארוחות דרך חיפוש או ברקוד, ומחר המכסה מתאפסת." });
       }
+      if (dayCount === DAILY_LIMIT) { res.setHeader("x-ai-limit", "soft"); } // last allowed call: answer it, and flag so the client notes this was the last for today
 
       const minKey = `ai:min:${id}:${Math.floor(Date.now() / 60000)}`;
       const minCount = await redis(base, token, "INCR", minKey);

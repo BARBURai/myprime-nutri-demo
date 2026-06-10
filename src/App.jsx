@@ -394,7 +394,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "2.08";
+const VERSION = "2.11";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1821,6 +1821,7 @@ async function aiNutritionChat(messages) {
   });
   const data = await res.json();
   const photoCount = Number(res.headers.get("x-photo-count")) || null;
+  const softLimit = res.headers.get("x-ai-limit") === "soft";
   if (res.status === 429 || data.error === "limit") {
     return { raw: "", reply: data.message || "הגעת למכסת הפעולות להיום. נתראה מחר 💜", done: false, items: [], limited: true, photoCount };
   }
@@ -1834,7 +1835,7 @@ async function aiNutritionChat(messages) {
     raw: text,
     limited: false,
     photoCount,
-    reply: parsed.reply || "",
+    reply: (parsed.reply || "") + (softLimit ? "\n\nזו הייתה המנה האחרונה במכסת ה-AI להיום 💜 מכאן אפשר להמשיך לתעד דרך חיפוש או ברקוד, ומחר המכסה מתאפסת." : ""),
     done: !!parsed.done,
     items: (parsed.items || []).map((it) => ({ name: it.name, en: it.en || "", grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) })),
   };
