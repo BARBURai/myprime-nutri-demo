@@ -101,12 +101,13 @@ function projection(currentKg, goalKg, weeklyRateG) {
   return { maintain: false, weeks, data };
 }
 function nutritionFor(food, grams) {
-  const k = grams / 100;
+  const k = (Number(grams) || 0) / 100;
+  const p100 = (food && food.per100) || {};
   return {
-    kcal: Math.round(food.per100.kcal * k),
-    p: Math.round(food.per100.p * k),
-    f: Math.round(food.per100.f * k),
-    c: Math.round(food.per100.c * k),
+    kcal: Math.round((Number(p100.kcal) || 0) * k),
+    p: Math.round((Number(p100.p) || 0) * k),
+    f: Math.round((Number(p100.f) || 0) * k),
+    c: Math.round((Number(p100.c) || 0) * k),
   };
 }
 function unitLabelFor(unit) { return unit === "ml" ? "מ\"ל" : "ג׳"; }
@@ -393,7 +394,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "2.07";
+const VERSION = "2.08";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -981,9 +982,9 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
 }
 function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, introLock = false, overlayOpen = false }) {
   const dayLog = log.filter((e) => e.date === date);
-  const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
+  const consumed = dayLog.reduce((s, e) => s + (e.kcal || 0), 0);
   const dayAct = activityLog.filter((a) => a.date === date);
-  const actKcal = dayAct.reduce((s, a) => s + a.kcal, 0);
+  const actKcal = dayAct.reduce((s, a) => s + (a.kcal || 0), 0);
   const stepsOpen = unlockedOn(profile.startDate, date, STEPS_UNLOCK);
   const steps = (stepsByDate && stepsByDate[date]) || 0;
   const stepKcal = stepsOpen ? stepsKcal(steps, profile.weightKg) : 0;
@@ -4248,7 +4249,7 @@ export default function App() {
   const confirmBaseline = (val) => { setProfile((p) => ({ ...p, stepBaseline: val, stepGoal: val + stepGoalCumOffset(programWeek) })); setGoalAckWeek(highestBumpAtOrBelow(programWeek)); setSheet(null); };
   const confirmIncrease = (week, val) => { setProfile((p) => ({ ...p, stepGoal: val })); setGoalAckWeek(week); setSheet(null); };
   const recDayLog = log.filter((e) => e.date === selectedDate);
-  const recRemainingKcal = (dailyTarget + activityLog.filter((a) => a.date === selectedDate).reduce((s, a) => s + a.kcal, 0)) - recDayLog.reduce((s, e) => s + e.kcal, 0);
+  const recRemainingKcal = (dailyTarget + activityLog.filter((a) => a.date === selectedDate).reduce((s, a) => s + (a.kcal || 0), 0)) - recDayLog.reduce((s, e) => s + (e.kcal || 0), 0);
   const recRemainingProtein = Math.max(0, targets.protein - recDayLog.reduce((s, e) => s + (e.p || 0), 0));
   const recMealsHad = recDayLog.map((e) => e.name).join(", ");
 
