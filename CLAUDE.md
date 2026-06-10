@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `2.05`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `2.07`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,16 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v2.07 - Daily check-in open all day; 19:00 push becomes a reminder
+- Removed the 19:00 lock on the daily check-in ("דוח המעקב"): CHECKIN_REVEAL_HOUR 19 -> 0, so ciLocked is always false and the card is fillable any time of day (set back to 19 to restore the lock; the "ייפתח ב-19:00" locked-state UI is kept but now unreachable).
+- api/notify.js push body: "יומן המעקב נפתח לך..." -> "תזכורת קטנה מילאת היום את דוח המעקב היומי שלך?" (cron timing unchanged - still 19:00).
+- Reframed the notify opt-in copy (OnboardNotify + day-screen prompt) from "כשיומן המעקב נפתח" to a reminder that the report can be filled any time of day.
+- App VERSION 2.06->2.07. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, api/notify.js, CLAUDE.md.
+
+## v2.06 - "Install first, then fill" nudge in onboarding
+- iOS isolates Safari storage from the installed PWA, so a woman who logs in + fills onboarding in Safari then installs has to redo everything in the installed app. Added a note in the onboarding install banner, shown only when NOT standalone (i.e. in-browser): "כדאי למלא את הפרטים רק אחרי ההתקנה, מתוך האפליקציה". On iOS it appends "- אחרת תצטרכי למלא אותם שוב" (true only on iOS; Android shares storage so no refill - kept the recommendation without that false claim). Added obIsIOS/obStandalone detection in the Onboarding component.
+- VERSION 2.05->2.06. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
 
 ## v2.05 - Device limit disabled for beta (api/access.js)
 - The 2-concurrent-device cap caused real problems during onboarding: one woman fumbling install (iOS Safari vs installed PWA = separate storage; every remove+re-add = new device id) racks up 2+ device ids and hits "device_limit" without actually having 2 phones. Disabled the cap for the beta: added module const MAX_DEVICES (0 = no limit) in api/access.js and gated the count check on `MAX_DEVICES > 0`. Device tracking (ZADD/EXPIRE/prune of `devices:<email>`) STILL runs, so Ron can still inspect multi-device usage in Upstash and re-enable later by setting MAX_DEVICES = 2. Redis untouched (push + backup unaffected). Email gate still blocks non-registered emails.

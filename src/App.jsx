@@ -309,7 +309,7 @@ const TRACKER_ENABLED = true;
 // Show the fat/carbs/fiber strip under the rings. Off for now (kept for future).
 const SHOW_MACRO_STRIP = false;
 const CHECKIN_UNLOCK = { week: 1, day: 3 };   // starts on day 3 of week 1
-const CHECKIN_REVEAL_HOUR = 19;               // today's report opens at 19:00
+const CHECKIN_REVEAL_HOUR = 0;                // 0 = daily report available all day (set to 19 to lock until 19:00)
 const MEDAL_SRC = "/medal.png";
 function trophyForWeek(w) {
   if (w >= 10) return "/medals/trophy-champion.webp";
@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "2.05";
+const VERSION = "2.07";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -640,7 +640,7 @@ function OnboardNotify({ email }) {
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><span style={{ fontSize: 24 }}>🔔</span><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>תזכורת יומית</span></div>
-      <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginBottom: 16 }}>נזכיר לך כל יום ב-19:00, כשיומן המעקב נפתח, להקדיש רגע ולמלא את היום. אפשר לכבות בכל רגע מהפרופיל.</div>
+      <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginBottom: 16 }}>נזכיר לך כל יום ב-19:00 להקדיש רגע ולמלא את דוח המעקב היומי. אפשר למלא אותו בכל שעה במהלך היום, ולכבות את התזכורת בכל רגע מהפרופיל.</div>
       {!supported ? note("הדפדפן הזה לא תומך בתזכורות. אפשר להמשיך בלי - זה לא משפיע על המעקב.")
         : needInstall ? note("כדי לקבל תזכורות באייפון, קודם הוסיפי את האפליקציה למסך הבית ופתחי אותה משם. אפשר להמשיך עכשיו ולהפעיל אחר כך מהפרופיל.")
         : st === "on" ? <div style={{ background: "#E8F3EC", borderRadius: 12, padding: "12px 14px", fontSize: 15, color: "#3B7A57", fontWeight: 600 }}>מצוין! נזכיר לך כל ערב ב-19:00 💜</div>
@@ -702,6 +702,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
 
   const numStyle = (bad) => ({ width: 96, textAlign: "center", border: `1.5px solid ${bad ? "#D7263D" : C.line}`, borderRadius: 10, padding: "9px 10px", fontSize: 18, fontFamily: fontStack, color: C.ink, outline: "none" });
   const errNote = (txt) => <div style={{ fontSize: 14.5, fontWeight: 700, color: "#D7263D", marginTop: 5, lineHeight: 1.4 }}>{txt}</div>;
+  const obIsIOS = /iphone|ipad|ipod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
+  const obStandalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -715,6 +717,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           <div style={{ flex: 1, textAlign: "right" }}>
             <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>מומלץ מאוד להתקין את האפליקציה בטלפון</div>
             <div style={{ fontSize: 13.5, color: C.brandD, textDecoration: "underline", marginTop: 2 }}>תרצי הנחיות? הקישי כאן</div>
+            {!obStandalone && <div style={{ fontSize: 12.5, color: C.brandD, fontWeight: 500, marginTop: 6, lineHeight: 1.5 }}>כדאי למלא את הפרטים רק אחרי ההתקנה, מתוך האפליקציה{obIsIOS ? " - אחרת תצטרכי למלא אותם שוב" : ""}.</div>}
           </div>
           <ChevronLeft size={20} color={C.brand} style={{ flexShrink: 0 }} />
         </div>
@@ -4547,7 +4550,7 @@ export default function App() {
             <div style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 340, textAlign: "center", fontFamily: fontStack }}>
               <div style={{ fontSize: 34, marginBottom: 6 }}>🔔</div>
               <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 8 }}>שנזכיר לך כל ערב?</div>
-              <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>נשמח לשלוח לך תזכורת קטנה כל יום ב-19:00, כשיומן המעקב נפתח. אפשר לכבות בכל רגע בפרופיל.</p>
+              <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>נשמח לשלוח לך תזכורת קטנה כל יום ב-19:00 למלא את דוח המעקב היומי. אפשר למלא אותו בכל שעה, ולכבות בכל רגע בפרופיל.</p>
               {/iphone|ipad|ipod/i.test(navigator.userAgent || "") && <p style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, margin: "0 0 14px" }}>כשיופיע חלון של הטלפון - בחרי "אישור".</p>}
               <Btn onClick={acceptNotify}>כן, הזכירו לי</Btn>
               <Btn variant="ghost" onClick={dismissNotify} style={{ marginTop: 8 }}>לא עכשיו</Btn>

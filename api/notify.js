@@ -39,7 +39,7 @@ export default async function handler(req, res) {
 
   const payload = JSON.stringify({
     title: "MyPrime מעקב",
-    body: "יומן המעקב נפתח לך 💜 הקדישי רגע למלא את היום",
+    body: "תזכורת קטנה 💜 מילאת היום את דוח המעקב היומי שלך?",
     url: "/",
     tag: "daily-diary",
   });
