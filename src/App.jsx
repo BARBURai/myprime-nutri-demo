@@ -3,7 +3,7 @@ import {
   Home, BookOpen, TrendingDown, ChefHat, User, Plus, Check, Search,
   Barcode, Camera, ChevronRight, ChevronLeft, ChevronDown, Pencil, Trash2, Minus, X,
   Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet,
-  MessageCircle, Loader, Copy, Mic, Send, Lock, Clock, Cookie,
+  MessageCircle, Loader, Copy, Mic, Send, Lock, Clock, Cookie, BarChart3,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { BrowserMultiFormatReader } from "@zxing/browser";
@@ -135,7 +135,7 @@ const FOODS = [
   { id: "rice", name: "אורז לבן מבושל", search: "אורז", per100: { kcal: 130, p: 2.7, f: 0.3, c: 28 }, measures: [{ label: "כוס", g: 158 }, { label: "100 ג׳", g: 100 }], def: 1 },
   { id: "sal", name: "סלט ירקות", search: "סלט ירקות", per100: { kcal: 30, p: 1.3, f: 0.2, c: 6 }, measures: [{ label: "מנה", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "cot", name: "קוטג׳ 5%", search: "קוטג גבינה", per100: { kcal: 98, p: 11, f: 5, c: 3 }, measures: [{ label: "מנה", g: 100 }, { label: "100 ג׳", g: 100 }], def: 0 },
-  { id: "oat", name: "דייסת שיבולת שועל", search: "שיבולת שועל קוואקר דייסה", per100: { kcal: 380, p: 13, f: 7, c: 67 }, measures: [{ label: "מנה", g: 60 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "oat", name: "שיבולת שועל", search: "שיבולת שועל קוואקר דייסה", per100: { kcal: 380, p: 13, f: 7, c: 67 }, measures: [{ label: "מנה", g: 60 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "cof", name: "קפה עם חלב", search: "קפה הפוך", per100: { kcal: 40, p: 2, f: 1.5, c: 4 }, measures: [{ label: "כוס", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "egg", name: "ביצה גדולה", search: "ביצים ביצה חביתה", per100: { kcal: 143, p: 13, f: 10, c: 1 }, measures: [{ label: "יחידה", g: 50 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "bread", name: "לחם פרוס", search: "לחם פרוסה טוסט", per100: { kcal: 265, p: 9, f: 3.2, c: 49 }, measures: [{ label: "פרוסה", g: 28 }, { label: "100 ג׳", g: 100 }], def: 0 },
@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "2.01";
+const VERSION = "2.04";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2797,7 +2797,9 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
 }
 
 function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg, attempts = 0, agree, setAgree }) {
-  const deniedText = reason === "device_limit"
+  const deniedText = reason === "fetch_failed"
+    ? "תקלה טכנית זמנית, נסי שוב בעוד רגע."
+    : reason === "device_limit"
     ? "המייל שלך כבר מחובר בשני מכשירים. ניתן להשתמש ב-MyPrime בו-זמנית בשני מכשירים בלבד. התנתקי במכשיר אחר ונסי שוב, או פני למנהלת התוכנית."
     : reason === "expired"
     ? "תקופת השימוש באפליקציה הסתיימה. תודה שהיית חלק מהמסע שלנו 💜"
@@ -4452,7 +4454,7 @@ export default function App() {
   const sweetsOpen = unlockedOn(profile.startDate, TODAY, SWEETS_UNLOCK);
   const tabs = [
     { id: "day", ic: Home, label: "יומן" },
-    { id: "report", ic: TrendingDown, label: "דוח" },
+    { id: "report", ic: BarChart3, label: "דוח" },
     { id: "recipes", ic: ChefHat, label: "מתכונים" },
     { id: "profile", ic: User, label: "פרופיל" },
   ];
