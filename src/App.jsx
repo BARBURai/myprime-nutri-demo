@@ -394,7 +394,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "2.11";
+const VERSION = "2.12";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2121,6 +2121,17 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
   const [dbResults, setDbResults] = useState([]);
   const [dbSource, setDbSource] = useState("il");
   const [searching, setSearching] = useState(false);
+  const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
+  const [mKcal, setMKcal] = useState(""); const [mProt, setMProt] = useState(""); const [mFat, setMFat] = useState(""); const [mCarb, setMCarb] = useState("");
+  const mInput = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", background: C.panel };
+  const mLbl = { display: "block", fontSize: 13, color: C.sub, marginBottom: 4 };
+  const saveManual = () => {
+    const name = mName.trim(); const amount = Math.round(Number(mAmount) || 0);
+    if (!name || amount <= 0) return;
+    const k = amount / 100;
+    const n = { kcal: Math.round((Number(mKcal) || 0) * k), p: Math.round((Number(mProt) || 0) * k), f: Math.round((Number(mFat) || 0) * k), c: Math.round((Number(mCarb) || 0) * k) };
+    commit({ meal, name, g: amount, unit: mUnit, source: "manual", ...n });
+  };
 
   useEffect(() => {
     const q = query.trim();
@@ -2311,7 +2322,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
     return () => cleanup();
   }, [scanState]);
   const photoItems = [{ f: FOOD_BY_ID["rice"], g: 158 }, { f: FOOD_BY_ID["chk"], g: 120 }, { f: FOOD_BY_ID["sal"], g: 80 }];
-  const filtered = query.trim() ? FOODS.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
+  const localPool = [...(favorites || []), ...FOODS.filter((f) => !(favorites || []).some((fav) => fav.name === f.name))];
+  const filtered = query.trim() ? localPool.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
   const nut = food ? nutritionFor(food, grams) : null;
   const unitLabel = unitLabelFor(food?.unit);
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
@@ -2329,7 +2341,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
               { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
               { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => setStep("history") },
-              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") }].map((o) => (
+              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") },
+              { ic: Pencil, t: "הזנה ידנית", s: "להקליד ערכים מהתווית - בלי AI", bg: "#EDEFF3", color: "#6B7A99", go: () => setStep("manual") }].map((o) => (
               <div key={o.t} data-tut={o.tut} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
                 <div style={{ width: 46, height: 46, borderRadius: 13, background: o.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 3px 9px ${o.color}55` }}><o.ic size={23} color="#fff" strokeWidth={2.2} /></div>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{o.t}</div><div style={{ fontSize: 14, color: C.sub }}>{o.s}</div></div>
@@ -2337,6 +2350,32 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               </div>
             ))}
             <div style={{ fontSize: 14, color: C.faint, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /> <span>ברקוד וחיפוש מדויקים יותר מצילום. בצילום נאשר את הכמות יחד.</span></div>
+          </>
+        )}
+        {step === "manual" && (
+          <>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>הזנה ידנית</div>
+            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.5, margin: "0 0 14px" }}>הקלידי את הערכים מהתווית של המוצר. הוא יישמר אצלך ויופיע בחיפוש בפעם הבאה.</p>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+            </div>
+            <label style={mLbl}>שם המוצר</label>
+            <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="לדוגמה: חטיף חלבון" style={mInput} />
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              <div style={{ flex: 1 }}><label style={mLbl}>כמות שאכלת</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
+            </div>
+            <div style={{ fontSize: 14, color: C.sub, margin: "16px 0 8px", fontWeight: 600 }}>מהתווית, ל-100 {mUnit === "ml" ? "מ\"ל" : "ג׳"}:</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ flex: 1 }}><label style={mLbl}>קלוריות</label><input value={mKcal} onChange={(e) => setMKcal(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>חלבון (ג׳)</label><input value={mProt} onChange={(e) => setMProt(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+              <div style={{ flex: 1 }}><label style={mLbl}>שומן (ג׳)</label><input value={mFat} onChange={(e) => setMFat(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>פחמימות (ג׳)</label><input value={mCarb} onChange={(e) => setMCarb(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+            </div>
+            <div style={{ marginTop: 18 }}><Btn onClick={saveManual} disabled={!mName.trim() || !(Number(mAmount) > 0)}>הוסיפי ליומן</Btn></div>
+            <Btn variant="ghost" onClick={() => setStep("method")} style={{ marginTop: 8 }}>חזרה</Btn>
           </>
         )}
         {step === "list" && (
@@ -2367,7 +2406,12 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                 </div>
               );
             })}
-            {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 15, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
+            {query && !searching && filtered.length === 0 && dbResults.length === 0 && (
+              <div style={{ padding: "14px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 15, color: C.faint, marginBottom: 10 }}>לא נמצאו תוצאות ל"{query}"</div>
+                <Btn variant="ghost" onClick={() => setStep("manual")}>להזין את הערכים ידנית</Btn>
+              </div>
+            )}
             {!query && <div style={{ fontSize: 14, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
           </>
         )}
@@ -2430,6 +2474,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                   <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
                   <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי את התווית התזונתית</span>
                 </label>
+                <Btn variant="ghost" onClick={() => setStep("manual")} style={{ marginBottom: 8 }}>להזין את הערכים ידנית</Btn>
                 <Btn variant="ghost" onClick={() => setScanState("idle")}>נסי שוב לסרוק</Btn>
               </div>
             )}
