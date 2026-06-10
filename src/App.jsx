@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.97";
+const VERSION = "2.00";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1520,6 +1520,8 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
 function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, maxStart, gateEmail }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   const [baseOpen, setBaseOpen] = useState(false);
   const [newSens, setNewSens] = useState("");
@@ -1650,8 +1652,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
         <ChevronLeft size={18} color={C.faint} />
       </div>
 
-      <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
-      <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onLogout} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
+      <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={() => setConfirmReset(true)} style={{ color: C.sub }}>מחיקת כל הנתונים והתחלה מחדש</Btn></div>
+      <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmLogout(true)} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
       <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>משחרר את המכשיר הזה ומחזיר למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב עם המייל.</div>
       <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
 
@@ -1714,6 +1716,26 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
             <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>את עדכון המשקל השוטף עושים בדוח, לא כאן. השדה הזה הוא הנתון שאיתו התחלת או היעד שלך. למעקב אחרי המשקל בפועל - היכנסי לדוח ולחצי "הזיני משקל".</div>
             <Btn onClick={confirmWeight}>אני רוצה לשנות בכל זאת</Btn>
             <Btn variant="ghost" onClick={() => setPendingWeight(null)} style={{ marginTop: 8 }}>צאי בלי לשנות</Btn>
+          </div>
+        </div>
+      )}
+      {confirmReset && (
+        <div onClick={() => setConfirmReset(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>למחוק הכל ולהתחיל מחדש?</div>
+            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>פעולה זו תמחק את כל מה שהזנת במכשיר הזה - יומן האוכל, המשקל, הצעדים והכל - ותחזיר אותך למסך ההתחלה. אי אפשר לבטל את זה.{profile.backup?.enabled ? " אם הפעלת גיבוי, הנתונים שמורים אצלנו ותוכלי לשחזר עם הקוד שלך." : ""}</div>
+            <Btn onClick={() => { setConfirmReset(false); onReset(); }} style={{ background: "#D7263D" }}>כן, מחקי והתחילי מחדש</Btn>
+            <Btn variant="ghost" onClick={() => setConfirmReset(false)} style={{ marginTop: 8 }}>ביטול</Btn>
+          </div>
+        </div>
+      )}
+      {confirmLogout && (
+        <div onClick={() => setConfirmLogout(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>להתנתק מהמכשיר?</div>
+            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>תתנתקי מהמכשיר הזה ותחזרי למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב בכל רגע עם המייל שלך.</div>
+            <Btn onClick={() => { setConfirmLogout(false); onLogout(); }}>כן, התנתקי</Btn>
+            <Btn variant="ghost" onClick={() => setConfirmLogout(false)} style={{ marginTop: 8 }}>ביטול</Btn>
           </div>
         </div>
       )}
@@ -2001,7 +2023,7 @@ async function reconcileWithDb(items) {
 function SplashScreen() {
   return (
     <div style={{ position: "absolute", inset: 0, zIndex: 200, background: C.panel, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28, textAlign: "center", fontFamily: fontStack, animation: "splashFade 2s ease forwards" }}>
-      <div style={{ position: "absolute", top: 14, left: 14, background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, padding: "4px 12px", borderRadius: 999 }}>דמו</div>
+      <div style={{ position: "absolute", top: 14, left: 14, background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, padding: "4px 12px", borderRadius: 999 }}>בטה</div>
       <img src={MEDAL_SRC} alt="" width={150} height={150} style={{ display: "block", marginBottom: 20 }} />
       <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.45, maxWidth: 320 }}>ברוכה הבאה לאפליקציית המעקב היומי של מיי פריים</div>
     </div>
@@ -2012,9 +2034,9 @@ function IntroOverlay({ onClose, name }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 22, zIndex: 40 }}>
       <div style={{ background: C.panel, borderRadius: 18, padding: 20, fontFamily: fontStack }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>דמו MyPrime · v{VERSION}</span></div>
-        <p style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, margin: "0 0 12px" }}>שלום {name ? name + " " : ""}🙂 זו גרסת הדגמה (בטה) להתנסות.</p>
-        <p style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, margin: "0 0 16px" }}>ייתכן ויתבצעו עדכוני גרסה לאפליקציה, לכן ממליצה לך לרענן את מסך האפליקציה פעם ביום ע״י משיכה למטה של המסך במהלך השימוש באפליקציה - כך תהיה לך הגרסה המעודכנת ביותר.</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>אפליקציית MyPrime · v{VERSION}</span></div>
+        <p style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, margin: "0 0 12px" }}>שלום {name ? name + " " : ""}🙂 זו גרסת בטה להתנסות.</p>
+        <p style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, margin: "0 0 16px" }}>ייתכן ויתבצעו עדכוני גרסה לאפליקציה, ומומלץ לרענן מדי פעם כדי שתהיה לך הגרסה המעודכנת ביותר. באנדרואיד אפשר למשוך את המסך למטה, ובאייפון צריך לסגור את האפליקציה לגמרי ולפתוח שוב (משיכה למטה לא עובדת באייפון).</p>
         <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "11px 13px", margin: "0 0 16px", fontSize: 15, color: C.brandD, fontWeight: 600, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 8 }}>
           <MessageCircle size={20} style={{ flexShrink: 0, marginTop: 1 }} />
           <span>זו גרסת בטה - נשמח מאוד לקבל כל הערה לתיקון! בכל מקום באפליקציה את יכולה להשאיר הערה בלחיצה על כפתור הבועה <MessageCircle size={15} style={{ display: "inline", verticalAlign: "-2px" }} /> בצד שמאל, ואנחנו נקבל את ההערות ונטפל בהן בהקדם האפשרי.</span>
@@ -2056,7 +2078,7 @@ function NotesFab({ notes, setNotes, screen, userName }) {
         <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 45 }} onClick={() => setOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxWidth: 460, maxHeight: "82%", borderRadius: 20, padding: "20px 22px 24px", overflowY: "auto", fontFamily: fontStack, border: `2.5px solid ${C.brand}`, boxShadow: "0 14px 44px rgba(0,0,0,0.34)", boxSizing: "border-box" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>הערות לדמו</span>
+              <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>הערות לאפליקציה</span>
               <button onClick={() => setOpen(false)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
             </div>
             <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={4} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
