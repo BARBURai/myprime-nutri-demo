@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "2.00";
+const VERSION = "2.01";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1199,8 +1199,8 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
   const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
   const proteinFocus = programWeek >= MACRO_UNLOCK.week;
-  const cardBox = { border: `1.5px solid ${C.line}`, borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" };
-  const jumpBtn = { flex: 1, border: `1.5px solid ${C.line}`, background: C.panel, color: C.ink, borderRadius: 12, padding: "10px 6px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 };
+  const cardBox = { border: `1.5px solid ${C.brand}`, borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" };
+  const jumpBtn = { flex: 1, border: `1.5px solid ${C.brand}`, background: C.panel, color: C.ink, borderRadius: 12, padding: "10px 6px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 };
   const stepsRef = useRef(null), calRef = useRef(null), weightRef = useRef(null);
   const jump = (r) => r.current && r.current.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
@@ -1231,7 +1231,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         return (
           <div ref={stepsRef} style={cardBox}>
             <CardHeading icon={Footprints} text="דוח צעדים" />
-            <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+            <div style={{ display: "flex", border: `1.5px solid ${C.brand}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
               {cells.map((c, i) => (
                 <div key={i} style={{ flex: 1, textAlign: "center", padding: "12px 6px", borderInlineStart: i === 0 ? "none" : `1px solid ${C.line}`, background: c.hl ? C.brandBg : "transparent" }}>
                   <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 5 }}>{c.label}</div>
