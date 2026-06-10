@@ -49,6 +49,10 @@ function isExpired(startSunday) {
   return today.getTime() > exp.getTime();
 }
 
+// Max concurrent devices per email. 0 (or less) = no limit (disabled for beta).
+// Set to 2 to re-enable a 2-device cap later. Device tracking in Redis stays on either way.
+const MAX_DEVICES = 0;
+
 export default async function handler(req, res) {
   const email = String((req.query && req.query.email) || "").trim().toLowerCase();
   const device = String((req.query && req.query.device) || "").trim();
@@ -99,10 +103,12 @@ export default async function handler(req, res) {
     const key = `devices:${email}`;
     try {
       await redis(RU, RT, "ZREMRANGEBYSCORE", key, "-inf", now - TTL * 1000);
-      const known = await redis(RU, RT, "ZSCORE", key, device);
-      if (known === null || known === undefined) {
-        const count = Number(await redis(RU, RT, "ZCARD", key)) || 0;
-        if (count >= 2) return res.status(200).json({ allowed: false, reason: "device_limit", configured: true, startDate });
+      if (MAX_DEVICES > 0) {
+        const known = await redis(RU, RT, "ZSCORE", key, device);
+        if (known === null || known === undefined) {
+          const count = Number(await redis(RU, RT, "ZCARD", key)) || 0;
+          if (count >= MAX_DEVICES) return res.status(200).json({ allowed: false, reason: "device_limit", configured: true, startDate });
+        }
       }
       await redis(RU, RT, "ZADD", key, now, device);
       await redis(RU, RT, "EXPIRE", key, TTL);
