@@ -1,1139 +1,4548 @@
-# CLAUDE.md
-
-This file provides guidance to Claude (Claude Code and chat) when working with code in this repository.
-
-## Commands
-
-```bash
-npm install        # Install dependencies
-npm run dev        # Start dev server at http://localhost:5173
-npm run build      # Build for production (outputs to dist/)
-npm run preview    # Preview the production build
-```
-
-No test runner is configured.
-
-## Architecture
-
-**Stack:** React 18 + Vite, deployed to Vercel (frontend + serverless functions). UI is Hebrew, right-to-left (`dir="rtl"` in `index.html`), styled entirely with inline styles + a small injected `<style>` block. **Responsive layout:** on desktop it renders as a centered phone mockup (~390×800 card, the `.phone-frame` class); on phones (`max-width: 440px`) it goes full-screen — the frame fills the viewport (`100dvh`, no border/shadow/radius) so the bottom nav bar stays pinned to the bottom of the screen, like a native app. The responsive switch is done with a CSS media query inside the injected `<style>` block (the `.app-outer` / `.phone-frame` classes), since inline styles can't hold media queries.
-
-### Frontend
-Nearly all frontend logic lives in a single file: `src/App.jsx` (~1,570 lines). It is a **monolithic** component file — no component library, no state-management framework; everything uses React `useState` / `useEffect` / `useMemo`. `src/main.jsx` just mounts it.
-
-Key sections inside `src/App.jsx` (top to bottom):
-- **DOMAIN** — pure nutrition logic: `computeTargets` (Mifflin-St Jeor BMR for women, TDEE, deficit, protein/fat/carb targets), `projection`, `nutritionFor`, `programWeekFor`, `programDayNumber`, `unlockedOn`, `streakDays`.
-- **SEED DATA** — `FOODS` (Israeli staples, per-100g macros), `RECIPES`, `MEALS`, `INITIAL_LOG`, `makeWeightSeed`.
-- **THEME** — the `C` color object (feminine rose palette) and `fontStack` (Rubik). `VERSION` constant lives here.
-- **PRIMITIVES** — `Ring`, `MacroCard`, `MacroRow`, `WaterCard`, `Btn`, `Header`, `Stepper`.
-- **ONBOARDING** — `Onboarding`.
-- **SCREENS** — `DayScreen` (the "today" home screen), `ReportScreen` (weight + calorie-adherence charts), `RecipesScreen`, `ProfileScreen`.
-- **AI FUNCTIONS** — `analyzeMeal` (photo → items), `aiNutritionChat` (logging-by-chat), `aiMealChat` ("what should I eat?" conversational helper), `searchIsraeliDB`.
-- **MODALS / SHEETS** — `EntryMenu`, `SheetShell`, `ActivityModal`, `WeightModal`, `CalorieGoalModal`, `AccessGate`, `AddModal`, `RecommendModal`, `StreakCheer`, `IntroOverlay`, `NotesFab`.
-- **ROOT** — `export default function App()` (near the bottom): all state, persistence, and wiring of screens + modals.
-
-### Navigation (bottom bar)
-The bottom nav bar holds four tabs (`tabs` array: היום / דוח / מתכונים / פרופיל) split two-and-two around a **raised circular "+" action button** in the center. The "+" is the brand-gradient circle (class `fab-center`, a gentle float + glow animation) and opens the entry menu (`setSheet("menu")`). It is part of the bar and persistent across all tabs. All sheets/modals render as full-screen overlays (`position: absolute; inset: 0`) above the bar, so the "+" never collides with them.
-
-### Persistence
-State is saved to `localStorage` under the key `myprime_demo_state_v1` (profile, log, weights, activityLog, waterByDate). A device id is stored separately as `myprime_device_id`.
-
-### Feature unlock system (time-gated)
-Trackers are gated by program week, computed from `profile.startDate`:
-- `MACRO_UNLOCK = { week: 3, day: 4 }` — nutrition macros (protein/fat/carbs/fiber).
-- `WATER_UNLOCK = { week: 3, day: 2 }` — water tracker.
-- `unlockedOn(startDate, onDate, u)` decides whether a tracker is open on a given date.
-
-**Product rule:** before a tracker's week, it must **not appear at all** — not shown as "locked", just absent from the screen. Protein focus / macros are only relevant **from week 3**. The whole codebase follows this single rule (hidden before week 3, never "locked"). The previous leftover `PROTEIN_UNLOCK_WEEK = 2` constant and the "locked" mode in `MacroCard` (text "ייפתח בשבוע 2") were removed in v0.23. This rule also applies in `ProfileScreen`: the macro row (protein/fat/carbs) is gated by `programWeekFor(startDate, TODAY) >= MACRO_UNLOCK.week` (v0.28) — only the daily calorie target shows before week 3. The day strip marks the current day with a different-shade top band labeled "היום" (so the header no longer prefixes "היום"). `ProfileScreen` shows the real name via a `userName` prop (`profile.name || gateName`), not the "משתמשת" placeholder.
-
-### Android back button
-The root `App` intercepts the hardware/gesture back button (Samsung/Android) via the History API: on mount it pushes a synthetic history state and listens for `popstate`. A back press first closes an open sheet/modal; if none is open it shows an exit-confirm overlay (`showExit`) with "להישאר" / "לצאת". "להישאר" dismisses it; "לצאת" sets a guard and calls `history.go(-2)` to leave (a browser tab/PWA can't be force-closed by JS, so on a standalone PWA the OS performs the actual close at the history root). Sheets/modals are tracked through refs (`modalRef` / `sheetRef` / `exitRef`) so the single mount-time listener always reads current state.
-
-### Chat inputs
-Both AI chats — the meal-logging chat in `AddModal` (step `"ai"`) and `RecommendModal` ("מה כדאי לאכול") — use an auto-growing `<textarea>` (not a single-line input) so long dictated/typed text stays visible (grows up to ~96px, then scrolls). Enter sends, Shift+Enter inserts a newline. Both message lists auto-scroll to the latest message via an end-anchor ref + `scrollIntoView`.
-
-### Diet style & sensitivities
-Collected during onboarding (step 2, "איך את אוכלת?") and editable later in `ProfileScreen`. Two **separate** concepts, intentionally not mixed:
-- `profile.diet` (array of ids from `DIET_OPTIONS`, objects `{id, emoji}`: הכל / צמחוני / טבעוני / כשר / דל פחמימה / ים-תיכוני) — a *style* preference, shown as selectable emoji circles in onboarding.
-- `profile.allergies` (array from `SENSITIVITY_OPTIONS`: גלוטן / חלב-לקטוז / ביצים / אגוזים / בוטנים / סויה / דגים / שומשום) plus `profile.dislikes` (free text "other") — things to *avoid*.
-
-These feed the AI suggestion chat (`RecommendModal`): the seed prompt lists the diet style and, critically, injects allergies+dislikes as a **hard "never suggest" rule** (not a soft preference). **Safety stance:** this is best-effort risk reduction, never a guarantee — an onboarding + profile disclaimer makes clear the app is a coaching aid, not a medical allergy-safety tool, and the user must verify ingredients herself. Do not position the app as "safe for allergies." Existing stored profiles may predate `allergies`, so always read it defensively (`profile.allergies || []`). As of v0.33, `RecommendModal` opens with a **confirm stage**: it shows the diet style + sensitivities (editable inline, persisted to the profile via `setProfile`; "none recorded" hint when empty), and only on "קבלי המלצות" builds the seed and starts the chat — a double-check that reduces wrong-context errors. When sensitivities exist, the seed instructs the assistant to always end with a gentle reminder to verify the full ingredient list, and the confirm stage shows the same caution. As of v0.35 there is **no human-handoff path anywhere** in the app (testers use their program group, not the app): the "talk to someone" quick-reply was removed and the `aiMealChat` prompt now explicitly instructs the assistant not to offer human contact or forward requests; the QA harness verifies that offering human contact is a failure. `ActivityModal` (v0.34) computes burned calories with the MET formula `MET × 3.5 × weightKg ÷ 200 × minutes` — a chosen activity's MET (or a custom "אחר" intensity) × a minutes stepper × the user's body weight, instead of fixed presets. As of v0.36: (1) each meal suggestion includes an inline estimate — kcal + protein/fat/carbs from week 3, kcal-only before week 3 (`estimateRule`, gated by `proteinFocus`, synced in the QA harness); (2) when the user states a new preference/dislike/sensitivity mid-chat, `extractPreferences()` (a small AI call to `/api/ai`) detects it and `RecommendModal` shows a "save to your preferences?" banner — on confirm, diet styles → `profile.diet`, known sensitivities → `profile.allergies`, the rest → appended to `profile.dislikes` (persisted). **Persistence note:** the profile lives in `localStorage` (per device/browser); chat history is ephemeral and is *not* persisted, which is why only saved-to-profile preferences survive across sessions, and why a new device starts fresh (gate + onboarding) — true cross-device sync would require server-side profile storage. As of v0.41, committing food entries upserts them into a persisted `favorites` list (per-100g derived from the logged item, deduped by name, newest first, capped 20); the AddModal search step's "אחרונים/האחרונים שלך" section renders real favorites (falling back to the demo `RECENT` only when empty) for one-tap re-adding at the last-used quantity. As of v0.42, when macros unlock (week 3), the day view shows the calorie `Ring` and a matching `ProteinRing` (same style, `C.macroP` color, positive "reached goal" semantics) side by side, with a small one-line fat/carbs/fiber summary beneath — replacing the previous four `MacroCard`s. As of v0.43, future days in the day strip (`d > TODAY`) are disabled and dimmed (opacity 0.4, not clickable); each day becomes fillable once its date arrives. As of v0.44 the root keeps a reactive `today` (a 60s interval re-checks `ymd(new Date())`), passed to `DayScreen`, so the next day unlocks automatically at midnight without a reload (and the view advances if it was on the old today). As of v0.45: `macroP` is a distinct teal (`#2F9E8F`) so the protein ring no longer matches the pink calorie ring; each ring carries a **bold macro name inside it** (`קלוריות` in brand color / `חלבון` in teal) plus the remaining number and a small `מתוך {target}` line; the redundant "יעד/נאכל" sub-line was removed; and fat/carbs/fiber now render as a **compact 2-row table** (label row / value row, thin column dividers) directly beneath the rings, kept short so it doesn't push content down. As of v0.46, `PRIVACY_URL`/`COOKIE_URL` default to the real MyPrime policy pages and both are linked in the onboarding consent and the AccessGate note; `resetDemo` now also resets the access gate (`setGate("form")`, clears name/email, removes `myprime_access_email`) so "restart demo" returns to the name+email screen instead of skipping straight to onboarding. As of v0.47, the AddModal search step (`step === "list"`) is split into two tabs — **"חיפוש"** (the search box + local/`il`/OFF results) and **"אחרונים"** (the favorites/recents history) — with the meal-target chips shared above both; `listTab` defaults to history when favorites exist, else search. Note: search still queries the Israeli national DB first (`/api/il-food`) and only falls back to OFF when it returns nothing; that dataset (data.gov.il `nutrition-database` = the MoH "צמרת" DB, ~4,500 foods) is published as downloadable CSV (last updated 2022), not a live datastore, so `datastore_search` returns empty. As of v0.48, `api/il-food.js` was rewritten to **download the CSV resource(s) directly, decode (utf-8/windows-1255), parse, and cache them in module scope**, then substring-search the Hebrew names (the existing `normalize()` already targets the real צמרת column codes `shmmitzrach`/`food_energy`/`protein`/`total_fat`/`carbohydrates`, with Hebrew-substring fallback). It still tries `datastore_search` first. This runs on Vercel's open network (the sandbox can't reach data.gov.il, so it was NOT testable here). **Open task: verify on the deployed site** — hit `/api/il-food?q=חומוס&debug=1`, which returns the resource list + CSV headers + parsed count; if the field mapping is off, adjust `normalize()` keys from those headers. Also v0.48: the onboarding final step shows MyPrime's legal disclosure ("מיי פריים ה.ד.ס בע"מ … אינה אוספת מידע אישי …", cookie-policy + privacy-policy usage clauses) with both policy links. As of v0.49, the v0.47 in-search tabs were removed: the **"חיפוש מזון" method screen is search-only**, and recents/favorites became their **own bottom entry in the method chooser** ("האחרונים והמועדפים שלי", `Clock` icon → `step === "history"`), positioned last as the lowest-priority option; the qty screen's back button returns to its origin step (`qtyOrigin`). Also v0.49: the meal-suggestion prompt (`aiMealChat`, mirrored in the QA harness) now instructs the assistant to base nutrition estimates on the Israeli national DB ("צמרת") values for Israeli foods — prompt-level grounding (the *logging* path already reconciles named items against `/api/il-food` via `reconcileWithDb`, so logged foods use real Israeli DB values now that the endpoint works). As of v0.50: the bottom nav bar is tinted (`C.brandBg` as of v0.51, up from a too-faint `C.bg`) with a soft top shadow so it reads as a bar; and `RecommendModal` ("מה כדאי לאכול?") gained an always-available **"אכלתי — הוסיפי ליומן"** button on each suggestion — it opens a `"log"` sub-stage that runs `aiNutritionChat` (asks clarifying questions if needed, e.g. which idea / how much), and once it returns items shows them + meal chips + a confirm that calls `onLog` (= root `commit`, which logs **and** upserts favorites/recents). `RecommendModal` now takes an `onLog` prop.
-
-### Backend (Vercel serverless functions in `api/`)
-- `api/ai.js` — proxy to the Anthropic Messages API. Requires env var `ANTHROPIC_API_KEY`; optional `AI_MODEL` (defaults to a current Sonnet model). The frontend calls it via `AI_ENDPOINT` (`/api/ai`, overridable with `VITE_AI_ENDPOINT`). The proxy overrides the model server-side, so the model string sent from the client is not authoritative.
-- `api/access.js` — access gate: checks an email against the program participant list (`ACCESS_ENDPOINT` / `/api/access`).
-- `api/il-food.js` — Israeli food database lookup (`/api/il-food?q=...`); downloads + caches the MoH "צמרת" CSV from data.gov.il and substring-searches names (datastore fast-path + `?debug=1` diagnostic). See the v0.48 note above.
-
-Barcode scanning (in `AddModal`) — as of v0.38 — opens the rear camera once (`getUserMedia`, ideal 1920×1080, best-effort `focusMode: continuous`) and runs **two decoders in parallel on the same `<video>`**: native `BarcodeDetector` (only if `getSupportedFormats()` returns a non-empty list — some devices expose the class but support nothing) via a `requestAnimationFrame` `detect()` loop, **and** `@zxing/browser`'s `decodeFromVideoElement` with retail format hints + `TRY_HARDER`. First engine to read a code wins (`onCode` is guarded + idempotent). A dimmed aiming frame with a center line overlays the video. `stopScan` runs a stored cleanup (rAF loop, ZXing controls, camera tracks). A successful scan looks the code up on Open Food Facts; manual numeric entry is available both before scanning and via "להקליד מספר ידנית" during scanning. **Open Food Facts is a global, crowd-sourced DB** — many Israeli products have English/partial names or aren't listed, so (v0.39) `lookupBarcode` prefers Hebrew fields (`product_name_he` → `generic_name_he` → `product_name` → …) and the qty step shows an **editable name field for barcode items** (`food.id` starting `bc_`) so the user can correct an English/wrong name before adding. There is no good free Israeli barcode→nutrition API; the Israeli DB (`/api/il-food`) is name-search only. **FoodsDictionary was contacted and confirmed they do not offer an API** — so the interim stack (Open Food Facts barcode + editable name + label-photo fallback + `/api/il-food` name search) stands; do not re-propose FoodsDictionary as a data source. As of v0.40, when a scanned barcode isn't found, the "notfound" state offers a **"צלמי את התווית התזונתית"** button (camera `capture`) that routes the photo through `onPhoto → sendAiImage` so the AI reads the values straight off the nutrition label — the accurate fallback for products missing from Open Food Facts. (v0.29 `decodeFromConstraints` then v0.31 single-engine BarcodeDetector failed to detect on the target Samsung device — hence the parallel rewrite; coverage/detection still varies with camera focus and product listing.) Note: photo analysis (`analyzeMeal`) only *estimates* nutrition from appearance and is unreliable for packaged products — the barcode is the accurate path for those. As of v0.29 the photo prompt also reads an on-package nutrition label when one is visible. **Photo flow internals:** the live path is `onPhoto → sendAiImage → aiNutritionChat` (image sent into the logging chat); the standalone `analyzeMeal()` function exists but is **unused** (dead code). The photo step (v0.37) offers two explicit inputs — "צלמי עכשיו" (`capture="environment"`, opens the camera) and "העלי תמונה מהגלריה" (no `capture`), both calling `onPhoto`. v0.30 adds a **hybrid reconciliation**: after the AI identifies items (photo or text logging), `reconcileWithDb()` searches the product DBs (`searchIsraeliDB` + `searchOpenFoodFacts`) by item name and, only on a **strong** name match (`strongMatch`), replaces the AI's estimated values with the DB's real per-100g values scaled to the item's grams, tagging the item `source:"db"` (badge "מהמאגר") vs `source:"estimated"` (badge "מוערך", via `SrcBadge`). Name search is fuzzier than a barcode (no unique id), so unmatched items keep the estimate; the barcode remains the accurate path for packaged products. As of v0.31 the logging prompt (`aiNutritionChat`) also asks about typical accompaniments (e.g. oats/cereal → milk/yogurt + which kind; coffee → milk/sugar) and returns each component as a separate item, so the whole thing is logged at once.
-
-The AI features only work when deployed (or with the functions running), since they depend on `/api/*`. In a plain local `npm run dev` they may not respond — that is expected.
-
-### Beta feedback (`feedback/`)The notes panel (`NotesFab`, "הערות לדמו") lets testers jot screen-tagged notes. As of v0.32, when `VITE_FEEDBACK_URL` is set it shows a "שלחי משוב לצוות MyPrime" button that POSTs all notes (with device id, app version, tester name, timestamp, per-note screen) to a Google Apps Script web app, which appends one row per note to a "Feedback" sheet. The POST uses `mode:"no-cors"` + `text/plain` (fire-and-forget, avoids CORS preflight). `feedback/Code.gs` is the Apps Script; `feedback/README.md` has the one-time setup (create Sheet → Apps Script → deploy as web app "Anyone" → set `VITE_FEEDBACK_URL` in Vercel → redeploy). Clipboard copy remains as a fallback when no URL is configured.
-
-### Testing / QA (`qa/`)
-`qa/run-qa.mjs` is a standalone Node (18+) harness that evaluates the **AI layer only**. It generates a broad scenario matrix (adversarial allergy/diet baits, neutral suggestion-with-allergy, suggestions across profiles, the week-3 protein-gating rule, safety/extreme + medical-condition requests, brand-voice/no-shaming probes, verifying NO human-handoff is offered, off-topic, and meal-logging format/accuracy — ~83 text scenarios) plus optional meal-photo tests driven by `qa/images/manifest.json` (user supplies real plate photos + ground truth; analyzed via the verbatim `analyzeMeal` prompt, checked for expected items + plausible total kcal), runs each through the **same prompts the app uses** (the `aiMealChat`/`aiNutritionChat`/`analyzeMeal` strings and the RecommendModal seed are copied verbatim — `KEEP IN SYNC` if those change in `App.jsx`), then grades each answer with an LLM rubric plus an independent allergen keyword heuristic and rule-based logging/photo-JSON checks. It writes `qa/report.html` + `qa/results.json`. Run with `QA_BASE_URL="https://<app>.vercel.app" node qa/run-qa.mjs` (hits the deployed `/api/ai`, no key needed) or `ANTHROPIC_API_KEY=... node qa/run-qa.mjs`. See `qa/README.md`. This does **not** cover product-data accuracy (FOODS vs ground truth) or functional/device testing, and LLM grading is fallible — human-review all critical fails. There is still no automated test runner for the app itself.
-
-## Working rules (owner preferences — important)
-
-- **Never hand back patches or code snippets.** For every change, deliver a complete, ready-to-paste `src/App.jsx` **and** a zip. Never "replace this line" or partial diffs. The owner does not edit code by hand.
-- **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
-- **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
-- **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.93`.
-- **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
-- **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
-- **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
-- **QA is MANDATORY, not optional (owner directive).** The owner is the ONLY tester (no QA team), tests by hand in the browser on the live site. Keep the test list simple and doable solo - it lives in `qa/QA-CHECKLIST.md` (plain Hebrew, click-through). Rule: any change touching user input, a safety guardrail (weight blocks, calorie floor, sensitivities/allergies), or an AI prompt must be checked. Two moments: (1) after delivering such a change - the owner re-checks just the part that changed; (2) one full pass through the whole list before letting any real user in (incl. sending the link to dietitians) and especially before turning it into the native app, on a phone and on a computer. The `qa/run-qa.mjs` AI harness exists but requires Node/terminal, so it is OPTIONAL for the owner - do not present it as a required step; offer to walk through it only before a big release if asked. **Automatic logic check:** `qa/check-logic.mjs` is a no-network/no-browser Node script that asserts the guardrail RULES (weight blocks keep BMI>=18.5, calorie floor 1200, no 750 rate, water never negative, water legacy migration). Claude RUNS THIS ITSELF every version that touches a guardrail and reports pass/fail - the owner does nothing. It mirrors the rule fns/consts from App.jsx (keep in sync). It checks logic/math, NOT visual rendering - the only thing left for the owner is a short eyeball on the live site before sharing.
-
-## How we work (process - agreed with owner v0.94, IMPORTANT)
-Learned the hard way: running to code before locking the spec caused back-and-forth, wrong builds, and patch-on-patch. Default to clarify-first.
-- **New feature, or any change with more than one reasonable way to do it:** do NOT code yet. First send a short plan in chat - what it does exactly, the rules (what counts as done, what triggers what), the edge cases (e.g. backfill, Saturday, week boundaries), and where it lives. If it is visual, include a mockup. Wait for the owner's explicit "go" before touching code.
-- **Multi-point feedback in one message:** reflect it back as a numbered list with the proposed approach per item, flag the items that need an owner decision, get confirmation, THEN build them all in ONE clean version. No partial patches across several replies.
-- **Tiny, unambiguous fixes** (a color, a text string, a size, a label): just do them, no need to ask.
-- **One clean version per agreed round.** Batch decisions; avoid a long tail of micro-versions.
-- **Lock data/logic rules in words before coding them** (definitions of "completed", what earns a reward, how past-day edits behave). Most churn came from coding a rule before agreeing on it.
-- **Periodic cleanup:** remove dead/unused code left from iterations (no leftover patches) so the app stays clean.
-
-## v0.53 — Recipe booklet (29 real MyPrime recipes)
-The "מתכונים" tab now renders the real MyPrime recipe booklet instead of placeholder data.
-- Recipe data lives in `src/recipes.js` (`export const RECIPES`), imported by `App.jsx`. Each recipe: `{id,page,name,img,prep,diff,servings,kcal,p,f,c,ing[],steps[],tips[]}`. Ingredient lines ending with ":" render as sub-headers. kcal/p/f/c are per serving (range midpoints) for logging. Hebrew copy is transcribed faithfully from the official PDF — do not alter without instruction.
-- Photos: `public/recipes/<page>.jpg` (4..32), extracted from the booklet PDF with `pdfimages` (largest portrait image per page), resized to max width 900 / JPEG q82 (~2.1MB total). Vite serves them at `/recipes/<page>.jpg`.
-- `RecipesScreen`: search box + filter chips (הכל / עתיר חלבון [p>=25] / דל פחמימות [c<=12]) + photo cards; tapping a card opens `RecipeDetail` (hero photo, prep/servings/difficulty chips, 4-stat nutrition strip, "הוסיפי מנה ליומן", ingredients with sub-headers, numbered steps, tips). Card "+" and detail button call `addRecipe`.
-- `addRecipe(r)` logs a serving (g:1, source "verified", explicit kcal/p/f/c) to `selectedDate` with a time-based meal; no longer force-switches to the day tab (screen shows a "נוסף ליומן" toast/confirmation instead).
-- To add/replace recipe images later: drop files in `public/recipes/` (GitHub), Vercel serves them.
-
-## v0.55 — Sweets tab + protein color
-- Protein color changed from teal (#2F9E8F) to strong purple `macroP:#7E4FB5`; added `proteinTrack:#EBE1F7` (soft purple) used as the ProteinRing track (was C.line). Recipe-card protein badge updated to the purple palette. Carbs stays mauve #A87BB5 (distinct).
-- New desserts feature "הפינה המתוקה": data in `src/sweets.js` (`export const SWEETS`, 12 items, same shape as recipes), photos in `public/sweets/<page>.jpg` (pages 3..14, extracted from the desserts PDF via pdfimages, largest portrait per page; page 9 grabbed manually — its photo is 1.44 ratio). Hebrew copy transcribed faithfully.
-- `RecipesScreen` generalized: now takes `items`/`title`/`subtitle` (default = RECIPES / "מתכונים"). Reused for sweets via `<RecipesScreen items={SWEETS} title="מתוקים" ... />`. `RecipeDetail` reused as-is.
-- Gating: `SWEETS_UNLOCK = { week: 3, day: 5 }` (program day 19). The "מתוקים" tab is conditionally added to `tabs` only when `unlockedOn(startDate, TODAY, SWEETS_UNLOCK)` — i.e. it does NOT appear at all before week 3 day 5 (no locked teaser), per Ron's request. Tab icon: Cookie. With 5 tabs the nav splits 2 (day, report) + FAB + 3 (recipes, sweets, profile).
-- To add/replace sweet images: drop files in `public/sweets/` (GitHub) → Vercel serves at `/sweets/<page>.jpg`.
-
-## v0.56 — Recipe logging fix + category filters
-- BUG FIX: recipes/sweets were logged as `g:1` with per-serving kcal, so the gram-based edit modal recomputed per100 = kcal*100 → astronomical values at 100 g. Recipe/sweet entries are now SERVING-based: `{ unit:"serving", servings, base:{kcal,p,f,c}, kcal/p/f/c = base*servings }`. Day totals already sum `e.kcal` (correct); editing now scales by servings, not grams. (Old g:1 recipe entries in localStorage still mis-edit — reset/delete them.)
-- New `RecipeAddModal` (SheetShell): opens on recipe "+" / "הוסיפי מנה ליומן" (add) and when tapping a serving entry in the journal (edit). Shows recipe name, meal chips, a servings stepper (step 0.5, min 0.5, default 1), a live 4-stat nutrition strip (base×servings), and "הוסף ליומן"/"עדכן" (+ "מחק פריט" when editing). PDF nutrition is per serving; the modal multiplies by the chosen number of servings.
-- Root wiring: `addRecipe(r) → setModal({kind:"recipe", recipe:r})`; `editEntry(e) → kind "recipe" if e.unit==="serving" else "food"`; `saveRecipe(payload, editId)` updates or appends (does NOT touch favorites). Modal render branches recipe vs AddModal. Day entry row shows "{servings} מנה/מנות" for serving entries.
-- Recipe/sweet filter chips changed from עתיר חלבון/דל פחמימות to NUTRITION CATEGORIES, derived dynamically from each item's new `cat` field (horizontal-scroll chips). Recipe cats: שייקים, ארוחות בוקר, מנות ראשונות, סלטים, מרקים, מנות עיקריות. Sweet cats: פנקייקים, מוסים ופודינג, עוגות, חטיפים, עוגיות וכדורים. `cat` lives in recipes.js/sweets.js.
-
-## v0.57 — + menu / method chooser / onboarding consent
-- The "+" menu (EntryMenu) already contains only מזון/פעילות/מים (no weight/calorie items); weight + daily-calorie editing live in ProfileScreen (משקל row + יעד קלורי block). Confirmed — no change needed there. (Dead WeightModal/CalorieGoalModal + onPickEntry weight/calorie cases remain, harmless.)
-- AddModal method chooser ("הוספת מזון") reordered: 1) ספרי לי מה אכלת (AI), 2) צילום ארוחה, 3) סריקת ברקוד (removed "מומלץ" tag), 4) האחרונים והמועדפים שלי, 5) חיפוש מזון (last). Restyled: each row a soft tinted background with a prominent 46px colored icon chip (white icon). Tints: AI=info, photo=amber, barcode=brand, recent=water, search=green(#E8F3EC/#4E9E76). Kept "חדש"/"מהיר" tags (now white chip w/ row color). NOTE: first-item assumption was AI — easy to swap if Ron meant another.
-- Onboarding consent: moved the "קראתי ואני מאשרת…" line + checkbox to the END (below the legal paragraph, above "בואי נתחיל", with a top divider). De-duplicated policy links — they now appear ONLY in the consent line; the long legal paragraph is plain text (no <a> links). (The separate privacy/cookie link pair in the food-add footer is unrelated and left as-is.)
-
-## v0.58 — Sweets as a top toggle inside Recipes (not a bottom-nav tab)
-- Reverted the bottom-nav "מתוקים" tab from v0.55. The bottom nav is back to 4 tabs (day, report, recipes, profile).
-- Sweets now live INSIDE the Recipes screen as a top segmented toggle: "מתכונים | מתוקים" (pill segmented control, panel bg on active). RecipesScreen takes `sweetsOpen` and manages an internal `section` state ("recipes"/"sweets") switching dataset (RECIPES/SWEETS), subtitle, search placeholder, and category chips.
-- The "מתוקים" segment only renders when `sweetsOpen` (week 3 day 5 / program day 19). When it appears it shows a small "חדש" badge; the badge disappears once the user taps the מתוקים segment (local `seenSweets` state). Icons: ChefHat / Cookie.
-- RecipesScreen no longer takes items/title/subtitle props; it is self-contained. Rendered once: `<RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />`.
-
-## v0.59 — Profile as a draft form + feminine wording + report graph clarity
-- All copy now feminine-only ("את כעת בשבוע X בתוכנית" — removed "את/ה"). App audience is women only.
-- ProfileScreen is now a DRAFT form: a local `draft` mirrors profile; every field/chip/dislikes/calorie edit updates `draft`, NOT the live profile. `dirty = JSON.stringify(draft)!==JSON.stringify(profile)`. A prominent "שמור שינויים" button appears ONLY when dirty — placed high (right under the "שבוע X" line) AND again above the reset button — and only on click does `setProfile(draft)` commit. The old always-present (dead, no-onClick) bottom save button was removed.
-- Moved the daily-calorie target + macros (protein/fat/carbs) block UP to directly under the "את כעת בשבוע X" line. MacroRow now lives inside that brandBg card (shown from week 3).
-- Report weight graph: added caption "המשקל שהזנת בפועל לאורך זמן (לא תחזית)" to make explicit it is ACTUAL logged weight, not a projection/target.
-- NOTE (answered, no code change): editing weight in Profile sets the baseline used for targets/projection only; it does NOT add a dated point to the report's actual-weight graph (that graph reflects weights logged via "+ הזיני משקל היום"). If Ron wants a Profile weight-save to also drop a dated measurement on the report graph, that's a separate wiring change (ProfileScreen would need an addWeight callback).
-
-## OPEN — to work on next session (saved, not yet implemented)
-### 1. Weight model rework (analysis done v0.59 turn)
-Two unsynced sources: `profile.weightKg` (baseline → computeTargets) vs `weights[]` (report graph). Problems: editing profile weight doesn't touch the graph & vice-versa (two different "current weight"); graph is SEEDED with fabricated 24-day loss history (makeWeightSeed); "+ הזיני משקל היום" auto-logs `last-0.2` instead of asking (the real WeightModal is now orphaned — sheet "weight" no longer reachable); addWeightValue logs to selectedDate not necessarily today; report "Adaptive TDEE" is derived (tdee±40). Direction to decide: single source of truth (weights[] = log; current = last; profile.weightKg derived/synced); profile weight-save = log a dated measurement + update baseline; drop fabricated seed (start from one onboarding point); make "הזיני משקל היום" open WeightModal (ask a value).
-
-### 2. Food-data accuracy — web-grounded nutrition (NEW, Ron flagged)
-Symptom: AI-estimated values are unrealistically low (e.g. grilled entrecote kcal/100g too low; Google AI overview shows ~260–350 kcal/100g, citing fuder.co.il / FoodsDictionary). Root cause: `api/ai.js` is a bare proxy to Anthropic Messages with NO tools — nutrition estimates come purely from model priors (no grounding); the "חיפוש מזון" path uses צמרת CSV (2022) + Open Food Facts, where a cut like "אנטריקוט" may be a lean/raw entry → reads low. Fix direction (feasible): enable Anthropic server-side `web_search` tool in the AI-estimation path (aiNutritionChat) so the model grounds values in the web like Gemini does; prompt it to prefer authoritative sources (USDA FoodData Central, משרד הבריאות/צמרת, FoodsDictionary, fuder), return per-100g + range + note cut/prep. Considerations: latency+cost (only on the AI path, add caching per food); don't hard-scrape one site (ToS) — let the model search & weigh sources; keep the exact barcode/DB path for packaged items, use web grounding mainly for cooked/restaurant dishes.
-
-## v0.60 — Steps tracking (manual now, auto-ready for the app stage)
-- New metric: daily steps with a goal. Data: `profile.stepGoal` (default 8000, in DEFAULT_PROFILE + onboarding draft, read defensively `|| 8000`) and `stepsByDate{date:count}` (persisted in localStorage, reset in resetDemo). Single source/getter pattern: UI reads `stepsByDate[date]`; `setStepsForDate(date,n)` writes. Future auto-sync (HealthKit/Health Connect) will write to the same store — UI unchanged. A disabled "התחברות לאפליקציית הבריאות · זמין באפליקציה" button sits in StepsModal as the placeholder slot.
-- Gating: `STEPS_UNLOCK = { week: 1, day: 2 }` (program day 2). Card/menu/graph appear from then.
-- Calories: steps ADD to the daily calorie budget like activity. `stepsKcal(steps, weightKg) = round(steps * 0.00055 * weightKg)` (~0.04 kcal/step at 70kg; ~317 kcal for 8000 @72kg). DayScreen `budget = dailyTarget + actKcal + stepKcal`. Double-count handling: steps cover everyday walking; "פעילות גופנית" is for dedicated workouts (StepsCard notes the budget bump). Coefficient 0.00055 easy to tune.
-- UI: `StepsCard` (progress bar, steps/goal, +kcal, tap-to-edit) on the Day screen (before WaterCard); a steps BarChart (14 days, goal ReferenceLine, bars colored brand when ≥goal else proteinTrack) on the Report screen with "+ עדכון צעדים להיום"; `StepsModal` sheet (Stepper step 250, live kcal preview) opened from the card, the report button, and a new "עדכון צעדים" item in the "+" menu (EntryMenu gated by `stepsOpen`). Goal set in Profile (Footprints row, Mini stepper step 500, in the draft form — saved with "שמור שינויים").
-- Icons: Footprints. Components are self-contained (StepsCard/StepsModal); no patches.
-
-## v0.61 — USDA FoodData Central as a generic-food data layer
-- New serverless proxy `api/usda.js` → FDC `foods/search`. Reads per-100g nutrients 208(kcal)/203(protein)/204(fat)/205(carbs), prefers generic data types (Foundation > SR Legacy > Survey FNDDS > Branded), returns `{items:[{name,brand,dataType,kcal,p,f,c}]}`. Supports `?debug=1`. **Needs a free `USDA_API_KEY` in Vercel env** (https://fdc.nal.usda.gov/api-key-signup.html); falls back to DEMO_KEY (rate-limited).
-- Client: `searchUSDA(q)` (English query) + `translateFoodToEnglish(q)` (tiny AI call, Hebrew→short English term).
-- AI logging path (the main accuracy win): `aiNutritionChat` prompt now asks for an English `en` query per item; parsed items carry `en`. `lookupProduct(name, en)` priority = Israeli DB (Hebrew) → USDA (en) → Open Food Facts; `reconcileWithDb` tags source `"db"`/`"usda"` and scales per-100g by grams. So generic cooked foods ("steak", "rice", …) now get real USDA values instead of the model's guess.
-- Manual search ("חיפוש מזון"): USDA added as a fallback — if צמרת and OFF both return nothing, translate the Hebrew query to English and query USDA (source label "USDA FoodData Central · ערכים גנריים").
-- SrcBadge: added a blue "USDA" badge (#EEF4FB / #2D6CB5) alongside "מהמאגר"/"מוערך".
-- **CANNOT be tested in the sandbox** (api.nal.usda.gov is outside the allowlist) — verify on the live site via `/api/usda?q=grilled%20ribeye%20steak&debug=1`; expect one tuning round (coefficient/field mapping) after deploy.
-- **QA harness note:** `aiNutritionChat` prompt changed (added `en`) — `qa/run-qa.mjs` mirrors prompts verbatim; KEEP IN SYNC before relying on QA.
-
-## v0.61 — USDA FoodData Central grounding (generic foods)
-- Full USDA integration is now in place (most client wiring already existed from a prior in-progress pass): `api/usda.js` proxy to FDC `foods/search` (reads nutrient numbers 208 kcal / 203 protein / 204 fat / 205 carb per-100g, prefers Foundation > SR Legacy > Survey > Branded, `?debug=1` supported, key from `USDA_API_KEY` env, DEMO_KEY fallback). Client: `searchUSDA()`, `translateFoodToEnglish()` (tiny AI call, Hebrew→English), `lookupProduct(name,en)` layered Israeli→USDA→OFF, `reconcileWithDb` passes `it.en`, `SrcBadge` "usda" (blue), `aiNutritionChat` prompt emits per-item `en`, manual-search effect falls back to translate+USDA when צמרת & OFF are empty (source label "USDA FoodData Central · ערכים גנריים").
-- Layering: barcode/צמרת/OFF for packaged & Israeli; USDA for generic cooked foods (English-normalized); AI estimate only when nothing matches.
-- **Deploy requirement (IMPORTANT):** this is the first change that needs files BEYOND `src/App.jsx`. Ron must upload **`api/usda.js`** to the repo's `api/` folder and add a free **`USDA_API_KEY`** env var in Vercel (api.data.gov / fdc.nal.usda.gov/api-key-signup) then redeploy. Verify on the live site: `/api/usda?q=grilled%20ribeye%20steak&debug=1` (should return items with realistic kcal). NOT testable in the sandbox (network blocked to api.nal.usda.gov) — expect one tuning round after deploy.
-- KEEP qa harness prompts in sync — `aiNutritionChat` now includes the `en` field instruction.
-
-## v0.61 — USDA FoodData Central as the generic-food data layer
-- New serverless proxy `api/usda.js` → FDC `foods/search`. Reads per-100g nutrients (208 kcal / 203 protein / 204 fat / 205 carb), prefers generic data types (Foundation > SR Legacy > Survey FNDDS > Branded), returns `{items:[{name,brand,dataType,kcal,p,f,c}]}`. Key from env `USDA_API_KEY` (free at fdc.nal.usda.gov/api-key-signup.html), falls back to DEMO_KEY. Debug: `/api/usda?q=grilled%20ribeye%20steak&debug=1`.
-- Client: `searchUSDA(q)` (same {per100,measures} shape as IL/OFF). `translateFoodToEnglish(q)` = tiny AI call (Hebrew→short English query) used for the manual-search fallback. AI logging path gets English directly: `aiNutritionChat` prompt now asks for a per-item `en` field, parsed items carry `it.en`.
-- Layered lookup `lookupProduct(name, en)`: (1) Israeli צמרת by Hebrew name → source "db"; (2) USDA by English `en` → source "usda"; (3) Open Food Facts → source "db". `reconcileWithDb` passes `it.en`, scales per-100g by grams, tags source. Manual search (`step==="list"`): Israeli → OFF → (translate) USDA fallback.
-- `SrcBadge` has a "usda" case (blue "USDA"). Barcode/צמרת/OFF stay the exact path for packaged/Israeli; USDA covers generic cooked foods; AI estimate only when nothing matches.
-- **Deploy:** add `USDA_API_KEY` to Vercel env; upload the new `api/usda.js` + `src/App.jsx`. **Not testable in this sandbox** (api.nal.usda.gov is outside the allowlist) — verify on the live site with the debug URL; expect maybe one tuning round (nutrient-number/dataType mapping) after first deploy.
-- **KEEP QA HARNESS IN SYNC:** `aiNutritionChat` system prompt changed (added the `en` field) — mirror it in `qa/run-qa.mjs` if/when the harness covers the logging prompt.
-
-## v0.62 — Profile = per-field tap-to-edit (no global save); step default 2000
-- Step-goal default changed 8000 → 2000 (DEFAULT_PROFILE, onboarding draft, fallbacks, ReportScreen default).
-- ProfileScreen reworked per Ron's clarification (example screenshots were functionality-only, not design): removed the global draft + "שמור שינויים" button. Each value field (גיל / גובה / משקל / משקל יעד / קצב ירידה / תחילת התוכנית / יעד קלורי / יעד צעדים) is now a tappable EditRow showing its value; tapping opens a small centered edit modal (our theme, not the example's look) with the right control (Stepper for numbers, option buttons for rate, select for start date, Stepper + "אפסי למומלץ" for calorie) and its own "שמור" — only on save does `setProfile` commit that one field. Modal is a self-contained `position:fixed` centered overlay (zIndex 60) inside ProfileScreen.
-- Diet/sensitivities chips + dislikes text now apply immediately (no draft), so no resync conflict.
-- Calorie card + step-goal row open their editors on tap; MacroRow still shown in the calorie card from week 3 (its tap is stopPropagation so it doesn't open the editor).
-
-## v0.63 — USDA ranking tweak (demote raw on cooked queries)
-- `api/usda.js`: added `rankScore(f, q)` used for sorting. Primary key still data type (Foundation>SR Legacy>Survey>Branded); additionally, when the query contains a cooking word (grill/cook/roast/bake/fry/boil/broil/steam/saute/sear/poach) any result whose name matches `\braw\b` is pushed down (+5). So a "grilled X" query no longer surfaces raw X.
-- Deliberately did NOT penalize "separable lean only": simulation showed it crosses between different foods and can promote a wrong unpenalized cut (e.g. a sirloin) above the correct ribeye; lean values are accurate anyway, and client `strongMatch` guards the final pick. Verified on the real "grilled ribeye steak" result set — cooked ribeye stays #1, raw entries sink.
-- App VERSION bumped 0.62→0.63 (UI label only; the functional change is api/usda.js — re-upload both api/usda.js and src/App.jsx).
-
-## v0.64 — AI logging: wait for DB before showing values; respect exact quantity
-- The "ספרי לי מה אכלת" summary no longer shows the AI's estimated values first and then swaps them. `finishItems` now sets `aiDoneItems=null` + `reconciling=true`, runs `reconcileWithDb`, and only sets the items AFTER the DB lookup (Israeli/USDA/OFF) completes. While checking, a loader card "בודקת ערכים במאגרי המזון…" shows; values/badges appear once, final. On reconcile error, falls back to estimated items.
-- `aiNutritionChat` prompt: added an explicit instruction to use the user's stated quantity EXACTLY (e.g. "200 גרם") and not substitute a typical portion — addresses a report where "200 גרם" was logged as 400g (the gram value comes straight from the model; reconcile/commit never alter `grams`, confirmed). If it recurs, capture the exact chat to confirm it's model output vs. anything else.
-- VERSION 0.63→0.64 (App.jsx changed; re-upload src/App.jsx). KEEP qa harness prompt in sync (aiNutritionChat prompt changed again).
-
-## v0.65 — Day-screen rings (2x2), + menu rework, weight model, profile sections
-- **Day screen — 4 rings (2x2, responsive flex-wrap):** calories (always), protein (macroOpen/wk3), water (waterOpen), steps (stepsOpen). New generic `MetricRing` (value/goal/color/track/label/sub + optional `onPlus` overlay button in the ring color). Water ring `+` adds a glass (min(8,glasses+1), no decrement — resets daily); steps ring `+` opens StepsModal. Colors: calories brand pink, protein purple, water blue (#7E8DD6/#EBEDF8), steps amber (#C77A3C/#FBEEDF). Removed the "מה כדאי לאכול?" button and the old StepsCard/WaterCard renders from the day screen (component defs left in file, now unused — harmless).
-- **+ menu (EntryMenu):** now הוספת מזון · פעילות גופנית · מה כדאי לאכול (id "recommend") · הזיני משקל היום (id "weight"). Removed steps/water items (now on the rings). onPickEntry: added `recommend` → setSheet("recommend"). EntryMenu call no longer passes waterOpen/stepsOpen.
-- **Weight model:** profile "משקל" → **"משקל התחלתי"** (baseline for targets). New `logWeightToday(kg)` upserts TODAY (filters existing today entry, re-adds) so re-entry overwrites. WeightModal is now **typed only** (text input, inputMode decimal, validates 30–400, no +/-), title "הזיני משקל היום", note about overwrite. Report's weight button (`reportAddWeight`) now opens the weight sheet instead of auto −0.2. Weight sheet current = today's value or last.
-- **Steps modal:** typed only (text input, inputMode numeric, no 250 jumps), amber progress bar, note "לשינוי יעד הצעדים — אפשר בפרופיל. הזנה חוזרת היום מעדכנת את הערך." (stepsByDate setStepsForDate already overwrites per date.)
-- **Profile:** base data (גיל/גובה/משקל התחלתי/משקל יעד/קצב ירידה/תחילת התוכנית + week line) wrapped in a collapsible "נתוני בסיס" dropdown (ChevronDown, default CLOSED via `baseOpen`). Calorie goal stays a brandBg card. Step goal converted from EditRow to its own amberBg section card. Nutrition prefs (diet+sensitivities+dislikes+note) wrapped in a C.bg section card titled "העדפות תזונה" (chip unselected bg transparent→C.panel for contrast). Per-field edit modal unchanged.
-- VERSION 0.64→0.65 (App.jsx changed — re-upload src/App.jsx; usda.js unchanged since 0.63). KEEP qa harness in sync (aiNutritionChat prompt unchanged this version).
-
-## v0.66 — "+" on the calories ring (food + activity shortcut)
-- `Ring` now accepts an optional `onPlus` → renders the same bottom-center "+" badge (brand color) as MetricRing. Backward compatible (callers without onPlus get the plain svg).
-- Day screen: calories ring `onPlus={onAddCalorie}` (new DayScreen prop) → root `setSheet("caloriemenu")`.
-- `EntryMenu` gained a `mode` prop; `mode="calorie"` shows only [הוספת מזון (first), פעילות גופנית]. New sheet render `caloriemenu` uses it. onPickEntry already routes food/activity. The bottom FAB still opens the full menu (food/activity/recommend/weight).
-- VERSION 0.65→0.66 (App.jsx only).
-
-## v0.67 — sensitivities save/placement, intro update, start-date cap, no long dashes
-- **Free-text sensitivity input** moved to immediately after the "רגישויות ואלרגיות" heading (before the preset chips) in BOTH the profile prefs section and the onboarding allergies step, restyled prominent (1.5px C.brand border, not faint). Confirmed it persists to `profile.dislikes` (controlled input) and is ALREADY fed into the RecommendModal seed via `avoidList` (allergies + dislikes) with a strict no-suggest instruction. The bottom disclaimer note changed from C.faint to C.sub.
-- **Intro/welcome modal:** barcode no longer described as a demo-only mock (it works) - bullet now "אפשר לסרוק ברקוד של מוצר ולקבל ערכים מהמאגר"; added a bullet that steps/water/weight tracking appears by program progress.
-- **Program start date:** `listSundays()` loop capped at `i <= 0` (was `<= 2`) so the latest selectable start is the CURRENT week's Sunday - no future start dates.
-- **Long dashes removed:** all em-dashes and en-dashes in displayed text replaced with a short hyphen across App.jsx, recipes.js, sweets.js (standing rule: short dashes only). recipes.js/sweets.js changed only for this - re-upload all three this version.
-- VERSION 0.66->0.67.
-
-## v0.68 — consent text tidy, pescatarian diet option
-- Onboarding consent privacy block: merged the 3 separate paragraphs (one had a Lock icon in a flex column that caused a hanging indent) into ONE flowing right-aligned paragraph (textAlign right) with the Lock icon inline at the start (display inline, vertical-align). No more icon-induced indentation / ragged wrap.
-- DIET_OPTIONS: added "צמחוני + דגים" 🐟 (pescatarian) between צמחוני and טבעוני.
-- VERSION 0.67->0.68 (App.jsx only).
-- OPEN QUESTION raised with Ron: the report's "Adaptive TDEE" line (`adaptive = targets.tdee + (change<0 ? -40 : +40)`, line ~691) is a crude placeholder - it nudges the formula TDEE by a flat ±40 by weight-change SIGN only; it does NOT use logged intake or the magnitude of change, so "ההוצאה האמיתית שלך כוילה" overstates it. Pending Ron's choice: implement a real adaptive calc (expenditure = intake - weightChangeKg×7700, /days), reword honestly, or hide until enough data.
-
-## v0.69 — removed Adaptive TDEE line (kept as future task)
-- Per Ron: removed the report's "Adaptive TDEE" note + the unused `adaptive` const. Kept as a FUTURE TASK: implement a real adaptive-TDEE (expenditure = intake - weightChangeKg*7700, /days) once there's enough logged data, or revisit wording. (Target icon import may now be unused - harmless.)
-- VERSION 0.68->0.69 (App.jsx only).
-- DISCUSSION (calorie targets higher than other apps): root cause is the activity multiplier default `activity:"בינונית"` (×1.55 in ACTIVITY_FACTORS) in DEFAULT_PROFILE + onboarding draft. computeTargets = bmrMifflinWoman × factor - deficit. Most consumer apps default to sedentary (×1.2) and ADD exercise. Our app ALSO adds steps+activity to the daily budget, so ×1.55 DOUBLE-COUNTS activity. Proposed (pending Ron): default activity to "יושבני" (1.2). For demo profile 55kg/165/50yo/250g-wk: 1.55→1539 vs 1.2→~1129. NOT yet changed.
-
-## v0.70 — default activity to sedentary (calorie targets aligned with familiar apps)
-- Decision (Ron): keep the Mifflin-St Jeor formula, but change the DEFAULT activity level from "בינונית" (×1.55) to "יושבני" (×1.2). Rationale: the app already adds steps + logged activity to the daily budget, so a moderate baseline double-counted movement and pushed targets well above what users see in familiar apps. Changed in DEFAULT_PROFILE (line ~2214) and the onboarding draft (line ~427); computeTargets fallback `?? 1.55` -> `?? 1.2`. For the demo profile this drops the target by ~400 kcal into the expected range. (Harris-Benedict was considered and rejected - less accurate, and would have raised the number.)
-- VERSION 0.69->0.70 (App.jsx only).
-
-## v0.71 — HOTFIX: build break from v0.67 dash cleanup
-- The v0.67 global em/en-dash -> hyphen replacement hit a regex character class inside `normName` (line ~1288). The original class `["'.,()\[\]/–-]` contained an en-dash; replacing it produced `["'.,()\[\]/--]`, and the adjacent `/--` was parsed as an out-of-order range (`/` to `-`), breaking `vite build` (rollup: "Range out of order in character class"). Fixed to a single trailing hyphen: `["'.,()\[\]/-]`. Verified: no other regex char-classes contain non-edge hyphens (only valid `0-9` digit classes remain), no `--` sequences anywhere.
-- LESSON for future bulk text edits: never blanket-replace characters that may appear inside regex literals; exclude/inspect regexes first.
-- VERSION 0.70->0.71 (App.jsx only).
-
-## v0.72 — force sedentary for ALL profiles (fix: legacy profiles still showed high target)
-- v0.70 only changed the DEFAULT activity for new profiles/onboarding; existing profiles in localStorage kept activity="בינונית" (×1.55) and still showed ~1,500. computeTargets now uses ACTIVITY_FACTORS["יושבני"] (1.2) directly, ignoring stored profile.activity, so legacy profiles recompute to the lower target without a reset. (If a user-facing activity selector is added later, revert to reading profile.activity.)
-- VERSION 0.71->0.72 (App.jsx only).
-
-## v0.73 — profile sensitivities section reordered + custom-sensitivity chips
-- ProfileScreen "רגישויות ואלרגיות" subsection reordered to: (1) heading "רגישויות ואלרגיות (להימנע)"; (2) the explanatory note moved to right after the heading and made readable (C.ink, was faint gray); (3) preset sensitivity chips; (4) new "רגישויות נוספות" labelled free-text input WITH an add mechanism - Enter key and a "+" button (Plus icon) - that commits each entry as a removable brand-colored chip (X icon to remove).
-- Custom sensitivities are stored in profile.dislikes as a comma-separated list (state newSens + helpers customSens/addSens/removeSens). This is the SAME field RecommendModal already feeds into avoidList (line ~2042), so custom entries flow into "מה כדאי לאכול" with the strict "never suggest foods containing these" instruction. Confirmed wired.
-- Removed the old single free-text dislikes input from the profile (replaced by the chip-add input). Onboarding allergies step left unchanged (not in scope).
-- VERSION 0.72->0.73 (App.jsx only).
-
-## v0.74 — brand border around the profile calorie-goal card
-- ProfileScreen calorie-goal card (line ~1018) gained `border: 1.5px solid C.brand` (matching the emphasized protein MacroCard's brand outline) so the whole "יעד קלורי יומי" card now has a surrounding pink frame like the protein card. Background stays C.brandBg.
-- VERSION 0.73->0.74 (App.jsx only).
-
-## v0.75 - RecommendModal: custom-sensitivity chips + add button + brand frame
-- The "מה כדאי לאכול?" confirm stage previously had only a PLAIN single free-text input bound directly to `profile.dislikes` (faint C.line border) - it did NOT render existing custom sensitivities as chips and had no add button. So a "בלי חריף" saved in the profile showed as raw text only, and there was no way to add+sync a new one from this screen.
-- Ported the exact v0.73 profile chip-add pattern into `RecommendModal`: new local `newSens` state + `customSens` (profile.dislikes comma-split) + `addSens`/`removeSens` (same helpers as ProfileScreen, writing back to `profile.dislikes` via `setProfile`). Replaced the plain input with: label "רגישויות נוספות" -> brand-bordered input (Enter to add) + a "+" (Plus) button -> existing customSens rendered as removable brand chips (X to remove). Because it persists to `profile.dislikes`, entries now (a) show as chips here AND in the profile, (b) flow into `avoidList`/the seed prompt, and (c) survive across sessions/future chats. `avoidList`/`hasAvoid`/`startChat` unchanged (still read the same comma-separated `profile.dislikes` string).
-- Added a `1.5px solid C.brand` rounded frame (radius 14, padding 14) around the ENTIRE confirm-stage content (the part Ron screenshotted). NOTE: v0.74 had put the brand border on the PROFILE calorie-goal card; that border is LEFT in place (matches the protein card, not removed). If Ron meant the frame should sit only around the sensitivities block, or around the whole sheet incl. the title bar, it is a one-line move.
-- VERSION 0.74->0.75 (App.jsx only). qa harness unaffected (no prompt change).
-
-## v0.76 - red frame moved to the PROFILE calorie headline (where Ron actually meant); steps "0" fixed; reverted the v0.75 RecommendModal frame
-- FRAME (settled at last): the red/brand frame Ron wanted was NEVER in RecommendModal and NOT the whole calorie card - it is around the calorie-TARGET HEADLINE row inside the ProfileScreen calorie card (he sent a hand-marked screenshot looping just the "יעד קלורי יומי / 1,200 קק"ל (מומלץ)" line, excluding the macro row below). Implemented: the calorie card (line ~1018) lost its faint full-card `1.5px C.brand` border (added in v0.74, too low-contrast to notice and wrong scope); the headline row now has its own prominent box: `2px solid C.brand`, radius 10, padding 9/11, white background - clearly visible against the brandBg card, matching his drawing. MacroRow stays below, outside the frame.
-- Reverted the v0.75 RecommendModal confirm-stage frame (that was based on a misread of which screenshot he meant). The v0.75 custom-sensitivity CHIPS + add button in RecommendModal STAY - those were correct and unrelated to the frame.
-- STEPS "0": `StepsModal` init was `useState(current != null ? String(current) : "")`; since `current` is passed as `stepsByDate[date] || 0` it was always a number, so the field always showed "0" that had to be deleted before typing. Changed to `useState(current ? String(current) : "")` - 0/empty now shows the placeholder "לדוגמה 6500", a real saved value still pre-fills.
-- VERSION 0.75->0.76 (App.jsx only). qa harness unaffected.
-- PENDING (agreed plan, not yet coded): water entry rework - tapping the water "+" should open a small modal to add either a כוס or מ"ל, with a configurable cup size. Today the water ring `+` just increments glass count by 1 (capped 8); `waterByDate[date]` stores a GLASS COUNT. Plan to discuss/confirm: store water in ML per date (migrate existing glass counts x cupMl on read), add `profile.cupMl` (default 250), target = 2000 ml; the ring shows ml as glasses = round(ml/cupMl) of round(2000/cupMl); the "+" opens WaterModal (add chip: כוס / חצי ליטר / מ"ל typed) + a "גודל כוס" field saved to profile. WATER_UNLOCK gating unchanged.
-
-## v0.77 - onboarding sensitivities rework (chip-add + safety confirm) + weight chart shows only entered points
-- ONBOARDING step 2 ("איך את אוכלת?" / רגישויות) reworked to match profile + RecommendModal:
-  - Order is now: heading -> sub-note -> preset SENSITIVITY_OPTIONS chips -> the disclaimer note (MOVED UP from the bottom, now C.ink black/clear, no tinted box) -> "רגישויות נוספות" label -> chip-add input + "+" (Plus) button (Enter or "+" commits) -> removable brand chips. Previously this step had only a PLAIN single free-text `dislikes` input with NO add button (so custom sensitivities could not really be committed/seen as chips here), and the disclaimer sat at the bottom in a faint C.bg box.
-  - Local helpers added to `Onboarding`: `newSens` state, `customSens` (dislikes comma-split), `addSens`/`removeSens` (write the local `dislikes` string, which already flows into the created profile via `draft`). Same pattern as ProfileScreen, but operating on onboarding-local state since the profile does not exist yet.
-  - SAFETY CONFIRM: new `hasSens` (allergies or customSens) + `confirmNoSens` state + `next()` handler. The step-2 "המשך" now goes through `next()`; if NO sensitivity/allergy is marked it opens a centered confirm overlay "לא סימנת שום רגישות או אלרגיה / האם את בטוחה?" that repeats the same check-ingredients-yourself disclaimer, with "כן, אפשר להמשיך" (advances) and "חזרה לסמן רגישויות" (dismiss). The "דלג ישר לדמו" skip link still bypasses (deliberate). Steps 0/1/other still advance normally.
-- WEIGHT CHART (report) now shows ONLY weights the user actually entered. Removed `makeWeightSeed` (the fabricated 7-point/24-day loss history) and replaced with `initWeights(currentKg, startDate)` = a SINGLE starting point `[{date: startDate, kg}]`. Used in the weights initial state, `finishOnboarding` (p.weightKg @ p.startDate), and `resetDemo`. The report weight Area chart now starts at that one point and grows only as she logs weights via "הזיני משקל היום"; the change badge reads 0 until a second weight exists. ReportScreen already reads weights[0]/weights[last] defensively so a 1-point array is fine.
-  - **Existing testers:** old fabricated points persist in their `localStorage` `weights` (loaded via `saved?.weights`); they must RESET THE DEMO once to clear them. New onboarding/reset start clean.
-- VERSION 0.76->0.77 (App.jsx only). qa harness unaffected.
-- STILL PENDING owner approval (not coded): the water entry rework (כוס/מ"ל + configurable cup size) proposed before v0.76.
-
-## v0.78 - water tracking reworked: ml-based, configurable cup size, fixed 2L target, modal entry
-- Decision (Ron): water target is ALWAYS 2,000 ml (2 ליטר), fixed. Cup size is user-configurable; the cups number shown is derived = ml / cupMl.
-- Storage change: `waterByDate[date]` now holds **ML** (was a glass count). Read everywhere via `waterMlOf(v)` = `v < 50 ? Math.round(v*250) : v` so legacy glass-count data (<= ~8) auto-migrates on read (old fixed cup = 250 ml). New writes are always >= 50 ml (free-ml input min 50, cup size min 100, quick-adds 250/500), so the threshold never collides.
-- New constants: `WATER_TARGET_ML = 2000`, `DEFAULT_CUP_ML = 250`. `profile.cupMl` added to DEFAULT_PROFILE + onboarding draft (read defensively `profile.cupMl || DEFAULT_CUP_ML`).
-- Water RING (DayScreen): center now shows the CUPS number (`bigText`), label "כוסות", sub `"{ml} מ"ל מתוך {targetCups} כוסות"` where targetCups = round(2000/cupMl). Ring fill = ml/2000 (passed value=ml, goal=2000; new optional `MetricRing` `bigText` prop overrides only the displayed central number so the fraction stays exact). The "+" no longer instant-adds a glass - it opens the new WaterModal (`onWater` prop -> `setSheet("water")`).
-- New `WaterModal` (sheet "water", placed before CalorieGoalModal): shows current cups + ml + target; blue progress bar; quick-add buttons "+ כוס ({cupMl} מ"ל)" and "+ חצי ליטר"; a free-ml typed input (Enter or "+", min 50); "איפוס היום" (set 0); and a "גודל כוס" Stepper (step 10, clamped 100-1000) saved to the profile. Save -> `setWaterForDate(date, ml)` + `setProfile({...profile, cupMl})`.
-- `WaterCard` (the old per-glass day card) remains dead/unused code (not rendered since v0.65) and still references the old glass model - harmless, left as-is.
-- VERSION 0.77->0.78 (App.jsx only). qa harness unaffected.
-
-## v0.79 - weight entry: pick any date (fixes back-dated entries not landing on the graph)
-- BUG: the weight sheet was wired to `logWeightToday` which ALWAYS wrote to `today`, ignoring the date - so a "back-dated" weight just overwrote today's point and never appeared at its real date on the graph. Also the modal was titled "משקל היום" with no way to choose a date.
-- `WeightModal` reworked: now takes `weights`, `today`, `minDate` (= profile.startDate). Adds a native `<input type="date">` (default today, `min`=startDate, `max`=today). Changing the date prefills the weight field with that date's existing value if one exists. On save it calls `onAdd(kg, date)`.
-- Root: replaced the two old single-purpose helpers (`logWeightToday` -> today only; `addWeightValue` -> selectedDate, was already dead) with ONE `setWeightForDate(date, kg)` upsert (filter that date + re-add + sort). Weight sheet now: `onAdd={(kg, date) => setWeightForDate(date, kg)}`. Removed the two dead helpers so a future session can't re-wire the today-only one by mistake.
-- Labels "+ הזיני משקל היום" (report) and the "+" menu item "הזיני משקל היום" -> "הזיני משקל" (a date is now selectable).
-- ON THE ONBOARDING/START-DATE COMPLAINT: the initial weight is ALREADY dated at the program start date (`initWeights(p.weightKg, p.startDate)`, since v0.77). Ron saw it on a pre-0.77 build where `makeWeightSeed` dated the current-weight point at TODAY. Resolution: deploy 0.79 + reset the demo once to clear stale localStorage weights; OR just use the new date picker to set the starting weight to the start date. No further code change needed for that part.
-- VERSION 0.78->0.79 (App.jsx only). qa harness unaffected.
-
-## v0.80 - onboarding: readback confirm when sensitivities WERE marked
-- Per Ron: the step-2 "המשך" now ALWAYS goes through a confirm (kept light). Added `confirmSens` state; `next()` on step 2 -> `hasSens ? setConfirmSens(true) : setConfirmNoSens(true)`.
-- New `confirmSens` overlay (marked case): title "רגע לפני שממשיכים", a readback "רשמתי לעצמי להימנע מ: <bold list>" (allergies + customSens joined), ONE short reminder line ("תמיד כדאי לבדוק את רשימת הרכיבים בעצמך - זה כלי עזר, לא תחליף לבדיקה."), buttons "המשך" / "שינוי". Deliberately NOT the full disclaimer (that already sits on the step screen; full version is only in the no-mark `confirmNoSens` overlay). Decision: readback is worth it for allergy safety + catches mis-taps, but kept short to avoid nagging.
-- VERSION 0.79->0.80 (App.jsx only). qa harness unaffected.
-
-## v0.81 - onboarding marked-sensitivities confirm: add allergy line + required acknowledgement checkbox
-- In the `confirmSens` overlay (step 2, when she DID mark sensitivities): appended the real-allergy sentence so it now reads "...לא תחליף לבדיקה. אם יש לך אלרגיה ממשית, אל תסתמכי רק על האפליקציה." (previously only the no-mark overlay had the allergy line).
-- Added a REQUIRED acknowledgement checkbox (`ack` state): "קראתי והבנתי שהאפליקציה היא כלי עזר בלבד, ובאחריותי לבדוק תמיד את רשימת הרכיבים המלאה לפני אכילה." "המשך" is `disabled` until it is ticked. `ack` resets on continue / "שינוי" / overlay dismiss. Checkbox styled like the consent checkbox (22px box + Check).
-- The no-mark `confirmNoSens` overlay is unchanged (no checkbox there - she has nothing to take responsibility for; it keeps the full disclaimer + "כן, אפשר להמשיך"/"חזרה לסמן").
-- VERSION 0.80->0.81 (App.jsx only). qa harness unaffected.
-
-## v0.82 - "מה כדאי לאכול?" asks direction before recommending
-- Per Ron: before generating ideas, ask what she is in the mood for. Added module const `WANT_OPTIONS` = ארוחה מלאה / משהו קל / חטיף / משקה (id+emoji). New `want` state in `RecommendModal` (single-select, optional - tapping again clears).
-- Confirm stage: added a "מה את מחפשת עכשיו?" chip row right under the intro (above סגנון תזונה), using the same `chip()` style. The recommendations already factor in what she logged today (the seed includes `mealsHad` + remainingKcal), so the only addition is the direction.
-- `startChat` seed: appends `. אני מחפשת עכשיו: {want}` when one is chosen. If none chosen, behavior is unchanged (general ideas).
-- VERSION 0.81->0.82 (App.jsx only). qa harness: the RecommendModal seed changed (added the optional "אני מחפשת עכשיו" clause) - mirror in qa/run-qa.mjs if/when that seed is covered.
-
-## v0.83 - protein ring shows protein EATEN (counts up), not remaining
-- Ron reported the day-screen protein ring "changing protein to ~101 instead of 14" and then "going down" when he added another recipe. Not a value/scaling bug: `ProteinRing` was displaying `remaining = target - consumed` (target ~115 for 72kg at PROTEIN_PER_KG 1.6, so after a 14g recipe it showed 101, and dropped as more was eaten). With the "מתוך {target}" subtitle this read as "101 of 115 eaten" and counted the wrong direction.
-- Fix: the ring big number now shows `eaten = Math.round(consumed)` (counts UP toward the goal). Subtitle stays "מתוך {target}", fill stays consumed/target, "הגעת ליעד!" still at consumed>=target. So protein now reads "14 ג׳ חלבון מתוך 115" and grows as she eats.
-- Intentional asymmetry left as-is: the CALORIE ring still shows `remaining = budget - consumed` (counts DOWN - it is a budget to stay under), while protein counts UP (it is a goal to reach). Different metric types, different framing.
-- VERSION 0.82->0.83 (App.jsx only). qa harness unaffected.
-
-## v0.84 - safer weight-loss options + low-value warnings (underweight goal / floor calories)
-- RATE_OPTIONS: removed 750 g/week (too aggressive per Ron). Now [0, 250, 500].
-- 250 g/week emphasized as the recommended option in BOTH the onboarding rate step and the profile rate editor: always brand-bordered (2px) + brandBg even when unselected, a prominent "מומלץ" badge, and (onboarding) a subtitle "הקצב הבריא - נשמר לאורך זמן וטוב לשמירה על מסת השריר".
-- New safety warnings (verified threshold WHO BMI<18.5 = underweight). Reusable `LowValueWarning` overlay (zIndex 70) with "הבנתי, להמשיך" / "לשנות"; module consts `bmiOf(kg,heightCm)`, `UNDERWEIGHT_BMI=18.5`, `GOAL_LOW_MSG`, `KCAL_LOW_MSG`. The warnings inform + point to a professional + let her proceed at her own responsibility (company not taking responsibility), per Ron.
-  - Triggers: (a) goal weight whose BMI < 18.5 - checked in onboarding `next()` when leaving step 1 (rate!=0), and in ProfileScreen `commit` when saving `goalWeightKg`; (b) manual calorie override at/below the 1,200 floor - checked in ProfileScreen `commit` when saving `calorieOverride` (the calorie editor Stepper min stays 1000 so she CAN go low but gets warned). ProfileScreen `commit` now routes through `doCommit`; `warn` state holds the message.
-  - NOT added: a popup for the onboarding "floored target" case - that already shows the amber note. Calorie target is otherwise floored at 1,200 in computeTargets.
-  - NOTE for older users: WHO underweight line is 18.5, but in the elderly BMI<21 may already indicate undernutrition; left the trigger at 18.5 (universal underweight) - could be raised for older ages later if wanted.
-- VERSION 0.83->0.84 (App.jsx only). qa harness unaffected.
-
-## v0.85 - underweight protection extended to actual + starting weight
-- WeightModal (logging real weight) now takes a `heightCm` prop and shows an inline amber note (Info icon) whenever the entered value's BMI < 18.5. Non-blocking (a real measurement can always be saved) and REPEATED - it shows every time an underweight value is entered, not one-time (per Ron). Render passes `profile.heightCm`.
-- Starting / baseline weight protection (Ron: "is there protection if she sets a low starting weight?"):
-  - Onboarding: `next()` now warns on leaving step 0 if current weight BMI < 18.5 (LowValueWarning, message `STARTW_LOW_MSG`). Refactored the onboarding warning to a single `obWarn` (message string|null) state replacing the prior `goalWarn` boolean - both the step-0 (start weight) and step-1 (goal) warnings flow through it; onContinue advances the step, onCancel dismisses.
-  - ProfileScreen `commit`: added `weightKg` (baseline) underweight check -> `setWarn(STARTW_LOW_MSG)`.
-- New module const `STARTW_LOW_MSG` (sits with GOAL_LOW_MSG / KCAL_LOW_MSG). Note framing: actual/starting weight in underweight range is informational + points to a professional + lets her proceed (company not taking responsibility) - distinct from the goal case which discourages targeting an unhealthy weight.
-- Summary of all underweight triggers now: goal weight (onboarding step1 + profile), starting weight (onboarding step0 + profile baseline), actual logged weight (inline note, repeated), manual calorie override at/below 1,200 floor (profile).
-- Still open / discussed but NOT built: auto-switch from deficit to maintenance when actual weight reaches goal or enters underweight (Ron leaned toward the gentle-note path; the maintenance auto-switch was offered, not yet chosen). For older users the underweight line could be raised above 18.5 (elderly undernutrition ~BMI 21) - left at 18.5.
-- VERSION 0.84->0.85 (App.jsx only).
-
-## v0.86 - hard blocks for everything she SETS (weight/calorie) + live water update
-Ron's decision: things she SETS/CHOOSES (goal weight, starting weight, calorie target) must be HARD-BLOCKED from unhealthy values - she literally cannot enter them, like the 1,200 calorie floor. But the ACTUAL ongoing weigh-in stays a (repeated) note, never a block - blocking a real measurement would force a false number / lose the data. Underweight threshold verified WHO BMI<18.5 (also AHA/NIH); for the elderly BMI<21 can indicate undernutrition but the universal underweight line 18.5 is kept.
-
-Hard blocks (replaced the v0.84/0.85 LowValueWarning popups, which were removed entirely):
-- Helper `minHealthyKg(heightCm)` = lowest weight still giving BMI >= 18.5, rounded UP to 0.5.
-- Goal weight: onboarding Stepper clamps `Math.max(minHealthyKg(heightCm), Math.min(weightKg-0.5, v))` + faint hint; profile EditRow `min: minHealthyKg(profile.heightCm)` + `hint`.
-- Starting weight: onboarding "משקל נוכחי" Stepper clamps `Math.max(minHealthyKg(heightCm), v)` + caption; profile "משקל התחלתי" EditRow `min: minHealthyKg` + hint. Draft also clamps saved `weightKg` and `goalWeightKg` to `minHealthyKg` (covers the height-changed-after-weight edge).
-- Calorie: profile calorie editor Stepper min raised 1000 -> KCAL_FLOOR (1200); CalorieGoalModal already floored at 1200. So calorie is a true hard floor everywhere now (it was NOT before - the profile editor allowed down to 1000).
-- num-type edit modal renders an optional `edit.hint` line.
-- REMOVED: `LowValueWarning` component, `GOAL_LOW_MSG`/`KCAL_LOW_MSG`/`STARTW_LOW_MSG` consts, onboarding `obWarn` state+overlay+next() bmi checks, ProfileScreen `warn`/`doCommit`+commit checks+overlay. (They contradicted "can't enter": a popup that lets her continue.)
-- KEPT: WeightModal actual-weigh-in inline amber note (repeated, non-blocking) from v0.85 - this is the one place that stays a note.
-
-Live water update (WaterModal, sheet "water"):
-- Now LIVE: every action commits immediately (no "שמור"). Props changed `onSave(ml,cup)` -> `onSetMl(ml)` + `onSetCup(cup)`; removed local `ml` staging (uses `currentMl` prop directly, controlled); `cup` stays local but commits live via `onSetCup`. Close via the SheetShell X.
-- + כוס / + חצי ליטר / free-ml input (kept, Ron chose to keep it) all add immediately; new "- כוס (תיקון)" subtracts a cup (disabled at 0); "איפוס היום" zeroes immediately. Caption "כל שינוי נשמר מיד. אפשר לסגור בכל רגע."
-- Day-screen water ring label "כוסות" -> "כוסות מים".
-- VERSION 0.85->0.86 (App.jsx only). qa harness unaffected.
-
-
-## v0.87 - Daily progress tracker (check-in module, owner's medals/trophies)
-NEW module ported from the ManyChat 10-week WhatsApp tracker. Built as an opt-in component behind a master switch.
-- **Master switch:** `const TRACKER_ENABLED` (top of App.jsx, in the tracker section after `streakDays`). false = the whole tracker is hidden everywhere; true = live. Owner toggles only this.
-- **Content:** `src/checkins.js` exports `CHECKIN_GROUPS`, `CHECKIN_TASKS` (~22 habit tasks, each with `startWeek`/`type`(bool|number)/`group`/optional `auto`), and `activeTasks(week)`. Tasks are CUMULATIVE: a task turns on at its `startWeek` and stays active through week 10 (no stopWeek). Built from the 10-week booklet PDF. The PDF/WhatsApp drop some tasks later only due to message length; the app keeps them and groups them instead.
-- **Gating:** card shows from program day 3 (`CHECKIN_UNLOCK={week:1,day:3}`) via `unlockedOn`. TODAY's report is locked until 19:00 local (`CHECKIN_REVEAL_HOUR=19`) - before that the card shows a "ייפתח ב-19:00" note and no fill button; past days are always fillable (backfill via existing day nav); the rest of the app is unaffected by the time lock.
-- **Auto-fill:** `autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl)` derives steps/water/protein-goal/nutrition-journal from data the app already tracks; those tasks render read-only ("אוטומטי", pre-marked) so she is not asked twice. Manual tasks: bool tap-toggle + number `Stepper`.
-- **Storage:** answers live ONLY on her device - added `checkins` to the `STORAGE_KEY` state object (localStorage). Owner directive: store nothing server-side, no coach visibility, no sync. `setCheckinValue(date,taskId,value)` upserts/deletes per task; deleting empties the key.
-- **Streak + reward:** `checkinStreak(checkins, today)` = consecutive days with >=1 saved answer (rewards showing up, not perfection - misses just reset gently, no scolding). `CheckinCard` (on DayScreen) shows warm count "X מתוך Y" (positive count of what she did, NO percentages - owner: percentages feel like a traffic-cop report) + streak medals. `CheckinModal` (SheetShell) is the grouped fill UI; "סיימתי להיום" -> `finishCheckin` -> `CheckinCheer` celebration (owner's medal `/medals/medal.webp` shown x streak (cap 6) + animated confetti + a warm note "from ענת"). Tone: warm, "Anat in your phone", gamified but kind.
-- **Assets (owner-supplied, optimised to transparent webp ~20KB each, total ~230KB):** `public/medals/medal.webp` (single daily/streak medal, shown N times), `public/medals/trophy-1..9.webp` (weekly trophies, week number baked in), `public/medals/trophy-champion.webp` ("אלופה!", week 10). `trophyForWeek(w)` maps week->file (10+ = champion). Trophies are NOT used yet (weekly summary is the next version).
-- **Compare-to-self:** weekly steps will compare to HER previous week (owner chose this over a fixed target) - to be built with the weekly summary.
-- VERSION 0.86->0.87. New files: `src/checkins.js`, `public/medals/*.webp`. qa harness unaffected; `qa/check-logic.mjs` still 7/7 (no guardrail change). Zip includes the new medal assets (the only public/ files included; recipes/ still excluded).
-
-## OPEN TASKS (tracked, not yet built)
-- **Weekly summary + trophies (NEXT, v0.88):** a warm end-of-week summary card (per-task counts for the week, avg steps vs HER last week, NO percentages), using `trophyForWeek(week)` (champion for week 10), celebration in Anat's voice. Trophy assets already in `public/medals/`.
-- **Daily 19:00 notification:** native-app phase only (web/PWA push unreliable, esp iOS; needs notification permission). The in-app card already gates today's report to 19:00.
-- **Onboarding required-field validation (owner-flagged; build AFTER owner finishes current testing):** the profile-setup / onboarding flow must verify ALL required fields are filled before the user can proceed past "המשך". If she taps "המשך" with anything missing, do NOT advance - instead show a small inline note at each missing field (e.g. "יש למלא את הנתון"). So: per-step required-field check; block/disable advance until complete; on attempted advance, mark the empty fields with the small note. (Lives in `Onboarding` - the "מסך פרופיל"/base-data steps where the המשך buttons are. Confirm exact required set per step when building.)
-- **QA automation (owner-flagged, important):** connect the two automatic checks (logic `qa/check-logic.mjs` + AI `qa/run-qa.mjs`) into one simple command, or have Claude run them before a release. Keep it solo-friendly (owner is the only tester).
-- **API cost controls (owner-flagged, MUST do before scale; real-app/server phase):** the AI is used two ways per customer - meal-photo analysis (vision) and nutrition-advice chat - so token cost scales with active users. Estimated cost/customer/month (May 2026 pricing: Haiku 4.5 $1/$5, Sonnet 4.6 $3/$15, Opus 4.8 $5/$25 per MTok): ~$0.5 on Haiku, ~$1.4 on Sonnet, assuming ~75 photos (~2,000 in incl ~1,500 image + 500 out) + ~30 chats (~1,500 in + 500 out). Negligible per customer vs a subscription; the real risks are scale, heavy/abusive users, and accidentally using an expensive model or full-res images. Implement ALL of these when wiring the live API (currently the demo calls `/api/ai`):
-  1. **Default model = Haiku 4.5 for photo analysis** (food ID + estimates); escalate to Sonnet only for genuinely complex advice. Do not use Opus for routine calls.
-  2. **Downsize images client-side to ~768px long side before upload** - image tokens scale with resolution (~w*h/750); this roughly halves the image cost, which is the biggest single input chunk. Calculator deliverable: `docs/myprime-api-cost-calculator.html` (in the handoff zip).
-  3. **Prompt caching on the system prompt** (Anat's voice + instructions + grounding rules) - it repeats on every call (chat AND photo), 90% off the cached input portion. Highest-leverage lever given she both chats and sends photos.
-  4. **Cap output** - small `max_tokens` + ask for concise/structured output.
-  5. **Per-user daily usage cap** - DONE (v1.15): enforced server-side in `api/ai.js` via the same Upstash Redis as the access gate. Per-user daily cap (`AI_DAILY_LIMIT`, default 25) + per-minute burst cap (`AI_BURST_LIMIT`, default 10), keyed by the access email (sent as `x-user-id` header; falls back to IP). Daily quota resets at Israel-time midnight. Returns 429 `{error:'limit', message}`; the client shows a gentle Hebrew message. Limit is OFF until the Upstash env vars are set (app still works). The remaining cost levers (1-4, 6) are still open.
-  6. **(Optional) Batch API (-50%)** only for non-real-time work; NOT for live photo/chat (it's async and the user waits).
-- **Cross-device backup / restore (owner-flagged; architecture decision, build as a separate feature):** all data is in `localStorage` today, so a lost/wiped/replaced phone = data gone. An on-device backup (even automatic) does NOT survive phone loss - the backup must leave the device. Constraint: restore must work WITHOUT the owner holding readable personal health data (Israel privacy/consent sensitivity). Options:
-  - (A) Manual export/import JSON file - zero infra, fully private, but manual and only survives phone loss if SHE moves the file off-device.
-  - (B) **E2E-encrypted backup keyed by email + passphrase [RECOMMENDED for this constraint]** - client encrypts the state blob (WebCrypto: PBKDF2 from her passphrase to AES-GCM), uploads ciphertext to a new Vercel `/api` route storing it in the EXISTING Upstash Redis keyed by hash(email). Restore on a new device = email + passphrase, GET, decrypt. Owner stores only unreadable bytes. Automatic after a one-time setup. TRADEOFF: forgotten passphrase = unrecoverable by design (no readable copy on the server). Offer manual export as a backup-to-the-backup.
-  - (C) User's own Google Drive (appDataFolder) - data lives in HER cloud, owner stores nothing ($0 storage), auto-sync after one-time Google sign-in; downside: OAuth complexity + Google dependency.
-  - AVOID: plain server storage keyed by email - simplest but then the owner DOES hold readable health data (privacy/consent obligations).
-  - **Cost (option B, Upstash, checked June 2026):** negligible at beta scale. Storage ~100-150 KB/user (one overwritten blob); 1,000 users ~150 MB = within the free 1 GB ~ $0 (10k users ~ $0.13/mo). Commands $0.20/100K, 500K/mo free; with debounced writes (~few per user/day) 1,000 active users ~ $0-2/mo. Switch to the $10/mo fixed plan (unlimited commands) once above ~10M commands/mo. Keep cheap: debounce writes (on app close / every few min), one blob per user overwritten.
-  - **UX:** offer as a one-time choice in onboarding ("בלי גיבוי" vs "גיבוי עם מייל + סיסמה") with a clear explanation ("מוצפן, גם אנחנו לא רואים את הנתונים, ושכחת סיסמה = אין שחזור").
-  - STATUS: pending owner go-ahead on which option; then full spec + build. Connects to the previously-deferred "localStorage to server-side by email/ID" architectural note.
-- **DEV-only test-fidelity bug (RESOLVED v1.30):** during `?dev=1` simulation the tracker card showed the REAL date instead of the simulated `TODAY` (owner saw "שבת 6 ביוני" while simulating 2/6). Root cause was the v0.44 midnight-rollover interval clobbering the simulated `today` after ~60s; fixed by skipping that interval in DEV (see v1.30). This also fixed the weekly-summary tip misfiring on day 3.
-
-
-## v0.88 - Tracker clarity (week label, 10-week cap, reward hint)
-Small fixes after owner testing (he saw tasks that "had not started" and asked when rewards arrive).
-- `CheckinCard` header now shows a `שבוע {week}` pill so it is obvious which program week the app computed (driven by `profile.startDate`). Helps diagnose "too many tasks" - the active list is cumulative from week 1 up to that week.
-- Tracker week capped at 10: `ciWeek = Math.min(week, 10)` in DayScreen (card + tasks) and `Math.min(programWeekFor(...), 10)` in the modal, so it never shows beyond the defined schedule even if the start date is far in the past.
-- Added a one-line reward hint under the card button: "כל יום שתמלאי, נכנסת עוד מדליה לאוסף" (clarifies when medals are earned - one per filled day, streak builds 1..6).
-- No change to the task schedule itself (startWeeks). Open: owner to confirm the encoded startWeek per task matches the real program rollout (the schedule was read from the booklet PDF and may need per-task correction in `src/checkins.js`).
-- VERSION 0.87->0.88 (App.jsx only; re-upload src/App.jsx). qa unaffected.
-
-
-## v0.89 - Day strip reaches the program start (backfill any past day)
-Owner test: started 6 weeks ago, scrolled back to view "week 1" but the day strip only went 10 days back, so the leftmost reachable day was ~week 5 (showing ~13 cumulative tasks) - looked like "all of week 6's tasks on week 1". Root cause was navigation, not the task gating (each day already shows its own week via `programWeekFor(startDate, date)`).
-- Day strip range now spans from the program start to today (+4 future as before): `backN = Math.min(74, Math.max(10, programDayNumber(startDate, today) - 1))`, `days = length backN+5 from today-backN`. New users keep the old 10-back behavior; mid-program users can scroll to any past day to view/backfill (matches the WhatsApp "update past days"). Future days stay disabled/dimmed; strip still auto-scrolls to today.
-- Now navigating to a real week-1 day shows only week-1 tasks (2), confirming the per-day gating is correct.
-- VERSION 0.88->0.89 (App.jsx only; re-upload src/App.jsx). qa unaffected.
-
-
-## v0.90 - Tracker ring (medal in center) + macro strip hidden
-- `SHOW_MACRO_STRIP` flag (next to TRACKER_ENABLED) gates the day-screen fat/carbs/fiber strip. Set to false for now per owner (kept for future). With it hidden the daily tracker card sits higher. Protein/calorie/steps/water rings are unaffected.
-- `CheckinCard` redesigned: the flat progress bar is replaced by a circular ring (same style as the calorie/protein/steps rings: r=54, C.brand on C.brandBg track, fills by done/total) with the OWNER'S medal (`/medals/medal.webp`) centered inside it. Medal is greyscale until she has >=1 done. The whole card is tappable to open the check-in (the explicit button was removed). Keeps title + week pill + streak medals row + lock state + reward hint.
-- VERSION 0.89->0.90 (App.jsx only; re-upload src/App.jsx). qa unaffected.
-
-
-## v0.91 - Tracker ring polish + collection cabinet replaces the streak flame
-- Tracker ring fill is now a distinct pink (`#E8589B` on `#FBE0EE` track) so it differs from the calorie rose / protein purple / steps amber / water blue rings.
-- Medal inside the ring enlarged (ring 104->112, medal 54->78).
-- Version number moved OFF the top header (top now just "MyPrime") to the BOTTOM of the day screen ("MyPrime · v{VERSION}", small, faint) so the top layout reads cleaner.
-- Celebration trigger made predictable: `finishCheckin` now opens `CheckinCheer` (medal + animated confetti + Anat note) whenever "סיימתי להיום" is tapped and the day has >=1 answer (previously only for today). So the confetti appears right after finishing the day's check-in.
-- The top-left flame "X ימים ברצף" pill is REPLACED by a "ארון המדליות והגביעים" button (medal icon + current check-in streak, opens the collection). DayScreen prop `onStreakTap` -> `onOpenCollection`; the old StreakCheer "streak" sheet is now unused (left in place, harmless).
-- NEW `CollectionModal` (sheet "collection") = the cabinet: medal count (`trackerStats` = days with >=1 answer) + current streak, and a 4-col grid of the 10 weekly trophies (`trophy-1..9`, champion for week 10) - earned (full colour) when she filled >=1 day that program week, else greyed. Trophy "earned" = any filled day in that week (lenient v1; refine to "week completed" when the weekly summary lands).
-- VERSION 0.90->0.91 (App.jsx only; re-upload src/App.jsx). qa unaffected; check-logic 7/7.
-
-
-## v0.92 - Medal/streak/trophy actually register; header redesign; bug fixes
-Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE: week 1 has only AUTO tasks (steps + journal); the code only counted MANUAL answers in `checkins`, so `checkins[date]` stayed empty -> nothing registered.
-- **Completion marker:** finishing the check-in ("סיימתי להיום") now sets `checkins[date]._done = true` and ALWAYS opens `CheckinCheer` (medal + confetti + Anat note). Works on all-auto weeks. A medal = a completed day, intentional (she tapped done).
-- `checkinStreak` now counts consecutive `_done` days and SKIPS Saturday (optional rest day) so a skipped Saturday does not break the streak.
-- `trackerStats` medals = number of `_done` days (the cabinet count now rises).
-- **Trophy logic** = `weekTrophyEarned(checkins, startDate, w, today)`: earned once the week's Friday has passed AND every eligible non-Saturday day (program day >=3, date <= today) of that program week is `_done`. Matches owner: "Sunday to Friday is enough, Saturday not required". CollectionModal uses this (was the lenient any-filled-day rule).
-- Cabinet answer to owner: medals accumulate across the WHOLE program (one per completed day, no cap on total); trophies are one per completed week (1-9) + champion (week 10).
-- **Medal in the ring enlarged** again (ring 112->120, medal 78->92).
-- **Top header redesigned** (day screen): removed the global "MyPrime" top bar. Header row now = name/היי + date/week (right corner), "האוסף שלי" button in the middle (small medal icon removed - text only), and an APP-ICON on the left (~60px, ~2x the pill height). Icon loads `/app-icon.webp` with an onError fallback to the medal until the real asset arrives.
-- Saturday is fillable (owner is fine with it); only the trophy ignores Saturday.
-- VERSION 0.91->0.92 (App.jsx only; re-upload src/App.jsx). qa unaffected; check-logic 7/7.
-
-## OPEN (owner to provide / next)
-- **App icon + favicon asset:** owner to send the logo-in-medal as a square transparent PNG. Drop it at `public/app-icon.webp` (header auto-picks it up) and add `<link rel="icon" href="/app-icon.webp">` to index.html for the browser/Chrome favicon. Deferred until the asset arrives.
-- **Weekly summary (still next):** warm end-of-week recap with the week's trophy + champion for week 10.
-
-
-## v0.93 - App icon uses the existing medal (left corner)
-- Header app icon now uses the existing medal (`MEDAL_SRC`) directly instead of waiting for a separate `/app-icon.webp` (owner: just use the medal we have). Removed the onError fallback.
-- Nudged it into the left corner: header padding "2px 16px 0" -> "2px 16px 0 6px".
-- Favicon still open (would point at the medal too if/when wired in index.html).
-- Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
-- VERSION 0.92->0.93 (App.jsx only).
-
-
-## v1.93 - Notification opt-in step in onboarding
-- Added a 6th onboarding step (step 5, "תזכורת יומית"): value framing + "אפשרי תזכורת יומית" button (the tap satisfies the iOS user-gesture requirement) -> enableDailyReminder(email). New OnboardNotify component. Progress bar 5->6 segments; footer now finishes at step 5 (step 4 -> "המשך").
-- iOS branch: if iOS and NOT installed to home screen (Safari), shows install-first guidance instead of a button that can't work; supported/denied/error states handled. Fixed 19:00 (custom time deferred - free, needs hourly cron).
-- Day-screen one-time prompt (v1.92) kept: granted users never see it (gated on permission "default"); only nudges those who skipped / existing users.
-- VERSION 1.92->1.93. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
-
-## v1.92 - Daily 19:00 reminder (Web Push)
-- NEW FEATURE: native Web Push (VAPID) on the existing Vercel + Upstash stack (no Firebase). Reminds each subscribed woman at 19:00 Israel that the diary is open.
-- NEW FILES: public/sw.js (service worker: push + notificationclick), api/subscribe.js (GET returns VAPID public key, POST stores subscription in Redis HASH `push:subs`), api/notify.js (cron target: sends to all subs, prunes 404/410, gated to hour===19 Asia/Jerusalem unless ?force=1), vercel.json (crons 16:00 & 17:00 UTC -> code gates to 19:00 Israel, DST-safe). package.json: added web-push.
-- App.jsx client: registers /sw.js; silent re-subscribe on every open if permission already granted; ReminderRow in profile (enable/off/denied/unsupported states, uses Clock icon); one-time opt-in prompt card on the day screen (after intro/tour, gated by tipsSeen "notifyAsked"); helpers enableDailyReminder/disableDailyReminder/urlBase64ToUint8Array. Passes gateEmail to ProfileScreen.
-- iOS caveats (documented): push only on iOS 16.4+, app installed to home screen, permission from a user gesture. Android/desktop work in-browser. Reused lessons from the owner's barbur-poker FCM knowledge (notificationclick handler, gesture-triggered permission, re-register on open).
-- REQUIRES OWNER VERCEL SETUP (feature is inert until done): env VAPID_PUBLIC, VAPID_PRIVATE (generated), VAPID_SUBJECT (mailto:), CRON_SECRET (for Vercel cron auth) and/or NOTIFY_SECRET (for external cron). Deploy with vercel.json for crons (or hit /api/notify?secret=... from an external cron at 19:00 Israel). Test send: /api/notify?secret=...&force=1.
-- VERSION 1.91->1.92. esbuild clean, check-logic 7/7, 0 em/en dashes, api+sw node --check ok, JSON valid. CHANGED/NEW FILES: src/App.jsx, CLAUDE.md, public/sw.js, api/subscribe.js, api/notify.js, vercel.json, package.json.
-
-## v1.91 - Tour button shows day 3+ (not only day 3)
-- The on-screen "סיור באפליקציה" pill was gated to progDay===3 && week===1 (exact day 3). Changed to week===1 && progDay>=3 && tour-not-completed, so a woman entering on day 4+ (within week 1) still sees a way to open the tour from the main screen; it hides once she finishes the tour (appTour in tipsSeen). Auto-tour already covered pd>=3; this is the manual entry point. Context: week-1 group entering on day 4 tomorrow (week-2 group not invited yet).
-- VERSION 1.90->1.91. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
-
-## v1.90 - Weight confirm modal: choice before changing
-- Profile weight modal was post-save (only "הבנתי", number already changed). Now it confirms BEFORE applying: saving "משקל התחלתי"/"משקל יעד" stashes the value (pendingWeight) and opens "רק לוודא" with two buttons: "אני רוצה לשנות בכל זאת" (applies) and "צאי בלי לשנות" (ghost, cancels). Backdrop tap = cancel. The number is NOT changed unless she confirms.
-- VERSION 1.89->1.90. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
-
-## v1.89 - Report header + jump buttons + protein card stats
-- Report title "דוח והתקדמות" -> "דוח התקדמות".
-- Added 3 quick-jump buttons under the title that smooth-scroll to the matching card: "דוח צעדים" (only when stepsOpen), "יעד קלורי", "משקל". Implemented with refs + scrollIntoView.
-- Protein card: "ימים ביעד" moved INTO the "יעד חלבון" card (two-column: protein goal | days-on-target). The separate "ירידה מתחילת המעקב" box removed entirely. The old bottom two-box row is gone. Before week 3 (no protein card) "ימים ביעד" still shows as a standalone box so the stat isn't lost.
-- VERSION 1.88->1.89. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
-
-## v1.88 - Report restructure (titled cards) + weight flow
-- ReportScreen: every card now has a big bold heading with an underline divider + stronger card frame (1.5px border, radius 16, more spacing, light shadow) for clearer separation. New CardHeading component. Headings: "דוח צעדים" (Footprints), "עמידה ביעד הקלורי" (Target, kept wording, now big), "דוח משקל" (TrendingDown).
-- Protein goal promoted from a tiny gray footer box to its own titled card "יעד חלבון" (Dumbbell, macroP color), shown from week 3 (proteinFocus). Bottom mini-row now always shows ימים-ביעד + ירידה-מתחילת-המעקב.
-- WEIGHT DECISION (Ron): weight tracking is in the report only. New WeighInTips box (3 rules: once a week / same day / morning, no clothes) shown under "דוח משקל" AND inside the "הזנת משקל" modal.
-- Profile: saving "משקל התחלתי" or "משקל יעד" now shows a non-blocking ack modal ("רק לוודא גג") clarifying ongoing weight updates are done in the report. Change is still saved; she taps "הבנתי". Fires on every such save.
-- VERSION 1.87->1.88. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
-
-## v1.87 - App (home-screen) name + two small text fixes
-- PWA home-screen name was just "MyPrime" (confusing). Changed to "MyPrime מעקב": manifest.webmanifest short_name "MyPrime" -> "MyPrime מעקב" and name "MyPrime - מעקב יומי" -> "MyPrime מעקב"; index.html apple-mobile-web-app-title "MyPrime" -> "MyPrime מעקב" and <title> -> "MyPrime מעקב" (also removed an em-dash that was in the old title).
-- Profile FAQ row label: "שאלות ותשובות ועזרה" -> "שאלות, תשובות ועזרה" (comma instead of first vav).
-- Tour feedback step: dropped the leading vav -> "יש לך הערה? ...".
-- CHANGED FILES THIS ZIP: src/App.jsx, CLAUDE.md, public/manifest.webmanifest, index.html. (Note: manifest+index are NEW files in the zip vs recent App.jsx-only zips - both must be deployed for the home-screen name to update.)
-- VERSION 1.86->1.87. esbuild clean, check-logic 7/7, 0 em/en dashes.
-
-## v1.86 - Feedback coachmark moved from onboarding to the TOUR
-- Owner clarified: the feedback-bubble coachmark belongs in the guided TOUR (סיור), not the onboarding. Reverted ALL the v1.84 onboarding bits (coach/coachSeen state, next() routing, the in-onboarding TutorialOverlay render, and the forceBack prop on TutorialOverlay).
-- Added it as a normal TOUR step in TOUR_TAIL, right AFTER the nav-profile step (i.e. after the whole bottom bar incl. the profile explanation), before the daystrip step: { sel: "notesfab", text: "ויש לך הערה? נשמח מאוד לשמוע ..." }. Uses the existing tour mechanism exactly. data-tut="notesfab" on the NotesFab button is kept.
-- VERSION 1.85->1.86. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
-
-## v1.85 - Feedback bubble raised again
-- Bubble button bottom 230 -> 420 (was sitting on the trophy in the collection; owner wants it just below the calorie ring + steps ring). Still a best-guess pixel value; fine-tune on device.
-- NOTE re: the onboarding feedback coachmark "not showing / skipped" - it was added in v1.84; if testing on <=1.83 (the 230-px bubble) the coachmark does not exist yet. Code verified intact (coach/coachSeen state, next() routes step0 through it, data-tut="notesfab", forceBack). Should appear once v1.84+ is deployed.
-- VERSION 1.84->1.85. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
-
-## v1.84 - Add-method button labels + onboarding feedback coachmark
-- AddModal method buttons: removed "חדש" tag from "ספרי לי מה אכלת" (keeps "(AI)" subtitle). On "צילום ארוחה": removed "מהיר" tag and changed subtitle "המהיר ביותר" -> "זיהוי אוטומטי (AI)" to mark it AI-powered like the other.
-- Onboarding feedback coachmark: after the profile step (step 0), a one-step TutorialOverlay spotlights the feedback bubble (added data-tut="notesfab" to the NotesFab button) with text "יש לך הערה? נשמח לשמוע כדי לשפר ..." + המשך/הקודם. Reuses the existing coachmark mechanism exactly. Added a forceBack prop to TutorialOverlay so the back button shows on a single-step coachmark (idx 0). State: coach + coachSeen (shows once; next() on step 0 routes through it before advancing to step 1). NotesFab renders above onboarding (zIndex 13) so the spotlight finds it.
-- VERSION 1.83->1.84. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
-
-## v1.83 - Feedback bubble (NotesFab): position + panel restyle
-- Bubble button raised from bottom:78 to bottom:230 (still left side / insetInlineEnd:14). NOTE: target was "height of the filling circles" - 230 is a best-guess, may need a nudge once owner sees it on-device.
-- Notes panel changed from a bottom-sheet (alignItems flex-end, top-only radius, full width) to a CENTERED card: alignItems/justifyContent center + overlay padding 16; borderRadius 20 (all corners); maxWidth 460; bigger padding (20/22/24); textarea rows 3->4. Added highlighting brand ring (border 2.5px solid C.brand) + stronger shadow.
-- VERSION 1.82->1.83. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
-
-## v1.82 - Onboarding validation clarity + gate email label
-- errNote (onboarding step 0 validation) is now bold + red (#D7263D) + larger (was faint amber 13px), so it is clear WHERE the missing/invalid field is. numStyle error border also switched amber -> red.
-- The "האם את מעוניינת להשתמש ... בכל ימות השבוע" unanswered error note moved ABOVE the gray helper text (right under the buttons) so it is tied to the question and not buried; it inherits the new bold-red style.
-- AccessGate email field placeholder "המייל שלך" -> "המייל איתו נרשמת לתוכנית" (clarifies which email to enter).
-- VERSION 1.81->1.82. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
-
-## v1.81 - Household measures: כף / כפית on external products
-- Anat approved the proposal: add כף (15g) + כפית (5g) universally; כוס stays liquids-only (avoids big calorie errors on powders, e.g. a cup of PB2 powder != 240g).
-- External products (IL-food il_, Open Food Facts off_, USDA usda_, barcode bc_, favorites fav_) previously offered ONLY "100 ג׳"; this is the PB2 case. Appended כף(15)/כפית(5) to all 5 builders (def stays 0 -> 100ג׳ default). Also added כף/כפית to measuresForUnit (both unit branches; כוס already only on the ml branch).
-- Local FOODS were left as-is (curated per-product measures; relevant items already carry כף/כוס). Did NOT force כף/כפית onto items like banana/steak. Can extend specific local items (e.g. add כפית to tahini) if wanted.
-- Measure pills auto-append " · {g} ג׳" when the label has no number, so כף shows as "כף · 15 ג׳". User can still fine-tune exact grams.
-- VERSION 1.80->1.81. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
-
-## v1.80 - Weekly summary steps: bold "השבוע"
-- Per owner, instead of changing the report's averaging window, the weekly SUMMARY steps line now says "ממוצע הצעדים לימים שדיווחת **השבוע**" with "השבוע" in bold, clarifying the summary average is for THIS program week (vs the report's rolling 7-day). Applied to summaryTaskLine steps (n>=2) and the week-1 steps line; both detail fields became JSX fragments (the modal renders {l.d} and {ln}, so JSX is fine).
-- OPEN/parked: the report card itself still uses the rolling last-7-days window; owner chose the wording route over re-aligning the report. Can revisit if still confusing.
-- VERSION 1.79->1.80. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes.
-
-## v1.79 - Weekly summary: Hebrew dual form (פעמיים / יומיים)
-- Bug: counts of exactly 2 read as "2 פעמים" / "2 ימים" instead of the Hebrew dual "פעמיים" / "יומיים". Code handled 1 (singular) and 3+ (plural) but not 2 (dual).
-- Fix: added module-scope helpers sumDays(n) / sumBDays(n) / sumTimes(n) (1 -> יום אחד/ביום אחד/פעם אחת, 2 -> יומיים/ביומיים/פעמיים, 3+ -> N ימים/ב-N ימים/N פעמים) and applied them across all summaryTaskLine cases (steps, journal, water, protein, sleep, breathing, gratitude, grains split+combined, pelvic, probiotics, antiinflam, bonedensity) and the week-1 lines. 15 call sites in total.
-- Scope: only days/times per owner request. Counts like "2 אימוני כוח" / "2 ארוחות" (averages) were left as-is; can extend to "שני/שתי" forms if wanted.
-- OPEN (discussed, not yet resolved): the report steps card ("ממוצע X ימים", rolling last-7-days) can disagree with the weekly summary ("this program week"), because the rolling window spills into the previous week. Need to decide whether to (a) keep both as different clearly-labeled metrics, or (b) make the report average week-aligned.
-- VERSION 1.78->1.79. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter ( -1 = the ":)" smiley in the profile coachmark.)
-
-## v1.78 - Report steps-average clarification + diary "מה שהוזן היום"
-- **Report (steps card):** added a small gray clarification under the goal/average card: "הממוצע מחושב לפי הימים שהזנת בהם צעדים, מתוך 7 הימים האחרונים". (The "ממוצע X ימים" card uses steps7stats = rolling last-7-days average over days that have data; the X is the count of days-with-data in that window, which confused testing.)
-- **Diary:** the "מה שהוזן" section header is now BLACK + BOLD (was C.faint/gray) and renamed to "מה שהוזן היום". FAQ reference updated to match.
-- VERSION 1.77->1.78. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter ( -1 = the ":)" smiley in the profile coachmark.)
-
-## v1.77 - Week-1 summary singular/plural fix
-- Bug: the WEEK 1 summary lines used raw interpolation (`${stepsDays} פעמים`, `ב-${journalDays} ימים`), so a value of 1 read as "1 פעמים" / "1 ימים". The singular handling existed for weeks 2-10 (summaryTaskLine) but week 1 (wk1Lines) was missed.
-- Fix: added wk1StepsLine / wk1JournalLine with 0 / 1 / many variants matching the week 2+ phrasing ("פעם אחת" / "ביום אחד" / "X פעמים"|"X ימים").
-- Note: SUMMARY_COUNT_PHRASE / SUMMARY_AVG_PHRASE (top of summary section) also lack singular handling but are DEAD CODE (defined, never used) - not rendered, left as-is.
-- VERSION 1.76->1.77. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter ( -1 = the ":)" smiley in the profile coachmark.)
-
-## v1.76 - DEV: don't cap the simulated start date
-- Bug: in DEV mode, "קבע יום 1" (devAnchorDay1) sets profile.startDate to the Sunday of the simulated TODAY, but the startDate-cap effect immediately forced it back to gateStartDate (the sheet date), making it impossible to simulate "I just started this week" - broke testing of early weeks.
-- Fix (both DEV-only, zero effect on real users): (1) the cap effect now `if (DEV) return;` before aligning startDate to the sheet date; (2) ProfileScreen receives `maxStart={DEV ? null : gateStartDate}` so the start-date editor offers all Sundays in DEV.
-- VERSION 1.75->1.76. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter ( -1 = the ":)" smiley in the profile coachmark string.)
-
-## v1.75 - Photo UX: program-window gate + gentle nudges (client side of v1.73)
-- **Photos only during the 10-week program (days 1-70).** `sendAiImage` and the "צילום ארוחה" entry button both check `programDayNumber(startDate, TODAY) > 70`; if the window is closed they show the Anat end-message in chat instead of opening the camera / calling AI. (AddModal now receives a `startDate` prop, passed from `profile.startDate`.)
-- **Gentle in-chat nudges (Anat voice), on a real photo analysis only (`!r.limited`):**
-  - EVERY time she reaches 3 photos in one day (`bumpPhotosToday()` -> localStorage `myprime_photos_today` {date,n}; fires when n===3).
-  - ONCE at 35 total photos (`r.photoCount` from the server `x-photo-count` header; flag `myprime_photo_hs35`).
-  - Both show: "הערה קטנה ממני אלייך 💜 ... מוגבלת ל-70 תמונות. לאחר מכן תמיד אפשר לתאר לי בטקסט מה אכלת." (single note even if both triggers coincide).
-- `aiNutritionChat` now returns `limited` (true on 429) and `photoCount` (parsed from the `x-photo-count` response header) so the client can drive nudges without double-counting on limit hits.
-- The HARD 70 cap + the end/daily messages live server-side (v1.73); this version is the soft pacing UX so she doesn't binge to the wall.
-- VERSION 1.74->1.75. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter ( -1 is the ":)" smiley in the v1.74 profile string; esbuild confirms a clean parse.)
-
-
-- **Steps coachmark**: reworded to "כאן מזינים את מספר הצעדים. פותחים את אפליקציית הבריאות בטלפון, רואים כמה צעדים נצברו היום, ומזינים את המספר כאן." + a BOLD reassurance line "אפשר לעדכן את הצעדים כמה פעמים שתרצי במהלך היום (וגם לימים קודמים) - אל דאגה." (tip `text` is rendered as `{cur.text}` so it accepts a JSX fragment with `<b>`).
-- **Profile coachmark**: appended "ניתן לעדכן את נתוני הפרופיל בכל זמן שתרצי :)".
-- OPEN (owner to raise with Anat): how weight is referred to / where it's updated. The profile coachmark's "update profile data anytime" could confuse a user into thinking weight is updated in the profile rather than in the report (דוח). Wording to be finalized with Anat.
-- VERSION 1.73->1.74. App.jsx only. esbuild clean, check-logic 7/7, 0 em/en dashes. (Bracket counter shows ( -1 purely from the intentional ":)" smiley inside the profile string - not a code issue; esbuild confirms a clean parse.)
-
-
-- **api/ai.js: 70-photo hard cap per user** (`AI_PHOTO_LIMIT`, default 70). A "photo" call is detected by an image block in `body.messages`. Counted server-side in Upstash (`ai:photos:<email>` INCR, EXPIRE ~210d) so it CANNOT be reset by clearing the browser - this is the real cost guarantee on the expensive (image) calls. On the call past the budget, returns 429 `scope:photos` with the Anat end-message ("סיימת את צילומי הארוחה לתקופת הליווי 💜 ... אפשר לתאר לי בטקסט..."), which the existing `aiNutritionChat` 429 handler shows in chat. Also sets `x-photo-count` response header (for the upcoming client nudges).
-- **Daily cap lowered 25 -> 10** (`AI_DAILY_LIMIT` default). Caps the theoretical worst-case bill (~$10.7k -> ~$4.3k/mo at full scale) with negligible impact on a normal user. New daily-cap message: "הגעת למכסת ניתוחי ה-AI להיום 💜 אפשר להמשיך לתעד ארוחות דרך חיפוש או ברקוד, ומחר המכסה מתאפסת."
-- Body is now parsed once at the top of the handler (needed for photo detection); the final API-call block reuses it.
-- The matching CLIENT photo-UX (program-window gate + the 3/day and 35 nudges) ships separately in v1.75 (see below). v1.73 here is the SERVER hard cap only. Even before v1.75 is deployed, the server still caps cost (70 photos) and the end/daily messages still surface via the existing aiNutritionChat 429 handler - the client just lacks the pre-emptive camera gate and the gentle nudges. (An earlier draft of this entry wrongly claimed the client UX was already present in the delivered App.jsx - it was not; it landed in v1.75.)
-- VERSION 1.72->1.73. Changed: api/ai.js (real change), src/App.jsx (VERSION bump only). esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7, ai.js node --check ok.
-
-
-- **Client-side image downscale before AI photo analysis** (biggest cost lever). New module helper `downscaleImage(file, maxDim, quality)` draws the photo onto a canvas capped at 1024px longest side and re-encodes JPEG q=0.82; `onPhoto` now downscales (1024 / 0.82) before `sendAiImage`, with a fallback to the original file if the canvas path errors. Full-resolution phone photos were being sent as-is (huge image input-token cost); this cuts it several-fold with negligible food-recognition impact. (Meal photo has a single entry path: the `<input type=file capture>`; the getUserMedia video is only the barcode scanner.)
-- **max_tokens trimmed 1000 -> 800** on `aiNutritionChat` (the shared photo+chat call). 800 (not 700) to avoid truncating multi-item meal JSON.
-- Deferred per owner: switching `AI_MODEL` to Haiku (env, owner to A/B test accuracy). Prompt caching discussed separately.
-- VERSION 1.71->1.72. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.71 - Device logout (free the slot)
-- Added a "התנתקות מהמכשיר הזה" button in ProfileScreen (below the reset button). It frees this device's slot server-side and returns to the gate, WITHOUT deleting her data (logging back in with the email restores everything).
-- Client `logoutDevice()`: calls `${ACCESS_ENDPOINT}?email=&device=&logout=1`, then clears the stored access email/start-date and resets gate state (keeps STORAGE_KEY profile data + device id). Passed to ProfileScreen as onLogout.
-- api/access.js: new early `logout` branch - `ZREM devices:<email> <device>` (when Upstash configured) and returns {ok:true}, before any sheet lookup.
-- Solves the real beta gap: a user on her 3rd device (or replacing a device) can free a slot herself instead of waiting for the 24h TTL.
-- VERSION 1.70->1.71. Changed: src/App.jsx, api/access.js. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7, access.js node --check ok.
-
-## v1.70 - Hide skip-to-demo for real users + prominent install CTA + install FAQ
-- **"דלג ישר לדמו" skip button is now DEV-only** (wrapped in `{DEV && ...}`), so real participants can't bypass onboarding into demo mode; still available with ?dev=1 for testing.
-- **Install-as-app CTA upgraded** from a small underlined link to a prominent brandBg box at the top of onboarding: "📲 מומלץ מאוד להתקין את האפליקציה בטלפון" + "תרצי הנחיות? הקישי כאן" + chevron; opens the existing install modal.
-- **New FAQ item (first)** in profile Q&A: "איך מתקינים את האפליקציה בטלפון" with Android(Chrome)/iPhone(Safari) Add-to-Home-Screen steps.
-- VERSION 1.69->1.70. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-- NOTE (no code): the 2-device limit not blocking the 3rd login is an env/deploy issue, not code - device id is sent correctly (myprime_device_id UUID per browser). Requires UPSTASH_REDIS_REST_URL + _TOKEN set AND a redeploy.
-
-## v1.69 - Intro modal text black
-- The two IntroOverlay (demo intro) paragraphs (greeting + daily-refresh recommendation) changed from gray (C.sub) to black (C.ink) per owner. Feedback box unchanged.
-- VERSION 1.68->1.69. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.68 - Backup-step privacy text black
-- The two privacy/backup paragraphs on onboarding step 3 ("מה שאת ממלאת... נשמר במכשיר שלך בלבד..." and the encrypted-cloud-backup paragraph) changed from gray (C.sub) to black (C.ink) per owner.
-- VERSION 1.67->1.68. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.67 - Summary disclaimer text black
-- The liability disclaimer on the onboarding summary ("ההמלצות בתוכנית מבוססות...") changed from gray (C.faint) to black (C.ink) per owner.
-- VERSION 1.66->1.67. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.66 - Goal-weight default = entered current weight + gate consent text black
-- **Goal weight no longer defaults to a fixed 66.** `goalKg` now starts null; `goalEff = goalKg == null ? weightN : goalKg` is used for the stepper value, draft goalWeightKg, projection, and the summary text. So the "משקל רצוי" stepper starts at her entered current weight and she lowers it from there. If left at current weight, projection() returns maintain (goal>=current) so the summary reads as a maintenance plan rather than odd "0 weeks". Change still clamps to Math.max(minHealthyKg, Math.min(weightN-0.5, v)).
-- **Gate consent now black (per owner):** the privacy disclosure paragraph (C.faint -> C.ink) and the "קראתי ואני מאשרת" label (C.sub -> C.ink) on the access gate are now black instead of gray.
-- VERSION 1.65->1.66. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.65 - Liability disclaimer on summary
-- Added a disclaimer line on the onboarding summary step (step 4, under the kcal target): recommendations are based on the data she entered, she is responsible for accurate/current data, and the app is a tool only - not medical/nutritional advice or a substitute for it. Faint text + Info icon. Owner to pass wording to their lawyer; can be upgraded to an acknowledged checkbox if the lawyer prefers.
-- VERSION 1.64->1.65. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.64 - Tighter onboarding ranges (owner)
-- Adjusted step-0 validation ranges per owner: age 33-80 (was 18-120), height 120-210 cm (was 120-230), weight 50-150 kg (was 30-300). Age invalid-note made generic ("יש להזין גיל תקין"). NOTE: owner said height "can't be more than 1.20m" - interpreted as a 120 cm MINIMUM (literal reading would block everyone); confirm if a different bound was meant.
-- VERSION 1.63->1.64. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.63 - Fix onboarding number inputs (one-digit bug) + sensible ranges
-- **Fixed the "can only type one digit" bug** on the step-0 age/height/weight inputs. Root cause: `Field` was defined INSIDE Onboarding, so it was a new component type on every render; typing a digit -> setState -> re-render -> React remounted Field and its <input>, dropping focus after each keystroke. Fix: moved `Field` to module scope (stable reference). It now keeps focus and accepts multi-digit input.
-- **Sensible range validation** on step 0 (was just >0, which accepted 1 cm / 1 kg / age 1): age 18-120, height 120-230 cm, weight 30-300 kg. Error notes are now range-aware: empty -> "יש למלא את הנתון"; filled-but-invalid -> "יש להזין גיל תקין (18 ומעלה)" / "יש להזין גובה תקין בסנטימטרים" / "יש להזין משקל תקין בק״ג". The amber field outline + block-on-המשך use the same per-field ok flags (ageOk/heightOk/weightOk).
-- VERSION 1.62->1.63. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.62 - Splash screen + install-as-app guide + favicon/PWA icons + cancelled-member block
-- **Splash screen** (`SplashScreen`): full-screen overlay shown for 2s on every app open - big medal (MEDAL_SRC, 150px), "ברוכה הבאה לאפליקציית המעקב היומי של מיי פריים", and a small "דמו" badge top-left. Fades in/out via `@keyframes splashFade`. App state `showSplash` (init true) + a 2000ms setTimeout to dismiss; rendered as the first child of `.phone-frame` (zIndex 200).
-- **Install-as-app guide:** an "📲 איך מתקינים כאפליקציה?" link under the v{VERSION} line in onboarding opens a modal with Android(Chrome) + iPhone(Safari) Add-to-Home-Screen steps. Local `showInstall` state in Onboarding.
-- **Favicon + PWA (medal icon on the home screen):** new `index.html` adds icon / apple-touch-icon / manifest links + theme-color #D45D79 + apple-mobile-web-app metas. New `public/manifest.webmanifest` (standalone, rtl, he, bg #fff, theme #D45D79). New icon files generated from medal.png on a WHITE background: `public/icon-192.png`, `public/icon-512.png` (Android), `public/apple-touch-icon.png` (180px, iOS, no alpha).
-- **Cancelled-member block:** api/access.js now flags the matched email's row as cancelled if it contains a standalone TRUE cell (`/(^|,)\s*TRUE\s*(,|$)/i`), and returns `reason:"cancelled"` (before expiry/device checks). AccessGate shows a support-contact message for cancelled and hides the retry button (terminal, like expired). Inert until the cancellation column is added to the published `access` tab. NOTE: owner must update the access-tab formula to also pull the cancellation column (TRUE = cancelled = blocked).
-- VERSION 1.61->1.62. Changed: src/App.jsx, index.html, api/access.js, public/manifest.webmanifest, public/icon-192.png, public/icon-512.png, public/apple-touch-icon.png. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7, access.js node --check ok.
-
-## v1.61 - Onboarding rework: empty fields + keyboard entry + validation + consent moved to gate
-- **Privacy consent moved to the gate (before personal data).** The legal disclosure + "קראתי ואני מאשרת את מדיניות הפרטיות ומדיניות העוגיות" checkbox now live on the AccessGate name+email form; "כניסה" is blocked (gateMsg "יש לאשר את מדיניות הפרטיות כדי להמשיך") until checked. New App state `gateAgree`, passed to AccessGate; submitGate enforces it. Removed the consent block + `agree` state from onboarding step 4 (now just the projection graph + recommended kcal), and the final button is no longer gated by agree. The old small "data stays on your device" gate note was replaced by the formal disclosure.
-- **Onboarding step 0 reworked:** age/height/current-weight now start EMPTY (no 50/165/72 defaults) and are KEYBOARD number inputs (type=number, inputMode numeric/decimal) instead of +/- steppers. Removed the "can't enter weight below X" helper line (the 1,200 kcal calorie floor + goal-weight block still protect downstream; no floor on the current-weight field - she enters her real weight).
-- **Saturday question has no default selection** (`keepShabbat` starts null); she must choose.
-- **Required-field validation on step 0:** tapping "המשך" with anything missing sets `err0`, shows an amber note next to each missing field ("יש למלא את הנתון" / age: "יש להזין גיל 18 ומעלה" / Saturday: "יש לבחור תשובה") and blocks advance. Validity = age>=18, height>0, weight>0, Saturday chosen. Step 1 goal-weight refs switched to parsed numbers (heightN/weightN). Goal/rate step and other steps unchanged.
-- **Demo intro modal:** added a highlighted feedback box (brandBg + MessageCircle bubble icon) inviting beta feedback via the bottom-left bubble button.
-- VERSION 1.60->1.61. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.60 - Gate text + start-date cap + attempts limit + intro copy
-- **Profile start-date capped to the sheet date.** The profile start-date editor now offers only Sundays up to and including her registered (gate) date - she can move her start EARLIER (gets different values, allowed) but not later than the sheet. `ProfileScreen` takes `maxStart={gateStartDate}`; the date select filters `listSundays()` to `s.value <= maxStart`. The v1.59 sync effect changed from force-equal to a CAP: it only overrides profile.startDate when it is LATER than the sheet date (earlier manual choices are preserved instead of being reverted).
-- **Rejection (not_registered) text updated** to direct to the technical team: "...פני בבקשה לצוות הטכני בווטסאפ 0547304177 או במייל support@myprime.co.il." (device_limit / expired texts unchanged.)
-- **Email-attempt cap at the gate = 5.** `gateAttempts` counts failed not_registered submits; after 5 the "נסי שוב / כתובת אחרת" button is hidden so she must contact support (the rejection text already gives the contact details). In-memory soft cap (a page reload resets it; avoids permanently locking out a legit user who mistyped). Reset on resetDemo.
-- **Demo intro modal (IntroOverlay) copy replaced** with the owner's beta/refresh text, now personalized with her name: "שלום {name} 🙂 זו גרסת הדגמה (בטה) להתנסות." + a paragraph recommending a daily pull-to-refresh for the latest version. Bullet list removed.
-- VERSION 1.59->1.60. App.jsx only. esbuild clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.59 - Sheet start date + usage window (expiry)
-- `api/access.js` now reads each participant's program START DATE from her row in the registration sheet (same ACCESS_SHEET_CSV_URL). It matches the email per row and extracts a date (DD/MM/YYYY or YYYY-MM-DD, any column order, header row ok), snapped to its Sunday. Returns `startDate` on allowed responses.
-- Usage window enforced SERVER-SIDE: access ends 70 days (10 weeks) + 3 months after the start date (inclusive of the last day). Past that, the gate returns allowed:false reason "expired" (tamper-proof vs device clock). Participants with no parseable date stay allowed with no expiry (graceful fallback).
-- Client: stores the gate's startDate (localStorage myprime_start_date). Onboarding now LOCKS the start date when provided by the sheet (read-only display "התאריך נקבע לפי ההרשמה שלך", no selector); falls back to the Sunday picker in demo mode. Returning users sync profile.startDate to the sheet value on each gate pass. Cleared on retry/reset.
-- AccessGate: new "expired" state -> "תקופת השימוש באפליקציה הסתיימה. תודה שהיית חלק מהמסע שלנו 💜" (no retry button).
-- Setup note for owner: add a start-date column to the SAME registration sheet, format DD/MM/YYYY, re-publish CSV (ACCESS_SHEET_CSV_URL env stays the same).
-- VERSION 1.58->1.59. Changed: src/App.jsx, api/access.js (api/backup.js unchanged, included for a complete deploy drop). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-
-- Onboarding backup screen (step 3): added a required acknowledgment checkbox "קראתי והבנתי את מדיניות שמירת הנתונים של מיי פריים." The "המשך" button is now gated on it (in addition to the existing backup yes/no choice and, if backup chosen, a valid email + matching code). The backup yes/no choice and Profile enable flow (email + code + confirm via BackupModal, shown when backup is off) were already in place.
-- VERSION 1.57->1.58 (App.jsx only). api/backup.js unchanged from v1.57 (still needs deploying). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-
-- New end-to-end encrypted backup. User data is encrypted IN THE BROWSER (AES-GCM, key derived from a personal backup code via PBKDF2, Web Crypto - no external library) before upload. The server (Upstash) stores ONLY ciphertext + salt + iv, keyed by email. No one, including MyPrime, can read the contents without the user's code. The code lives in its own localStorage key (myprime_bk_code) and is never sent to the server.
-- New serverless endpoint `api/backup.js` on the SAME Upstash as the access gate (UPSTASH_REDIS_REST_URL/TOKEN). Email must be on the registered list (ACCESS_SHEET_CSV_URL) to read/write, matching the gate. GET ?email -> {exists, blob}; POST {email, blob} -> stores. While Upstash is unset, backup is simply off.
-- Onboarding: new screen (now step 3 of 5, before the plan-graph + privacy screen). Explains that data is stored only on her device and only she can access it; offers optional encrypted cloud backup. If she opts in: confirm/edit email (prefilled from the gate) + set a backup code with double-entry confirmation, plus a clear warning that the code cannot be recovered. Progress bar is now 5 dots; the plan-graph + privacy approval moved to step 4.
-- New-device restore: when there is no local data but a cloud backup exists for the gate email, a Restore screen asks for the backup code, decrypts locally and loads the data (skipping onboarding). Wrong code -> "קוד שגוי, נסי שוב." Option to start fresh without restoring.
-- Profile > נתוני בסיס: new "גיבוי מוצפן" status row (מופעל/כבוי) opening a manage sheet (BackupModal): enable (email+code+confirm), "גבה עכשיו", and "איפוס קוד" (re-keys from the current device and overwrites the cloud copy - the E2E-compatible reset).
-- Auto-backup: once a day, a few seconds after the first load/change of the day (not on every keystroke), when backup is enabled and a code is present locally. Tracked via myprime_bk_last.
-- VERSION 1.56->1.57. New file api/backup.js included in the zip (deploy it). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-
-- Tour tracker bubble (the daily-tasks step) text -> "וכאן המשימות היומיות. שתי המשימות הראשונות מסומנות אוטומטית כשאת ממלאת בפלוס את הצעדים והקלוריות 💜".
-- Tour bubbles whose target is a bottom-nav item (sel starts with "nav-") now sit just ABOVE the bottom bar instead of being pinned to the top.
-- Tracker modal yellow note -> "חלק מהמשימות מסומנות 'אוטומטי' - הן מתעדכנות לבד לפי מה שמילאת בפלוס של הקלוריות והצעדים, בלי שתצטרכי למלא שוב."
-- Tracker modal: each auto task with no data yet shows a small amber hint under its label - steps -> "יש למלא בעיגול הצעדים", water -> "יש לעדכן בעיגול המים", food-based (journal/protein/other) -> "יש למלא בעיגול הקלוריות".
-- FAQ (Profile > שאלות ותשובות): added a "סיור באפליקציה (מעבר לשבוע ראשון, יום שלישי)" button that jumps selectedDate to week1-day3 (addDays(startDate,2)), switches to the day tab and launches the tour. Added an intro note "יש לך שאלה נוספת שלא מופיעה כאן? אפשר לשלוח אותה בקבוצה ולקבל מענה." The steps Q now renders the existing image guide (StepGuideLink, which also covers the no-app/store case) instead of a text-only answer. Added 5 new Q&A (calorie target, missed a whole day, edit/delete an item, medals/trophies, why tasks unlock gradually). The "מסכים באפליקציה" section now lists only "הוספת מזון ופעילות (כפתור +)" (the rest were redundant).
-- VERSION 1.55->1.56 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-
-- Tap steps (calorie ➕ and now the steps ➕) dim the whole screen EXCEPT the highlighted element via 4 click-capturing strips around it, so only the ➕ (and the bubble) are tappable - she can't accidentally tap elsewhere and break the tour. Steps step changed from a "המשך" button to a tap step ("לחצי על הפלוס של הצעדים", event "opensteps" fired from onEditSteps) that opens the steps demo and advances.
-- Bubble placement: when the highlighted element is in the lower half of the screen the bubble now pins to the top (top:12) instead of hugging the element, so it never hides the options that the screen reveals; the highlight stays lit.
-- Every bubble now has a "הקודם" button (when idx>0) to step back; `tourBack` decrements and the open-sync effect restores that step's screen. Every step now carries an explicit `open` (calorie ➕ and steps ➕ are `open:"day"`) so back/forward reopen/close the right screen.
-- Intro screen (week1 days 1-2): heart emoji -> medal image (/medal.png); title -> "ברוכה הבאה לאפליקציית המעקב של מיי פריים 360"; body is day-dependent: "ביומיים הראשונים עדיין אין מעקב. [מחרתיים (day1) / מחר (day2)] מתחילות יחד, צעד אחרי צעד, ותקבלי כאן ביום שלישי את כל ההסברים על השימוש באפליקציה." Placeholder line removed.
-- VERSION 1.54->1.55 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-
-- Tracker CTA is now dynamic by whether the viewed day has any MANUAL (non-auto) task: if all of the day's tasks are auto (steps/journal only - i.e. week1-day3 up to before week2-day3) the button reads "הקישי לצפייה במעקב"; once a manual task exists (first one is אימון כוח at week2-dow3) it reads "הקישי למילוי המעקב". Implemented via `tasks.some(t => !t.auto)` in CheckinCard, so it self-adjusts if the schedule changes.
-- New one-time coachmark "trackerfill" (TIPS, no FAQ title, sel "tracker"), due when the day first has a manual task (`ctx.manualTracker`): "מהיום אנחנו מתחילות למלא את יומן המעקב במשימות שלא נכנסות באופן אוטומטי. היום לדוגמה נוספה משימת אימון כוח, ולאחר שתבצעי אימון כוח את יכולה לסמן וי במעקב." DayScreen ctx now carries `manualTracker = checkinOpen && tasksForDate(...).some(t => !t.auto)`.
-- VERSION 1.53->1.54 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-
-- The tour no longer asks the user to fill anything in. It now DRIVES the screens itself (demo): each step carries `open` ("day"/"caloriemenu"/"addfood"/"steps") and an App effect syncs the live screen to it. Only the very first step is a real tap (the calorie ➕), with NO "המשך" button - tapping the ➕ opens the menu and advances (tap steps render no advance button now).
-- Bubbles are anchored to real elements (spotlight) on each demo screen: ➕ ring -> calorie menu "הוספת מזון" -> add-food "האחרונים והמועדפים" -> add-food "ספרי לי מה אכלת" (this single bubble now explains the AI chat; no real chat screen is opened, no API) -> day "מה שהוזן" (diarylist) -> calorie menu "פעילות גופנית" (NEW activity bubble) -> day steps ring -> steps screen (demo, autofocus disabled so no keyboard) -> tracker -> cabinet -> nav יומן/דוח/➕/מתכונים/פרופיל -> day strip -> finish.
-- New data-tut anchors: diarylist ("מה שהוזן" header), entry-activity (calorie-menu activity item), steps-input (steps field). Removed reliance on the old ai-chat/real-tap-advance for the inner steps.
-- Every bubble now has a "סיים את הסיור" link (except the final bubble); it jumps straight to the final bubble (the restart/FAQ message), which then closes via "סיימנו". Default advance button label is now "המשך".
-- Daystrip bubble text updated: "...דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך (סוויפ)" (dropped the side-arrows wording).
-- "סיור באפליקציה" button now shows ONLY on program day 3 of week 1 (was always shown).
-- Intro days lock: on week 1 days 1-2 (`introLock`), the top day strip and the bottom nav bar + FAB are grayed (opacity 0.4) and non-interactive (pointerEvents none), each with a small "בקרוב" pill.
-- VERSION 1.52->1.53 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Cross-screen UX still needs device testing.
-
-
-- Replaces the old day-3 coachmark set (cal/steps/tracker/cabinet) with a single App-level guided tour that walks across screens. Auto-triggers once on program week 1, day>=3 (700ms after the day screen settles), and is restartable anytime via a permanent "סיור באפליקציה" button under the day strip (data-tut="tourbtn", Sparkles icon).
-- Bubble 1 (cal ring): explains the + and asks "רוצה שאראה לך דוגמה?" with [כן, בבקשה]/[אין צורך, נמשיך].
-- YES path is hands-on across real screens: tap cal + (opens calorie menu) -> tap "הוספת מזון" (opens add-food) -> bubble on "האחרונים והמועדפים" -> tap "ספרי לי מה אכלת" (opens AI chat) -> explain the chat (NO API call in the demo; she does not send) -> back on day: edit/delete note -> steps explain -> tap steps + and enter a number -> daily-tasks auto-check note.
-- NO path: steps bubble + tracker bubble (original texts).
-- Shared tail (both paths): cabinet -> nav buttons יומן/דוח/+/מתכונים/פרופיל -> day strip (time travel) -> finish bubble that points at the "סיור באפליקציה" button and mentions FAQ.
-- Architecture: tour state lifted to App `{steps,i}`; builder `buildTour(path)` + TOUR_YES/TOUR_NO/TOUR_TAIL consts. `tourView` derives the live screen from sheet/modal. Steps render only when `step.view === tourView`. `tap:true` steps render WITHOUT a screen-blocking backdrop (lighter dim, real UI tappable) and advance via `tourEvent(key)` fired from the real handlers (addcalorie / pickfood / pickai / addsteps); button steps advance via onNext; `closeModal` steps close the add-food modal on advance. Tour-seen flag = "appTour" in profile.tipsSeen (auto-trigger only; restart ignores it).
-- TutorialOverlay generalized: optional `cur.btn` label (default "הבנתי"), `cur.tap` (no block, lighter dim), `cur.sel===null` centered bubble, counter hidden when a single step. Existing later-day tips (water/protein/stepbaseline/weeklysummary) unchanged; DayScreen queue now excludes the four tour keys (kept in TIPS only for the FAQ list).
-- data-tut tags added: EntryMenu food item (entry-food), add-food method items (method-history, method-ai) + AI chat area (ai-chat), day strip (daystrip), restart button (tourbtn), nav tabs (nav-day/report/recipes/profile) + FAB (nav-fab).
-- NOTE: cross-screen UX could not be runtime-tested here; needs owner testing (see chat checklist). Likely one fix round.
-- VERSION 1.51->1.52 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.51 - Day-3 tutorial rework (step 1): first bubble offers an example with yes/no choice
-- Start of the owner's multi-stage day-3 tutorial redesign. First bubble (the "cal" tip) now ends with the prompt "רוצה שאראה לך דוגמה?" and shows TWO buttons instead of "הבנתי": "כן, בבקשה" / "אין צורך, נמשיך".
-- TutorialOverlay extended: a tip with a `choice: {yes,no}` (and optional `prompt`) renders the prompt (bold) + two buttons; non-choice tips keep the single "הבנתי". Added onChoice prop.
-- DayScreen: added tipChoose(yes). FOR NOW both yes and no just continue to the next bubble - the step-by-step food-example bubbles (the YES path) and the NO=skip-past-them wiring will be inserted in tipChoose once the owner provides the example bubbles' content.
-- Owner is feeding this bubble-by-bubble; remaining: the example/food bubbles, and confirming the post-example flow (steps bubble, then the journal/tracker, no extra bubbles).
-- VERSION 1.50->1.51 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.50 - Weekly summary polish: bigger achievements card, normal P.S., larger body text
-- Owner feedback on the weekly summary:
-  1. The "ההישגים שלך השבוע" block looked small/unserious -> redesigned as a prominent white card (C.panel) with a brand border + soft shadow; bigger title (18.5, bold), bigger medals (34->48px), bigger trophy (66->92px), and clearer labels (medal count 16/bold ink, trophy line 16/bold brandD).
-  2. The closing נ.ב. was small + gray (14 / C.sub) -> now same as body text (16 / C.ink / lineHeight 1.7) with a bold "נ.ב." prefix, in both week 1 and weeks 2-10.
-  3. Summary body text felt small -> bumped from 15.5 to 16 (matches the app's standard body size); the bold title from 16.5 to 17.5.
-- VERSION 1.49->1.50 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.49 - Fix (desktop): sheet still cut off at top - cap height to the app frame, not the viewport
-- v1.43 used maxHeight 88vh on the SheetShell panel. On desktop the app is a FIXED 800px-tall .phone-frame (overflow hidden); 88vh of the tall desktop browser (~950px) is bigger than the 800px frame, so a long sheet (weekly summary) overflowed the frame's top and got clipped/hidden behind the DEV bar.
-- Fix: SheetShell panel maxHeight changed from "88vh" to "88%" - i.e. 88% of the app frame (which is 800px on desktop, 100vh on mobile). The sheet now always fits inside the frame with the header visible and the body scrolling internally, on both desktop and mobile.
-- VERSION 1.48->1.49 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test on desktop: open a long weekly summary -> title + intro visible at top, scrolls within the sheet, nothing hidden.
-
-## v1.48 - Weekly summary: natural Hebrew grammar for 0 / 1 in every task line
-- Owner: lines read oddly for 0 or 1 (e.g. "1 פעמים", "ביצעת השבוע 0 אימוני כוח"). Wanted "פעם אחת" for 1 and a "did not / not yet" phrasing for 0.
-- Rewrote summaryTaskLine so EVERY line branches on 0 / 1 / many:
-  * 1 -> singular ("פעם אחת", "יום אחד", "אימון כוח אחד", "כוס אחת", "שעה אחת", "צבע אחד", "ארוחה אחת").
-  * 0 -> a gentle "השבוע עוד לא..." / "עדיין לא..." phrasing instead of "0 ...".
-  * many -> the original plural wording.
-- Covers steps, journal, strength, strength+mobility, veg+order, water (full/simple), protein, sleep (full/simple), breathing, gratitude, grains (split/combined), pelvic, probiotics, antiinflam, bone-density, fasting. Added an `amt()` singular-aware helper for averaged amounts.
-- VERSION 1.47->1.48 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: a week with 0 strength + 1 step-report day now reads "השבוע עוד לא ביצעת אימוני כוח" and "דיווחת פעם אחת על הצעדים".
-
-## v1.47 - "ספרי לי מה אכלת": ask for all details up front (shorten the chat)
-- Owner: in the AI food chat, the opening message should ask her to give as many calorie-relevant details as possible right away (how it was prepared - fried/baked/etc, what she drank, approx grams), so there are fewer follow-up questions.
-- Rewrote the first assistant message (aiMsgs initial) to request: preparation method, added oil/butter/sauce, what she drank, and an approximate quantity (grams/cups/spoons), noting that more detail = more accurate estimate. Kept "אפשר לדבר או לכתוב".
-- Added whiteSpace:pre-wrap to the food-chat bubble so the multi-line message renders with its line breaks (matches the other chat bubbles).
-- The system prompt already instructs one-question-at-a-time and not to re-ask what was given, so providing details up front naturally reduces follow-ups; no system-prompt change needed.
-- VERSION 1.46->1.47 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.46 - Weekly summary: "ההישגים שלך השבוע" illustration at the end (medals + trophy)
-- Owner idea: end each weekly summary with a nice illustration of the medals/trophy she earned that week.
-- WeeklySummaryModal now computes wkMedals (completed days this program week, via checkins[date]._done over day-numbers (week-1)*7+1 .. week*7, capped at today) and wkTrophy (weekTrophyEarned for this week). Reuses the existing medal/trophy assets (MEDAL_SRC, trophyForWeek).
-- achievementsEl: a bottom section (top border) titled "ההישגים שלך השבוע 🏆" showing a row of this week's daily medals ("N מדליות יומיות השבוע") and, if earned, the week's trophy ("גביע השבוע נכנס לארון!" / "גביע האלופה..." at week 10). Hidden entirely if nothing earned that week. Appended at the very end of BOTH summary branches (week 1 and weeks 2-10), after the signature/PS.
-- VERSION 1.45->1.46 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: complete a few days in dev, open the weekly summary -> medals row + trophy at the bottom.
-
-## v1.45 - Unified bold title on every weekly summary
-- Owner: each weekly summary should open with the bold title "סיכום שבועי של משימות השבוע {הראשון} שלך במיי פריים!", where only the ordinal word changes per week.
-- Added WK_ORD (1..10 -> הראשון..העשירי) and a titleEl rendered as the first line of the summary box (bold, brand color, centered) in BOTH branches (week 1 and weeks 2-10). The SheetShell chrome header still shows "סיכום שבוע X" as a short identifier.
-- VERSION 1.44->1.45 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: open any week's summary -> the bold MyPrime title appears on top with the correct ordinal.
-
-## v1.44 - Fix: report "עמידה ביעד הקלורי" over-counted (partial logging shown as met)
-- Owner bug: the report showed "עמדת ביעד 2 מתוך 2" when the woman had only logged a tiny amount (filled the food journal once) and had NOT actually met the calorie goal.
-- Cause: metDays counted any logged day with kcal <= goalKcal as "met". A single small item -> total far below target -> counted as met.
-- Fix: a day counts as "met" only if intake is CLOSE to target: calMet(kc) = kc >= goalKcal*0.8 && kc <= goalKcal*1.05. Trivial/partial logging (far below target) or strong under-eating no longer counts. loggedDays (the "X מתוך Y" denominator) still = any day with food logged, so Ron's case now reads e.g. "0 מתוך 2". The calorie bar colors match the same rule (brand = met, amber = off-target either direction, line = no data).
-- Threshold (80%-105%) is tunable - tell me if you want it wider/narrower. Note: weeklySummaryData.calOnGoal uses a stricter +-5% band but is not currently displayed (curated summaries dropped the calorie line).
-- VERSION 1.43->1.44 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: log one small item on a day -> report shows that day as NOT met.
-
-## v1.43 - Fix: long bottom-sheets (weekly summary) cut off at the top / unreadable
-- Owner (testing in dev): could not read the whole weekly-summary message - the top (title + intro + first tasks) was pushed above the screen and hidden behind the DEV bar (z99999).
-- Root cause: SheetShell (the bottom sheet used by the weekly summary, FAQ, entry menu, etc.) had no max-height and no internal scroll. When content was taller than the viewport, the panel overflowed upward off-screen with no way to scroll back to the top (the page-level scroll let the DEV bar cover it).
-- Fix: SheetShell panel now has maxHeight 88vh + flex column; the header (title + X) is fixed (flex-shrink 0) and the body is wrapped in an overflow-y:auto, flex:1, minHeight:0 container that scrolls internally. The sheet now stays below the DEV bar and any long content scrolls within the sheet with the title always visible. Affects ALL sheets (universal improvement); short sheets are unchanged.
-- VERSION 1.42->1.43 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: open a long weekly summary (e.g. week 7+) and scroll - title stays, whole message readable, nothing hidden by the top bar.
-
-## v1.42 - Step guide collapsed into one button -> options menu (owner: bubble too crowded)
-- Owner: the steps tip bubble showed too much (2 guide buttons + a links line). Replace with a SINGLE trigger button, and put the 3 options behind it.
-- StepGuideLink now renders one amber button "זקוקה להנחיות שימוש באפליקציית הצעדים? לחצי". Tapping opens a menu modal (overlay, zIndex 100001) titled "הנחיות לאפליקציית הצעדים" with three amber boxes:
-  1. מדריך: Apple Health -> in-app image viewer.
-  2. מדריך: Samsung Health -> in-app image viewer.
-  3. an amber box "אין לך אפליקציית בריאות בטלפון? הורידי אפליקציית צעדים חינמית:" with the two store links rendered AS BUTTONS (Android / אייפון), per owner ("שהלינקים יראו ככפתורים").
-- view state machine: null | menu | ios | android. From an image viewer, X / tap-outside / last-image button ("חזרה") return to the menu; from the menu, X / tap-outside close. Single trigger shown in all surfaces (StepsModal, report card, steps tip bubble); the non-linkOnly explanation line is kept above it.
-- VERSION 1.41->1.42 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: steps tip bubble now shows only the one button -> opens the 3-option menu -> guides flip in-app, store links open as buttons.
-
-## v1.41 - Step guide: show all 3 options to everyone (no platform detection)
-- Owner: stop branching by detected phone - show every woman all three options together: Apple Health guide, Samsung Health guide, and the external app links.
-- StepGuideLink rewritten: no longer calls detectPlatform/currentStepGuide. It renders a button per guide (iterates STEP_GUIDES -> Apple Health, then Samsung Health), each opening the in-app image viewer for that guide (openKey state picks which images). Below them, the free-app line always shows both store links (Android / אייפון).
-- The intro line dropped the per-app name (generic "פתחי את אפליקציית הבריאות בטלפון"). Shown in all surfaces incl. the steps tip bubble (linkOnly).
-- detectPlatform / currentStepGuide / stepAppFor are no longer used by StepGuideLink (left in file, harmless) - can be removed later if nothing else needs them.
-- VERSION 1.40->1.41 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: on ANY device, open steps -> two guide buttons (Apple + Samsung) both open their image viewer, and the Android/אייפון app links appear.
-
-## v1.40 - Fallback step-counter app links (for women without Samsung Health / Apple Health)
-- Coverage gap raised by owner: iPhone always has Apple Health (covered), but a non-Samsung Android (Pixel, Xiaomi, etc.) has no Samsung Health, and desktop/other shows no guide at all.
-- Added STEP_APPS: free pedometer apps per store - Android "Pedometer - Step Counter" (play.google.com/.../pedometer.steptracker.calorieburner.stepcounter), iOS "StepsApp" (apps.apple.com/.../id1037595083). stepAppFor(platform) returns the right one.
-- StepGuideLink now shows fallback download links:
-  * When a native guide exists (ios/android): a small line under the מדריך button - "אין לך את {app}? אפשר להוריד אפליקציית צעדים חינמית: {store app}" (Play app on Android, StepsApp on iOS).
-  * When NO native guide (other/desktop), non-linkOnly: "אין לך אפליקציית בריאות בטלפון? ... Android / אייפון" with both store links. (linkOnly tip bubbles still render nothing when there is no guide.)
-- These store links open externally (the store app) - that is expected/correct for installing an app, and unrelated to the old PDF blank-page issue.
-- VERSION 1.39->1.40 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-- OPEN: owner to confirm the two chosen pedometer apps are good picks for MyPrime's audience (free, simple, Hebrew-friendly), and whether to surface the fallback link inside the tip bubble too.
-
-## v1.39 - Intermittent-fasting intro bubble + fasting now opt-in (gated in tracker)
-- checkins.js: fasting task startDow 5 -> 4, so it (and the intro) land on week 8 DAY 4 (Wednesday), per owner.
-- NEW FastingIntroModal: a one-time bubble on the day screen, fires from week 8 day 4 onward (dowOf>=4) or week>8, once (tipsSeen key "fastingintro"), only on the day tab with no other overlay, and skipped if she already opted in. Copy (Anat voice): "היום העליתי לך סרטון על משימת הצום לסירוגין. אם את מעוניינת לנסות את המשימה - אשרי זאת בכפתור. תמיד אפשר לשנות את הבחירה בפרופיל." Two buttons: "כן, אשמח לנסות" -> sets profile.fasting=true + marks seen; "לא עכשיו" -> marks seen, stays off. (Owner wrote "משימת הצעדים" - corrected to "הצום", confirmed the intent.)
-- FASTING IS NOW OPT-IN END-TO-END: tasksForDate gained a `fasting` arg and filters the fasting task out unless opted in. Wired into the daily tracker (DayScreen ciTasks + CheckinModal) and weeklySummaryData, so the fasting task shows in the tracker AND the summary line ONLY for women who opted in (via the bubble or the week-8 profile toggle). Default off -> never appears.
-- dayComplete + dayProgress now ignore optional tasks (filter !t.optional) - so the optional fasting task never blocks a medal or drags the progress ring (fixes a latent issue where the optional task could have blocked completion).
-- VERSION 1.38->1.39 (App.jsx + checkins.js). esbuild parse clean, brackets 0/0/0 both files, 0 em/en dashes, check-logic 7/7.
-- TEST (?dev=1, simulate to week 8 Wed): the bubble appears on the day screen; "כן" turns on fasting (toggle in profile reflects it, fasting task appears in tracker, fasting line in the weekly summary); "לא עכשיו" leaves everything off and the fasting task does not appear. Bubble does not reappear after either choice.
-
-## v1.38 - Step guide is now IN-APP (two-image viewer), no external PDF/page
-- BUG (owner): tapping the guide button opened a blank page (the PDF link `/guides/*.pdf` opened a new tab; the in-app browser could not render it / file not deployed). Owner wants the guide to stay INSIDE the app - flip between the two instruction images in place, per phone.
-- REPLACED the PDF-link approach with an in-app image viewer. STEP_GUIDES now holds `images: []` per platform (not a `url`): ios -> [/guides/apple-1.png, /guides/apple-2.png], android -> [/guides/samsung-1.png, /guides/samsung-2.png]. currentStepGuide() returns the platform guide if it has images (no cross-platform fallback - iPhone never sees Samsung).
-- StepGuideLink: the "מדריך" button now opens a fixed overlay (zIndex 100001, above the tutorial overlay) showing one image at a time with הקודם / הבא navigation, a 1/2 counter, and close. "הבא" on the last image closes. Tap-outside closes. Used in all 3 spots (StepsModal, report steps card, steps tip bubble).
-- Old PDFs removed from public/guides; replaced by 4 PNGs (1080px wide, optimized): samsung-1/2.png, apple-1/2.png.
-- OWNER: add the 4 files under public/guides/ (in the zip). You can delete the old samsung-health-steps.pdf / apple-health-steps.pdf if you added them - no longer referenced.
-- VERSION 1.37->1.38 (App.jsx + 4 new assets). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test: open steps -> מדריך -> flip between the two images without leaving the app.
-
-## v1.37 - Apple Health step guide wired (iOS) - both platforms now complete
-- Owner supplied the Apple Health (iPhone) "find your steps" instructions as two images (step 1: open the Health app; step 2: the Steps card with Today vs Average). Built public/guides/apple-health-steps.pdf (2 pages, ~120KB), same layout as the Samsung guide.
-- STEP_GUIDES.ios.url set to "/guides/apple-health-steps.pdf". Both ios + android guides are now live: iPhone -> Apple Health PDF, Android -> Samsung Health PDF. Item 10 guide content fully complete.
-- OWNER: add public/guides/apple-health-steps.pdf to the repo (in the zip, alongside the Samsung one from v1.36).
-- VERSION 1.36->1.37 (App.jsx + new asset). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test on an iPhone/iOS UA: open steps -> "מדריך: איך מוצאים את הצעדים ב-Apple Health" opens the PDF.
-
-## v1.36 - Samsung Health step guide wired (android)
-- Owner supplied the Samsung Health "find your steps" instructions as two images (step 1: open the app; step 2: where the step count is + scroll for history). Built a 2-page PDF (step 1 then step 2, each centered on a white A4 page) at public/guides/samsung-health-steps.pdf (~140KB).
-- STEP_GUIDES.android.url set to "/guides/samsung-health-steps.pdf". iOS (Apple Health) url still empty - pending owner. So on Android the guide link/button now appears (StepsModal, report steps card, steps tip bubble); on iOS it stays hidden until the Apple guide is supplied.
-- FIXED currentStepGuide(): removed the cross-platform fallback so an iPhone never gets shown the Samsung guide. Now returns the guide only for the detected platform (else null). Desktop/other shows no guide link.
-- OWNER: add public/guides/samsung-health-steps.pdf to the repo (in the zip). Apple Health guide still TODO (send the iOS instructions and I'll build + fill STEP_GUIDES.ios.url).
-- VERSION 1.35->1.36 (App.jsx + new asset). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. Test on an Android device/UA: open steps -> the "מדריך" button opens the PDF.
-
-## v1.35 - New daily-medal artwork (gold rosette, woman silhouette, brand colors)
-- Owner supplied a medal graphic to use everywhere the daily medal appears. Source was RGB with a solid white background; removed the OUTER white via border flood-fill (kept the inner white silhouette), autocropped, padded to square, resized to 360x360, saved transparent at public/medal.png (~175KB).
-- MEDAL_SRC changed from "/medals/medal.webp" to "/medal.png". This single constant drives every daily-medal spot: MedalCheer ("מדליה נכנסה לאוסף"), and CollectionModal (the earned-medals grid + the empty-state grayscale). No other code changes needed.
-- Weekly trophies (גביעים: /medals/trophy-*.webp) and the cabinet icon are SEPARATE and left unchanged - owner said "the medal". Can swap those too if asked.
-- OWNER: add the file public/medal.png to the repo (included in the zip). Square asset so the existing width=height sizing renders undistorted.
-- VERSION 1.34->1.35 (App.jsx + new asset). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. VISUAL pass: see the medal in the cabinet + day-complete cheer.
-
-## v1.34 - Combined grains/fats summary count = days with at least one (owner)
-- "במהלך X ימים הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא" (grains_combined, weeks 7+): X was a rough max(grains, goodfat). Owner chose: count a day if she did AT LEAST ONE of grains/goodfat.
-- weeklySummaryData now computes `grainsDays` per-day (grains OR goodfat done that day), returned and used by grains_combined. This resolves the last v1.32 mapping assumption. Week 6 stays split (two separate counts), unchanged.
-- VERSION 1.33->1.34 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-## v1.33 - Sleep-improvement summary count = days with at least one sleep task (owner)
-- "במהלך X ימים ביצעת את משימות שיפור השינה" (weeks 4-7 sleep_full line): X was approximated by counts.noscreens. There are two sleep-improvement tasks (noscreens + stopeating; "שעות שינה" is the separate hours metric). Owner chose: count a day if she did AT LEAST ONE of them.
-- weeklySummaryData now computes `sleepDays` properly per-day (a day counts if noscreens OR stopeating was done that day) and returns it; sleep_full uses data.sleepDays. This replaces the noscreens approximation (one of the two v1.32 flagged assumptions resolved). The grains_combined max(grains,goodfat) assumption still stands pending owner.
-- VERSION 1.32->1.33 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7.
-
-
-Wired the owner-supplied WhatsApp weekly summaries (weeks 2-10) into the in-app WeeklySummaryModal, in Anat's voice. Source: feedback/weekly-summaries-unified.md (the merged copy, approved approach).
-- DECISIONS APPLIED: two %-variants unified into ONE warm/inclusive narrative per week; the "X% מהמשימות" line DROPPED everywhere (owner, like week 1); short hyphens only.
-- Replaced the old generic checklist (weeks 2+) with a CURATED per-week narrative: WK_INTRO/WK_OUTRO/WK_TASKS configs + summaryTaskLine() builder. Week 1 keeps its v1.31 unified narrative. The summary lists only the tasks Anat recaps that week (NOT every active task) - e.g. journal drops from the summary at week 4, veg/order at week 5 - matching the source.
-- Per-week task sets reconciled against checkins.js (all tasks exist there): W2 steps/journal/strength/veg+order; W3 +water+protein; W4 swaps journal->sleep+breathing; W5 +gratitude (drops veg/order); W6 grains(split)+gratitude; W7 +pelvic(NEW)+probiotics(NEW), grains becomes combined; W8 +antiinflam +fasting(optional), water/sleep wording simplifies; W9-10 strength+mobility, +bone-density(calcium/sun). "חדש" pill shown on pelvic+probiotics at week 7 only.
-- Wording variants by week handled in the builder: water_full (W3-7) vs water_simple (W8+); sleep_full (W4-7) vs sleep_simple (W8+); grains_split (W6) vs grains_combined (W7+); strength vs strength_mobility (W9+).
-- INTERMITTENT FASTING: new profile field `fasting` (bool, default false; added to DEFAULT_PROFILE + onboarding draft). Toggle added in Profile > "נתוני בסיס" (next to "שומרת שבת"), rendered ONLY when programWeek >= 8 (fully hidden before, not greyed). When ON, the "*משימת צום לסירוגין (רשות)* 🕘" line shows in the W8-10 summaries (WeeklySummaryModal now takes a `fasting` prop = profile.fasting).
-- The week-2 step-baseline-sanity amber box (stepRecheckDir) is preserved, now rendered between the task lines and the outro.
-- ASSUMPTIONS (flagged for Anat to validate): "ימים שביצעת את משימות שיפור השינה" uses counts.noscreens as the representative count; grains_combined day-count uses max(grains, goodfat). These map a single WhatsApp field onto the app's split tasks.
-- OPEN (owner): week 4 & 7 copy received and merged. Weeks-2+ copy approval still welcome. Fasting coachmark BUBBLE still TODO (create a TIPS entry when the fasting task UI first appears, week 8). Old SUMMARY_COUNT_PHRASE/SUMMARY_AVG_PHRASE/WEEKLY_MOTIVATION now unused (left in place, harmless).
-- VERSION 1.31->1.32 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. VISUAL pass needed - eyeball weeks 2-10 summaries (use ?dev=1 + simulate weeks) and the week-8 fasting toggle.
-
-
-Owner accumulated 12 fixes and said execute all in one pass. Week-1 summary copy implemented now; weeks 2+ keep the checklist format until owner sends their copy. Two content dependencies remain (owner-supplied): the 2 health-app PDFs and more FAQ Q&A.
-1. EntryMenu (the bottom "+" / `sheet:"menu"`, default mode): removed the "הזיני משקל" item (weight stays in the report). `onPickEntry` still has a dead "weight" branch (harmless); `TrendingDown` import now unused (harmless).
-2. EntryMenu color-coding + prominence: food family (הוספת מזון + מה כדאי לאכול) tinted brand pink (C.brandBg/C.brand), activity tinted purple (C.infoBg/C.info). Each row got a tinted background + 4px colored start-border + white icon tile. Reordered so recommend sits with food, activity last.
-3. ActivityModal: removed "הליכה" + "הליכה מהירה" from `acts[]` (ריצה is now first, default `sel=0`). Walking is covered by steps.
-4. ActivityModal: added a C.infoBg note box - workout calories ADD to the daily calorie budget, and walking is auto-counted via steps.
-5. Weekly summary: protein line gated to `week >= 3` (`if (data.protein && week >= 3)`). Weeks 1-2 show no protein line.
-6. Weekly summary signature "ענת" is now black + bold everywhere (week-1 narrative fontWeight 800/C.ink; weeks 2+ motivation box C.faint -> C.ink fontWeight 700).
-7. Weeks 2+ steps line verb: "הוצאת בממוצע" -> "צעדת בממוצע" (week 1 uses the new narrative).
-8. `stepBaseline` loop d=2..6 -> d=2..7 so Saturday (program day 7) is included if logged. StepSetupModal baseline branch rewritten: states "your average is X, the task is +offset, so your goal = X+offset", with a live amber goal box (offset = `stepGoalCumOffset(programWeek)`, =2000 in week 2) and a button that shows the resulting goal. `confirmBaseline` already stored `stepGoal = val + offset`, so no logic change there.
-9. Report steps card: added `steps7stats()` (returns {avg,n}); the average label is now dynamic - "ממוצע N ימים" (n<=0 -> "7", n===1 -> "יום אחד", else N), reflecting actual days-with-data in the rolling 7-window. Average still over days-with-data only (a skipped day is not counted as 0). `steps7avg` kept (now unused, harmless).
-10. Health-app step guides (structure done; PDFs PENDING owner): added `detectPlatform()` (ios/android/other), `STEP_GUIDES = {ios:{url:"",app:"Apple Health"}, android:{url:"",app:"Samsung Health"}}` (empty urls = link hidden), `currentStepGuide()`, and a reusable `StepGuideLink({style,linkOnly})`. Deeper steps explanation now shown; the per-platform PDF button auto-appears once a STEP_GUIDES url is filled. Placed in: StepsModal (replaced the old disabled "התחברות לאפליקציית הבריאות" button), the report steps card, and the "steps" tip bubble (linkOnly). Steps tip text deepened. **OWNER TODO: drop the 2 PDFs in /public/guides and fill the two STEP_GUIDES urls.**
-11. FAQ / help (structure done; more Q&A PENDING owner): added `title` to every TIPS entry; `FAQ_ITEMS` (3 seeded entries that restate existing app copy); `FaqModal` (accordion of FAQ_ITEMS + app-screen tips from TIPS + StepGuideLink, scrollable). ProfileScreen got `onOpenFaq`; a "שאלות ותשובות ועזרה" row sits above the reset button; root renders `sheet === "faq" && <FaqModal/>`. **OWNER TODO: expand FAQ_ITEMS.**
-12. WeeklySummaryModal week 1: single unified Anat-voice narrative (no 80%/100% branching - owner dropped it) in a C.brandBg box. Merge fields: stepsDays = `data.avgs.steps.n`, stepsAvg = `data.avgs.steps.avg`, journalDays = `data.journalDays` (= calN, days with >=1 food entry; added to `weeklySummaryData` return). Empty-state fallback when week 1 has no data. Weeks 2+ keep the checklist + motivation box. Verbatim copy lives in `wk1Lines[]`. **OWNER: approve/adjust the week-1 wording.**
-- VERSION 1.30->1.31 (App.jsx only). esbuild parse clean, brackets 0 0 0, 0 em/en dashes, check-logic 7/7. NOTE: heavy UI pass - eyeball on device (entry menu colors, activity sheet, week-1 summary, step-goal modal, FAQ).
-
-
-- BUG (owner, ?dev=1): after reset + "קבע יום 1", stepping to program day 3 (filled it, got a medal), then tapping "+" to add food, the WEEK-1 weekly-summary tip popped up over the food sheet with a full dim and no spotlight - on what should have been a Tuesday (day 3), not a Friday/Saturday. The tracker card also showed the REAL date ("שבת, 6 ביוני") instead of the simulated day.
-- ROOT CAUSE: the v0.44 midnight-rollover interval (root, ~line 3079) ran `ymd(new Date())` every 60s and did NOT respect DEV. ~60s after load it overwrote the simulated `today` (2.6) with the real date (Sat 6.6) and advanced `selectedDate` to it. Sat -> `dow===0` -> the weekly-summary tip's `weeklySummaryShown = checkinOpen && (dow===6||dow===0)` became true on week 1 -> the tip fired. TutorialOverlay sits at zIndex ~99999 (above all sheets), so it rendered on top of the open food sheet; the target bar was hidden behind the sheet so `rect` was unusable -> the no-rect full-dim fallback. This was also the source of the parked "tracker shows the real date during ?dev=1" test-fidelity bug.
-- FIX 1 (root cause): the rollover interval now early-returns when `DEV` (the simulated date is fixed; the DevDateBar reloads to change it). Production behavior is unchanged. The simulated day stays put, so day 3 stays Tuesday and the tip is no longer due.
-- FIX 2 (robustness, also production-relevant): the tip-start effect now early-returns when an overlay is open (`overlayOpen` prop = `!!(sheet||modal||showExit||showIntro)`, added to the effect guard + deps), mirroring the existing isIntro/isShabbat gate (v1.26). So a tip can never start over an open sheet/modal - including a real week-1 Friday where the user happens to be mid food-add. The tip re-evaluates and can appear once the overlay closes.
-- VERSION 1.29->1.30 (App.jsx only). tsc/parse clean, brackets 0 0 0, 0 dashes, check-logic 7/7. No prompt change (qa harness unaffected). No visual pass needed - logic-only.
-1. Steps tip: appended "אפשר תמיד לעדכן את כמות הצעדים של היום - אל דאגה."
-2a. Tracker tip: "כמה משימות קטנות" -> "המשימות שלך בשלב הזה".
-2b. Tracker spotlight excludes the trophy-cabinet rail: moved `data-tut="tracker"` from the CheckinCard root to the inner main-content div (the cabinet keeps its own `data-tut="cabinet"`).
-3. Calorie tip: now lists the logging methods - "לספר במילים או בדיבור (AI), לצלם, לסרוק ברקוד, או לחפש מזון" (matches the caloriemenu options: Mic/Camera/Barcode/History/Search).
-4. NEW weekly-summary tip (`key:"weeklysummary"`, `data-tut="weeklysummary"` on the summary bar): fires once on week 1 when the summary bar is visible (`due: week===1 && weeklySummaryShown`, where `weeklySummaryShown = checkinOpen && (dow===6||dow===0)`). Tip ctx gained `week` + `weeklySummaryShown`; effect deps gained `week, dow`. Text: "זה השבוע הראשון שלך בתוכנית! ... ואם שכחת למלא ... אפשר להשלים ולפתוח שוב את הסיכום, והוא יתעדכן."
-5. StepSetupModal baseline copy: "מדדנו את הצעדים שלך בשבוע הראשון..." -> "לפי נתוני הצעדים שנמדדו עד כה, הקצב הטבעי שלך הוא בערך X... אפשר גם לשנות את המספר למטה - בהוספה או הורדה של צעדים." AND `stepBaseline` now rounds UP to the nearest 100 (`Math.ceil(sum/n/100)*100`); `steps7avg` (report 7-day avg) stays `Math.round` (unchanged).
-6. Step banner tip: "נקודת ההתחלה שלך בצעדים" -> "נקודת ההתחלה שלך במשימת הצעדים".
-7. DEV "קבע יום 1" is now a true clean slate: clears log/stepsByDate/waterByDate/checkins/activityLog, resets `weights` to `initWeights(profile.weightKg, sun)`, and resets the program-progress profile fields (`stepBaseline:null, stepGoal:null, calorieOverride:null, tipsSeen:[]`, `goalAckWeek:0`). Keeps her base stats (age/height/weight/diet). This fixes both the "leftover 2,000 steps / 165 kcal on day 3" and the "step baseline banner vanished after reset" reports (it had preserved a previously-set stepBaseline). Not a production issue - real users start empty.
-- VERSION 1.28->1.29 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7. data-tut targets now 8 (added weeklysummary). NOTE: the new weekly-summary tip + the tracker-spotlight change are a first VISUAL pass - eyeball on device.
-
-## v1.28 - Report weight label: "משקל נוכחי" -> "משקל (עדכון אחרון: <date>)"
-- Owner: "current weight" was misleading since the shown value is the last logged weight, not necessarily today's. Relabeled the ReportScreen weight card to "משקל (עדכון אחרון: D.M.YYYY)" using the date of the latest weight entry (`weights[last].date`). The parenthetical is smaller/fainter. The onboarding "משקל נוכחי" Field (step 0) is unchanged - appropriate there.
-- `lastWUpdate` derived from `weights[weights.length - 1].date`.
-- VERSION 1.27->1.28 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-
-## v1.27 - DEV: "קבע יום 1" button (anchor this week's Sunday as day 1)
-- Testing helper so the owner can simulate a participant starting fresh, without the access+onboarding round-trip. Added a teal "קבע יום 1" button to DevDateBar.
-- `devAnchorDay1` (App): computes `sundayOf(TODAY)`, then writes the full state blob to STORAGE_KEY directly (synchronous, no React-effect race) with `profile.startDate = that Sunday`, `profile.tipsSeen = []` (so the tour/tips re-appear), `onboarded: true`; also sets `myprime_dev_today` to that Sunday; then reloads. Result: lands on day 1 = that Sunday, onboarded, tips re-armed. Stepping +1 walks the progression (day 3 tour, week-2 step banner, week-3 water/protein).
-- Why needed: `startDate` is `sundayOf(TODAY)`, so resetting on a Saturday snapped day 1 to the PREVIOUS Sunday (today became day 7). The button removes the weekday dependency for testing. DevDateBar got `flexWrap` to fit the extra button. Still entirely behind `?dev=1`.
-- VERSION 1.26->1.27 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-
-## v1.26 - Fix: tips must not fire on the intro / shabbat screens
-- BUG (owner screenshot): on program day 2 the steps tip popped up over the "ברוכה הבאה" welcome screen with a full dim and no spotlight. Cause: `STEPS_UNLOCK = {week:1,day:2}` so `stepsOpen` is true from day 2, but days 1-2 render the intro placeholder (no rings), so the tip was "due" with no on-screen target -> TutorialOverlay's no-rect fallback (full dim + bottom bubble). It was alone (1/1) because checkin/cal unlock only on day 3.
-- Fix: added `const isIntro = progDay >= 1 && progDay <= 2;` and the tip-start effect now early-returns when `isIntro || isShabbatRest` (also added both to its deps). The render branch reuses `isIntro` (single source). So the steps tip now appears on day 3 as part of the day-3 tour, when the ring is actually visible.
-- VERSION 1.25->1.26 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-
-## v1.25 - Contextual tips: explainer bubble for every feature on its first-appearance day
-- Generalized the day-3 tour into a one-time TIP SYSTEM. Replaced the fixed `TUTORIAL_STEPS` with a `TIPS` registry (module-level, before App): each `{ key, sel, due:(ctx)=>bool, text }`. 7 tips:
-  - cal (progDay>=3), steps (stepsOpen), tracker (checkinOpen), cabinet (checkinOpen) - the original day-3 four.
-  - stepbaseline (sel "stepbanner", due when the week-2 step banner is active) - owner wanted emphasis even though the banner is self-explanatory.
-  - water (due when waterOpen) - fuller text per owner: states the 2-liter goal AND that cup size is set via the water + (onSetCup -> profile.cupMl).
-  - protein (due when macroOpen) - explains it is NOT filled manually; auto-calculated and auto-updated from logged food.
-- DayScreen: `stepBannerActive`, `tipQueue`/`tipIdx` state. An effect (guarded by `tipIdx === -1`) snapshots all due+unseen tips into a queue and starts; `tipAdvance` walks the queue and on finish calls `onTipsSeen(keys)` to persist. If several tips are due the same day they queue in registry order (e.g. day 3 still shows cal->steps->tracker->cabinet). Reuses the existing `TutorialOverlay` (spotlight + bubble) - now fed `steps={tipQueue}`.
-- data-tut added: protein (ProteinRing wrapper), water (water MetricRing wrapper), stepbanner (the step-goal banner). Existing: cal/steps/tracker/cabinet.
-- Persistence: replaced the `tutorialSeen` boolean with `profile.tipsSeen` (array of seen tip keys). DEFAULT_PROFILE `tipsSeen: []`; existing profiles (undefined) are treated as [] so tips show once for them too. App passes `tipsSeen` + an `onTipsSeen` that appends keys.
-- CheckinModal: one-time amber note at the top ("חלק מהמשימות מסומנות 'אוטומטי' - הן מתעדכנות לבד...") with a "הבנתי" that marks `tipsSeen` key "autotasks". Shown only when the day has auto tasks and the note was not yet dismissed. Modal now receives `tipsSeen` + `onTipsSeen`.
-- VERSION 1.24->1.25. tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7; grep confirms 0 refs to the removed tutStep/tutAdvance/TUTORIAL_STEPS/tutorialSeen/onTutorialDone.
-- NOTE: the day-3 bubbles are owner-confirmed good; the NEW bubbles (water/protein/stepbanner) are a first visual pass - eyeball positioning on device (esp. the step banner near the top, and protein/water in row 2).
-
-## v1.24 - First-day tutorial (coachmark tour) on program day 3
-- On the first data-filling day (progDay >= 3, the w1d3 unlock), a 4-step guided tour appears automatically, once. Sequence + texts (owner-specified for 1-2, drafted in Anat's voice for 3-4):
-  1. cal ring: "בלחיצה על הפלוס את ממלאת את המזון... והפעילות הגופנית (חוץ מהצעדים)..."
-  2. steps ring: "כאן את ממלאת את הצעדים... עדיף מאוחר ביום אחרי בדיקה באפליקציית הבריאות..."
-  3. tracker (יומן המעקב): daily-tasks + medal explanation.
-  4. cabinet (ארון הגביעים): medals + trophies collection.
-- Implementation: targets tagged with `data-tut="cal|steps|tracker|cabinet"`; `TutorialOverlay` querySelectors the current target, `scrollIntoView` (handles tracker/cabinet below fold), measures rect, draws a box-shadow spotlight + "2px white" ring, and a bubble (positioned below the target if it is in the top half, else above) with the text + "הבנתי" + a step counter. A full-screen click-blocker prevents app interaction mid-tour. If a target is not found it falls back to a full dim + centered-ish bubble.
-- Trigger/persist: DayScreen `tutStep` state (-1 idle, 0..3 active, 99 done); effect starts it when `!tutorialSeen && progDay >= 3`; "הבנתי" advances; after the last, calls `onTutorialDone` -> sets `profile.tutorialSeen = true` (persisted, never shows again). DEFAULT_PROFILE gets `tutorialSeen: false`; existing profiles (undefined) are falsy so it shows once for them too.
-- To RE-TEST: reset the demo (clears tutorialSeen). Use ?dev=1 to set today to program day 3.
-- VERSION 1.23->1.24. tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-- NOTE: first VISUAL pass (sandbox cannot render). Bubble positioning, the spotlight fit, and scroll-into-view for the tracker/cabinet (below the fold) should be eyeballed on device and tuned.
-
-## v1.23 - DEV-only "simulated today" tool for testing (gated by ?dev=1)
-- Owner wanted to step through days and preview what a participant sees each day, WITHOUT this shipping to real users. Implemented as a URL-gated dev tool - no flag to remember to flip, inert in production:
-- `const DEV = URLSearchParams(location.search).has("dev")`. `TODAY` now reads an override from `localStorage["myprime_dev_today"]` (validated YYYY-MM-DD) ONLY when `?dev=1` is present; otherwise it is the real `ymd(new Date())`. Since TODAY is the single source (seeds, programWeek line ~3054, app `today`/`selectedDate` init, profile week calc, screen defaults), overriding it recomputes the whole app for the simulated day.
-- `DevDateBar` (rendered only when DEV) - a thin dark bar absolutely positioned at the top of the phone-frame with: -1 / date-picker / +1 / איפוס. Each writes `myprime_dev_today` and reloads so everything recomputes.
-- Production: real users never pass `?dev=1`, so the bar never shows and TODAY is always the real date. Nothing to remove before the PWA goes live. To use: open `...vercel.app/?dev=1`, set/step the day; "איפוס" clears the override.
-- VERSION 1.22->1.23. tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-
-## v1.22 - Remove "צעדים היום" cell from the report step summary
-- The report (ReportScreen) step-summary header had 3 cells: צעדים היום / היעד היומי / ממוצע 7 ימים. The "צעדים היום" cell showed 0 and was confusing in the report (the report is not tied to a specific day; today's steps belong on the יומן). Removed it - now 2 cells: היעד היומי (highlighted) + ממוצע 7 ימים.
-- Highlight now keyed off a `hl: true` flag on the היעד-היומי cell (was `i === 1`), so it stays correct with 2 cells. `stepsToday` const is now unused (harmless, left in place).
-- VERSION 1.21->1.22 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-
-## v1.21 - Drop "מודדת ממוצע" from the week-1 steps ring
-- In week 1 the steps `MetricRing` sub showed "מודדת ממוצע" (owner: confusing/unclear). Emptied it: `sub` is now "" when there is no goal, so the ring shows just the step count + "צעדים". The profile step-goal field still shows "מודדת ממוצע" as its value (owner only flagged the ring; left as-is, easy to change if he wants).
-- VERSION 1.20->1.21 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-
-## v1.20 - Bigger text app-wide + "שומרת שבת" moved into base-data section
-- "שומרת שבת" toggle moved from a standalone card in ProfileScreen INTO the collapsible "נתוני בסיס" section (as a row after תחילת התוכנית, before the week note). Onboarding shabbat question (step 0) unchanged.
-- Text enlarged app-wide: uniform +1px on EVERY `fontSize` (367 occurrences) via regex - the cleanest global bump given fonts are inline px with no single root knob. "A bit bigger everywhere" per owner.
-- Fold protection (owner: must still see the tracker/checkin card above the fold on the day screen): compensated the rings area so bigger text does not push the journal down - the 4 day-screen rings 130->124, grid rowGap 14->10, marginTop 6->2, marginBottom 14->10. Net day-screen vertical budget roughly unchanged while body text is larger.
-- VERSION 1.19->1.20 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-- NOTE: this is a first visual pass (sandbox cannot render). Magnitude (+1) and the ring/gap compensation should be eyeballed on device and tuned.
-
-## v1.19 - Week-2 baseline note: added the upward direction
-- The week-2 summary note (v1.18) now also fires when she is tracking >20% ABOVE her goal (`wkStepAvg > stepGoal * 1.2`): a congratulatory text suggesting she set a HIGHER baseline in the profile for more challenge (Anat's increases continue from it). Logic replaced `showStepRecheck` (below-only) with `stepRecheckDir` = "low" | "high" | null; the card renders the matching text. Still text-only, profile-driven, week 2 only, no recalculation/runaway.
-- VERSION 1.18->1.19 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-
-## v1.18 - One-time week-2 baseline sanity note in the weekly summary
-- Owner intent (after rejecting a broader ongoing recalibration as a "bypass" of Anat's methodology): the ONLY goal is that her baseline is sensible; from there Anat's fixed gradual increases run untouched. So this is a single, optional, text-only nudge - NOT an ongoing goal-vs-performance mechanism.
-- In `WeeklySummaryModal`: when viewing the WEEK 2 summary, if her week-2 actual step average is tracking >20% BELOW her current goal (`wkStepAvg < stepGoal * 0.8`), show one gentle amber text note suggesting she set a more realistic baseline in the profile ("a goal you'll win"), and noting Anat's increases continue from it. No button/recalibration math - she changes it herself via the existing profile step-goal edit; Anat's scheduled increases then add to whatever she sets.
-- Design choice: compares to the GOAL, not the bare baseline, and only flags the DOWNWARD/struggling case. Comparing to the bare baseline would false-positive whenever she simply succeeds at baseline+2000 (that is the goal, not a sign the baseline was wrong) and would push the goal up - the double-count/runaway the owner warned against. Downward-only serves the owner's principle: realistic goal, feeling of winning, not despair.
-- Gated to week === 2 (so it is effectively one-time; never appears week 3+). New prop `stepGoal` passed to WeeklySummaryModal.
-- VERSION 1.17->1.18 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-
-## v1.17 - Daily AI call limit default lowered 40 -> 25
-- `api/ai.js`: built-in `AI_DAILY_LIMIT` default changed from 40 to 25 per owner (40 felt high; a heavy-but-legit day of multi-turn chat logging is ~15-25 CALLS, so 25 gives headroom while halving the worst case). Still overridable via the `AI_DAILY_LIMIT` env var with no code change. Burst cap unchanged (10/min).
-- VERSION 1.16->1.17 (bumped per the every-code-change rule even though only api/ai.js changed; re-upload BOTH src/App.jsx and api/ai.js).
-
-## v1.16 - Bug fixes from owner testing: white-screen crash + day strip going before start
-- **CRASH (white screen) opening the steps entry:** `StepsModal` still passed `goal={curStepGoal || 0}`, but `curStepGoal` was DELETED in v1.14 (it was part of the old auto-bump block). So tapping the step ring "+" threw `ReferenceError: curStepGoal is not defined` and crashed React. Fixed: `goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0}` (single-source goal, `programWeek` is in App scope at line ~3043).
-- **Day strip showed days BEFORE the program start ("a week back"):** the strip range used `Math.max(10, programDayNumber(startDate, today) - 1)`. The `10` floor forced 10 days back even when the program started <10 days ago, so the strip extended before the start date. Fixed to `Math.max(0, ...)` so the earliest cell is always exactly day 1 (the start). New users now see just today + future (dimmed); no pre-start days.
-- QA LESSON: `tsc --jsx preserve --skipLibCheck` on the single .tsx did NOT flag the undefined `curStepGoal` (no TS2304). So tsc is NOT a reliable undefined-variable check here. New rule: whenever a `const`/variable is removed, `grep -c <name> src/App.jsx` must return 0 (verify no dangling refs). Done for this fix (curStepGoal -> 0, stepBase -> 0).
-- VERSION 1.15->1.16 (App.jsx only). tsc 0, brackets 0 0 0, 0 dashes, check-logic 7/7.
-- Note: the week-7 seen in the owner's screenshot is from the back-dated April-19 demo start; with a fresh May-31 start, today computes as week 1 (this was the strip bug, not the week calc).
-
-## v1.15 - Server-side per-user AI rate limit (cost protection)
-- `api/ai.js` rewritten: before proxying to Anthropic it enforces a per-user rate limit using the SAME Upstash Redis already used by `api/access.js` (no new infra). Per-user DAILY cap (`AI_DAILY_LIMIT`, default 25) and per-minute BURST cap (`AI_BURST_LIMIT`, default 10). Key = `x-user-id` header (the access email, lowercased), falling back to `ip:<x-forwarded-for>` then `anon`. Day key uses Israel-time date (`Intl` Asia/Jerusalem) so the quota resets at local midnight; keys expire (~48h day, 120s minute). Over-limit returns HTTP 429 `{error:'limit', scope, message}`. If the limiter itself throws, it fails OPEN (logs, does not block). If the Upstash vars are unset, the limit is OFF and the app works as before.
-- The key still lives only in `process.env.ANTHROPIC_API_KEY` (server side); never in the client. `AI_MODEL` env still overrides the model (set `claude-haiku-4-5` for the cheap path).
-- App.jsx: new `aiHeaders()` helper sends `x-user-id` (from `localStorage.myprime_access_email`) on ALL 5 `/api/ai` calls. 429 handled gracefully: `aiNutritionChat` returns the server's gentle message as the reply; `analyzeMeal` throws the message; `aiMealChat` returns `{error,limit,message}`.
-- Tuning: change `AI_DAILY_LIMIT` / `AI_BURST_LIMIT` in Vercel env (no code change). Splitting photo vs chat caps would need the client to tag request kind - easy follow-up if wanted.
-- VERSION 1.14->1.15. Files changed: src/App.jsx, api/ai.js. qa: tsc 0, brackets 0, 0 dashes, check-logic 7/7.
-
-## v1.14 - Step goal: user-confirmed baseline + transparent, button-driven increases
-- Methodology (confirmed by owner = Anat's): personal baseline, then +2000/+2000/+1000/+1000 over weeks 2/4/6/8 (+6000 cumulative). NOT capped at 8,000 - higher starters reach higher (2,000 -> 8,000; 4,000 -> 10,000).
-- The goal NEVER changes silently now. A prominent "important" banner appears on the day screen when a step action is pending (pendingStepAction): week>=2 with no baseline -> "קביעת ממוצע צעדים יומי"; an unacknowledged bump week (4/6/8) -> "היעד שלך עולה השבוע". She taps it to act.
-- New StepSetupModal: baseline-set (proposes the measured week-1 average, or asks her to estimate with a 2,000-4,000 hint if no data) and increase (shows the bump, lets her ACCEPT or CHANGE via a 250-step +/- stepper). Copy in Anat's voice (owner-approved drafts).
-- Data model: profile.stepBaseline (confirmed anchor) + profile.stepGoal (single source of truth for display, set on confirm = baseline + cumOffset(week), updated on each accepted bump or manual edit). effectiveStepGoal simplified to (stepGoal, week) - all screens read the one stored value (no more recompute drift). goalAckWeek tracks acknowledged bumps; confirmBaseline sets it to highestBumpAtOrBelow(week) so mid-program entry does not cascade retroactive prompts.
-- Removed the old silent auto-bump useEffect + the goalBump sheet (GoalBumpModal now unused).
-- Transparency: profile shows "התחלת ב-X" under the goal; modal explains the journey.
-- Profile keeps the goal edit; editing sets stepGoal and future bumps continue from her value (per owner).
-- VERSION 1.13->1.14 (App.jsx only). check-logic 7/7; tsc clean; 0 dashes.
-- Existing demo profiles have no stepBaseline -> the baseline banner will appear on load (intended: she confirms her start).
-
-## v1.13 - Step goal unified across all screens (bugfix)
-- BUG: day ring + report showed the dynamic goal (baseline + weekly offset, e.g. 6,740), but the PROFILE field showed "מודדת ממוצע" and the profile edit modal defaulted to 2,000 - because those two only read profile.stepGoal (null until a Sunday bump actually runs). Mid-program entry (back-dated April start, now week 7) never ran the bumps, so the three screens disagreed.
-- FIX: new single-source helper effectiveStepGoal(stepGoalStored, stepsByDate, startDate, week) = week<2 ? null : (stored ?? baseline+cumOffset). Now used by the day ring, report, profile display, profile edit init, AND the bump effect. All screens show the same number; the profile edit opens at the current effective goal (not 2,000), so saving no longer silently resets the goal.
-- ProfileScreen now receives stepsByDate + programWeek.
-- VERSION 1.12->1.13 (App.jsx only). check-logic 7/7; tsc clean; 0 dashes.
-- NOTE: the goal value itself (e.g. 6,740 = baseline 1,740 + 5,000 at week 7) depends on week-1 step data. A back-dated start with no real week-1 steps yields whatever baseline the seed/data gives; for a real user week 1 measures it properly.
-
-## v1.12 - Date line in the check-in modal
-- CheckinModal now shows the same date/day/week line as the card, under the title "המעקב היומי שלי" (relLabel + full weekday + d/month + "שבוע N, יום D"). Passed date={selectedDate} + startDate to the modal.
-- VERSION 1.11->1.12 (App.jsx only). check-logic 7/7; tsc clean; 0 dashes.
-
-## v1.11 - Card graphics: bigger cabinet trophy + fill button
-- Cabinet "ארון הגביעים" button: trophy image enlarged (44x44 -> 72x58, correct 1.25 aspect), padding reduced (10px6px -> 8px4px), gap 6->4, button width 80->84. Owner: trophy was too small with too much padding.
-- CheckinCard: replaced the "הקישי לפתיחה" + "כל יום שתמלאי, עוד מדליה לאוסף" hint lines with a solid square brand button "הקישי למילוי המעקב" (onClick -> onOpen, stopPropagation).
-- VERSION 1.10->1.11 (App.jsx only). check-logic 7/7; tsc clean; 0 dashes.
-
-## OPEN TASK / DECISION (Phase 2): PWA vs Native + health-band (Xiaomi) integration + migration steps
-Full detailed planning doc: **"MyPrime-חיבור-צמיד-שיאומי-תכנון.docx"** (+ .pdf) - included in the handoff zip. The key conclusions and the migration plan, captured here so they survive in CLAUDE.md:
-
-**Why a band needs native:** A PWA on iOS CANNOT read Apple Health / step data (HealthKit is native-only), and cannot read the phone's own pedometer (Core Motion is native-only; there is no reliable web pedometer). So automatic steps from a band or the phone require a native/hybrid app. The current web demo therefore uses MANUAL step entry (chosen for beta - the user reads her daily total from Mi Fitness at end of day and types it in; works with any band).
-
-**Capacitor (the recommended hybrid path):** wraps the SAME React/Vite code in a WebView - it keeps debugging like a web app (Safari Web Inspector on a real iPhone). Only the thin health plugin needs Mac + Xcode and a REAL device (the simulator has no health data; the health permission is a one-shot prompt). The plugin writes steps into the SAME `stepsByDate` store, so the UI is unchanged (there is already a disabled "התחברות לאפליקציית הבריאות" placeholder slot in StepsModal). Native also unlocks the daily 19:00 push notification (the in-app card already gates the report to 19:00 as a placeholder).
-
-**Real "native tax":** a Mac + Apple Developer account ($99/yr) + slower release cadence through app-store review (mitigated with a live-update / OTA mechanism).
-
-**The Xiaomi problem specifically:** the weak link is the flaky Mi Fitness -> Apple Health sync (Xiaomi's own hop; Xiaomi has no public cloud API), NOT the band's measurement.
-
-**Band options:** (a) manual entry [chosen for beta]; (b) the phone's own steps [native only]; (c) band-via-Health as a fill-in [native + flaky for Xiaomi].
-
-**Aggregators (Terra / Rook / Spike):** a ~$400-500/mo floor (Terra: $399 annual / $499 monthly incl ~100k credits) - only worth it at scale; they absorb vendor-API churn. They do NOT cover current Xiaomi/Mi-Fitness cloud (only legacy Mi Bands via Zepp Life). **Amazfit** (same maker, Zepp app, same cheap price) IS cloud-supported by Terra server-to-server, which is **PWA-compatible** (no native needed). Fitbit has a cloud API but is mid-migration to the Google Health API (legacy dies ~Sept 2026) - churn risk.
-
-**DECISION:** Beta = PWA + manual step entry (any band). Auto-steps deferred. If/when pursued: use a cloud band (Amazfit + Terra) to STAY a PWA; otherwise go native (Capacitor + health plugin).
-
-**Migration steps (PWA -> native, when the time comes):**
-1. Wrap the existing React/Vite app in Capacitor (same codebase, WebView).
-2. Build env: Mac + Xcode (iOS) and/or Android Studio (Android); Apple Developer account ($99/yr).
-3. Add a health plugin (HealthKit / Health Connect) that writes into the existing `stepsByDate` store - UI stays the same.
-4. Test on a REAL device only (simulator has no health data); handle the one-shot permission prompt.
-5. Add a live-update / OTA channel to keep releases fast despite store review.
-6. Turn on the native daily 19:00 notification (card already gates to 19:00).
-7. Pick the band path per the decision above (cloud band stays PWA-compatible; Mi/Apple-Health is native + flaky).
-8. Run the full QA pass (qa/QA-CHECKLIST.md) on a phone AND a computer before any real users / dietitians.
-
-## v1.10 - Summary button polish (Fri/Sat only) + trophy image on cabinet button
-- Weekly-summary bar now appears ONLY on Friday (dn 6) and Saturday (dn 0); hidden on other days.
-- Bar restyled as a clear button: light brand background (C.brandBg) + brand border + bar-chart icon + label + ChevronLeft.
-- WeeklySummaryModal: Anat's motivation line is hidden when there is no data (empty state shows only the "עוד אין נתונים" message, no closing quote).
-- Cabinet "ארון הגביעים" button: replaced the white SVG trophy outline with the actual golden trophy image. New asset `public/medals/trophy-icon.webp` = label-free crop of trophy-1 (cup only, no "שבוע N").
-- VERSION 1.09->1.10. CHANGED FILES: src/App.jsx, CLAUDE.md, public/medals/trophy-icon.webp (NEW). check-logic 7/7; tsc clean; 0 dashes.
-- ASSET NOTE: the cabinet INTERIOR trophies use /medals/trophy-1..9.webp + trophy-champion.webp (real golden trophies, 400x400). If they 404 in production the owner must upload them to public/medals/. Delivered the full medals folder in the zip to be safe.
-
-## v1.09 - Weekly summary (סיכום שבועי) built
-- New "סיכום שבועי" bar at the bottom of the tracker-card main area (top border, spans right edge to where the cabinet button starts; inline bar-chart SVG + label; stopPropagation so it does not open the check-in). Wired App -> DayScreen -> CheckinCard via onOpenSummary.
-- New WeeklySummaryModal (sheet "weeklySummary"): computes LIVE on every open (re-tap after adding data recomputes). Covers the program week of the SELECTED date (navigate to a past week's day to see that week's summary). Aggregates only days that are unlocked, <= today, and have tasks (Saturday included for non-keepers).
-- Aggregation (weeklySummaryData): bool/workout tasks -> COUNT of days done ("ב-X ימים" / "X אימונים", no denominator); number tasks (steps, water cups, veg, mealorder, sleep, fasting) -> AVERAGE over reported days ("בממוצע X" + "ב-N לילות שדיווחת" for sleep). Steps also compared to the previous week's average. Calories: avg kcal/day vs dailyTarget + "על היעד ב-X ימים" where on-goal = within 95%-105% of target (ASSUMPTION - owner to confirm band). Protein: avg g/day vs targets.protein. Only positives shown (zero-count tasks are skipped, warm tone).
-- Motivation: WEEKLY_MOTIVATION[week-1] closes each summary in Anat's voice; week 10 = the long "program ends, keep the habits" text (no "מסע"). ALL summary copy + phrasing is DRAFT - owner will refine.
-- VERSION 1.08->1.09 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-- Note: calorie 95% rule lives here (calorie on-goal count), since calories is not a daily check-in task.
-
-## v1.08 - Cheers stay (close button, no auto-dismiss)
-- Removed the auto-dismiss timers from CheckinCheer and TrophyCheer (they "ran away" before the owner could enjoy them). Both now stay until dismissed.
-- Added a warm close button to both: medal -> "יאללה, ממשיכות 💜"; trophy -> "ממשיכות חזק 💜" (champion week 10 -> "סגירה 💜"). Tap-outside still closes.
-- Confirmed: the trophy cheer fires on BACKFILL too - the auto-award effect detects an increase in earned-trophy count on any data change (after mount), regardless of which day was filled.
-- VERSION 1.07->1.08 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-
-## v1.07 - Medal pops for any completed day (was today-only)
-- Auto-award effect: the medal cheer now fires when ANY day newly completes (not only `today`). Fixes "completed week 2 day 3, no medal popped" - that day was not the demo's today, so the old `d === today` guard suppressed it. The first-load `celebRef.mounted` guard still prevents pops on app open.
-- Reminder: a day completes only when ALL its tasks are done. E.g. week 2 day 3 = steps (auto) + food journal (auto) + strength (manual). Filling only strength will not complete it; steps must be entered and food logged for that date too.
-- VERSION 1.06->1.07 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-
-## OPEN TASK (owner): owner will supply/refine the weekly-summary copy later (motivation lines 1-10 + metric phrasing). Hold final copy until provided. Aggregation spec is otherwise locked (live recompute on button tap; counts as "ב-X ימים" no denominator; averages "בממוצע X, ב-N ימים שדיווחת"; add calories/day-vs-target and protein/day-vs-target; count days within 95% of calorie target as on-goal).
-
-## Copy rule (owner): AVOID the word "מסע" anywhere in UI/copy (Anat's voice). Also scrub it from the days 1-2 welcome ("ברוכה הבאה למסע") on the next build.
-
-## v1.06 - Celebration animations + 95% protein
-- Protein task (auto) now counts as done at 95% of target: autoStatusFor.protein uses `proteinHad >= targets.protein * 0.95`. Affects the card, dayComplete, and medal logic consistently.
-- Medal celebration (CheckinCheer): now AUTO-dismisses (~2.6s), no button. Medal image pops with a new `medalIn` keyframe (scale+rotate bounce) on top of the existing confetti. Tap still dismisses.
-- New TrophyCheer overlay: when a NEW weekly trophy is earned, a trophy (that week's image, champion for week 10) pops in and auto-dismisses (~3s) with confetti. Warm Anat copy ("גביע השבוע נכנס לארון!" / champion text for week 10).
-- Auto-award effect upgraded: a `celebRef` (useRef) guards against popping on first load (sets _done silently on mount, only celebrates on later transitions) and tracks earned-trophy count to detect a NEW trophy. Routing: new trophy -> trophyCheer (priority); else today newly complete -> checkinCheer. New state `cheerTrophyWeek` feeds the trophy image.
-- VERSION 1.05->1.06 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-- RESUMING NEXT: weekly-summary aggregation spec was proposed (count vs average-over-reported-days per task) - awaiting owner's approval + the "ב-5 ימים" vs "5 מתוך 6" choice, then full copy + 10-week motivation bank + mock + build (with the "סיכום שבועי" button bar).
-
-## v1.05 - Collection shows individual medals
-- CollectionModal: replaced the single big medal with a wrapping grid of N small medals (40px, count = days earned = _done days), scrollable (maxHeight 176) when many. The "X מדליות" count text and subtitle are KEPT below the grid (owner: keep the number AND show medals visually). 0 medals -> one greyed medal.
-- VERSION 1.04->1.05 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-- WEEKLY SUMMARY (planning): owner says base the CALCULATIONS on the uploaded PDF (Friday weekly-summary column + Sunday weekly-avg-steps) and the WhatsApp/ManyChat flow files, and present it WARM in Anat's voice (not a dry report) with a motivational line that VARIES week to week. Next step: extract the exact weekly calcs from the PDF/flows, draft structure + sample warm copy + a per-week motivation bank for approval, then mock, then build (+ the "סיכום שבועי" button bar in the card).
-
-## v1.04 - Swipe fixes
-- Swipe direction FLIPPED per owner (it felt reversed): onTouchEnd now `goDay(dx > 0 ? 1 : -1)`.
-- Future/pre-start clamp hardened: goDay now compares with getTime() against [startDate, today] so swipe can never land on a future (not-yet-arrived) or pre-program day.
-- VERSION 1.03->1.04 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-- OPEN VISUAL TASK (owner request): the collection ("ארון הגביעים") should show individual SMALL medals, count = medals earned since program start (now = number of _done days, auto). Need a layout that holds many: shrink the medal size / wrap to a scrollable grid as the count grows. Currently CollectionModal shows ONE medal image + a "X מדליות" count - to be replaced with N small medals.
-- OPEN: weekly summary (סיכום שבועי) + its button in the tracker card - still in planning.
-
-## v1.03 - Days 1-2 intro, Saturday tracking for non-keepers, automatic medal
-- Days 1-2 of the program: no rings and no tracker card - a placeholder intro panel instead (welcome text, marked as temporary; real onboarding text comes with the help system). Gated on `progDay = programDayNumber(startDate, date)` in {1,2}. Swipe still works there.
-- Saturday: new `tasksForDate(startDate, date, keepShabbat)` - for non-Shabbat-keepers, Saturday now shows the SAME tasks as the Friday before it (`activeTasks(week, 6)` = that week's daily tasks; Friday has no strength/mobility so it is exactly the daily set). Shabbat-keepers: Saturday stays a rest day (tasksForDate returns []). DayScreen ciTasks, dayProgress, and the CheckinModal all use tasksForDate now. Rings show on Saturday for non-keepers (they are date-gated, not dow-gated). Weekly trophy still counts Sun-Fri only (Saturday optional, never blocks).
-- Automatic medal: removed the "סיימתי להיום" button (now just "סגירה"/close). New `dayComplete(...)` helper (every active task done). An effect in App auto-sets `_done` for any day from start..today that is complete (so all-auto days like day 3 earn the medal by themselves) and pops the "מדליה נכנסה לאוסף" cheer when TODAY transitions to complete. `_done` still drives the existing medal/trophy counts (trackerStats, weekTrophyEarned) - now set automatically instead of by a button. Removed finishCheckin.
-- VERSION 1.02->1.03 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-- STILL OPEN: weekly summary (סיכום שבועי) - needs planning (Friday vs Saturday timing, content) + a "סיכום שבועי" button as a bar at the bottom of the tracker-card main area (right edge to where the cabinet button starts). Not built yet.
-
-## v1.02 - Real trophy icon + swipe between days
-- Cabinet button: the lucide Trophy icon was not rendering for the owner, so replaced it with an INLINE SVG trophy (lucide Trophy paths, white stroke) - guaranteed to show. Removed the lucide Trophy import.
-- Swipe between days on the day content area (onTouchStart/onTouchEnd on the rings/content div, NOT the strip so it doesn't fight the strip's own horizontal scroll). Swipe RIGHT = previous (earlier) day, swipe LEFT = next (later) day - matches the strip layout (past on the right, future on the left). Threshold 55px and horizontal-dominant (|dx| > 1.5*|dy|). `goDay(delta)` clamps to [profile.startDate, today] and SKIPS Saturday for keepShabbat users (steps one more in the same direction). Tap on strip still works.
-- Strip auto-sync: renamed todayRef -> selRef; the selected pill now scrolls into center via a useEffect on [date], so the strip follows the day you swiped to (also covers mount = today).
-- VERSION 1.01->1.02 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-- Swipe direction is easy to flip if it feels backwards (one line in onTouchEnd).
-
-## v1.01 - Fixes to v1.00 tracker card
-- Removed the "יומן המעקב שלי" screen title from the top of DayScreen (top now shows only the scrolling day strip, per owner).
-- Moved "יומן המעקב שלי" INTO the tracker card as the first header line (with Sparkles icon), with the detailed date line ("שלישי, 2 ביוני · שבוע 9, יום 3") directly below it as a secondary line.
-- Cabinet button icon changed from Award (rosette) to Trophy (cup), matching "ארון הגביעים". Import Award->Trophy.
-- VERSION 1.00->1.01 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-
-## v1.00 - Tracker-card redesign, day-strip progress bars, screen title
-- Bottom nav: removed the "האוסף" button - back to 4 tabs + CENTERED FAB (padding restored to 5px 12px). The collection is now opened from the tracker card instead.
-- CheckinCard rebuilt: it is now a flex row. LEFT = a solid brand-pink "ארון הגביעים" button (Award icon + label + ChevronLeft, full height, clearly tappable) that opens the collection (stopPropagation so it does not trigger the check-in). RIGHT = the main area (tap opens check-in). The card header is no longer "המעקב היומי שלי" + week pill; it now shows the selected day's date line: relLabel + full day name (HE_DAYS_FULL) + date + "שבוע N, יום D" (D = dowOf 1-6). Week pill removed. `onOpenCollection` prop added (App -> DayScreen -> CheckinCard, = setSheet("collection")).
-- DayScreen: added a screen title "יומן המעקב שלי" at the very top. Removed the day-line that sat under the strip (date now lives only in the tracker card header, per owner). Note: on days with no tracker card (week 1 days 1-2, Saturdays) no date text shows except the highlighted strip pill.
-- Day strip: the small dot under each day was replaced by a thin completion progress bar at the bottom of each pill. Fills RIGHT->LEFT by that day's tracker completion fraction (new `dayProgress(d)` in DayScreen using programWeekFor/dowOf/activeTasks/autoStatusFor/taskDone). Color STRENGTHENS with completion via new `lerpHex("#F4B8D2","#D81B7A",pct)`; selected (pink) pill uses white fill on a translucent track.
-- New module helpers: HE_DAYS_FULL, lerpHex. New import: Award.
-- VERSION 0.99->1.00 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-- STILL OPEN: swipe between days (discussed, owner positive, direction not finalized - not built); the help/explanation system (onboarding screens, per-unlock full-screen explainers, "?" badge popups) - texts not drafted yet.
-
-## v0.99 - Dashboard restructure: cleaner top, stable ring grid, verbs, collection in bottom bar
-- Removed the top header on DayScreen (greeting "היי <name>", the "האוסף שלי" pill, the medal logo); tightened the top space. `userName`/`onOpenCollection` props dropped from DayScreen.
-- "האוסף שלי" moved to the BOTTOM nav as a button (medal image icon, label "האוסף", opens the collection sheet). Nav button padding shrunk (5px 8px) to fit 5 items + FAB.
-- New selected-day line under the day strip, above the rings: relLabel + prettyDate + "שבוע N" (date + day + week, centered).
-- Rings now a FIXED 2-col grid - positions never shift when a new ring unlocks: calories top-right (col1/row1), steps top-left (col2/row1), protein bottom-right (col1/row2), water bottom-left (col2/row2). RTL => col1 = right. (Between water unlock w3d2 and protein w3d4 the bottom-right cell is briefly empty - the cost of stable positions.)
-- Verb label added at the top of each ring (center = the number, as before): calories/protein "צרכת", water "שתית", steps "צעדת". `MetricRing` got a `verb` prop. All ring text re-spaced to 4 lines (y 40/64/83/97).
-- VERSION 0.98->0.99 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-- STILL OPEN (next batch, owner approved structure first): the help/explanation system - onboarding intro screens, a full-screen explainer on each "first appearance" day (steps w1d2, daily tracker w1d3, water w3d2, protein w3d4), and a small "?" badge on each ring for the first 2 weeks opening a per-metric help popup (protein ring = only "?", no +). Texts to be drafted in Anat's voice for owner approval before building.
-
-## v0.98 - Calorie ring consistent with the others (center = eaten, not remaining)
-- `Ring` (calorie) center now shows calories EATEN (`Math.round(consumed)`) instead of remaining, so all four day rings read the same way: center = what you did, ring fills as you progress, subtitle "מתוך X". Over the cap: amber + "מעל היעד (X)". Resolves the confusion where a full ring meant "good progress" on 3 rings but "near your limit" on calories, and "245 מתוך 1,333" was ambiguous (ate vs left). Kept 4 rings (owner: for an older audience clarity > fewer rings).
-- VERSION 0.97->0.98 (App.jsx only). check-logic 7/7; tsc clean; 0 em/en dashes.
-
-## v0.97 - Shabbat = full rest day (no measurement), not just a greyed pill
-- When `profile.keepShabbat` and the viewed date is Saturday, DayScreen now shows a calm rest view ("שבת שלום, יום מנוחה") instead of the rings/check-in/food content. `const isShabbatRest = profile.keepShabbat && dow === 0;` wraps the day content. Matters mainly when today itself is Saturday (auto-selected). Header + day strip stay so she can navigate to other days.
-- VERSION 0.96->0.97 (App.jsx only). qa unaffected; check-logic 7/7; tsc clean; 0 em/en dashes.
-
-## v0.96 - Report steps section moved to top + 3-column table layout
-- In ReportScreen the steps section is now the FIRST section (right after the week pill, above the calorie and weight cards).
-- Steps header redesigned as one bordered row split into 3 equal cells (table-like): "צעדים היום" | "היעד היומי" (highlighted, brandBg) | "ממוצע 7 ימים". Goal cell shows "במדידה" in week 1. The 14-day bar chart stays below.
-- VERSION 0.95->0.96 (App.jsx only). qa unaffected; check-logic 7/7; tsc clean; 0 em/en dashes.
-
-## v0.95 - Verified day-by-day schedule + running step goal + Shabbat option + cleanup
-- **Schedule overhaul (src/checkins.js):** rewritten against the 10-week PDF, day by day. Each task now has `startWeek` + `startDow` (1=Sun..6=Fri) + `recur`: "daily" / "strength" (Sun/Tue/Thu, skipped on a mobility day) / "mobility" (explicit `MOBILITY_DAYS` = [[9,1],[10,1],[10,3]]). `activeTasks(week, dow)` now takes the day-of-week; returns [] for Saturday (dow 0/rest). fasting = optional (never blocks finishing).
-- Start-day fixes vs the old week-only model: strength w2 d3 (not daily), veg+mealorder w2 d4, water+drinkbefore w3 d2, protein w3 d4, stopeating w4 d2, probiotics w7 d4, antiinflam w8 d2, etc. Full reference: outputs Excel "MyPrime-לוז-מעקב-יומי.xlsx".
-- **Running step goal:** week 1 = measure baseline (avg daily steps, days 2-6). From week 2 the goal is a stored running value in `profile.stepGoal`; it goes up on Sundays of weeks 2/4/6/8 (+2000/+2000/+1000/+1000), each bump relative to the LAST goal. She can override it manually in the profile any time; later bumps build on her number. Helpers: `stepBaseline`, `stepGoalCumOffset`, `STEP_BUMP_WEEKS`. Day-screen + report steps ring uses this goal; week 1 shows "מודדת ממוצע" (no target).
-- **Goal-increase notice:** `GoalBumpModal` (sheet "goalBump") fires once on the bump Sunday - "היעד היומי שלך עלה היום ל-X (+Y)" + acknowledge. Recorded via `goalAckWeek` (persisted in STORAGE_KEY).
-- **7-day average:** report shows rolling 7-day avg daily steps next to "צעדים היום" (`steps7avg`; week 1 = from when she started measuring).
-- **Shabbat option:** onboarding Q ("להשתמש בכל ימות השבוע כולל שבת?") + profile toggle "שומרת שבת" -> `profile.keepShabbat`. When on, Saturdays are greyed/disabled in the day strip (rest day); rest of app stays available. (Saturday already has no tasks for anyone.)
-- **Cleanup:** removed dead `streakDays`, `StreakCheer`, sheet "streak", and the unused `const streak` in DayScreen. `dowOf(date)` helper added.
-- VERSION 0.94->0.95 (re-upload src/App.jsx AND src/checkins.js). qa unaffected; check-logic 7/7; tsc clean; 0 em/en dashes; 19/19 schedule spot-checks pass.
-
-## v0.94 - Streak removed (owner decision); medals-per-day + trophy-per-week only
-Owner: the streak ("ימים ברצף") was confusing with backfill and adds no real prize - drop it.
-- Removed `checkinStreak` entirely (function + all usages: DayScreen `ciStreak`, CheckinCard `streak` prop + header medals row + subtitle, CheckinCheer `streak`, CollectionModal streak line, App CheckinCheer prop).
-- Reward model is now simple: a MEDAL for every completed day (cabinet count, whole program) + a TROPHY per completed week (Sunday-Friday, Saturday optional) + champion (week 10). No streak anywhere in the tracker.
-- `CheckinCheer` now shows ONE medal (92px) + "מדליה נכנסה לאוסף!" + Anat note (no streak count / no 1-6 medal fan).
-- CheckinCard: removed the top-right streak medals and the "X ימים ברצף" subtitle.
-- CollectionModal subtitle: "כל יום שהשלמת שווה מדליה".
-- NOTE: the old FOOD-LOG streak (`streakDays`, `StreakCheer`, sheet "streak") is now unreachable dead code (the flame pill that opened it was replaced by the cabinet in v0.91). Left in place (harmless, predates the tracker); its "ימים ברצף" copy is never shown. Can be deleted later if desired.
-- VERSION 0.93->0.94 (App.jsx only). qa unaffected; check-logic 7/7.
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import {
+  Home, BookOpen, TrendingDown, ChefHat, User, Plus, Check, Search,
+  Barcode, Camera, ChevronRight, ChevronLeft, ChevronDown, Pencil, Trash2, Minus, X,
+  Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet,
+  MessageCircle, Loader, Copy, Mic, Send, Lock, Clock, Cookie,
+} from "lucide-react";
+import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import { DecodeHintType, BarcodeFormat } from "@zxing/library";
+import { RECIPES } from "./recipes";
+import { SWEETS } from "./sweets";
+import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
+
+// AI requests go through a server proxy that holds the API key (see /api/ai.js).
+const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
+// Identify the user to the server so it can enforce a per-user rate limit (cost protection).
+function aiHeaders() {
+  let uid = "";
+  try { uid = localStorage.getItem("myprime_access_email") || ""; } catch (e) {}
+  const h = { "Content-Type": "application/json" };
+  if (uid) h["x-user-id"] = uid;
+  return h;
+}
+const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
+const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a4%d7%a8%d7%98%d7%99%d7%95%d7%aa/";
+const COOKIE_URL = import.meta.env.VITE_COOKIE_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a7%d7%95%d7%a7%d7%99%d7%96/";
+const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || "";
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem("myprime_device_id");
+    if (!id) { id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(16).slice(2)); localStorage.setItem("myprime_device_id", id); }
+    return id;
+  } catch (e) { return "nodevice"; }
+}
+
+/* ============================================================
+   DOMAIN - pure logic, zero UI dependency (mirrors src/domain)
+   ============================================================ */
+const ACTIVITY_FACTORS = { "יושבני": 1.2, "קלה": 1.375, "בינונית": 1.55, "גבוהה": 1.725 };
+const KCAL_PER_KG = 7700;
+const KCAL_FLOOR = 1200;
+const PROTEIN_PER_KG = 1.6;        // טווח מומלץ 1.5-1.7
+const FAT_PER_KG = 0.9;
+const RATE_OPTIONS = [0, 250, 500];
+const UNDERWEIGHT_BMI = 18.5; // WHO: BMI<18.5 = תת-משקל
+function bmiOf(kg, heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? kg / (h * h) : 0; }
+function minHealthyKg(heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? Math.ceil(UNDERWEIGHT_BMI * h * h * 2) / 2 : 0; } // משקל מינימלי שעדיין BMI>=18.5, מעוגל ל-0.5 כלפי מעלה
+const WATER_TARGET_GLASSES = 8;    // 8 כוסות = 2 ליטר
+const WATER_MIN_GLASSES = 6;       // 6 כוסות = 1.5 ליטר
+const WATER_TARGET_ML = 2000;      // יעד מים קבוע: 2 ליטר
+const DEFAULT_CUP_ML = 250;        // גודל כוס ברירת מחדל
+// מים נשמרים במ"ל. ערכים ישנים נשמרו כספירת כוסות (<= ~8); ממירים בקריאה (כוס = 250 מ"ל).
+function waterMlOf(v) { if (v == null) return 0; return v < 50 ? Math.round(v * 250) : v; }
+
+const rateLabel = (g) => (g === 0 ? "שמירה על המשקל" : `ירידה ${g} ג׳ בשבוע`);
+const rateShort = (g) => (g === 0 ? "שמירה" : `${g} ג׳/שבוע`);
+
+function bmrMifflinWoman(weightKg, heightCm, age) {
+  return 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
+}
+function dailyDeficit(weeklyRateG) {
+  return Math.round((weeklyRateG / 1000) * KCAL_PER_KG / 7);
+}
+function computeTargets(profile) {
+  const bmr = bmrMifflinWoman(profile.weightKg, profile.heightCm, profile.age);
+  // Sedentary baseline for everyone: the app adds steps + logged activity to the
+  // daily budget separately, so a higher multiplier would double-count movement.
+  // (No activity selector is exposed; this intentionally ignores any stored
+  // profile.activity, so legacy profiles update without needing a reset.)
+  const tdee = bmr * ACTIVITY_FACTORS["יושבני"];
+  const deficit = dailyDeficit(profile.weeklyRateG);
+  const raw = Math.round(tdee - deficit);
+  const targetKcal = Math.max(KCAL_FLOOR, raw);
+  const floored = raw < KCAL_FLOOR;
+  const protein = Math.round(PROTEIN_PER_KG * profile.weightKg);
+  const fat = Math.round(FAT_PER_KG * profile.weightKg);
+  const carbKcal = Math.max(0, targetKcal - protein * 4 - fat * 9);
+  const carbs = Math.round(carbKcal / 4);
+  return { bmr: Math.round(bmr), tdee: Math.round(tdee), deficit, targetKcal, floored, protein, fat, carbs };
+}
+// Estimated calories burned from steps, scaled by body weight (~0.04 kcal/step at 70kg).
+function stepsKcal(steps, weightKg) {
+  return Math.round((steps || 0) * 0.00055 * (weightKg || 70));
+}
+function projection(currentKg, goalKg, weeklyRateG) {
+  const rateKg = weeklyRateG / 1000;
+  if (rateKg <= 0 || goalKg >= currentKg) {
+    return { maintain: true, weeks: 0, data: [{ w: 0, kg: currentKg }, { w: 8, kg: currentKg }] };
+  }
+  const totalLoss = currentKg - goalKg;
+  const weeks = Math.ceil(totalLoss / rateKg);
+  const stepW = Math.max(1, Math.ceil(weeks / 14));
+  const ease = (t) => 1 - Math.pow(1 - t, 1.8); // ירידה מהירה בהתחלה, מתמתנת
+  const data = [];
+  for (let w = 0; w <= weeks; w += stepW) {
+    const kg = currentKg - totalLoss * ease(w / weeks);
+    data.push({ w, kg: Math.round(kg * 10) / 10 });
+  }
+  if (data[data.length - 1].w !== weeks) data.push({ w: weeks, kg: goalKg });
+  return { maintain: false, weeks, data };
+}
+function nutritionFor(food, grams) {
+  const k = grams / 100;
+  return {
+    kcal: Math.round(food.per100.kcal * k),
+    p: Math.round(food.per100.p * k),
+    f: Math.round(food.per100.f * k),
+    c: Math.round(food.per100.c * k),
+  };
+}
+function unitLabelFor(unit) { return unit === "ml" ? "מ\"ל" : "ג׳"; }
+function measuresForUnit(unit) {
+  return unit === "ml"
+    ? [{ label: "כוס", g: 250 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }, { label: "פחית", g: 330 }, { label: "חצי ליטר", g: 500 }, { label: "בקבוק גדול", g: 1500 }]
+    : [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }, { label: "מנה קטנה", g: 80 }, { label: "מנה בינונית", g: 150 }, { label: "מנה גדולה", g: 250 }];
+}
+function foodFromEntry(e) {
+  const g = e.g || 100;
+  const per100 = { kcal: (e.kcal || 0) / g * 100, p: (e.p || 0) / g * 100, f: (e.f || 0) / g * 100, c: (e.c || 0) / g * 100 };
+  const unit = e.unit === "ml" ? "ml" : "g";
+  return { name: e.name, per100, unit, measures: measuresForUnit(unit) };
+}
+function activityBonus(stepsKcal, workoutKcal, returnPct) {
+  return Math.round((stepsKcal + workoutKcal) * (returnPct / 100));
+}
+
+/* ============================================================
+   SEED DATA
+   ============================================================ */
+const FOODS = [
+  { id: "yog", name: "יוגורט יווני 5%", search: "יוגורט", per100: { kcal: 90, p: 9, f: 5, c: 4 }, measures: [{ label: "כף", g: 20 }, { label: "מיכל", g: 150 }, { label: "כוס", g: 245 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "ban", name: "בננה בינונית", search: "בננה בננות פרי", per100: { kcal: 89, p: 1.1, f: 0.3, c: 23 }, measures: [{ label: "יחידה", g: 118 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "chk", name: "חזה עוף בגריל", search: "עוף חזה פרגית", per100: { kcal: 165, p: 31, f: 3.6, c: 0 }, measures: [{ label: "מנה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "rice", name: "אורז לבן מבושל", search: "אורז", per100: { kcal: 130, p: 2.7, f: 0.3, c: 28 }, measures: [{ label: "כוס", g: 158 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "sal", name: "סלט ירקות", search: "סלט ירקות", per100: { kcal: 30, p: 1.3, f: 0.2, c: 6 }, measures: [{ label: "מנה", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "cot", name: "קוטג׳ 5%", search: "קוטג גבינה", per100: { kcal: 98, p: 11, f: 5, c: 3 }, measures: [{ label: "מנה", g: 100 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "oat", name: "דייסת שיבולת שועל", search: "שיבולת שועל קוואקר דייסה", per100: { kcal: 380, p: 13, f: 7, c: 67 }, measures: [{ label: "מנה", g: 60 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "cof", name: "קפה עם חלב", search: "קפה הפוך", per100: { kcal: 40, p: 2, f: 1.5, c: 4 }, measures: [{ label: "כוס", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "egg", name: "ביצה גדולה", search: "ביצים ביצה חביתה", per100: { kcal: 143, p: 13, f: 10, c: 1 }, measures: [{ label: "יחידה", g: 50 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "bread", name: "לחם פרוס", search: "לחם פרוסה טוסט", per100: { kcal: 265, p: 9, f: 3.2, c: 49 }, measures: [{ label: "פרוסה", g: 28 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "pita", name: "פיתה", search: "פיתה לחם", per100: { kcal: 275, p: 9, f: 1.2, c: 55 }, measures: [{ label: "פיתה", g: 60 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "pasta", name: "פסטה מבושלת", search: "פסטה מקרוני ספגטי", per100: { kcal: 158, p: 5.8, f: 0.9, c: 31 }, measures: [{ label: "כוס", g: 140 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "beef", name: "בשר בקר רזה", search: "בקר בשר סטייק", per100: { kcal: 250, p: 26, f: 15, c: 0 }, measures: [{ label: "מנה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "salmon", name: "סלמון אפוי", search: "סלמון דג", per100: { kcal: 206, p: 22, f: 13, c: 0 }, measures: [{ label: "מנה", g: 140 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "tuna", name: "טונה במים", search: "טונה דג", per100: { kcal: 116, p: 26, f: 1, c: 0 }, measures: [{ label: "קופסה", g: 140 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "wcheese", name: "גבינה לבנה 5%", search: "גבינה לבנה", per100: { kcal: 90, p: 9, f: 5, c: 4 }, measures: [{ label: "כף", g: 30 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "ycheese", name: "גבינה צהובה 28%", search: "גבינה צהובה", per100: { kcal: 350, p: 25, f: 28, c: 1 }, measures: [{ label: "פרוסה", g: 25 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "milk", name: "חלב 3%", search: "חלב", per100: { kcal: 60, p: 3.3, f: 3, c: 4.7 }, measures: [{ label: "כוס", g: 240 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "apple", name: "תפוח עץ", search: "תפוח פרי", per100: { kcal: 52, p: 0.3, f: 0.2, c: 14 }, measures: [{ label: "יחידה", g: 180 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "cuke", name: "מלפפון", search: "מלפפון ירק", per100: { kcal: 15, p: 0.7, f: 0.1, c: 3.6 }, measures: [{ label: "יחידה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "tomato", name: "עגבניה", search: "עגבניה עגבניות ירק", per100: { kcal: 18, p: 0.9, f: 0.2, c: 3.9 }, measures: [{ label: "יחידה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 1 },
+  { id: "avocado", name: "אבוקדו", search: "אבוקדו", per100: { kcal: 160, p: 2, f: 15, c: 9 }, measures: [{ label: "חצי", g: 100 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "tahini", name: "טחינה גולמית", search: "טחינה", per100: { kcal: 595, p: 17, f: 53, c: 21 }, measures: [{ label: "כף", g: 15 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "hummus", name: "חומוס (ממרח)", search: "חומוס", per100: { kcal: 177, p: 8, f: 10, c: 14 }, measures: [{ label: "כף", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "almond", name: "שקדים", search: "שקדים אגוזים", per100: { kcal: 579, p: 21, f: 50, c: 22 }, measures: [{ label: "חופן", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "potato", name: "תפוח אדמה מבושל", search: "תפוח אדמה תפוד", per100: { kcal: 87, p: 2, f: 0.1, c: 20 }, measures: [{ label: "בינוני", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "lentil", name: "עדשים מבושלות", search: "עדשים קטניות", per100: { kcal: 116, p: 9, f: 0.4, c: 20 }, measures: [{ label: "כוס", g: 198 }, { label: "100 ג׳", g: 100 }], def: 0 },
+];
+const FOOD_BY_ID = Object.fromEntries(FOODS.map((f) => [f.id, f]));
+const RECENT = [
+  { foodId: "yog", g: 150 }, { foodId: "ban", g: 118 }, { foodId: "cof", g: 150 },
+  { foodId: "chk", g: 120 }, { foodId: "oat", g: 60 }, { foodId: "cot", g: 100 },
+];
+const MEALS = ["בוקר", "ביניים בוקר", "צהריים", "ביניים אחה״צ", "ערב", "נשנושים"];
+const HE_DAYS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+const HE_DAYS_FULL = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+function lerpHex(a, b, t) {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  const r = pa.map((v, i) => Math.round(v + (pb[i] - v) * Math.max(0, Math.min(1, t))));
+  return "#" + r.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+const HE_MONTHS = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+
+function ymd(d) { return d.toISOString().slice(0, 10); }
+function addDays(dateStr, n) { const d = new Date(dateStr); d.setDate(d.getDate() + n); return ymd(d); }
+function relLabel(dateStr) {
+  const today = ymd(new Date());
+  if (dateStr === today) return "היום";
+  if (dateStr === addDays(today, -1)) return "אתמול";
+  return null;
+}
+function prettyDate(dateStr) {
+  const d = new Date(dateStr);
+  return `${HE_DAYS[d.getDay()]}, ${d.getDate()} ב${HE_MONTHS[d.getMonth()]}`;
+}
+const DEV = (() => { try { return new URLSearchParams(window.location.search).has("dev"); } catch (e) { return false; } })();
+const TODAY = (() => {
+  try {
+    if (DEV) {
+      const o = window.localStorage.getItem("myprime_dev_today");
+      if (o && /^\d{4}-\d{2}-\d{2}$/.test(o)) return o; // dev-only simulated "today"
+    }
+  } catch (e) {}
+  return ymd(new Date());
+})();
+function sundayOf(dateStr) { const d = new Date(dateStr); d.setDate(d.getDate() - d.getDay()); return ymd(d); }
+function listSundays() {
+  const base = sundayOf(TODAY);
+  const out = [];
+  for (let i = -8; i <= 0; i++) {
+    const v = addDays(base, i * 7);
+    const d = new Date(v);
+    out.push({ value: v, label: `יום ראשון, ${d.getDate()} ב${HE_MONTHS[d.getMonth()]}` });
+  }
+  return out;
+}
+function programWeekFor(startDate, onDate) {
+  if (!startDate) return 1;
+  const diff = Math.floor((new Date(onDate) - new Date(startDate)) / 86400000);
+  if (diff < 0) return 0;
+  return Math.floor(diff / 7) + 1;
+}
+function programDayNumber(startDate, onDate) {
+  if (!startDate) return 1;
+  return Math.floor((new Date(onDate) - new Date(startDate)) / 86400000) + 1;
+}
+function unlockedOn(startDate, onDate, u) {
+  return programDayNumber(startDate, onDate) >= (u.week - 1) * 7 + u.day;
+}
+const MACRO_UNLOCK = { week: 3, day: 4 };
+const WATER_UNLOCK = { week: 3, day: 2 };
+const SWEETS_UNLOCK = { week: 3, day: 5 };
+const STEPS_UNLOCK = { week: 1, day: 2 };
+const FIBER_TARGET = 25;
+const DIET_OPTIONS = [
+  { id: "הכל", emoji: "🍽️" },
+  { id: "צמחוני", emoji: "🥗" },
+  { id: "צמחוני + דגים", emoji: "🐟" },
+  { id: "טבעוני", emoji: "🌱" },
+  { id: "כשר", emoji: "✡️" },
+  { id: "דל פחמימה", emoji: "🥑" },
+  { id: "ים-תיכוני", emoji: "🫒" },
+];
+const SENSITIVITY_OPTIONS = ["גלוטן", "חלב / לקטוז", "ביצים", "אגוזים", "בוטנים", "סויה", "דגים", "שומשום"];
+const WANT_OPTIONS = [{ id: "ארוחה מלאה", emoji: "🍽️" }, { id: "משהו קל", emoji: "🥗" }, { id: "חטיף", emoji: "🍎" }, { id: "משקה", emoji: "🥤" }];
+// Day of week for a date: 1=ראשון(Sun) .. 6=שישי(Fri), 0=שבת(Sat, rest day).
+function dowOf(dateStr) { const g = new Date(dateStr).getDay(); return g === 6 ? 0 : g + 1; }
+// Baseline = her average daily steps over week 1 (measured from day 2 onward).
+function stepBaseline(stepsByDate, startDate) {
+  let sum = 0, n = 0;
+  // Week-1 days 2..7 (Mon..Sat). Saturday (day 7) is included if she logged it - some fill it, some don't.
+  for (let d = 2; d <= 7; d++) { const s = (stepsByDate && stepsByDate[addDays(startDate, d - 1)]) || 0; if (s > 0) { sum += s; n++; } }
+  return n ? Math.ceil(sum / n / 100) * 100 : null;
+}
+// Cumulative step-goal offset above baseline: +2000 (w2-3), +4000 (w4-5), +5000 (w6-7), +6000 (w8+).
+function stepGoalCumOffset(week) { return week >= 8 ? 6000 : week >= 6 ? 5000 : week >= 4 ? 4000 : week >= 2 ? 2000 : 0; }
+// Single source of truth for the daily step goal shown everywhere (day ring, report, profile).
+// null = still measuring (week 1, or no baseline data yet).
+function effectiveStepGoal(stepGoal, week) {
+  return week < 2 ? null : (stepGoal != null ? stepGoal : null);
+}
+// 7-day rolling average of daily steps ending at `date` (only days with data; week 1: from when she started).
+function steps7avg(stepsByDate, date) {
+  let sum = 0, n = 0;
+  for (let i = 0; i < 7; i++) { const s = (stepsByDate && stepsByDate[addDays(date, -i)]) || 0; if (s > 0) { sum += s; n++; } }
+  return n ? Math.round(sum / n) : 0;
+}
+// Same rolling window, but also returns how many days actually had data (for the "ממוצע N ימים" label, capped at 7).
+function steps7stats(stepsByDate, date) {
+  let sum = 0, n = 0;
+  for (let i = 0; i < 7; i++) { const s = (stepsByDate && stepsByDate[addDays(date, -i)]) || 0; if (s > 0) { sum += s; n++; } }
+  return { avg: n ? Math.round(sum / n) : 0, n };
+}
+// Detect the phone platform so we can show the matching health-app guide.
+function detectPlatform() {
+  if (typeof navigator === "undefined") return "other";
+  const ua = (navigator.userAgent || "").toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return "ios";
+  if (/android/.test(ua)) return "android";
+  return "other";
+}
+// PDF guides for finding the step count in the phone's health app.
+// OWNER: drop the two PDFs in /public/guides and fill the paths (or external URLs). Empty string = link hidden.
+// In-app step guides: the two instruction images per platform (shown inside the app, no external link).
+// OWNER: drop the 4 images in /public/guides. Empty images array = guide hidden for that platform.
+const STEP_GUIDES = {
+  ios: { app: "Apple Health", images: ["/guides/apple-1.png", "/guides/apple-2.png"] },
+  android: { app: "Samsung Health", images: ["/guides/samsung-1.png", "/guides/samsung-2.png"] },
+};
+// The guide for the current device. No cross-platform fallback - an iPhone must never get the Samsung guide.
+function currentStepGuide() {
+  const g = STEP_GUIDES[detectPlatform()];
+  return g && g.images && g.images.length ? g : null;
+}
+// Free pedometer apps for women who do not have the built-in health app (e.g. non-Samsung Android) or are on another device.
+const STEP_APPS = {
+  android: { name: "Pedometer - Step Counter", url: "https://play.google.com/store/apps/details?id=pedometer.steptracker.calorieburner.stepcounter" },
+  ios: { name: "StepsApp", url: "https://apps.apple.com/il/app/stepsapp-pedometer/id1037595083" },
+};
+function stepAppFor(platform) { return STEP_APPS[platform] || null; }
+// Sundays when the running goal goes up, and by how much.
+const STEP_BUMP_WEEKS = { 2: 2000, 4: 2000, 6: 1000, 8: 1000 };
+function highestBumpAtOrBelow(week) { let h = 0; for (const w of [2, 4, 6, 8]) if (w <= week) h = w; return h; }
+// What step-goal action is pending for this week: set the baseline (first time), or accept an increase.
+function pendingStepAction(profile, week, ackWeek) {
+  if (week < 2) return null;
+  if (profile.stepBaseline == null) return { kind: "baseline" };
+  for (const w of [4, 6, 8]) if (w <= week && w > ackWeek) return { kind: "increase", week: w, inc: STEP_BUMP_WEEKS[w] };
+  return null;
+}
+
+/* ============================================================
+   DAILY PROGRESS TRACKER (check-in module)
+   ============================================================ */
+// Master switch - set to false to hide the whole tracker everywhere.
+const TRACKER_ENABLED = true;
+// Show the fat/carbs/fiber strip under the rings. Off for now (kept for future).
+const SHOW_MACRO_STRIP = false;
+const CHECKIN_UNLOCK = { week: 1, day: 3 };   // starts on day 3 of week 1
+const CHECKIN_REVEAL_HOUR = 19;               // today's report opens at 19:00
+const MEDAL_SRC = "/medal.png";
+function trophyForWeek(w) {
+  if (w >= 10) return "/medals/trophy-champion.webp";
+  return "/medals/trophy-" + Math.max(1, Math.min(9, w)) + ".webp";
+}
+// Pulls the values the app already tracks so she is not asked twice.
+function autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl) {
+  const steps = (stepsByDate && stepsByDate[date]) || 0;
+  const cups = Math.round((waterMlOf(waterByDate ? waterByDate[date] : 0) / (cupMl || DEFAULT_CUP_ML)) * 10) / 10;
+  const dayLog = (log || []).filter((e) => e.date === date);
+  const proteinHad = dayLog.reduce((s, e) => s + (e.p || 0), 0);
+  return {
+    steps: steps > 0 ? steps : null,
+    water: cups > 0 ? cups : null,
+    journal: dayLog.length > 0,
+    protein: !!(targets && targets.protein && proteinHad >= targets.protein * 0.95),
+  };
+}
+// A day is auto-marked complete (_done) by an effect in App the moment every
+// active task is done - no button. _done also drives the medal/trophy counts.
+// Whether a task reads as "done" (a positive, for the warm count).
+function taskDone(task, answers, auto) {
+  if (task.auto) {
+    if (task.auto === "steps") return auto.steps != null;
+    if (task.auto === "water") return auto.water != null;
+    if (task.auto === "journal") return auto.journal;
+    if (task.auto === "protein") return auto.protein;
+  }
+  const v = answers[task.id];
+  if (task.type === "number") return v != null && v > 0;
+  return v === true;
+}
+// Tasks shown for a given date. Saturday (dow 0): rest for Shabbat-keepers (none),
+// otherwise the same daily tasks as the Friday before it (activeTasks for dow 6).
+function tasksForDate(startDate, date, keepShabbat, fasting) {
+  const wk = Math.min(programWeekFor(startDate, date), 10);
+  const dw = dowOf(date);
+  let list = dw === 0 ? (keepShabbat ? [] : activeTasks(wk, 6)) : activeTasks(wk, dw);
+  if (!fasting) list = list.filter((t) => t.id !== "fasting"); // fasting shows only if she opted in
+  return list;
+}
+// A day is complete (earns a medal) when every REQUIRED active task is done - automatically,
+// no "I finished" button needed. Optional tasks (e.g. fasting) never block completion.
+function dayComplete(startDate, date, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl) {
+  if (!TRACKER_ENABLED) return false;
+  if (!unlockedOn(startDate, date, CHECKIN_UNLOCK)) return false;
+  const ts = tasksForDate(startDate, date, keepShabbat).filter((t) => !t.optional);
+  if (!ts.length) return false;
+  const ans = (checkins && checkins[date]) || {};
+  const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl);
+  return ts.every((t) => taskDone(t, ans, au));
+}
+const seedEntry = (id, date, meal, foodId, g, source = "verified") => {
+  const f = FOOD_BY_ID[foodId];
+  return { id, date, meal, name: f.name, g, source, ...nutritionFor(f, g) };
+};
+const INITIAL_LOG = [
+  seedEntry("e1", TODAY, "בוקר", "oat", 60),
+  seedEntry("e2", TODAY, "בוקר", "cof", 150),
+  seedEntry("e3", TODAY, "ביניים בוקר", "ban", 118),
+  seedEntry("e4", TODAY, "צהריים", "chk", 120),
+  seedEntry("e5", TODAY, "צהריים", "rice", 158),
+  seedEntry("e6", addDays(TODAY, -1), "בוקר", "oat", 60),
+  seedEntry("e7", addDays(TODAY, -1), "צהריים", "chk", 140),
+  seedEntry("e8", addDays(TODAY, -1), "ערב", "cot", 100),
+];
+function initWeights(currentKg, startDate) {
+  return [{ date: startDate, kg: Math.round(currentKg * 10) / 10 }];
+}
+
+/* ============================================================
+   THEME - feminine rose palette
+   ============================================================ */
+const C = {
+  bg: "#FAF3F4", panel: "#FFFFFF", ink: "#3A2B30", sub: "#8B737A", faint: "#BBA7AC",
+  line: "#F1E4E7",
+  brand: "#D45D79", brandD: "#A8425C", brandBg: "#FBE9EE",
+  macroP: "#7E4FB5", proteinTrack: "#EBE1F7", macroF: "#E0986A", macroC: "#A87BB5",
+  amber: "#C77A3C", amberBg: "#FBEEDF",
+  info: "#9C6BA6", infoBg: "#F2E7F3",
+  water: "#7E8DD6", waterBg: "#EBEDF8",
+};
+const fontStack = "'Rubik', system-ui, sans-serif";
+const VERSION = "1.96";
+const STORAGE_KEY = "myprime_demo_state_v1";
+
+/* ============================================================
+   ENCRYPTED CLOUD BACKUP (end-to-end)
+   The user's data is encrypted IN THE BROWSER with a key derived from her
+   personal backup code (PBKDF2 -> AES-GCM). The server (Upstash) stores ONLY
+   ciphertext + salt + iv. The code never leaves the device, so no one - not
+   even MyPrime - can read the data. The code is kept in its own localStorage
+   key so it is NOT part of the (backed-up) app state blob.
+   ============================================================ */
+const BK_CODE_KEY = "myprime_bk_code";
+const BK_LAST_KEY = "myprime_bk_last";
+const bkSubtle = (typeof window !== "undefined" && window.crypto && window.crypto.subtle) ? window.crypto.subtle : null;
+function bkGetCode() { try { return localStorage.getItem(BK_CODE_KEY) || ""; } catch (e) { return ""; } }
+function bkSetCode(code) { try { if (code) localStorage.setItem(BK_CODE_KEY, code); else localStorage.removeItem(BK_CODE_KEY); } catch (e) {} }
+function bkB64(buf) { let s = ""; const b = new Uint8Array(buf); for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
+function bkUnb64(str) { const s = atob(str); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
+async function bkDeriveKey(code, salt) {
+  const base = await bkSubtle.importKey("raw", new TextEncoder().encode(code), { name: "PBKDF2" }, false, ["deriveKey"]);
+  return bkSubtle.deriveKey({ name: "PBKDF2", salt, iterations: 150000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function bkEncrypt(code, plaintext) {
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const key = await bkDeriveKey(code, salt);
+  const ct = await bkSubtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext));
+  return { ct: bkB64(ct), salt: bkB64(salt), iv: bkB64(iv), v: 1 };
+}
+async function bkDecrypt(code, blob) {
+  const key = await bkDeriveKey(code, bkUnb64(blob.salt));
+  const pt = await bkSubtle.decrypt({ name: "AES-GCM", iv: bkUnb64(blob.iv) }, key, bkUnb64(blob.ct));
+  return new TextDecoder().decode(pt);
+}
+async function bkUpload(email, code, plaintext) {
+  if (!bkSubtle) return false;
+  const blob = await bkEncrypt(code, plaintext);
+  const r = await fetch("/api/backup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, blob }) });
+  if (!r.ok) return false;
+  const d = await r.json().catch(() => ({}));
+  return !!d.ok;
+}
+async function bkFetch(email) {
+  try { const r = await fetch(`/api/backup?email=${encodeURIComponent(email)}`); if (!r.ok) return { exists: false }; return await r.json(); }
+  catch (e) { return { exists: false }; }
+}
+
+/* ============================================================
+   PRIMITIVES
+   ============================================================ */
+function Ring({ consumed, budget, size = 132, onPlus }) {
+  const r = 54, circ = 2 * Math.PI * r;
+  const frac = Math.max(0, Math.min(1, budget > 0 ? consumed / budget : 0));
+  const remaining = Math.round(budget - consumed);
+  const over = remaining < 0;
+  const svg = (
+    <svg width={size} height={size} viewBox="0 0 132 132">
+      <circle cx="66" cy="66" r={r} fill="none" stroke={C.line} strokeWidth="10" />
+      <circle cx="66" cy="66" r={r} fill="none" stroke={over ? C.amber : C.brand} strokeWidth="10"
+        strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
+        transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+      <text x="66" y="40" textAnchor="middle" style={{ fontSize: 12.5, fontWeight: 600, fill: C.sub }}>צרכת</text>
+      <text x="66" y="64" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{Math.round(consumed).toLocaleString()}</text>
+      <text x="66" y="83" textAnchor="middle" style={{ fontSize: 14.5, fontWeight: 700, fill: over ? C.amber : C.brand }}>קלוריות</text>
+      <text x="66" y="97" textAnchor="middle" style={{ fontSize: 11, fill: over ? C.amber : C.sub }}>{over ? `מעל היעד (${Math.round(budget).toLocaleString()})` : `מתוך ${Math.round(budget).toLocaleString()}`}</text>
+    </svg>
+  );
+  if (!onPlus) return svg;
+  return (
+    <div style={{ position: "relative", width: size, height: size }}>
+      {svg}
+      <button onClick={onPlus} aria-label="הוספה לתקציב" style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 30, height: 30, borderRadius: "50%", background: C.brand, color: "#fff", border: `2px solid ${C.panel}`, boxShadow: "0 2px 6px rgba(0,0,0,0.18)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={17} /></button>
+    </div>
+  );
+}
+function ProteinRing({ consumed, target, size = 124 }) {
+  const r = 54, circ = 2 * Math.PI * r;
+  const frac = Math.max(0, Math.min(1, target > 0 ? consumed / target : 0));
+  const eaten = Math.round(consumed);
+  const done = target > 0 && consumed >= target;
+  return (
+    <svg width={size} height={size} viewBox="0 0 132 132">
+      <circle cx="66" cy="66" r={r} fill="none" stroke={C.proteinTrack} strokeWidth="10" />
+      <circle cx="66" cy="66" r={r} fill="none" stroke={C.macroP} strokeWidth="10"
+        strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
+        transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+      <text x="66" y="40" textAnchor="middle" style={{ fontSize: 12.5, fontWeight: 600, fill: C.sub }}>צרכת</text>
+      <text x="66" y="64" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{eaten}<tspan style={{ fontSize: 14, fill: C.sub }}> ג׳</tspan></text>
+      <text x="66" y="83" textAnchor="middle" style={{ fontSize: 14.5, fontWeight: 700, fill: C.macroP }}>חלבון</text>
+      <text x="66" y="97" textAnchor="middle" style={{ fontSize: 11, fill: C.sub }}>{done ? "הגעת ליעד!" : `מתוך ${Math.round(target)}`}</text>
+    </svg>
+  );
+}
+function MetricRing({ value, goal, color, track, label, sub, onPlus, size = 130, bigText, verb }) {
+  const r = 54, circ = 2 * Math.PI * r;
+  const frac = Math.max(0, Math.min(1, goal > 0 ? value / goal : 0));
+  const done = goal > 0 && value >= goal;
+  return (
+    <div style={{ position: "relative", width: size, height: size }}>
+      <svg width={size} height={size} viewBox="0 0 132 132">
+        <circle cx="66" cy="66" r={r} fill="none" stroke={track} strokeWidth="10" />
+        <circle cx="66" cy="66" r={r} fill="none" stroke={color} strokeWidth="10"
+          strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)}
+          transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+        {verb && <text x="66" y="40" textAnchor="middle" style={{ fontSize: 12.5, fontWeight: 600, fill: C.sub }}>{verb}</text>}
+        <text x="66" y="64" textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: C.ink }}>{bigText != null ? bigText : value.toLocaleString()}</text>
+        <text x="66" y="83" textAnchor="middle" style={{ fontSize: 14.5, fontWeight: 700, fill: color }}>{label}</text>
+        <text x="66" y="97" textAnchor="middle" style={{ fontSize: 11, fill: C.sub }}>{done ? "הגעת ליעד!" : sub}</text>
+      </svg>
+      {onPlus && (
+        <button onClick={onPlus} aria-label={`עדכון ${label}`} style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 30, height: 30, borderRadius: "50%", background: color, color: "#fff", border: `2px solid ${C.panel}`, boxShadow: "0 2px 6px rgba(0,0,0,0.18)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={17} /></button>
+      )}
+    </div>
+  );
+}
+function MacroCard({ label, value, target, color, emphasized, headline }) {
+  const pct = target ? Math.max(0, Math.min(100, Math.round((value / target) * 100))) : 0;
+  return (
+    <div style={{ flex: 1, background: emphasized ? C.brandBg : C.bg, border: `1px solid ${emphasized ? C.brand : "transparent"}`, borderRadius: 12, padding: "10px 9px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 7 }}>
+        <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0 }} />
+        <span style={{ fontSize: 15, color: emphasized ? C.brandD : C.sub, fontWeight: emphasized ? 600 : 400 }}>{label}</span>
+      </div>
+      {headline ? (
+        <div style={{ fontSize: 22, fontWeight: 600, color: C.ink }}>{target}<span style={{ fontSize: 14, color: C.sub, fontWeight: 400 }}> ג׳</span></div>
+      ) : (
+        <>
+          <div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{value}<span style={{ fontSize: 13, color: C.faint, fontWeight: 400 }}> / {target} ג׳</span></div>
+          <div style={{ height: 5, background: C.line, borderRadius: 3, marginTop: 7 }}><div style={{ width: `${pct}%`, height: 5, background: color, borderRadius: 3, transition: "width .4s" }} /></div>
+        </>
+      )}
+    </div>
+  );
+}
+function MacroRow({ p, f, c, tp, tf, tc, headline }) {
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <MacroCard label="חלבון" value={p} target={tp} color={C.macroP} emphasized headline={headline} />
+      <MacroCard label="שומן" value={f} target={tf} color={C.macroF} headline={headline} />
+      <MacroCard label="פחמימות" value={c} target={tc} color={C.macroC} headline={headline} />
+    </div>
+  );
+}
+function WaterCard({ glasses, setGlasses }) {
+  const liters = (glasses * 0.25).toString();
+  return (
+    <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 16, color: C.ink, fontWeight: 500 }}><Droplet size={16} color={C.water} /> מים</span>
+        <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{liters} / 2 ליטר</span>
+      </div>
+      <div style={{ display: "flex", gap: 5 }}>
+        {Array.from({ length: WATER_TARGET_GLASSES }).map((_, i) => {
+          const filled = i < glasses;
+          return (
+            <button key={i} onClick={() => setGlasses(filled && i === glasses - 1 ? i : i + 1)}
+              style={{ flex: 1, height: 32, borderRadius: 8, border: `1px solid ${filled ? C.water : C.line}`, background: filled ? C.waterBg : "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Droplet size={15} color={filled ? C.water : C.faint} fill={filled ? C.water : "none"} />
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 8 }}>מומלץ {WATER_MIN_GLASSES}-{WATER_TARGET_GLASSES} כוסות ביום (1.5-2 ליטר)</div>
+    </div>
+  );
+}
+
+function StepsCard({ steps, goal, kcal, onEdit }) {
+  const frac = Math.max(0, Math.min(1, goal > 0 ? steps / goal : 0));
+  return (
+    <div onClick={onEdit} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginBottom: 16, cursor: "pointer" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 16, color: C.ink, fontWeight: 500 }}><Footprints size={16} color={C.brand} /> צעדים</span>
+        <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{steps.toLocaleString()} / {goal.toLocaleString()}</span>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: C.brandBg, overflow: "hidden" }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: C.brand, borderRadius: 6, transition: "width .4s" }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+        <span style={{ fontSize: 13, color: C.faint }}>הקישי לעדכון · נוסף לתקציב: +{kcal} קק״ל</span>
+        <span style={{ fontSize: 13, color: C.brandD, display: "flex", alignItems: "center", gap: 4 }}><Pencil size={12} /> עדכון</span>
+      </div>
+    </div>
+  );
+}
+function Btn({ children, onClick, variant = "solid", disabled, style = {} }) {
+  const base = { width: "100%", border: "none", borderRadius: 12, padding: "12px", fontSize: 18, fontWeight: 500, cursor: disabled ? "default" : "pointer", fontFamily: fontStack, transition: "transform .08s, opacity .15s" };
+  const variants = { solid: { background: C.brand, color: "#fff" }, ghost: { background: "transparent", color: C.ink, border: `1px solid ${C.line}` } };
+  return (
+    <button onClick={disabled ? undefined : onClick} style={{ ...base, ...variants[variant], opacity: disabled ? 0.45 : 1, ...style }}
+      onMouseDown={(e) => !disabled && (e.currentTarget.style.transform = "scale(0.98)")}
+      onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}>{children}</button>
+  );
+}
+function SrcBadge({ source }) {
+  if (source === "estimated") return <span style={{ fontSize: 13, background: C.amberBg, color: C.amber, padding: "2px 7px", borderRadius: 5 }}>מוערך</span>;
+  if (source === "db") return <span style={{ fontSize: 13, background: "#E7F4EC", color: "#1E8449", padding: "2px 7px", borderRadius: 5 }}>מהמאגר</span>;
+  if (source === "usda") return <span style={{ fontSize: 13, background: "#EEF4FB", color: "#2D6CB5", padding: "2px 7px", borderRadius: 5 }}>USDA</span>;
+  return null;
+}
+function Header({ title, onBack }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+      {onBack && <button onClick={onBack} style={{ border: "none", background: "transparent", cursor: "pointer", padding: 4, color: C.sub }}><ChevronRight size={22} /></button>}
+      <span style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{title}</span>
+    </div>
+  );
+}
+function Stepper({ value, set, step = 1, min = 0, suffix }) {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <button onClick={() => set(Math.max(min, Math.round((value - step) * 10) / 10))} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Minus size={15} /></button>
+      <span style={{ minWidth: 78, textAlign: "center", fontSize: 22, fontWeight: 600, color: C.ink }}>{value}{suffix ? <span style={{ fontSize: 15, color: C.sub, fontWeight: 400 }}> {suffix}</span> : null}</span>
+      <button onClick={() => set(Math.round((value + step) * 10) / 10)} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Plus size={15} /></button>
+    </span>
+  );
+}
+
+/* ============================================================
+   ONBOARDING
+   ============================================================ */
+function Field({ label, children }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
+      <span style={{ fontSize: 18, color: C.ink }}>{label}</span>{children}
+    </div>
+  );
+}
+
+function OnboardNotify({ email }) {
+  const supported = typeof navigator !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const isIOS = /iphone|ipad|ipod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
+  const standalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true);
+  const needInstall = isIOS && !standalone;
+  const [st, setSt] = useState(typeof Notification !== "undefined" && Notification.permission === "granted" ? "on" : "idle");
+  const turnOn = async () => {
+    setSt("busy");
+    const r = await enableDailyReminder(email);
+    if (r.ok) setSt("on");
+    else if (r.reason === "denied") setSt("denied");
+    else setSt("err");
+  };
+  const note = (txt) => <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", fontSize: 14.5, color: C.brandD, lineHeight: 1.6 }}>{txt}</div>;
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><span style={{ fontSize: 24 }}>🔔</span><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>תזכורת יומית</span></div>
+      <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginBottom: 16 }}>נזכיר לך כל יום ב-19:00, כשיומן המעקב נפתח, להקדיש רגע ולמלא את היום. אפשר לכבות בכל רגע מהפרופיל.</div>
+      {!supported ? note("הדפדפן הזה לא תומך בתזכורות. אפשר להמשיך בלי - זה לא משפיע על המעקב.")
+        : needInstall ? note("כדי לקבל תזכורות באייפון, קודם הוסיפי את האפליקציה למסך הבית ופתחי אותה משם. אפשר להמשיך עכשיו ולהפעיל אחר כך מהפרופיל.")
+        : st === "on" ? <div style={{ background: "#E8F3EC", borderRadius: 12, padding: "12px 14px", fontSize: 15, color: "#3B7A57", fontWeight: 600 }}>מצוין! נזכיר לך כל ערב ב-19:00 💜</div>
+        : st === "denied" ? note("ההתראות חסומות במכשיר. אפשר לאפשר אותן בהגדרות, או להמשיך בלי.")
+        : <Btn onClick={turnOn} disabled={st === "busy"}>{st === "busy" ? "רגע..." : "אפשרי תזכורת יומית"}</Btn>}
+      {supported && isIOS && !needInstall && st !== "on" && st !== "denied" && <div style={{ fontSize: 13, color: C.faint, marginTop: 8, lineHeight: 1.5 }}>כשיופיע חלון של הטלפון - בחרי "אישור".</div>}
+      {st === "err" && <div style={{ fontSize: 13.5, color: C.sub, marginTop: 8 }}>לא הצלחנו להפעיל כרגע. אפשר לנסות שוב מהפרופיל.</div>}
+    </>
+  );
+}
+
+function Onboarding({ onFinish, name, email, fixedStart }) {
+  const [step, setStep] = useState(0);
+  const [age, setAge] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [weightKg, setWeightKg] = useState("");
+  const [rate, setRate] = useState(250);
+  const [goalKg, setGoalKg] = useState(null);
+  const [err0, setErr0] = useState(false);
+  const [showInstall, setShowInstall] = useState(false);
+  const [startDate, setStartDate] = useState(fixedStart || sundayOf(TODAY));
+  const [keepShabbat, setKeepShabbat] = useState(null);
+  const [diet, setDiet] = useState([]);
+  const [allergies, setAllergies] = useState([]);
+  const [dislikes, setDislikes] = useState("");
+  const [newSens, setNewSens] = useState("");
+  const [confirmNoSens, setConfirmNoSens] = useState(false);
+  const [confirmSens, setConfirmSens] = useState(false);
+  const [ack, setAck] = useState(false);
+  const [wantBackup, setWantBackup] = useState(null); // null = not chosen yet
+  const [ackData, setAckData] = useState(false);
+  const [bkEmail, setBkEmail] = useState((email || "").trim());
+  const [bkCode, setBkCode] = useState("");
+  const [bkCode2, setBkCode2] = useState("");
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bkEmail.trim());
+  const codeOk = bkCode.trim().length >= 4 && bkCode === bkCode2;
+  const backupStepOk = ackData && (wantBackup === false || (wantBackup === true && emailOk && codeOk));
+  const customSens = dislikes.split(",").map((s) => s.trim()).filter(Boolean);
+  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setDislikes([...customSens, t].join(", ")); setNewSens(""); };
+  const removeSens = (t) => setDislikes(customSens.filter((x) => x !== t).join(", "));
+  const hasSens = allergies.length > 0 || customSens.length > 0;
+  const ageN = +age, heightN = +heightCm, weightN = +weightKg;
+  const goalEff = goalKg == null ? weightN : goalKg;
+  const ageOk = ageN >= 33 && ageN <= 80;
+  const heightOk = heightN >= 120 && heightN <= 210;
+  const weightOk = weightN >= 50 && weightN <= 150;
+  const step0Valid = ageOk && heightOk && weightOk && keepShabbat !== null;
+  const next = () => {
+    if (step === 0 && !step0Valid) { setErr0(true); return; }
+    if (step === 2) { if (hasSens) setConfirmSens(true); else setConfirmNoSens(true); return; }
+    setStep(step + 1);
+  };
+
+  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightN : Math.max(minHealthyKg(heightN), goalEff), returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
+  const targets = computeTargets(draft);
+  const proj = projection(weightN, rate === 0 ? weightN : goalEff, rate);
+  const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
+  const backupSetup = wantBackup ? { enabled: true, email: bkEmail.trim().toLowerCase(), code: bkCode } : { enabled: false };
+
+  const numStyle = (bad) => ({ width: 96, textAlign: "center", border: `1.5px solid ${bad ? "#D7263D" : C.line}`, borderRadius: 10, padding: "9px 10px", fontSize: 18, fontFamily: fontStack, color: C.ink, outline: "none" });
+  const errNote = (txt) => <div style={{ fontSize: 14.5, fontWeight: 700, color: "#D7263D", marginTop: 5, lineHeight: 1.4 }}>{txt}</div>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "10px 20px 16px" }}>
+        <div style={{ display: "flex", gap: 6, margin: "6px 0 8px" }}>
+          {[0, 1, 2, 3, 4, 5].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
+        </div>
+        <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginBottom: 8 }}>v{VERSION}</div>
+        <div onClick={() => setShowInstall(true)} style={{ background: C.brandBg, border: `1.5px solid ${C.brand}`, borderRadius: 14, padding: "12px 14px", marginBottom: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 24 }}>📲</span>
+          <div style={{ flex: 1, textAlign: "right" }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>מומלץ מאוד להתקין את האפליקציה בטלפון</div>
+            <div style={{ fontSize: 13.5, color: C.brandD, textDecoration: "underline", marginTop: 2 }}>תרצי הנחיות? הקישי כאן</div>
+          </div>
+          <ChevronLeft size={20} color={C.brand} style={{ flexShrink: 0 }} />
+        </div>
+        {DEV && (
+          <div style={{ textAlign: "center", marginBottom: 12 }}>
+            <button onClick={() => onFinish(draft, { enabled: false })} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 15, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
+          </div>
+        )}
+
+        {step === 0 && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>{name && name.trim() ? `היי ${name.trim()}, נעים להכיר!` : "נעים להכיר"}</span></div>
+            <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
+            <Field label="גיל"><input type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} placeholder="" style={numStyle(err0 && !ageOk)} /></Field>
+            {err0 && !ageOk && errNote(age === "" ? "יש למלא את הנתון" : "יש להזין גיל תקין")}
+            <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !heightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
+            {err0 && !heightOk && errNote(heightCm === "" ? "יש למלא את הנתון" : "יש להזין גובה תקין בסנטימטרים")}
+            <Field label="משקל נוכחי"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="decimal" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="" style={numStyle(err0 && !weightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></span></Field>
+            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "יש להזין משקל תקין בק״ג")}
+            <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
+              {fixedStart ? (
+                <>
+                  <div style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 18, color: C.ink, background: C.infoBg, display: "flex", alignItems: "center", gap: 8 }}><Lock size={16} color={C.sub} />{new Date(startDate).toLocaleDateString("he-IL")}</div>
+                  <div style={{ fontSize: 14, color: C.faint, marginTop: 6 }}>התאריך נקבע לפי ההרשמה שלך לתוכנית.</div>
+                </>
+              ) : (
+                <>
+                  <select value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 18, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }}>
+                    {listSundays().map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
+                  </select>
+                  <div style={{ fontSize: 14, color: C.faint, marginTop: 6 }}>התוכנית מתחילה בימי ראשון בלבד.</div>
+                </>
+              )}
+            </div>
+            <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>האם את מעוניינת להשתמש באפליקציה בכל ימות השבוע (כולל שבת)?</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[{ v: false, label: "כן, כל השבוע" }, { v: true, label: "לא, שבת יום מנוחה" }].map((o) => {
+                  const sel = keepShabbat === o.v;
+                  return (<button key={String(o.v)} onClick={() => setKeepShabbat(o.v)} style={{ flex: 1, border: `2px solid ${sel ? C.brand : C.line}`, background: sel ? C.brandBg : C.panel, color: sel ? C.brandD : C.ink, borderRadius: 12, padding: "11px 8px", fontSize: 16, fontWeight: sel ? 600 : 400, cursor: "pointer", fontFamily: fontStack }}>{o.label}</button>);
+                })}
+              </div>
+              {err0 && keepShabbat === null && errNote("יש לבחור תשובה")}
+              <div style={{ fontSize: 14, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>אם תבחרי "יום מנוחה", שבת תופיע אפורה ובלי מעקב. תמיד אפשר לשנות בפרופיל.</div>
+            </div>
+            <p style={{ fontSize: 14, color: C.faint, marginTop: 14, lineHeight: 1.6 }}>התוכנית מותאמת לנשים, ולכן אין צורך בשאלת מין.</p>
+          </>
+        )}
+
+        {step === 1 && (
+          <>
+            <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>מה המטרה שלך?</span>
+            <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 14 }}>בחרי קצב ירידה שבועי. קצב מתון נשמר לאורך זמן וטוב יותר לשמירה על מסת שריר.</p>
+            {RATE_OPTIONS.map((g) => {
+              const sel = rate === g;
+              const rec = g === 250;
+              return (
+                <div key={g} onClick={() => setRate(g)} style={{ display: "flex", alignItems: "center", gap: 10, border: `${rec ? 2 : 1}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : "transparent", borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${sel ? C.brand : C.line}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{sel && <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.brand }} />}</div>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{rateLabel(g)}</span>
+                    {rec && <div style={{ fontSize: 13.5, color: C.brandD, marginTop: 2, lineHeight: 1.4 }}>הקצב הבריא - נשמר לאורך זמן וטוב לשמירה על מסת השריר</div>}
+                  </div>
+                  {rec && <span style={{ fontSize: 13, fontWeight: 700, background: C.brand, color: "#fff", padding: "4px 11px", borderRadius: 8, flexShrink: 0 }}>מומלץ</span>}
+                </div>
+              );
+            })}
+            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalEff} set={(v) => setGoalKg(Math.max(minHealthyKg(heightN), Math.min(weightN - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightN)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>איך את אוכלת?</span>
+            <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 16 }}>בחרי את סגנון התזונה שלך - אפשר לבחור יותר מאחד. זה יעזור לי להתאים לך המלצות.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 22 }}>
+              {DIET_OPTIONS.map((d) => {
+                const on = diet.includes(d.id);
+                return (
+                  <div key={d.id} onClick={() => setDiet(on ? diet.filter((x) => x !== d.id) : [...diet, d.id])} style={{ width: 92, textAlign: "center", cursor: "pointer" }}>
+                    <div style={{ width: 72, height: 72, borderRadius: "50%", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 31, background: on ? C.brandBg : C.bg, border: `2px solid ${on ? C.brand : C.line}`, transition: "all .15s" }}>{d.emoji}</div>
+                    <span style={{ fontSize: 15, color: on ? C.brandD : C.sub, fontWeight: on ? 600 : 400 }}>{d.id}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ fontSize: 19, fontWeight: 500, color: C.ink, marginBottom: 4 }}>רגישויות ואלרגיות</div>
+            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>סמני וכתבי מה שחשוב להימנע ממנו, ואדאג שההמלצות יתחשבו בזה.</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+              {SENSITIVITY_OPTIONS.map((s) => {
+                const on = allergies.includes(s);
+                return (<span key={s} onClick={() => setAllergies(on ? allergies.filter((x) => x !== s) : [...allergies, s])} style={{ fontSize: 15, padding: "7px 14px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+              })}
+            </div>
+
+            <div style={{ fontSize: 14, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 12 }}>
+              <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>אשתדל להתאים את ההמלצות לרגישויות שלך, אבל תמיד כדאי לבדוק רכיבים בעצמך. האפליקציה היא כלי עזר ולא תחליף לייעוץ רפואי. אם יש לך אלרגיה ממשית, אל תסתמכי רק עליה.</span>
+            </div>
+
+            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+              <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+              <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+            </div>
+            {customSens.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {customSens.map((s) => (
+                  <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {s}
+                    <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Lock size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>גיבוי מאובטח</span></div>
+            <p style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.65, marginTop: 0, marginBottom: 10 }}>
+              מה שאת ממלאת פה באפליקציה נשמר במכשיר שלך בלבד ורק לך יש גישה לנתונים האלה. לחברת מיי פריים אין אפשרות לראות את הנתונים או להשתמש בהם.
+            </p>
+            <p style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.65, marginTop: 0, marginBottom: 14 }}>
+              אם תרצי, נשמור גיבוי <b>מוצפן</b> בענן - כך שאם תחליפי טלפון או יקרה משהו למכשיר, תוכלי לשחזר הכל. הגיבוי מוצפן כך ש<b>רק את</b> יכולה לפתוח אותו.
+            </p>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {[{ v: true, label: "כן, רוצה גיבוי מוצפן" }, { v: false, label: "לא תודה, רק במכשיר הזה" }].map((o) => {
+                const sel = wantBackup === o.v;
+                return (<button key={String(o.v)} onClick={() => setWantBackup(o.v)} style={{ flex: 1, border: `2px solid ${sel ? C.brand : C.line}`, background: sel ? C.brandBg : C.panel, color: sel ? C.brandD : C.ink, borderRadius: 12, padding: "12px 8px", fontSize: 15, fontWeight: sel ? 600 : 400, cursor: "pointer", fontFamily: fontStack, lineHeight: 1.4 }}>{o.label}</button>);
+              })}
+            </div>
+            {wantBackup === true && (
+              <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
+                <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>אימייל לגיבוי</div>
+                <input value={bkEmail} onChange={(e) => setBkEmail(e.target.value)} inputMode="email" placeholder="name@example.com" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${emailOk || !bkEmail ? C.line : C.amber}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", direction: "ltr", textAlign: "left" }} />
+                <div style={{ fontSize: 13, color: C.faint, marginTop: 4, marginBottom: 12 }}>הגיבוי ישויך לאימייל הזה. אפשר לאשר או לתקן.</div>
+                <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
+                <input value={bkCode} onChange={(e) => setBkCode(e.target.value)} type="password" placeholder="קוד אישי שתזכרי" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+                <input value={bkCode2} onChange={(e) => setBkCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב לאישור" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${bkCode2 && bkCode !== bkCode2 ? C.amber : C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", marginTop: 8 }} />
+                {bkCode2 && bkCode !== bkCode2 && <div style={{ fontSize: 13, color: C.amber, marginTop: 4 }}>הקודים אינם תואמים.</div>}
+                <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: "10px 12px", borderRadius: 10, lineHeight: 1.55, marginTop: 10, display: "flex", gap: 6 }}>
+                  <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>בחרי קוד פשוט שתזכרי. אי אפשר לשחזר אותו - אם תשכחי, לא נוכל לפתוח את הגיבוי בטלפון חדש. רשמי אותו במקום בטוח.</span>
+                </div>
+              </div>
+            )}
+            <div onClick={() => setAckData(!ackData)} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", padding: "12px 0 2px", marginTop: 14, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${ackData ? C.brand : C.line}`, background: ackData ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{ackData && <Check size={14} color="#fff" />}</div>
+              <span style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.55 }}>קראתי והבנתי את מדיניות שמירת הנתונים של מיי פריים.</span>
+            </div>
+          </>
+        )}
+
+        {step === 4 && (
+          <>
+            <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>התוכנית שלך</span>
+            <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 12 }}>
+              {proj.maintain ? "תוכנית לשמירה על המשקל הנוכחי." : `בקצב של ${rate} ג׳ בשבוע, תגיעי ל־${goalEff} ק״ג בעוד כ־${proj.weeks} שבועות.`}
+            </p>
+
+            <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "14px 10px 6px", marginBottom: 12 }}>
+              <div style={{ height: 150 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={projData} margin={{ top: 6, right: 10, left: 10, bottom: 0 }}>
+                    <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.brand} stopOpacity={0.2} /><stop offset="100%" stopColor={C.brand} stopOpacity={0} /></linearGradient></defs>
+                    <XAxis dataKey="label" tick={{ fontSize: 13, fill: C.faint }} axisLine={false} tickLine={false} />
+                    <YAxis domain={["dataMin - 1", "dataMax + 1"]} hide />
+                    <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v} ק״ג`, "משקל צפוי"]} labelFormatter={(l) => `שבוע ${l}`} />
+                    <Area type="monotone" dataKey="kg" stroke={C.brand} strokeWidth={2.5} fill="url(#pg)" dot={{ r: 2.5, fill: C.brand }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ textAlign: "center", fontSize: 13, color: C.faint, paddingBottom: 6 }}>תחזית לפי שבועות</div>
+            </div>
+
+            <div style={{ background: C.brandBg, borderRadius: 14, padding: 14, marginBottom: 12, textAlign: "center" }}>
+              <div style={{ fontSize: 14, color: C.brandD, marginBottom: 4 }}>יעד קלורי יומי מומלץ</div>
+              <div style={{ fontSize: 36, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 18 }}>קק״ל</span></div>
+            </div>
+
+            {targets.floored && (
+              <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 12, display: "flex", gap: 6 }}>
+                <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>הקצב שבחרת מהיר מהמומלץ עבור הנתונים שלך. היעד הוגבל ל־{KCAL_FLOOR} קק״ל לשמירה על בריאותך - שקלי קצב מתון יותר.</span>
+              </div>
+            )}
+
+            <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.7, textAlign: "right", display: "flex", alignItems: "flex-start", gap: 6 }}>
+              <Info size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>ההמלצות בתוכנית מבוססות על הנתונים שהזנת, ובאחריותך להזין נתונים מדויקים ועדכניים. האפליקציה היא כלי עזר בלבד ואינה מהווה ייעוץ רפואי או תזונתי, ואינה תחליף להם.</span>
+            </div>
+          </>
+        )}
+        {step === 5 && (<OnboardNotify email={email} />)}
+      </div>
+
+      <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", gap: 10, alignItems: "center" }}>
+        {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
+        {step < 5 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
+      </div>
+
+      {confirmNoSens && (
+        <div onClick={() => setConfirmNoSens(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
+            <div style={{ fontSize: 19, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לא סימנת שום רגישות או אלרגיה</div>
+            <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>האם את בטוחה?</div>
+            <div style={{ fontSize: 14, color: C.ink, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 18 }}>
+              <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>אשתדל להתאים את ההמלצות לרגישויות שלך, אבל תמיד כדאי לבדוק רכיבים בעצמך. האפליקציה היא כלי עזר ולא תחליף לייעוץ רפואי. אם יש לך אלרגיה ממשית, אל תסתמכי רק עליה.</span>
+            </div>
+            <Btn onClick={() => { setConfirmNoSens(false); setStep(step + 1); }}>כן, אפשר להמשיך</Btn>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmNoSens(false)} style={{ color: C.sub }}>חזרה לסמן רגישויות</Btn></div>
+          </div>
+        </div>
+      )}
+
+      {confirmSens && (
+        <div onClick={() => { setConfirmSens(false); setAck(false); }} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", textAlign: "right" }}>
+            <div style={{ fontSize: 19, fontWeight: 600, color: C.ink, marginBottom: 10 }}>רגע לפני שממשיכים</div>
+            <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>רשמתי לעצמי להימנע מ: <b>{[...allergies, ...customSens].join(", ")}</b></div>
+            <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>תמיד כדאי לבדוק את רשימת הרכיבים בעצמך - זה כלי עזר, לא תחליף לבדיקה. אם יש לך אלרגיה ממשית, אל תסתמכי רק על האפליקציה.</div>
+            <div onClick={() => setAck(!ack)} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 16 }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${ack ? C.brand : C.line}`, background: ack ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{ack && <Check size={14} color="#fff" />}</div>
+              <span style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.55 }}>קראתי והבנתי שהאפליקציה היא כלי עזר בלבד, ובאחריותי לבדוק תמיד את רשימת הרכיבים המלאה לפני אכילה.</span>
+            </div>
+            <Btn disabled={!ack} onClick={() => { setConfirmSens(false); setAck(false); setStep(step + 1); }}>המשך</Btn>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setConfirmSens(false); setAck(false); }} style={{ color: C.sub }}>שינוי</Btn></div>
+          </div>
+        </div>
+      )}
+      {showInstall && (
+        <div onClick={() => setShowInstall(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", maxHeight: "82%", overflowY: "auto", textAlign: "right", fontFamily: fontStack }}>
+            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 4 }}>התקנה כאפליקציה במסך הבית</div>
+            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>אפשר להוסיף את MyPrime למסך הבית כדי לפתוח אותה כמו אפליקציה רגילה, עם אייקון משלה.</p>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אנדרואיד (Chrome)</div>
+            <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
+              <li>פתחי את האפליקציה בדפדפן Chrome.</li>
+              <li>הקישי על תפריט שלוש הנקודות (⋮) בפינה העליונה.</li>
+              <li>בחרי "הוספה למסך הבית" (או "התקנת אפליקציה").</li>
+              <li>אשרי - והאייקון יופיע במסך הבית.</li>
+            </ol>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
+            <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 16px", paddingInlineStart: 20 }}>
+              <li>פתחי את האפליקציה בדפדפן Safari.</li>
+              <li>הקישי על כפתור השיתוף (ריבוע עם חץ כלפי מעלה).</li>
+              <li>גללי ובחרי "הוספה למסך הבית".</li>
+              <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
+            </ol>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>לרענון האפליקציה באייפון</div>
+            <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.7, margin: "0 0 16px" }}>באייפון משיכה למטה לא מרעננת את האפליקציה. כדי לרענן: סגרי אותה לגמרי (החליקי מלמטה למעלה ועצרי באמצע, ואז החליקי את הכרטיס של האפליקציה כלפי מעלה), ופתחי שוב מהאייקון.</p>
+            <Btn onClick={() => setShowInstall(false)}>סגירה</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, introLock = false, overlayOpen = false }) {
+  const dayLog = log.filter((e) => e.date === date);
+  const consumed = dayLog.reduce((s, e) => s + e.kcal, 0);
+  const dayAct = activityLog.filter((a) => a.date === date);
+  const actKcal = dayAct.reduce((s, a) => s + a.kcal, 0);
+  const stepsOpen = unlockedOn(profile.startDate, date, STEPS_UNLOCK);
+  const steps = (stepsByDate && stepsByDate[date]) || 0;
+  const stepKcal = stepsOpen ? stepsKcal(steps, profile.weightKg) : 0;
+  const budget = dailyTarget + actKcal + stepKcal;
+  const macros = dayLog.reduce((s, e) => ({ p: s.p + (e.p || 0), f: s.f + (e.f || 0), c: s.c + (e.c || 0), fib: s.fib + (e.fib || 0) }), { p: 0, f: 0, c: 0, fib: 0 });
+  const week = programWeekFor(profile.startDate, date);
+  const macroOpen = unlockedOn(profile.startDate, date, MACRO_UNLOCK);
+  const waterOpen = unlockedOn(profile.startDate, date, WATER_UNLOCK);
+  const cupMl = profile.cupMl || DEFAULT_CUP_ML;
+  const waterMl = waterMlOf(waterByDate[date]);
+  const waterCups = Math.round((waterMl / cupMl) * 10) / 10;
+  const targetCups = Math.round(WATER_TARGET_ML / cupMl);
+  const selRef = useRef(null);
+  const cupMlD = profile.cupMl || DEFAULT_CUP_ML;
+  const dow = dowOf(date);
+  const progDay = programDayNumber(profile.startDate, date);
+  const isShabbatRest = profile.keepShabbat && dow === 0;
+  const isIntro = progDay >= 1 && progDay <= 2;
+  const baseline = stepBaseline(stepsByDate, profile.startDate);
+  // Running goal: stored value if set, else baseline + cumulative offset; null in week 1 (still measuring).
+  const dayStepGoal = effectiveStepGoal(profile.stepGoal, week);
+  const checkinOpen = TRACKER_ENABLED && unlockedOn(profile.startDate, date, CHECKIN_UNLOCK);
+  const hasManualTask = checkinOpen && tasksForDate(profile.startDate, date, profile.keepShabbat, profile.fasting).some((t) => !t.auto);
+  const stepBannerActive = !!(stepAction && stepAction.kind === "baseline");
+  const [tipQueue, setTipQueue] = useState([]);
+  const [tipIdx, setTipIdx] = useState(-1);
+  useEffect(() => {
+    if (tipIdx !== -1) return;
+    if (isIntro || isShabbatRest) return;
+    if (overlayOpen) return; // never start a tip over an open sheet/modal (no on-screen target -> no spotlight)
+    const ctx = { progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, manualTracker: hasManualTask, stepBanner: stepBannerActive, week, weeklySummaryShown: checkinOpen && (dow === 6 || dow === 0) };
+    const due = TIPS.filter((t) => t.due(ctx) && !(tipsSeen || []).includes(t.key) && !["cal", "steps", "tracker", "cabinet"].includes(t.key));
+    if (due.length) { setTipQueue(due); setTipIdx(0); }
+  }, [progDay, stepsOpen, waterOpen, macroOpen, checkinOpen, hasManualTask, stepBannerActive, tipsSeen, tipIdx, isIntro, isShabbatRest, week, dow, overlayOpen]);
+  const tipAdvance = () => setTipIdx((i) => { const n = i + 1; if (n >= tipQueue.length) { onTipsSeen && onTipsSeen(tipQueue.map((t) => t.key)); setTipQueue([]); return -1; } return n; });
+  // First-bubble choice ("רוצה שאראה לך דוגמה?"). For now both continue to the next bubble;
+  // the step-by-step food-example bubbles (the YES path) will be inserted here once their content is provided.
+  const tipChoose = (yes) => { tipAdvance(); };
+  const ciWeek = Math.min(week, 10);
+  const ciTasks = checkinOpen ? tasksForDate(profile.startDate, date, profile.keepShabbat, profile.fasting) : [];
+  const ciAnswers = (checkins && checkins[date]) || {};
+  const ciAuto = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMlD);
+  const ciLocked = date === today && new Date().getHours() < CHECKIN_REVEAL_HOUR;
+  useEffect(() => { if (selRef.current) selRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, [date]);
+  const backN = Math.min(74, Math.max(0, programDayNumber(profile.startDate, today) - 1));
+  const days = Array.from({ length: backN + 5 }, (_, i) => addDays(today, i - backN));
+  const dayProgress = (d) => {
+    if (!TRACKER_ENABLED) return 0;
+    if (!unlockedOn(profile.startDate, d, CHECKIN_UNLOCK)) return 0;
+    const ts = tasksForDate(profile.startDate, d, profile.keepShabbat).filter((t) => !t.optional);
+    if (!ts.length) return 0;
+    const ans = (checkins && checkins[d]) || {};
+    const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMlD);
+    const dn = ts.filter((t) => taskDone(t, ans, au)).length;
+    return dn / ts.length;
+  };
+  const swipe = useRef({ x: 0, y: 0 });
+  const goDay = (delta) => {
+    const minT = new Date(profile.startDate).getTime(), maxT = new Date(today).getTime();
+    let d = addDays(date, delta);
+    if (profile.keepShabbat && new Date(d).getDay() === 6) d = addDays(d, delta);
+    const t = new Date(d).getTime();
+    if (t < minT || t > maxT) return;
+    setDate(d);
+  };
+  const onTouchStart = (e) => { const t = e.touches[0]; swipe.current = { x: t.clientX, y: t.clientY }; };
+  const onTouchEnd = (e) => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipe.current.x, dy = t.clientY - swipe.current.y;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) goDay(dx > 0 ? 1 : -1);
+  };
+  return (
+    <div style={{ padding: "8px 0 24px" }}>
+      {tipIdx >= 0 && tipIdx < tipQueue.length && <TutorialOverlay steps={tipQueue} idx={tipIdx} onNext={tipAdvance} onChoice={tipChoose} />}
+      <div style={{ position: "relative" }}>
+      <div data-tut="daystrip" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px", opacity: introLock ? 0.4 : 1, pointerEvents: introLock ? "none" : "auto" }}>
+        {days.map((d) => {
+          const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
+          return (
+            <button key={d} ref={sel ? selRef : null} disabled={off} onClick={() => { if (!off) setDate(d); }} title={isRest ? "שבת - יום מנוחה" : (isFuture ? "יום עתידי - ייפתח בתאריך הזה" : undefined)} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, overflow: "hidden", padding: 0, background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: off ? C.faint : (sel ? "#fff" : C.ink), cursor: off ? "default" : "pointer", opacity: off ? 0.4 : 1, textAlign: "center" }}>
+              {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
+              <div style={{ padding: "7px 0" }}>
+                <div style={{ fontSize: 14, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
+                <div style={{ height: 4, margin: "5px 6px 0", borderRadius: 3, position: "relative", background: sel ? "rgba(255,255,255,0.35)" : C.line, overflow: "hidden" }}>
+                  {pct > 0 && <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: `${Math.round(pct * 100)}%`, borderRadius: 3, background: sel ? "#fff" : lerpHex("#F4B8D2", "#D81B7A", pct) }} />}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {introLock && <div style={{ position: "absolute", top: 10, left: 16, background: C.faint, color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 11px", borderRadius: 999, fontFamily: fontStack }}>בקרוב</div>}
+      </div>
+      {week === 1 && progDay >= 3 && (
+      <div style={{ display: "flex", justifyContent: "center", padding: "6px 16px 0" }}>
+        <button data-tut="tourbtn" onClick={onStartTour} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 999, padding: "5px 14px", fontSize: 13, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={15} /> סיור באפליקציה</button>
+      </div>
+      )}
+
+      {stepAction && (
+        <div data-tut="stepbanner" onClick={onStepSetup} role="button" aria-label="קביעת יעד צעדים" style={{ margin: "10px 16px 0", background: C.amberBg, border: `1.5px solid ${C.amber}`, borderRadius: 14, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+          <span style={{ fontSize: 21 }}>⭐</span>
+          <div style={{ flex: 1, textAlign: "right" }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.ink }}>{stepAction.kind === "baseline" ? "קביעת ממוצע צעדים יומי" : "היעד שלך עולה השבוע"}</div>
+            <div style={{ fontSize: 13.5, color: C.sub }}>{stepAction.kind === "baseline" ? "הקישי כדי לקבוע את נקודת ההתחלה שלך" : "הקישי לעדכון היעד"}</div>
+          </div>
+          <ChevronLeft size={18} color={C.amber} />
+        </div>
+      )}
+      {isIntro ? (
+        <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "40px 24px 64px", textAlign: "center" }}>
+          <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto 14px" }} />
+          <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>ברוכה הבאה לאפליקציית המעקב של מיי פריים 360</div>
+          <div style={{ fontSize: 16, color: C.sub, marginTop: 12, lineHeight: 1.75 }}>ביומיים הראשונים עדיין אין מעקב. {progDay === 1 ? "מחרתיים" : "מחר"} מתחילות יחד, צעד אחרי צעד, ותקבלי כאן ביום שלישי את כל ההסברים על השימוש באפליקציה.</div>
+        </div>
+      ) : isShabbatRest ? (
+        <div style={{ padding: "36px 24px 60px", textAlign: "center", color: C.faint }}>
+          <div style={{ fontSize: 57, marginBottom: 12 }}>🤍</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: C.sub }}>שבת שלום</div>
+          <div style={{ fontSize: 17, marginTop: 10, lineHeight: 1.7 }}>היום יום מנוחה - בלי מעקב ובלי מדידה.<br />נתראה במוצאי שבת 🌙</div>
+        </div>
+      ) : (
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "0 16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", justifyItems: "center", alignItems: "start", rowGap: 10, columnGap: 6, marginTop: 2, marginBottom: 10 }}>
+          <div data-tut="cal" style={{ gridColumn: 1, gridRow: 1 }}><Ring consumed={consumed} budget={budget} size={124} onPlus={onAddCalorie} /></div>
+          {stepsOpen && <div data-tut="steps" style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : ""} onPlus={onEditSteps} size={124} /></div>}
+          {macroOpen && <div data-tut="protein" style={{ gridColumn: 1, gridRow: 2 }}><ProteinRing consumed={macros.p} target={targets.protein} size={124} /></div>}
+          {waterOpen && <div data-tut="water" style={{ gridColumn: 2, gridRow: 2 }}><MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} verb="שתית" color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={124} /></div>}
+        </div>
+        {SHOW_MACRO_STRIP && macroOpen && (
+          <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", margin: "0 0 16px" }}>
+            {[{ label: "שומן", v: macros.f, t: targets.fat, color: C.macroF }, { label: "פחמימות", v: macros.c, t: targets.carbs, color: C.macroC }, { label: "סיבים", v: macros.fib, t: FIBER_TARGET, color: C.info }].map((m, i) => (
+              <div key={m.label} style={{ flex: 1, textAlign: "center", padding: "5px 4px", borderInlineStart: i ? `1px solid ${C.line}` : "none" }}>
+                <div style={{ fontSize: 12.5, color: C.sub, display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: m.color }} />{m.label}</div>
+                <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, marginTop: 1 }}>{m.v} / {m.t} ג׳</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} />}
+
+        {dayAct.length > 0 && (
+          <>
+            <div style={{ fontSize: 14, color: C.faint, marginBottom: 2 }}>פעילות גופנית</div>
+            {dayAct.map((a) => (
+              <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: `1px solid ${C.line}`, fontSize: 16 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 7, color: C.ink }}><Dumbbell size={15} color={C.info} /> {a.name}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ color: C.brandD, fontWeight: 500 }}>+{a.kcal}</span><button onClick={() => deleteEntry(a.id, "activity")} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><Trash2 size={14} /></button></span>
+              </div>
+            ))}
+          </>
+        )}
+
+        <div data-tut="diarylist" style={{ fontSize: 14, fontWeight: 700, color: C.ink, margin: "16px 0 2px" }}>מה שהוזן היום</div>
+        {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 16, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה - הקישי על כפתור ה־+ להוספה</div>}
+        {dayLog.map((e) => (
+          <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+            <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
+              <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
+              <div style={{ fontSize: 14, color: C.faint }}>{e.meal} · {e.unit === "serving" ? `${e.servings} ${e.servings === 1 ? "מנה" : "מנות"}` : `${e.g} ${e.unit === "ml" ? "מ\"ל" : "ג׳"}`} · {e.kcal} קק״ל</div>
+            </div>
+            <button onClick={() => editEntry(e)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Pencil size={15} /></button>
+            <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
+          </div>
+        ))}
+        <div style={{ textAlign: "center", fontSize: 12.5, color: C.faint, marginTop: 22 }}>MyPrime · v{VERSION}</div>
+      </div>
+      )}
+    </div>
+  );
+}
+
+function CardHeading({ icon: Icon, text, color = C.brand }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 9, marginBottom: 13, borderBottom: `1.5px solid ${C.line}` }}>
+      {Icon && <Icon size={20} color={color} />}
+      <span style={{ fontSize: 18.5, fontWeight: 700, color: C.ink }}>{text}</span>
+    </div>
+  );
+}
+
+function WeighInTips({ style }) {
+  return (
+    <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", marginBottom: 14, ...style }}>
+      <div style={{ fontSize: 14.5, fontWeight: 700, color: C.brandD, marginBottom: 8 }}>כדי לעקוב נכון אחרי השינויים במשקל, ההמלצה שלנו:</div>
+      <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.75 }}>
+        <div>1. להישקל פעם אחת בשבוע בלבד</div>
+        <div>2. תמיד באותו יום בשבוע</div>
+        <div>3. דבר ראשון בבוקר, רצוי ללא בגדים</div>
+      </div>
+    </div>
+  );
+}
+
+function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDate = {}, startDate, stepGoalStored, stepsOpen, today = TODAY, onEditSteps }) {
+  const data = weights.map((w) => ({ ...w, label: `${new Date(w.date).getDate()}/${new Date(w.date).getMonth() + 1}` }));
+  const change = Math.round((weights[weights.length - 1].kg - weights[0].kg) * 10) / 10;
+  const current = weights[weights.length - 1].kg;
+  const lastWDate = new Date(weights[weights.length - 1].date);
+  const lastWUpdate = `${lastWDate.getDate()}.${lastWDate.getMonth() + 1}.${lastWDate.getFullYear()}`;
+  const calByDate = {};
+  log.forEach((e) => { calByDate[e.date] = (calByDate[e.date] || 0) + e.kcal; });
+  const goalKcal = targets.targetKcal;
+  const calSeries = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(TODAY, i - 6);
+    const dd = new Date(d);
+    return { label: `${dd.getDate()}/${dd.getMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
+  });
+  const loggedDays = calSeries.filter((x) => x.kcal > 0);
+  // A day counts as "met the calorie goal" only if she ate CLOSE to the target. Trivial/partial logging
+  // (e.g. a single item, far below target) or strong under-eating does not count as meeting the goal.
+  const calMet = (kc) => goalKcal > 0 && kc >= goalKcal * 0.8 && kc <= goalKcal * 1.05;
+  const metDays = loggedDays.filter((x) => calMet(x.kcal)).length;
+  const daysOnTarget = `${metDays}/${loggedDays.length}`;
+  const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
+  const proteinFocus = programWeek >= MACRO_UNLOCK.week;
+  const cardBox = { border: `1.5px solid ${C.line}`, borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" };
+  const jumpBtn = { flex: 1, border: `1.5px solid ${C.line}`, background: C.panel, color: C.ink, borderRadius: 12, padding: "10px 6px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 };
+  const stepsRef = useRef(null), calRef = useRef(null), weightRef = useRef(null);
+  const jump = (r) => r.current && r.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  return (
+    <div style={{ padding: "8px 16px 16px" }}>
+      <Header title="דוח התקדמות" />
+      <div style={{ marginBottom: 12 }}><span style={{ fontSize: 14, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 20 }}>שבוע {programWeek} בתוכנית</span></div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {stepsOpen && <button onClick={() => jump(stepsRef)} style={jumpBtn}><Footprints size={15} color={C.brand} /> דוח צעדים</button>}
+        <button onClick={() => jump(calRef)} style={jumpBtn}><Target size={15} color={C.brand} /> יעד קלורי</button>
+        <button onClick={() => jump(weightRef)} style={jumpBtn}><TrendingDown size={15} color={C.brand} /> משקל</button>
+      </div>
+      {stepsOpen && (() => {
+        const sData = Array.from({ length: 14 }, (_, i) => {
+          const d = addDays(today, -13 + i);
+          return { label: `${new Date(d).getDate()}/${new Date(d).getMonth() + 1}`, steps: stepsByDate[d] || 0 };
+        });
+        const stepsToday = stepsByDate[today] || 0;
+        const baseline = stepBaseline(stepsByDate, startDate);
+        const goal = effectiveStepGoal(stepGoalStored, programWeek);
+        const avg7s = steps7stats(stepsByDate, today);
+        const avg7 = avg7s.avg;
+        const avg7Label = avg7s.n <= 0 ? "ממוצע 7 ימים" : avg7s.n === 1 ? "ממוצע יום אחד" : `ממוצע ${avg7s.n} ימים`;
+        const maxStep = Math.max(goal || 0, ...sData.map((x) => x.steps), 1);
+        const cells = [
+          { label: "היעד היומי", val: goal ? goal.toLocaleString() : "במדידה", hl: true },
+          { label: avg7Label, val: avg7.toLocaleString() },
+        ];
+        return (
+          <div ref={stepsRef} style={cardBox}>
+            <CardHeading icon={Footprints} text="דוח צעדים" />
+            <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+              {cells.map((c, i) => (
+                <div key={i} style={{ flex: 1, textAlign: "center", padding: "12px 6px", borderInlineStart: i === 0 ? "none" : `1px solid ${C.line}`, background: c.hl ? C.brandBg : "transparent" }}>
+                  <div style={{ fontSize: 13.5, color: C.sub, marginBottom: 5 }}>{c.label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: c.hl ? C.brandD : C.ink, lineHeight: 1.1 }}>{c.val}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 12.5, color: C.faint, textAlign: "center", marginTop: -6, marginBottom: 12 }}>הממוצע מחושב לפי הימים שהזנת בהם צעדים, מתוך 7 הימים האחרונים</div>
+            <div style={{ fontSize: 13, color: C.faint, marginBottom: 2 }}>צעדים יומיים - 14 הימים האחרונים</div>
+            <div style={{ height: 150, margin: "6px -6px 0" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={sData} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: C.faint }} axisLine={false} tickLine={false} interval={1} />
+                  <YAxis domain={[0, maxStep]} hide />
+                  <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${Number(v).toLocaleString()} צעדים`, ""]} labelFormatter={(l) => l} />
+                  {goal && <ReferenceLine y={goal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד`, position: "insideTopRight", fontSize: 12, fill: C.brandD }} />}
+                  <Bar dataKey="steps" radius={[4, 4, 0, 0]}>
+                    {sData.map((d, i) => (<Cell key={i} fill={d.steps === 0 ? C.line : (goal && d.steps >= goal) ? C.brand : C.proteinTrack} />))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onEditSteps} style={{ padding: "9px" }}>+ עדכון צעדים להיום</Btn></div>
+            <StepGuideLink style={{ marginTop: 10 }} />
+          </div>
+        );
+      })()}
+
+      <div ref={calRef} style={cardBox}>
+        <CardHeading icon={Target} text="עמידה ביעד הקלורי" />
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 10 }}>
+          {loggedDays.length > 0
+            ? <>עמדת ביעד <b style={{ color: C.brandD }}>{metDays} מתוך {loggedDays.length}</b> הימים האחרונים 🎯</>
+            : "עדיין אין נתוני אכילה לשבוע הזה"}
+        </div>
+        {loggedDays.length > 0 && (
+          <div style={{ height: 140, margin: "0 -6px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={calSeries} margin={{ top: 12, right: 8, left: 8, bottom: 0 }}>
+                <XAxis dataKey="label" tick={{ fontSize: 13, fill: C.faint }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, Math.round(maxCal * 1.15)]} hide />
+                <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
+                <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 12, fill: C.brandD }} />
+                <Bar dataKey="kcal" radius={[6, 6, 0, 0]}>
+                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal) ? C.brand : C.amber} />))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+      <div ref={weightRef} style={cardBox}>
+        <CardHeading icon={TrendingDown} text="דוח משקל" />
+        <WeighInTips />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+          <div><div style={{ fontSize: 14, color: C.sub }}>משקל <span style={{ fontSize: 12.5, color: C.faint }}>(עדכון אחרון: {lastWUpdate})</span></div><div style={{ fontSize: 29, fontWeight: 600, color: C.ink }}>{current} <span style={{ fontSize: 16, color: C.sub }}>ק״ג</span></div></div>
+          <span style={{ fontSize: 15, background: C.brandBg, color: C.brandD, padding: "4px 10px", borderRadius: 8, display: "flex", alignItems: "center", gap: 3 }}><ArrowDownRight size={14} /> {Math.abs(change)} ק״ג</span>
+        </div>
+        <div style={{ fontSize: 13, color: C.faint, marginBottom: 2 }}>המשקל שהזנת בפועל לאורך זמן (לא תחזית)</div>
+        <div style={{ height: 150, margin: "6px -6px 0" }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 6, right: 8, left: 8, bottom: 0 }}>
+              <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.brand} stopOpacity={0.2} /><stop offset="100%" stopColor={C.brand} stopOpacity={0} /></linearGradient></defs>
+              <XAxis dataKey="label" tick={{ fontSize: 13, fill: C.faint }} axisLine={false} tickLine={false} />
+              <YAxis domain={["dataMin - 0.5", "dataMax + 0.5"]} hide />
+              <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v} ק״ג`, "משקל"]} labelFormatter={() => ""} />
+              <Area type="monotone" dataKey="kg" stroke={C.brand} strokeWidth={2.5} fill="url(#wg)" dot={{ r: 3, fill: C.brand }} activeDot={{ r: 5, fill: C.brandD }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={addWeight} style={{ padding: "9px" }}>+ הזיני משקל</Btn></div>
+      </div>
+      {proteinFocus ? (
+        <div style={cardBox}>
+          <CardHeading icon={Dumbbell} text="יעד חלבון" color={C.macroP} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 29, fontWeight: 700, color: C.macroP }}>{targets.protein} <span style={{ fontSize: 16, color: C.sub }}>ג׳</span></div>
+              <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>היעד היומי שלך לחלבון</div>
+            </div>
+            <div style={{ flex: 1, borderInlineStart: `1px solid ${C.line}`, paddingInlineStart: 14 }}>
+              <div style={{ fontSize: 29, fontWeight: 700, color: C.ink }}>{daysOnTarget}</div>
+              <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>ימים ביעד</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: C.bg, borderRadius: 10, padding: 10, marginBottom: 10 }}>
+          <div style={{ fontSize: 13, color: C.sub }}>ימים ביעד</div>
+          <div style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>{daysOnTarget}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecipeDetail({ r, onBack, onAdd }) {
+  const stat = (label, value, color) => (
+    <div style={{ flex: 1, textAlign: "center", padding: "8px 4px" }}>
+      <div style={{ fontSize: 18, fontWeight: 700, color: color || C.ink }}>{value}</div>
+      <div style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+  return (
+    <div style={{ paddingBottom: 24 }}>
+      <div style={{ position: "relative" }}>
+        <img src={r.img} alt={r.name} style={{ width: "100%", height: 230, objectFit: "cover", display: "block" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0) 55%)" }} />
+        <button onClick={onBack} style={{ position: "absolute", top: 12, insetInlineStart: 12, width: 38, height: 38, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.92)", color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}><ChevronRight size={22} /></button>
+        <div style={{ position: "absolute", bottom: 12, insetInlineStart: 16, insetInlineEnd: 16, color: "#fff", fontSize: 23, fontWeight: 700, lineHeight: 1.3, textShadow: "0 1px 6px rgba(0,0,0,0.5)" }}>{r.name}</div>
+      </div>
+
+      <div style={{ padding: "14px 16px 0" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <span style={{ fontSize: 14, color: C.brandD, background: C.brandBg, padding: "6px 12px", borderRadius: 16, display: "flex", alignItems: "center", gap: 5 }}><Clock size={14} /> {r.prep}</span>
+          <span style={{ fontSize: 14, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>מנות: {r.servings}</span>
+          <span style={{ fontSize: 14, color: C.sub, background: C.bg, padding: "6px 12px", borderRadius: 16 }}>קושי: {r.diff}</span>
+        </div>
+
+        <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 14 }}>
+          {stat("קלוריות", r.kcal, C.brand)}
+          <div style={{ width: 1, background: C.line }} />
+          {stat("חלבון (ג׳)", r.p, C.macroP)}
+          <div style={{ width: 1, background: C.line }} />
+          {stat("שומן (ג׳)", r.f, C.macroF)}
+          <div style={{ width: 1, background: C.line }} />
+          {stat("פחמ׳ (ג׳)", r.c, C.macroC)}
+        </div>
+
+        <div style={{ marginBottom: 16 }}><Btn onClick={() => onAdd(r)}><Plus size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> הוסיפי מנה ליומן</Btn></div>
+
+        <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, margin: "4px 0 8px" }}>מרכיבים</div>
+        <div style={{ marginBottom: 18 }}>
+          {r.ing.map((line, i) => {
+            const isHeader = line.trim().endsWith(":");
+            return isHeader
+              ? <div key={i} style={{ fontSize: 15, fontWeight: 700, color: C.brandD, margin: i === 0 ? "0 0 6px" : "12px 0 6px" }}>{line.replace(/:$/, "")}</div>
+              : <div key={i} style={{ display: "flex", gap: 9, fontSize: 15.5, color: C.ink, lineHeight: 1.5, marginBottom: 7 }}><span style={{ color: C.brand, marginTop: 7, width: 6, height: 6, borderRadius: "50%", background: C.brand, flexShrink: 0 }} /><span>{line}</span></div>;
+          })}
+        </div>
+
+        <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, margin: "4px 0 10px" }}>אופן ההכנה</div>
+        <div style={{ marginBottom: r.tips && r.tips.length ? 18 : 4 }}>
+          {r.steps.map((s, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+              <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: C.brandBg, color: C.brandD, fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</div>
+              <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, paddingTop: 2 }}>{s}</div>
+            </div>
+          ))}
+        </div>
+
+        {r.tips && r.tips.length > 0 && (
+          <div style={{ background: C.amberBg, borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.amber, marginBottom: 7, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={15} /> טיפים ושדרוגים</div>
+            {r.tips.map((t, i) => (
+              <div key={i} style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.55, marginBottom: 6, display: "flex", gap: 8 }}><span style={{ color: C.amber }}>•</span><span>{t}</span></div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecipesScreen({ addRecipe, sweetsOpen }) {
+  const [section, setSection] = useState("recipes");
+  const [seenSweets, setSeenSweets] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [filter, setFilter] = useState("הכל");
+  const [query, setQuery] = useState("");
+
+  if (selected) {
+    return <RecipeDetail r={selected} onBack={() => setSelected(null)} onAdd={addRecipe} />;
+  }
+
+  const isSweets = section === "sweets";
+  const items = isSweets ? SWEETS : RECIPES;
+  const subtitle = isSweets
+    ? "הפינה המתוקה של מיי פריים - פינוקים מתוקים עם כמה שפחות סוכר, ועם חלבון לערך מוסף. כדאי להגביל לכמות שנקבעה מראש."
+    : "חוברת המתכונים של מיי פריים - עשירים בחלבון, דלים בפחמימות ומשולבים מזונות אנטי-דלקתיים.";
+  const goSection = (s) => { setSection(s); setFilter("הכל"); setQuery(""); if (s === "sweets") setSeenSweets(true); };
+  const segBtn = (s, label, icon) => (
+    <button onClick={() => goSection(s)} style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 6px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, background: section === s ? C.panel : "transparent", color: section === s ? C.brandD : C.sub, boxShadow: section === s ? "0 1px 4px rgba(168,66,92,0.14)" : "none" }}>
+      {icon}{label}
+      {s === "sweets" && !seenSweets && <span style={{ position: "absolute", top: 2, insetInlineEnd: 8, fontSize: 11, fontWeight: 600, background: C.brand, color: "#fff", padding: "1px 6px", borderRadius: 8 }}>חדש</span>}
+    </button>
+  );
+
+  const cats = ["הכל", ...Array.from(new Set(items.map((r) => r.cat).filter(Boolean)))];
+  const filtered = items.filter((r) => {
+    if (query && !r.name.includes(query)) return false;
+    if (filter !== "הכל") return r.cat === filter;
+    return true;
+  });
+  const fchip = (t) => ({ fontSize: 15, padding: "6px 13px", borderRadius: 20, cursor: "pointer", whiteSpace: "nowrap", background: filter === t ? C.ink : "transparent", color: filter === t ? "#fff" : C.sub, boxShadow: filter === t ? "none" : `inset 0 0 0 1px ${C.line}` });
+
+  return (
+    <div style={{ padding: "8px 16px 16px", position: "relative" }}>
+      <Header title={isSweets ? "מתוקים" : "מתכונים"} />
+
+      {sweetsOpen && (
+        <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
+          {segBtn("recipes", "מתכונים", <ChefHat size={17} />)}
+          {segBtn("sweets", "מתוקים", <Cookie size={17} />)}
+        </div>
+      )}
+
+      <div style={{ fontSize: 14.5, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>{subtitle}</div>
+
+      <div style={{ position: "relative", marginBottom: 12 }}>
+        <Search size={16} style={{ position: "absolute", insetInlineStart: 12, top: 12, color: C.faint }} />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isSweets ? "חיפוש מתוק…" : "חיפוש מתכון…"} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 36px", fontSize: 15.5, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+        {cats.map((t) => (<span key={t} onClick={() => setFilter(t)} style={fchip(t)}>{t}</span>))}
+      </div>
+
+      {filtered.map((r) => (
+        <div key={r.id} onClick={() => setSelected(r)} style={{ border: `1px solid ${C.line}`, borderRadius: 16, overflow: "hidden", marginBottom: 14, cursor: "pointer", background: C.panel, boxShadow: "0 1px 6px rgba(168,66,92,0.05)" }}>
+          <div style={{ position: "relative" }}>
+            <img src={r.img} alt={r.name} loading="lazy" style={{ width: "100%", height: 158, objectFit: "cover", display: "block" }} />
+            <button onClick={(e) => { e.stopPropagation(); addRecipe(r); }} style={{ position: "absolute", bottom: 10, insetInlineEnd: 10, width: 38, height: 38, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}><Plus size={20} /></button>
+          </div>
+          <div style={{ padding: "11px 13px 13px" }}>
+            <div style={{ fontSize: 16.5, fontWeight: 600, color: C.ink, marginBottom: 7, lineHeight: 1.35 }}>{r.name}</div>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: C.brandD, background: C.brandBg, padding: "3px 9px", borderRadius: 12 }}>{r.kcal} קק״ל</span>
+              <span style={{ fontSize: 13, color: C.macroP, background: C.proteinTrack, padding: "3px 9px", borderRadius: 12 }}>חלבון {r.p} ג׳</span>
+              <span style={{ fontSize: 13, color: C.sub, background: C.bg, padding: "3px 9px", borderRadius: 12, display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} /> {r.prep}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+      {filtered.length === 0 && <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: 24 }}>לא נמצאו מתכונים תואמים.</div>}
+    </div>
+  );
+}
+
+function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
+  const editing = !!editEntry;
+  const name = editing ? editEntry.name : recipe.name;
+  const base = editing ? (editEntry.base || { kcal: editEntry.kcal, p: editEntry.p, f: editEntry.f, c: editEntry.c }) : { kcal: recipe.kcal, p: recipe.p, f: recipe.f, c: recipe.c };
+  const hour = new Date().getHours();
+  const defMeal = hour < 11 ? "בוקר" : hour < 16 ? "צהריים" : hour < 21 ? "ערב" : "נשנושים";
+  const [meal, setMeal] = useState(editing ? editEntry.meal : defMeal);
+  const [servings, setServings] = useState(editing ? (editEntry.servings || 1) : 1);
+  const n = { kcal: Math.round(base.kcal * servings), p: Math.round(base.p * servings), f: Math.round(base.f * servings), c: Math.round(base.c * servings) };
+  const save = () => onSave({ meal, name, source: "verified", unit: "serving", servings, base, kcal: n.kcal, p: n.p, f: n.f, c: n.c }, editing ? editEntry.id : null);
+  const stat = (label, value, color) => (
+    <div style={{ flex: 1, textAlign: "center", padding: "8px 4px" }}>
+      <div style={{ fontSize: 18, fontWeight: 700, color }}>{value}</div>
+      <div style={{ fontSize: 12, color: C.sub, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+  return (
+    <SheetShell title={editing ? "עריכת מנה" : "הוספה ליומן"} onClose={onClose}>
+      <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, marginBottom: 16, lineHeight: 1.35 }}>{name}</div>
+
+      <div style={{ fontSize: 14, color: C.sub, marginBottom: 7 }}>שיוך לארוחה</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 18 }}>
+        {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.brand : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+      </div>
+
+      <div style={{ fontSize: 14, color: C.sub, marginBottom: 10 }}>כמות מנות</div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+        <Stepper value={servings} set={setServings} step={0.5} min={0.5} suffix={servings === 1 ? "מנה" : "מנות"} />
+      </div>
+
+      <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 18 }}>
+        {stat("קלוריות", n.kcal, C.brand)}
+        <div style={{ width: 1, background: C.line }} />
+        {stat("חלבון (ג׳)", n.p, C.macroP)}
+        <div style={{ width: 1, background: C.line }} />
+        {stat("שומן (ג׳)", n.f, C.macroF)}
+        <div style={{ width: 1, background: C.line }} />
+        {stat("פחמ׳ (ג׳)", n.c, C.macroC)}
+      </div>
+
+      <div style={{ marginBottom: editing ? 10 : 0 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> {editing ? "עדכן" : "הוסף ליומן"}</Btn></div>
+      {editing && <Btn variant="ghost" onClick={onDelete}>מחק פריט</Btn>}
+    </SheetShell>
+  );
+}
+
+function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, maxStart, gateEmail }) {
+  const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
+  const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
+  const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
+  const [baseOpen, setBaseOpen] = useState(false);
+  const [newSens, setNewSens] = useState("");
+  const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
+  const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
+  const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
+  const commit = () => { const k = edit.key; if (k === "weightKg" || k === "goalWeightKg") { setPendingWeight({ key: k, value: edit.value }); setEdit(null); return; } setProfile({ ...profile, [k]: edit.value }); setEdit(null); };
+  const confirmWeight = () => { if (pendingWeight) setProfile({ ...profile, [pendingWeight.key]: pendingWeight.value }); setPendingWeight(null); };
+  const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
+  const startLabel = (listSundays().find((s) => s.value === profile.startDate) || {}).label || profile.startDate;
+  const calNow = profile.calorieOverride || targets.targetKcal;
+
+  const EditRow = ({ label, display, onClick }) => (
+    <div onClick={onClick} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 16, padding: "12px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+      <span style={{ color: C.sub }}>{label}</span>
+      <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{display} <Pencil size={13} color={C.faint} /></span>
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "8px 16px 16px" }}>
+      <Header title="פרופיל" />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>{((profile.name || userName || "").trim().charAt(0)) || "♥"}</div>
+        <div><div style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 14, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
+      </div>
+
+      <div style={{ borderTop: `1px solid ${C.line}` }}>
+        <div onClick={() => setBaseOpen(!baseOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", cursor: "pointer" }}>
+          <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>נתוני בסיס</span>
+          <ChevronDown size={20} color={C.sub} style={{ transform: baseOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+        </div>
+        {baseOpen && (
+          <div style={{ paddingBottom: 4 }}>
+            <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
+            <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
+            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.weightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
+            <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
+            <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
+            <EditRow label="תחילת התוכנית" display={startLabel} onClick={() => open({ key: "startDate", label: "תחילת התוכנית", type: "date", init: profile.startDate })} />
+            <div onClick={() => setProfile({ ...profile, keepShabbat: !profile.keepShabbat })} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 16, color: C.ink }}>שומרת שבת</div>
+                <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>שבת תופיע אפורה ובלי מעקב יומי</div>
+              </div>
+              <div style={{ width: 46, height: 27, borderRadius: 14, background: profile.keepShabbat ? C.brand : C.line, position: "relative", transition: "background .2s", flexShrink: 0 }}>
+                <div style={{ position: "absolute", top: 3, left: profile.keepShabbat ? 22 : 3, width: 21, height: 21, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+              </div>
+            </div>
+            {programWeekFor(profile.startDate, TODAY) >= 8 && (
+              <div onClick={() => setProfile({ ...profile, fasting: !profile.fasting })} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+                <div>
+                  <div style={{ fontSize: 16, color: C.ink }}>צום לסירוגין</div>
+                  <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>מבצעת צום לסירוגין (רשות) - יופיע בסיכום השבועי</div>
+                </div>
+                <div style={{ width: 46, height: 27, borderRadius: 14, background: profile.fasting ? C.brand : C.line, position: "relative", transition: "background .2s", flexShrink: 0 }}>
+                  <div style={{ position: "absolute", top: 3, left: profile.fasting ? 22 : 3, width: 21, height: 21, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                </div>
+              </div>
+            )}
+            <div onClick={onOpenBackup} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Lock size={15} color={C.sub} />גיבוי מוצפן: {profile.backup && profile.backup.enabled ? "מופעל" : "כבוי"}{profile.backup && profile.backup.enabled ? <Check size={15} color={C.brand} /> : null}</div>
+                <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{profile.backup && profile.backup.enabled ? "מגובה אוטומטית, רק את יכולה לפתוח" : "הפעלת גיבוי מוצפן בענן"}</div>
+              </div>
+              <ChevronDown size={20} color={C.sub} style={{ transform: "rotate(-90deg)", flexShrink: 0 }} />
+            </div>
+            <div style={{ fontSize: 14, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
+          </div>
+        )}
+      </div>
+
+      <div onClick={() => open({ key: "calorieOverride", label: "יעד קלורי יומי", type: "calorie", init: profile.calorieOverride || targets.targetKcal })} style={{ background: C.brandBg, borderRadius: 12, padding: 12, marginTop: 16, marginBottom: 12, cursor: "pointer" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `2px solid ${C.brand}`, borderRadius: 10, padding: "9px 11px", background: "#fff" }}>
+          <span style={{ fontSize: 14, color: C.brandD }}>יעד קלורי יומי</span>
+          <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{calNow.toLocaleString()} קק״ל {profile.calorieOverride ? "" : <span style={{ fontSize: 12, color: C.sub }}>(מומלץ)</span>} <Pencil size={13} color={C.faint} /></span>
+        </div>
+        {programWeekFor(profile.startDate, TODAY) >= MACRO_UNLOCK.week && <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
+      </div>
+
+      <div onClick={() => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: effStepGoal != null ? effStepGoal : 2000 })} style={{ background: C.amberBg, borderRadius: 12, padding: 12, marginBottom: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontSize: 14, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}><Footprints size={15} color={C.amber} /> יעד צעדים יומי</span>
+          {profile.stepBaseline != null && <span style={{ fontSize: 12.5, color: C.faint }}>התחלת ב-{profile.stepBaseline.toLocaleString()}</span>}
+        </span>
+        <span style={{ fontWeight: 600, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}>{effStepGoal != null ? `${effStepGoal.toLocaleString()} צעדים` : "מודדת ממוצע"} <Pencil size={13} color={C.faint} /></span>
+      </div>
+
+      <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 4 }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: C.ink, marginBottom: 10 }}>העדפות תזונה</div>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 8 }}>סגנון תזונה (משמש להמלצות)</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+          {DIET_OPTIONS.map((d) => {
+            const on = (profile.diet || []).includes(d.id);
+            return (<span key={d.id} onClick={() => setProfile({ ...profile, diet: on ? (profile.diet || []).filter((x) => x !== d.id) : [...(profile.diet || []), d.id] })} style={{ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{d.emoji} {d.id}</span>);
+          })}
+        </div>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות ואלרגיות (להימנע)</div>
+        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>מה שתסמני ותכתבי כאן נשמר ומוזן ל-AI כדי להתחשב בזה בהמלצות. עדיין כדאי לבדוק רכיבים בעצמך; זה כלי עזר ולא תחליף לייעוץ רפואי.</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+          {SENSITIVITY_OPTIONS.map((s) => {
+            const on = (profile.allergies || []).includes(s);
+            return (<span key={s} onClick={() => setProfile({ ...profile, allergies: on ? (profile.allergies || []).filter((x) => x !== s) : [...(profile.allergies || []), s] })} style={{ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : C.panel, color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` }}>{s}</span>);
+          })}
+        </div>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+          <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+          <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+        </div>
+        {customSens.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {customSens.map((s) => (
+              <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {s}
+                <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <ReminderRow email={gateEmail} />
+
+      <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, cursor: "pointer" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות, תשובות ועזרה</span>
+        <ChevronLeft size={18} color={C.faint} />
+      </div>
+
+      <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={onReset} style={{ color: C.sub }}>התחל דמו מחדש (חזרה לאונבורדינג)</Btn></div>
+      <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onLogout} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
+      <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>משחרר את המכשיר הזה ומחזיר למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב עם המייל.</div>
+      <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
+
+      {edit && (
+        <div onClick={() => setEdit(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 18px 20px", width: "100%", maxWidth: 340, fontFamily: fontStack }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+              <span style={{ fontSize: 19, fontWeight: 600, color: C.ink }}>{edit.label}</span>
+              <button onClick={() => setEdit(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+            </div>
+
+            {(edit.type === "num") && (
+              <>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: edit.hint ? 8 : 18 }}>
+                  <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(edit.min || 0, v) })} step={edit.step} min={edit.min} suffix={edit.suffix} />
+                </div>
+                {edit.hint && <div style={{ fontSize: 13.5, color: C.faint, textAlign: "center", marginBottom: 18, lineHeight: 1.5 }}>{edit.hint}</div>}
+              </>
+            )}
+
+            {edit.type === "calorie" && (
+              <>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+                  <Stepper value={edit.value} set={(v) => setEdit({ ...edit, value: Math.max(KCAL_FLOOR, v) })} step={10} min={KCAL_FLOOR} suffix="קק״ל" />
+                </div>
+                <div onClick={() => { setProfile({ ...profile, calorieOverride: null }); setEdit(null); }} style={{ textAlign: "center", fontSize: 14, color: C.brandD, textDecoration: "underline", cursor: "pointer", marginBottom: 18 }}>אפסי למומלץ ({targets.targetKcal.toLocaleString()})</div>
+              </>
+            )}
+
+            {edit.type === "rate" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+                {RATE_OPTIONS.map((r) => {
+                  const sel = edit.value === r; const rec = r === 250;
+                  return (
+                    <button key={r} onClick={() => setEdit({ ...edit, value: r })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: `${rec ? 2 : 1.5}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : C.panel, color: sel || rec ? C.brandD : C.ink, borderRadius: 12, padding: "11px", fontSize: 16, fontFamily: fontStack, fontWeight: sel || rec ? 600 : 400, cursor: "pointer" }}>
+                      <span>{rateLabel(r)}</span>
+                      {rec && <span style={{ fontSize: 12, fontWeight: 700, background: C.brand, color: "#fff", padding: "3px 8px", borderRadius: 7 }}>מומלץ</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {edit.type === "date" && (
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+                <select value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", width: "100%" }}>
+                  {listSundays().filter((s) => !maxStart || s.value <= maxStart).map((s) => (<option key={s.value} value={s.value}>{s.label}</option>))}
+                </select>
+              </div>
+            )}
+
+            <Btn onClick={commit}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+          </div>
+        </div>
+      )}
+      {pendingWeight && (
+        <div onClick={() => setPendingWeight(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>רק לוודא 💜</div>
+            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>את עדכון המשקל השוטף עושים בדוח, לא כאן. השדה הזה הוא הנתון שאיתו התחלת או היעד שלך. למעקב אחרי המשקל בפועל - היכנסי לדוח ולחצי "הזיני משקל".</div>
+            <Btn onClick={confirmWeight}>אני רוצה לשנות בכל זאת</Btn>
+            <Btn variant="ghost" onClick={() => setPendingWeight(null)} style={{ marginTop: 8 }}>צאי בלי לשנות</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   AI MEAL ANALYSIS (demo) - sends photo to Claude for estimation
+   ============================================================ */
+// Downscale a captured photo before sending to the AI, to cut image input-token cost.
+// Longest side capped at maxDim; re-encoded as JPEG. Falls back handled by caller.
+function downscaleImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve({ base64: dataUrl.split(",")[1], mediaType: "image/jpeg" });
+      } catch (e) { reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("img load failed")); };
+    img.src = url;
+  });
+}
+
+async function analyzeMeal(base64, mediaType) {
+  const prompt = "בתמונה מופיעה ארוחה או מוצר מזון. אם מופיעה תווית ערכים תזונתיים על האריזה - קרא את הערכים מהתווית (לפי הכמות שבאריזה, או ל-100 גרם) במקום לנחש. אחרת, זהה את פריטי המזון והערך לכל פריט כמות בגרמים וערכים תזונתיים סבירים. החזר JSON בלבד, ללא טקסט נוסף וללא סימוני קוד, במבנה: {\"items\":[{\"name\":\"שם בעברית\",\"grams\":0,\"kcal\":0,\"protein\":0,\"fat\":0,\"carbs\":0}]}";
+  const res = await fetch(AI_ENDPOINT, {
+    method: "POST", headers: aiHeaders(),
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: prompt }] }] }),
+  });
+  const data = await res.json();
+  if (res.status === 429) throw new Error(data.message || "limit");
+  if (!res.ok || data.error || !Array.isArray(data.content)) throw new Error("ai_unavailable");
+  const text = (data.content || []).map((i) => i.text || "").join("");
+  const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+  const arr = parsed.items || parsed || [];
+  return arr.map((it) => ({ name: it.name, grams: Math.round(it.grams || 0), kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) }));
+}
+
+function extractAiJson(text) {
+  const cleaned = (text || "").replace(/```json|```/g, "").trim();
+  try { return JSON.parse(cleaned); } catch (e) {}
+  const s = cleaned.indexOf("{"), e2 = cleaned.lastIndexOf("}");
+  if (s !== -1 && e2 > s) { try { return JSON.parse(cleaned.slice(s, e2 + 1)); } catch (e3) {} }
+  return null;
+}
+
+// Gentle photo-budget nudges (the HARD 70 cap is enforced server-side in api/ai.js).
+const PHOTO_HEADSUP_MSG = "הערה קטנה ממני אלייך 💜 שימי לב שכמות התמונות שניתן להעלות במהלך תוכנית הליווי מוגבלת ל-70 תמונות. לאחר מכן תמיד אפשר לתאר לי בטקסט מה אכלת.";
+const PHOTO_END_MSG = "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים.";
+function bumpPhotosToday() {
+  try {
+    let o = {};
+    try { o = JSON.parse(localStorage.getItem("myprime_photos_today") || "{}"); } catch (e) {}
+    if (o.date !== TODAY) o = { date: TODAY, n: 0 };
+    o.n = (o.n || 0) + 1;
+    localStorage.setItem("myprime_photos_today", JSON.stringify(o));
+    return o.n;
+  } catch (e) { return 0; }
+}
+function photoHeadsup35Seen() { try { return localStorage.getItem("myprime_photo_hs35") === "1"; } catch (e) { return false; } }
+function markPhotoHeadsup35() { try { localStorage.setItem("myprime_photo_hs35", "1"); } catch (e) {} }
+
+async function aiNutritionChat(messages) {
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב - אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
+  const res = await fetch(AI_ENDPOINT, {
+    method: "POST", headers: aiHeaders(),
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, system, messages }),
+  });
+  const data = await res.json();
+  const photoCount = Number(res.headers.get("x-photo-count")) || null;
+  if (res.status === 429 || data.error === "limit") {
+    return { raw: "", reply: data.message || "הגעת למכסת הפעולות להיום. נתראה מחר 💜", done: false, items: [], limited: true, photoCount };
+  }
+  if (!res.ok || data.error || !Array.isArray(data.content)) {
+    return { raw: "", reply: "אופס - החיבור ל-AI לא עבד. ודאי שמפתח ה-API מוגדר ב-Vercel (Environment Variables) ושנעשה Redeploy, ושיש קרדיט בחשבון Anthropic.", done: false, items: [], limited: false, photoCount };
+  }
+  const text = (data.content || []).map((i) => i.text || "").join("");
+  const obj = extractAiJson(text);
+  const parsed = obj || { reply: (text || "").replace(/\{[\s\S]*\}/g, "").trim() || "לא הבנתי, אפשר לנסות שוב?", done: false, items: [] };
+  return {
+    raw: text,
+    limited: false,
+    photoCount,
+    reply: parsed.reply || "",
+    done: !!parsed.done,
+    items: (parsed.items || []).map((it) => ({ name: it.name, en: it.en || "", grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) })),
+  };
+}
+
+async function aiMealChat(messages, ctx) {
+  const proteinRule = ctx.proteinFocus
+    ? "אם רלוונטי אפשר להזכיר חלבון בעדינות."
+    : "חשוב מאוד: בשלב הזה של התוכנית אל תדגישי חלבון, מאקרו או גרמים - דברי על ארוחות מאוזנות, משביעות וקלות להכנה.";
+  const estimateRule = ctx.proteinFocus
+    ? "לכל רעיון הוסיפי בסוף השורה הערכה קצרה בסוגריים: קלוריות וגרמים של חלבון/שומן/פחמימה. למשל: (~350 קק״ל · חלבון 30 / שומן 12 / פחמ׳ 20). הדגישי שאלו הערכות מקורבות."
+    : "לכל רעיון אפשר להוסיף הערכת קלוריות מקורבת בלבד בסוגריים (למשל: ~350 קק״ל), בלי לפרט חלבון/שומן/פחמימה או גרמים.";
+  const system =
+    "את היועצת של MyPrime, מדברת עברית בגוף שני נקבה. הטון: חברה חמה ואכפתית שמדברת, לא משווקת שמוכרת - אישי, פשוט ומעודד. " +
+    "המטרה: לעזור לה להחליט מה לאכול עכשיו, לפי מה שנשאר לה היום ומה שיש לה בבית. " +
+    proteinRule + " " +
+    "הציעי 2-3 רעיונות מעשיים, ים-תיכוניים וזמינים בישראל, שמתאימים לקלוריות שנותרו. שמרי על תשובות קצרות (2-4 משפטים). " +
+    estimateRule + " " +
+    "בסיס הערכים: התבססי ככל האפשר על ערכי מאגר התזונה הלאומי של משרד הבריאות (\"צמרת\") עבור מזונות ישראליים, כדי שההערכות יהיו עקביות ומדויקות. " +
+    "תמיד סיימי בשאלה עדינה - מה היא חושבת, או אם יש לה את המצרכים. אם חסר לה מצרך (למשל אין סלמון) - הציעי מיד חלופה זמינה ופשוטה. " +
+    "אל תפני אותה לדבר עם אדם, מאמנת או צוות, ואל תציעי ליצור קשר או להעביר פנייה לאף אחד - את כאן כדי לעזור עם האוכל והתזונה בלבד. " +
+    "אל תיתני ייעוץ רפואי. החזירי טקסט רגיל בלבד (לא JSON, בלי סימוני קוד).";
+  const res = await fetch(AI_ENDPOINT, {
+    method: "POST", headers: aiHeaders(),
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 700, system, messages }),
+  });
+  const data = await res.json();
+  if (res.status === 429 || data.error === "limit") return { error: true, text: "", limit: true, message: data.message || "" };
+  if (!res.ok || data.error || !Array.isArray(data.content)) return { error: true, text: "" };
+  const text = (data.content || []).map((i) => i.text || "").join("").trim();
+  return { text };
+}
+
+/* Detect NEW dietary preferences / dislikes / sensitivities the user states mid-chat,
+   so we can offer to save them to her profile (with confirmation). */
+async function extractPreferences(userText, existing) {
+  try {
+    const sys = "המשתמשת כותבת לעוזרת תזונה. חלצי אך ורק העדפות תזונה חדשות, מאכלים שהיא לא אוהבת/לא רוצה, או רגישויות/אלרגיות שהיא מזכירה - שעדיין לא קיימים ברשימה הקיימת: "
+      + ((existing && existing.length) ? existing.join(", ") : "(ריק)")
+      + ". החזירי JSON בלבד, בלי טקסט נוסף ובלי סימוני קוד: {\"diet\":[],\"avoid\":[]}. diet = סגנונות תזונה בלבד (צמחוני/טבעוני/כשר/דל פחמימה/ים-תיכוני). avoid = מאכלים או רכיבים להימנע מהם (כולל רגישויות, אלרגיות, ולא-אוהבת). אם אין שום דבר חדש, החזירי {\"diet\":[],\"avoid\":[]}.";
+    const res = await fetch(AI_ENDPOINT, {
+      method: "POST", headers: aiHeaders(),
+      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 200, system: sys, messages: [{ role: "user", content: userText }] }),
+    });
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data.content)) return { diet: [], avoid: [] };
+    const raw = (data.content || []).map((i) => i.text || "").join("");
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) return { diet: [], avoid: [] };
+    const obj = JSON.parse(m[0]);
+    return { diet: Array.isArray(obj.diet) ? obj.diet : [], avoid: Array.isArray(obj.avoid) ? obj.avoid : [] };
+  } catch (e) { return { diet: [], avoid: [] }; }
+}
+
+// Immediate, offline detection of diet/sensitivity keywords so the "save to profile"
+// offer always appears even if the AI extraction is slow or fails.
+function localPrefs(text, existing) {
+  const t = text || "";
+  const ex = (existing || []).map((x) => String(x));
+  const diet = [];
+  const dietMap = [
+    ["צמחוני", /צמחונ/],
+    ["טבעוני", /טבעונ/],
+    ["כשר", /כשר/],
+    ["דל פחמימה", /דל[ת]? ?פחמימ|לואו ?קארב|low ?carb/i],
+    ["ים-תיכוני", /ים[- ]?תיכונ/],
+  ];
+  for (const [id, re] of dietMap) if (re.test(t) && !ex.includes(id)) diet.push(id);
+  const avoid = [];
+  const avoidMap = [
+    ["גלוטן", /גלוטן/],
+    ["חלב / לקטוז", /לקטוז|בלי חלב|ללא חלב|רגיש\S* לחלב/],
+    ["ביצים", /בלי ביצים|ללא ביצים|רגיש\S* לביצים/],
+    ["אגוזים", /אגוזים/],
+    ["בוטנים", /בוטנים/],
+    ["סויה", /סויה/],
+    ["דגים", /בלי דגים|ללא דגים|רגיש\S* לדג/],
+    ["שומשום", /שומשום/],
+  ];
+  for (const [id, re] of avoidMap) if (re.test(t) && !ex.includes(id)) avoid.push(id);
+  return { diet, avoid };
+}
+
+async function searchIsraeliDB(q) {
+  const res = await fetch(`/api/il-food?q=${encodeURIComponent(q)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.items || []).map((it, i) => ({
+    id: "il_" + i,
+    name: it.name,
+    per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
+    measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
+    def: 0,
+  }));
+}
+
+async function searchOpenFoodFacts(q) {
+  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=20&fields=code,product_name,product_name_he,brands,nutriments`;
+  const res = await fetch(url);
+  const data = await res.json();
+  const out = [];
+  for (const p of data.products || []) {
+    const n = p.nutriments || {};
+    const kcal = n["energy-kcal_100g"];
+    if (kcal == null) continue;
+    const name = (p.product_name_he || p.product_name || p.brands || "").trim();
+    if (!name) continue;
+    out.push({
+      id: "off_" + (p.code || out.length),
+      name,
+      per100: { kcal: Math.round(kcal), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) },
+      measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
+      def: 0,
+    });
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
+async function searchUSDA(q) {
+  try {
+    const res = await fetch(`/api/usda?q=${encodeURIComponent(q)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.items || []).map((it, i) => ({
+      id: "usda_" + i,
+      name: it.name + (it.brand ? ` · ${it.brand}` : ""),
+      per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
+      measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
+      def: 0,
+    }));
+  } catch (e) { return []; }
+}
+
+// Short Hebrew→English food query for USDA lookups (used only when the
+// Hebrew DBs return nothing, and for the AI logging path via item.en).
+async function translateFoodToEnglish(q) {
+  try {
+    const res = await fetch(AI_ENDPOINT, {
+      method: "POST", headers: aiHeaders(),
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514", max_tokens: 40,
+        system: "Translate the Hebrew food name to a short English food-search query (2-4 words, common USDA-style naming, include cooking method if implied, e.g. 'grilled ribeye steak', 'white rice cooked'). Reply with ONLY the English term - no quotes, no punctuation, no extra words.",
+        messages: [{ role: "user", content: String(q || "") }],
+      }),
+    });
+    const data = await res.json();
+    const t = (data.content || []).map((i) => i.text || "").join("").trim();
+    return t.replace(/^["']|["']$/g, "").slice(0, 60);
+  } catch (e) { return ""; }
+}
+
+/* Reconcile AI-identified items against the product databases (by name).
+   Name search is fuzzier than a barcode (no unique id), so we only accept a
+   STRONG match; otherwise the AI estimate is kept. */
+function normName(s) { return String(s || "").replace(/["'.,()\[\]/-]/g, " ").replace(/\s+/g, " ").trim().toLowerCase(); }
+function strongMatch(aiName, dbName) {
+  const a = normName(aiName), b = normName(dbName);
+  if (!a || !b) return false;
+  if (b.includes(a) || a.includes(b)) return true;
+  const at = new Set(a.split(" ").filter((w) => w.length >= 2));
+  const bt = b.split(" ").filter((w) => w.length >= 2);
+  let hit = 0; for (const w of bt) if (at.has(w)) hit++;
+  return at.size > 0 && hit >= Math.min(2, at.size);
+}
+async function lookupProduct(name, en) {
+  // 1. Israeli national DB (Hebrew name) - best for Israeli foods.
+  try { const il = await searchIsraeliDB(name); for (const r of il) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return { ...r, source: "db" }; } catch (e) {}
+  // 2. USDA FoodData Central (English query) - best for generic cooked foods.
+  if (en) { try { const us = await searchUSDA(en); for (const r of us) if (r.per100 && r.per100.kcal && strongMatch(en, r.name)) return { ...r, source: "usda" }; } catch (e) {} }
+  // 3. Open Food Facts (Hebrew/brand) - packaged products.
+  try { const off = await searchOpenFoodFacts(name); for (const r of off) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return { ...r, source: "db" }; } catch (e) {}
+  return null;
+}
+async function reconcileWithDb(items) {
+  return Promise.all((items || []).map(async (it) => {
+    try {
+      const m = await lookupProduct(it.name, it.en);
+      if (m) {
+        const scale = (it.grams || 100) / 100;
+        return { ...it, source: m.source || "db", matched: m.name,
+          kcal: Math.round(m.per100.kcal * scale), p: Math.round((m.per100.p || 0) * scale),
+          f: Math.round((m.per100.f || 0) * scale), c: Math.round((m.per100.c || 0) * scale) };
+      }
+    } catch (e) {}
+    return { ...it, source: "estimated" };
+  }));
+}
+
+function SplashScreen() {
+  return (
+    <div style={{ position: "absolute", inset: 0, zIndex: 200, background: C.panel, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28, textAlign: "center", fontFamily: fontStack, animation: "splashFade 2s ease forwards" }}>
+      <div style={{ position: "absolute", top: 14, left: 14, background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, padding: "4px 12px", borderRadius: 999 }}>דמו</div>
+      <img src={MEDAL_SRC} alt="" width={150} height={150} style={{ display: "block", marginBottom: 20 }} />
+      <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.45, maxWidth: 320 }}>ברוכה הבאה לאפליקציית המעקב היומי של מיי פריים</div>
+    </div>
+  );
+}
+
+function IntroOverlay({ onClose, name }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 22, zIndex: 40 }}>
+      <div style={{ background: C.panel, borderRadius: 18, padding: 20, fontFamily: fontStack }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 21, fontWeight: 600, color: C.ink }}>דמו MyPrime · v{VERSION}</span></div>
+        <p style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, margin: "0 0 12px" }}>שלום {name ? name + " " : ""}🙂 זו גרסת הדגמה (בטה) להתנסות.</p>
+        <p style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, margin: "0 0 16px" }}>ייתכן ויתבצעו עדכוני גרסה לאפליקציה, לכן ממליצה לך לרענן את מסך האפליקציה פעם ביום ע״י משיכה למטה של המסך במהלך השימוש באפליקציה - כך תהיה לך הגרסה המעודכנת ביותר.</p>
+        <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "11px 13px", margin: "0 0 16px", fontSize: 15, color: C.brandD, fontWeight: 600, lineHeight: 1.6, display: "flex", alignItems: "flex-start", gap: 8 }}>
+          <MessageCircle size={20} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>זו גרסת בטה - נשמח מאוד לקבל כל הערה לתיקון! בכל מקום באפליקציה את יכולה להשאיר הערה בלחיצה על כפתור הבועה <MessageCircle size={15} style={{ display: "inline", verticalAlign: "-2px" }} /> בצד שמאל, ואנחנו נקבל את ההערות ונטפל בהן בהקדם האפשרי.</span>
+        </div>
+        <Btn onClick={onClose}>הבנתי, בואי נתחיל</Btn>
+      </div>
+    </div>
+  );
+}
+
+function NotesFab({ notes, setNotes, screen, userName }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const add = () => { if (!text.trim()) return; setNotes((n) => [...n, { text: text.trim(), screen, t: new Date().toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) }]); setText(""); };
+  const copyAll = () => { try { navigator.clipboard.writeText(notes.map((n) => `• [${n.screen}] ${n.text}`).join("\n")); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) {} };
+  const sendFeedback = async () => {
+    if (!notes.length || sending) return;
+    setSending(true);
+    let device = ""; try { device = localStorage.getItem("myprime_device_id") || ""; } catch (e) {}
+    try {
+      await fetch(FEEDBACK_URL, {
+        method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ device, name: userName || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
+      });
+      setSent(true); setTimeout(() => setSent(false), 2500); setNotes([]);
+    } catch (e) { alert("השליחה נכשלה - בדקי חיבור לאינטרנט ונסי שוב."); }
+    finally { setSending(false); }
+  };
+  return (
+    <>
+      <button data-tut="notesfab" onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 420, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
+        <MessageCircle size={20} />
+        {notes.length > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: C.ink, color: "#fff", fontSize: 13, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length}</span>}
+      </button>
+      {open && (
+        <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 45 }} onClick={() => setOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxWidth: 460, maxHeight: "82%", borderRadius: 20, padding: "20px 22px 24px", overflowY: "auto", fontFamily: fontStack, border: `2.5px solid ${C.brand}`, boxShadow: "0 14px 44px rgba(0,0,0,0.34)", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>הערות לדמו</span>
+              <button onClick={() => setOpen(false)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+            </div>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={4} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
+            <Btn onClick={add}>הוסיפי הערה</Btn>
+            {notes.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                {notes.map((n, i) => (
+                  <div key={i} style={{ borderTop: `1px solid ${C.line}`, padding: "9px 0", display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <span style={{ flex: 1, fontSize: 16, color: C.ink }}>{n.text}<div style={{ fontSize: 13, color: C.faint, marginTop: 2 }}>{n.screen} · {n.t}</div></span>
+                    <button onClick={() => setNotes((arr) => arr.filter((_, j) => j !== i))} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {FEEDBACK_URL && <Btn onClick={sendFeedback} disabled={sending}><Send size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {sent ? "נשלח, תודה!" : sending ? "שולחת…" : "שלחי משוב לצוות MyPrime"}</Btn>}
+                  <Btn variant="ghost" onClick={copyAll}><Copy size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {copied ? "הועתק!" : "העתיקי הכל"}</Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ============================================================
+   ADD / EDIT MODAL
+   ============================================================ */
+function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent, startDate }) {
+  const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
+  const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || "בוקר");
+  const [food, setFood] = useState(state.editEntry ? (FOODS.find((f) => f.name === state.editEntry.name) || foodFromEntry(state.editEntry)) : null);
+  const [grams, setGrams] = useState(state.editEntry?.g || 100);
+  const [query, setQuery] = useState("");
+  const [dbResults, setDbResults] = useState([]);
+  const [dbSource, setDbSource] = useState("il");
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!q || step !== "list") { setDbResults([]); setSearching(false); return; }
+    setSearching(true);
+    const id = setTimeout(async () => {
+      try {
+        let items = await searchIsraeliDB(q);
+        let src = "il";
+        if (!items.length) { items = await searchOpenFoodFacts(q); src = "off"; }
+        if (!items.length) { const en = await translateFoodToEnglish(q); if (en) { items = await searchUSDA(en); src = "usda"; } }
+        setDbResults(items); setDbSource(src);
+      } catch (e) { setDbResults([]); }
+      finally { setSearching(false); }
+    }, 450);
+    return () => clearTimeout(id);
+  }, [query, step]);
+  const fileRef = useRef(null);
+  const [photoState, setPhotoState] = useState("capture");
+  const [photoResult, setPhotoResult] = useState(null);
+  const onPhoto = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    downscaleImage(file, 1024, 0.82)
+      .then(({ base64, mediaType }) => sendAiImage(base64, mediaType))
+      .catch(() => {
+        const reader = new FileReader();
+        reader.onload = () => sendAiImage(String(reader.result).split(",")[1], file.type || "image/jpeg");
+        reader.readAsDataURL(file);
+      });
+  };
+  const [aiMsgs, setAiMsgs] = useState([{ role: "assistant", text: "היי! ספרי לי מה אכלת ואעזור להעריך את הקלוריות 😋\nכדי שאוכל לדייק כבר מההתחלה, נסי לפרט כמה שיותר: איך האוכל הוכן (מטוגן / אפוי / מבושל / על הגריל), אם הוספת שמן / חמאה / רוטב, מה שתית, וכמות משוערת (גרמים, כוסות או כפות).\nככל שתפרטי יותר, ההערכה תהיה מדויקת יותר. אפשר לדבר או לכתוב." }]);
+  const [aiApi, setAiApi] = useState([]);
+  const [aiInput, setAiInput] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiDoneItems, setAiDoneItems] = useState(null);
+  const [reconciling, setReconciling] = useState(false);
+  const finishItems = (items) => {
+    setReconciling(true);
+    setAiDoneItems(null);
+    reconcileWithDb(items)
+      .then((enriched) => setAiDoneItems(enriched))
+      .catch(() => setAiDoneItems(items.map((it) => ({ ...it, source: "estimated" }))))
+      .finally(() => setReconciling(false));
+  };
+  const recRef = useRef(null);
+  const [aiListening, setAiListening] = useState(false);
+  const aiInputRef = useRef(null);
+  const aiEndRef = useRef(null);
+  useEffect(() => { const el = aiInputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [aiInput, step]);
+  useEffect(() => { aiEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [aiMsgs, aiLoading, aiDoneItems]);
+  const sendAi = async (textArg) => {
+    const text = (textArg != null ? textArg : aiInput).trim();
+    if (!text || aiLoading) return;
+    setAiInput("");
+    setAiMsgs((m) => [...m, { role: "user", text }]);
+    const apiMsgs = [...aiApi, { role: "user", content: text }];
+    setAiLoading(true);
+    try {
+      const r = await aiNutritionChat(apiMsgs);
+      setAiApi([...apiMsgs, { role: "assistant", content: r.raw }]);
+      setAiMsgs((m) => [...m, { role: "assistant", text: r.reply }]);
+      if (r.done && r.items.length) finishItems(r.items);
+    } catch (e) {
+      setAiMsgs((m) => [...m, { role: "assistant", text: "יש תקלה זמנית בחיבור ל-AI. נסי שוב, או הוסיפי דרך חיפוש." }]);
+    } finally { setAiLoading(false); }
+  };
+  const sendAiImage = async (base64, mediaType) => {
+    if (aiLoading) return;
+    // Meal photos are available only during the 10-week program (days 1-70). After that: text only.
+    if (programDayNumber(startDate, TODAY) > 70) {
+      setStep("ai");
+      setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]);
+      return;
+    }
+    setStep("ai");
+    setAiMsgs((m) => [...m, { role: "user", text: "📷 תמונת הארוחה", img: `data:${mediaType};base64,${base64}` }]);
+    const apiMsgs = [...aiApi, { role: "user", content: [
+      { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+      { type: "text", text: "זוהי תמונת הארוחה שלי. זהי מה יש בה ועזרי לי להעריך כמויות וערכים. אם זו אריזת מוצר עם תווית ערכים תזונתיים - קראי את הערכים מהתווית במקום לנחש." },
+    ] }];
+    setAiLoading(true);
+    try {
+      const r = await aiNutritionChat(apiMsgs);
+      setAiApi([...apiMsgs, { role: "assistant", content: r.raw }]);
+      setAiMsgs((m) => [...m, { role: "assistant", text: r.reply }]);
+      if (r.done && r.items.length) finishItems(r.items);
+      // Gentle nudges only on a real (non-limited) photo analysis.
+      if (!r.limited) {
+        const todayN = bumpPhotosToday();
+        let nudge = todayN === 3;
+        if (r.photoCount && r.photoCount >= 35 && !photoHeadsup35Seen()) { nudge = true; markPhotoHeadsup35(); }
+        if (nudge) setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_HEADSUP_MSG }]);
+      }
+    } catch (e) {
+      setAiMsgs((m) => [...m, { role: "assistant", text: "יש תקלה זמנית בחיבור ל-AI. נסי שוב." }]);
+    } finally { setAiLoading(false); }
+  };
+  const startMic = () => {
+    if (aiListening && recRef.current) { recRef.current.stop(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("זיהוי דיבור לא נתמך בדפדפן הזה - נסי ב-Chrome/Safari עדכני, או הקלידי."); return; }
+    const rec = new SR();
+    rec.lang = "he-IL";
+    rec.interimResults = true;   // מציג טקסט תוך כדי דיבור
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => setAiListening(true);
+    rec.onresult = (e) => {
+      let t = "";
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      setAiInput(t);
+    };
+    rec.onerror = () => setAiListening(false);
+    rec.onend = () => setAiListening(false);
+    try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
+  };
+  const [qtyOrigin, setQtyOrigin] = useState("list");
+  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const videoRef = useRef(null);
+  const scanControlsRef = useRef(null);
+  const [scanState, setScanState] = useState("idle");
+  const [manualCode, setManualCode] = useState("");
+  const stopScan = () => { try { scanControlsRef.current && scanControlsRef.current(); } catch (e) {} scanControlsRef.current = null; };
+  const lookupBarcode = async (code) => {
+    setScanState("looking");
+    try {
+      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_he,generic_name,generic_name_he,brands,nutriments`);
+      const d = await r.json();
+      if (d.status !== 1 || !d.product) { setScanState("notfound"); return; }
+      const p = d.product, n = p.nutriments || {};
+      const name = (p.product_name_he || p.generic_name_he || p.product_name || p.generic_name || p.brands || "מוצר").trim();
+      const food = { id: "bc_" + code, name, per100: { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) }, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0 };
+      pickFood(food, 100);
+    } catch (e) { setScanState("error"); }
+  };
+  const startScan = () => setScanState("scanning");
+  useEffect(() => {
+    if (scanState !== "scanning") return;
+    let cancelled = false, raf = null, stream = null, zx = null;
+    const cleanup = () => {
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      try { zx && zx.stop(); } catch (e) {}
+      try { stream && stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+      try { if (videoRef.current) videoRef.current.srcObject = null; } catch (e) {}
+    };
+    const onCode = (code) => { if (cancelled || !code) return; cleanup(); lookupBarcode(String(code)); };
+    (async () => {
+      try {
+        const video = videoRef.current;
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+        if (cancelled) { cleanup(); return; }
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+        try { await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch (e) {}
+
+        // Engine 1: native BarcodeDetector - only if actually supported. Some devices
+        // expose the class but support no formats, so verify via getSupportedFormats.
+        let nativeOk = false;
+        if ("BarcodeDetector" in window) {
+          try { const f = await window.BarcodeDetector.getSupportedFormats(); nativeOk = Array.isArray(f) && f.length > 0; } catch (e) { nativeOk = false; }
+        }
+        if (nativeOk) {
+          let det;
+          try { det = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "itf"] }); }
+          catch (e) { det = new window.BarcodeDetector(); }
+          const tick = async () => {
+            if (cancelled) return;
+            try { const codes = await det.detect(video); if (codes && codes.length) return onCode(codes[0].rawValue); } catch (e) {}
+            raf = requestAnimationFrame(tick);
+          };
+          raf = requestAnimationFrame(tick);
+        }
+        // Engine 2: ZXing on the SAME video element, in parallel - covers devices where
+        // BarcodeDetector is missing or broken. First engine to read a code wins.
+        try {
+          const hints = new Map();
+          hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.CODE_128, BarcodeFormat.ITF]);
+          hints.set(DecodeHintType.TRY_HARDER, true);
+          const reader = new BrowserMultiFormatReader(hints);
+          zx = await reader.decodeFromVideoElement(video, (result) => { if (result) onCode(result.getText()); });
+          if (cancelled) { try { zx.stop(); } catch (e) {} }
+        } catch (e) {}
+      } catch (e) { if (!cancelled) setScanState("error"); }
+    })();
+    scanControlsRef.current = cleanup;
+    return () => cleanup();
+  }, [scanState]);
+  const photoItems = [{ f: FOOD_BY_ID["rice"], g: 158 }, { f: FOOD_BY_ID["chk"], g: 120 }, { f: FOOD_BY_ID["sal"], g: 80 }];
+  const filtered = query.trim() ? FOODS.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
+  const nut = food ? nutritionFor(food, grams) : null;
+  const unitLabel = unitLabelFor(food?.unit);
+  const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
+  const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "92%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", overflowY: "auto", fontFamily: fontStack }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
+          <button onClick={close} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+        </div>
+        {step === "method" && (
+          <>
+            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
+              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
+              { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
+              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => setStep("history") },
+              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") }].map((o) => (
+              <div key={o.t} data-tut={o.tut} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
+                <div style={{ width: 46, height: 46, borderRadius: 13, background: o.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 3px 9px ${o.color}55` }}><o.ic size={23} color="#fff" strokeWidth={2.2} /></div>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{o.t}</div><div style={{ fontSize: 14, color: C.sub }}>{o.s}</div></div>
+                {o.tag && <span style={{ fontSize: 13, background: C.panel, color: o.color, padding: "3px 10px", borderRadius: 8, fontWeight: 500 }}>{o.tag}</span>}
+              </div>
+            ))}
+            <div style={{ fontSize: 14, color: C.faint, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /> <span>ברקוד וחיפוש מדויקים יותר מצילום. בצילום נאשר את הכמות יחד.</span></div>
+          </>
+        )}
+        {step === "list" && (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 4, color: C.faint }}>
+              <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+            </div>
+            {query && filtered.length > 0 && <div style={{ fontSize: 14, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
+            {query && filtered.map((f) => {
+              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            {query && <div style={{ fontSize: 14, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
+            {query && dbResults.map((f) => {
+              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            {query && !searching && filtered.length === 0 && dbResults.length === 0 && <div style={{ fontSize: 15, color: C.faint, padding: "14px 0", textAlign: "center" }}>לא נמצאו תוצאות ל"{query}"</div>}
+            {!query && <div style={{ fontSize: 14, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
+          </>
+        )}
+        {step === "history" && (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+            </div>
+            {(favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
+              const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת על + מוסיפה עם הכמות האחרונה - בלי להזין שוב</span></div>
+          </>
+        )}
+        {step === "barcode" && (
+          <div>
+            {scanState === "idle" && (
+              <div style={{ textAlign: "center", padding: "4px 0" }}>
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Barcode size={32} color={C.brand} /></div>
+                <div style={{ fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 6 }}>סריקת ברקוד</div>
+                <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>כווני את המצלמה לברקוד של המוצר - הערכים יישלפו אוטומטית מ-Open Food Facts.</p>
+                <Btn onClick={startScan}>פתחי מצלמה לסריקה</Btn>
+                <div style={{ fontSize: 14, color: C.faint, margin: "16px 0 6px" }}>או הקלידי את מספר הברקוד</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={manualCode} onChange={(e) => setManualCode(e.target.value)} inputMode="numeric" placeholder="מספר ברקוד" style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+                  <button onClick={() => manualCode.trim() && lookupBarcode(manualCode.trim())} style={{ border: "none", background: C.brand, color: "#fff", borderRadius: 10, padding: "0 18px", cursor: "pointer", fontSize: 16, fontWeight: 500 }}>חפשי</button>
+                </div>
+              </div>
+            )}
+            {scanState === "scanning" && (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000" }}>
+                  <video ref={videoRef} style={{ width: "100%", display: "block", maxHeight: 320, objectFit: "cover" }} muted playsInline />
+                  <div style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ width: "80%", height: 92, border: "2px solid rgba(255,255,255,0.9)", borderRadius: 10, boxShadow: "0 0 0 9999px rgba(0,0,0,0.28)", position: "relative" }}>
+                      <div style={{ position: "absolute", top: "50%", left: 8, right: 8, height: 2, background: C.brand, transform: "translateY(-1px)" }} />
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 15, color: C.sub, marginTop: 10, lineHeight: 1.5 }}>מקמי את הברקוד בתוך המסגרת - ישר, ממלא את הרוחב, והחזיקי יציב לרגע</div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 10 }}>
+                  <Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>ביטול</Btn>
+                  <Btn variant="ghost" onClick={() => { stopScan(); setScanState("idle"); }}>להקליד מספר ידנית</Btn>
+                </div>
+              </div>
+            )}
+            {scanState === "looking" && (
+              <div style={{ textAlign: "center", padding: "32px 0" }}><Loader size={28} color={C.brand} className="spin" /><div style={{ fontSize: 16, color: C.ink, marginTop: 12 }}>מחפש את המוצר…</div></div>
+            )}
+            {scanState === "notfound" && (
+              <div style={{ textAlign: "center", padding: "16px 0" }}>
+                <div style={{ fontSize: 16, color: C.ink, marginBottom: 14, lineHeight: 1.6 }}>המוצר לא נמצא במאגר. אפשר לצלם את <b>התווית התזונתית</b> ואני אזהה את הערכים, או לנסות שוב.</div>
+                <label style={{ display: "block", marginBottom: 10 }}>
+                  <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי את התווית התזונתית</span>
+                </label>
+                <Btn variant="ghost" onClick={() => setScanState("idle")}>נסי שוב לסרוק</Btn>
+              </div>
+            )}
+            {scanState === "error" && (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <div style={{ fontSize: 16, color: C.amber, marginBottom: 12, lineHeight: 1.6 }}>לא ניתן לפתוח את המצלמה. ודאי שאישרת גישה למצלמה בדפדפן, או הקלידי את הברקוד ידנית.</div>
+                <Btn variant="ghost" onClick={() => setScanState("idle")}>חזרה</Btn>
+              </div>
+            )}
+          </div>
+        )}
+        {step === "photo" && (
+          <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
+            <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}><Camera size={32} color={C.brand} /></div>
+            <div style={{ fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 6 }}>צלמי או העלי תמונה</div>
+            <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>נפתח שיחה קצרה עם ה-AI - נזהה את הפריטים ונוכל לתקן כמויות יחד.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={{ display: "block" }}>
+                <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי עכשיו</span>
+              </label>
+              <label style={{ display: "block" }}>
+                <input ref={fileRef} type="file" accept="image/*" onChange={onPhoto} style={{ display: "none" }} />
+                <span style={{ display: "block", background: "transparent", color: C.brandD, borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer", boxShadow: `inset 0 0 0 1px ${C.line}` }}>העלי תמונה מהגלריה</span>
+              </label>
+            </div>
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>הניתוח מבוצע ע״י בינה מלאכותית - ייתכן שתתבקשי להתחבר ל-Claude.</div>
+          </div>
+        )}
+        {step === "ai" && (
+          <div data-tut="ai-chat" style={{ display: "flex", flexDirection: "column", height: 380 }}>
+            <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+              {aiMsgs.map((m, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+                  <div style={{ maxWidth: "82%", fontSize: 16, lineHeight: 1.5, padding: m.img ? 6 : "9px 12px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>
+                    {m.img && <img src={m.img} alt="" style={{ width: "100%", maxWidth: 180, borderRadius: 10, display: "block", marginBottom: m.text ? 6 : 0 }} />}
+                    {m.text && <div style={{ padding: m.img ? "0 6px 4px" : 0 }}>{m.text}</div>}
+                  </div>
+                </div>
+              ))}
+              {aiLoading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>כותבת…</div></div>}
+              {reconciling && !aiDoneItems && (
+                <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: C.sub, fontSize: 15 }}>
+                  <Search size={15} /> בודקת ערכים במאגרי המזון…
+                </div>
+              )}
+              {aiDoneItems && (
+                <div style={{ border: `1px solid ${C.brand}`, borderRadius: 12, padding: 10, marginTop: 6 }}>
+                  {aiDoneItems.map((it, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
+                      <span style={{ fontSize: 16, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source={it.source || "estimated"} /></span>
+                      <span style={{ fontSize: 15, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 12, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז - סריקת ברקוד היא המדויקת ביותר.</div>
+                  <div style={{ fontSize: 13, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
+                  <Btn onClick={() => commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })))}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ליומן</Btn>
+                  <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setAiDoneItems(null)}>אני רוצה לשנות</Btn></div>
+                </div>
+              )}
+              <div ref={aiEndRef} />
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+              <button onClick={startMic} disabled={aiLoading} className={aiListening ? "spin-pulse" : ""} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: aiListening ? C.brand : C.brandBg, color: aiListening ? "#fff" : C.brand, cursor: aiLoading ? "default" : "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Mic size={18} /></button>
+              <textarea ref={aiInputRef} value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }} disabled={aiLoading} rows={1} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+              <button onClick={() => sendAi()} disabled={aiLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Send size={18} /></button>
+            </div>
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>
+          </div>
+        )}
+        {step === "qty" && food && (
+          <>
+            {String(food.id || "").startsWith("bc_") && (
+              <>
+                <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>שם המוצר (אפשר לערוך)</div>
+                <input value={food.name} onChange={(e) => setFood({ ...food, name: e.target.value })} placeholder="שם המוצר" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
+              </>
+            )}
+            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>שיוך לארוחה</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
+            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>מידת בית</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>{food.measures.map((ms) => (<span key={ms.label} onClick={() => setGrams(ms.g)} style={{ fontSize: 15, padding: "6px 11px", borderRadius: 8, cursor: "pointer", background: grams === ms.g ? C.brandBg : "transparent", color: grams === ms.g ? C.brandD : C.sub, boxShadow: grams === ms.g ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{ms.label}{ms.label.includes(String(ms.g)) ? "" : ` · ${ms.g} ${unitLabel}`}</span>))}</div>
+            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>או כמות מדויקת</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
+              <button onClick={() => setGrams(Math.max(5, grams - 10))} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 22, color: C.ink }}>−</button>
+              <div style={{ minWidth: 70, textAlign: "center" }}><span style={{ fontSize: 27, fontWeight: 600, color: C.ink }}>{grams}</span> <span style={{ fontSize: 15, color: C.sub }}>{unitLabel}</span></div>
+              <button onClick={() => setGrams(grams + 10)} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 22, color: C.ink }}>+</button>
+            </div>
+            <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
+            </div>
+            <Btn onClick={() => commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...nut })}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
+            {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   ROOT APP
+   ============================================================ */
+function EntryMenu({ onClose, onPick, mode }) {
+  const FOOD = { bg: C.brandBg, fg: C.brand };
+  const ACT = { bg: C.infoBg, fg: C.info };
+  const items = mode === "calorie" ? [
+    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת", tint: FOOD },
+    { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי", tint: ACT },
+  ] : [
+    { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת", tint: FOOD },
+    { id: "recommend", ic: Sparkles, t: "מה כדאי לאכול?", s: "הצעות חכמות לפי היעדים שלך", tint: FOOD },
+    { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי", tint: ACT },
+  ];
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 26 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>מה תרצי להזין?</span>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+        </div>
+        {items.map((o) => (
+          <div key={o.id} data-tut={o.id === "food" ? "entry-food" : o.id === "activity" ? "entry-activity" : undefined} onClick={() => onPick(o.id)} style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${o.tint.bg}`, borderInlineStart: `4px solid ${o.tint.fg}`, background: o.tint.bg, borderRadius: 14, padding: 13, marginBottom: 8, cursor: "pointer" }}>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><o.ic size={19} color={o.tint.fg} /></div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{o.t}</div>{o.s && <div style={{ fontSize: 14, color: C.sub }}>{o.s}</div>}</div>
+            <ChevronLeft size={18} color={o.tint.fg} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SheetShell({ title, onClose, children }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 27 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexShrink: 0 }}>
+          <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{title}</span>
+          <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ActivityModal({ onClose, onAdd, weightKg }) {
+  const acts = [
+    { name: "ריצה", met: 9.8 },
+    { name: "אימון כוח", met: 5 },
+    { name: "יוגה / פילאטיס", met: 3 },
+    { name: "אופניים", met: 7 },
+    { name: "שחייה", met: 7 },
+    { name: "אירובי / ריקוד", met: 6.5 },
+  ];
+  const INT = { "קלה": 3, "בינונית": 5, "גבוהה": 8 };
+  const [sel, setSel] = useState(0); // index, or -1 for custom
+  const [minutes, setMinutes] = useState(30);
+  const [customName, setCustomName] = useState("");
+  const [intensity, setIntensity] = useState("בינונית");
+  const met = sel >= 0 ? acts[sel].met : INT[intensity];
+  const baseName = sel >= 0 ? acts[sel].name : (customName.trim() || "פעילות");
+  const kcal = Math.round(met * 3.5 * (weightKg || 70) / 200 * minutes);
+  const chip = (on) => ({ fontSize: 15, padding: "7px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}`, display: "flex", alignItems: "center", gap: 6 });
+  return (
+    <SheetShell title="פעילות גופנית" onClose={onClose}>
+      <div style={{ background: C.infoBg, borderRadius: 12, padding: "11px 13px", marginBottom: 14, fontSize: 14, color: C.ink, lineHeight: 1.6 }}>
+        הקלוריות שאת שורפת באימון <b>מתווספות לתקציב הקלורי היומי שלך</b> - כלומר מגדילות את הכמות שמותר לך לאכול היום. <b>הליכה לא נמצאת כאן</b> - היא נספרת אוטומטית דרך הצעדים.
+      </div>
+      <div style={{ fontSize: 14, color: C.sub, marginBottom: 8 }}>בחרי פעילות</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        {acts.map((a, i) => (<span key={a.name} onClick={() => setSel(i)} style={chip(sel === i)}><Dumbbell size={14} /> {a.name}</span>))}
+        <span onClick={() => setSel(-1)} style={chip(sel === -1)}>אחר</span>
+      </div>
+      {sel === -1 && (
+        <>
+          <input value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="שם הפעילות" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>עצימות</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>{Object.keys(INT).map((k) => (<span key={k} onClick={() => setIntensity(k)} style={chip(intensity === k)}>{k}</span>))}</div>
+        </>
+      )}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <span style={{ fontSize: 16, color: C.sub }}>כמה דקות?</span>
+        <Stepper value={minutes} set={(v) => setMinutes(Math.max(1, v))} step={5} suffix="דק׳" />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.bg, borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+        <span style={{ fontSize: 15, color: C.sub }}>נשרף בערך</span>
+        <span style={{ fontSize: 18, fontWeight: 600, color: C.brandD }}>{kcal} קק״ל</span>
+      </div>
+      <Btn onClick={() => onAdd({ name: `${baseName} ${minutes} דק׳`, kcal })}>הוסף פעילות</Btn>
+      <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 8 }}>הערכה לפי סוג הפעילות, המשקל שלך ({weightKg || 70} ק״ג) ומשך הזמן</div>
+    </SheetShell>
+  );
+}
+
+function WeightModal({ weights, today, minDate, heightCm, onClose, onAdd }) {
+  const find = (d) => { const w = (weights || []).find((x) => x.date === d); return w ? w.kg : null; };
+  const [date, setDate] = useState(today);
+  const [kg, setKg] = useState(() => { const k = find(today); return k != null ? String(k) : ""; });
+  const onDate = (d) => { setDate(d); const k = find(d); setKg(k != null ? String(k) : ""); };
+  const num = parseFloat(kg);
+  const valid = isFinite(num) && num >= 30 && num <= 400 && !!date;
+  const low = valid && bmiOf(num, heightCm) < UNDERWEIGHT_BMI;
+  return (
+    <SheetShell title="הזנת משקל" onClose={onClose}>
+      <WeighInTips style={{ marginTop: 2 }} />
+      <div style={{ margin: "2px 0 12px" }}>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>תאריך</div>
+        <input type="date" value={date} min={minDate} max={today} onChange={(e) => onDate(e.target.value)} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center" }} />
+      </div>
+      <div style={{ margin: "4px 0 8px" }}>
+        <input type="text" inputMode="decimal" value={kg} autoFocus onChange={(e) => setKg(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="לדוגמה 71.5" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 25, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <div style={{ textAlign: "center", fontSize: 14, color: C.sub, marginTop: 6 }}>ק״ג</div>
+      </div>
+      {low && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, borderRadius: 10, padding: 10, lineHeight: 1.6, marginBottom: 10, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>המשקל שהזנת נמוך מהטווח התקין (BMI מתחת ל-18.5). שווה להתייעץ עם איש מקצוע. אפשר כמובן לשמור את הערך.</span></div>}
+      <Btn onClick={() => { if (valid) onAdd(Math.round(num * 10) / 10, date); }} style={{ opacity: valid ? 1 : 0.5 }}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+      <div style={{ fontSize: 13, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>אפשר לבחור גם תאריך קודם. הזנה חוזרת לאותו תאריך מעדכנת את הערך.</div>
+    </SheetShell>
+  );
+}
+
+// Deeper steps explanation + per-platform health-app guide link (link appears once STEP_GUIDES is filled).
+function StepGuideLink({ style, linkOnly }) {
+  const [view, setView] = useState(null); // null | "menu" | "ios" | "android"
+  const [idx, setIdx] = useState(0);
+  const guideKeys = Object.keys(STEP_GUIDES).filter((k) => STEP_GUIDES[k].images && STEP_GUIDES[k].images.length); // ios, android
+  const og = (view === "ios" || view === "android") ? STEP_GUIDES[view] : null;
+  const imgs = og ? og.images : [];
+  const last = idx >= imgs.length - 1;
+  const navBtn = (on) => ({ border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: fontStack, fontSize: 15, fontWeight: 700, cursor: on ? "pointer" : "default", background: on ? C.brand : C.line, color: on ? "#fff" : C.faint });
+  const box = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.amber}`, background: C.amberBg, color: C.amber, borderRadius: 12, padding: "12px", fontFamily: fontStack, fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, textAlign: "center", lineHeight: 1.4 };
+  const storeBtn = { flex: 1, textAlign: "center", border: `1px solid ${C.amber}`, background: C.panel, color: C.amber, borderRadius: 10, padding: "9px", fontFamily: fontStack, fontSize: 14.5, fontWeight: 700, textDecoration: "none" };
+  const overlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 100001, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: fontStack, direction: "rtl" };
+  const card = { background: C.panel, borderRadius: 18, padding: 16, maxWidth: 460, width: "100%", maxHeight: "92vh", display: "flex", flexDirection: "column" };
+  const closeBtn = { border: "none", background: "transparent", cursor: "pointer", color: C.faint };
+  return (
+    <div style={style}>
+      {!linkOnly && (
+        <div style={{ fontSize: 13, color: C.sub, textAlign: "center", lineHeight: 1.55, marginBottom: 8 }}>
+          כדי לראות כמה צעדים עשית היום: פתחי את אפליקציית הבריאות בטלפון, מצאי את מספר הצעדים של היום, והזיני אותו כאן.
+        </div>
+      )}
+      <button onClick={() => setView("menu")} style={box}><Info size={16} /> זקוקה להנחיות שימוש באפליקציית הצעדים? לחצי</button>
+      {view === "menu" && (
+        <div onClick={() => setView(null)} style={overlay}>
+          <div onClick={(e) => e.stopPropagation()} style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>הנחיות לאפליקציית הצעדים</span>
+              <button onClick={() => setView(null)} aria-label="סגירה" style={closeBtn}><X size={20} /></button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {guideKeys.map((k) => (
+                <button key={k} onClick={() => { setView(k); setIdx(0); }} style={box}><Info size={15} /> מדריך: איך מוצאים את הצעדים ב{STEP_GUIDES[k].app}</button>
+              ))}
+              <div style={{ border: `1px solid ${C.amber}`, background: C.amberBg, borderRadius: 12, padding: "12px" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, textAlign: "center", marginBottom: 9, lineHeight: 1.45 }}>אין לך אפליקציית בריאות בטלפון?<br />הורידי אפליקציית צעדים חינמית:</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <a href={STEP_APPS.android.url} target="_blank" rel="noreferrer" style={storeBtn}>Android</a>
+                  <a href={STEP_APPS.ios.url} target="_blank" rel="noreferrer" style={storeBtn}>אייפון</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {og && (
+        <div onClick={() => setView("menu")} style={overlay}>
+          <div onClick={(e) => e.stopPropagation()} style={card}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>איך מוצאים את הצעדים ב{og.app}</span>
+              <button onClick={() => setView("menu")} aria-label="חזרה" style={closeBtn}><X size={20} /></button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto", background: C.bg, borderRadius: 12, padding: 8 }}>
+              <img src={imgs[idx]} alt="" style={{ maxWidth: "100%", maxHeight: "64vh", objectFit: "contain", borderRadius: 8 }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, gap: 10 }}>
+              <button onClick={() => setIdx((i) => Math.max(0, i - 1))} disabled={idx === 0} style={navBtn(idx > 0)}>הקודם</button>
+              <span style={{ color: C.faint, fontSize: 14 }}>{idx + 1}/{imgs.length}</span>
+              <button onClick={() => (last ? setView("menu") : setIdx((i) => i + 1))} style={navBtn(true)}>{last ? "חזרה" : "הבא"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StepsModal({ current, goal, weightKg, onClose, onAdd, autoFocusInput = true }) {
+  const [val, setVal] = useState(current ? String(current) : "");
+  const steps = Math.max(0, parseInt(val, 10) || 0);
+  const kcal = stepsKcal(steps, weightKg);
+  const frac = Math.max(0, Math.min(1, goal > 0 ? steps / goal : 0));
+  return (
+    <SheetShell title="עדכון צעדים" onClose={onClose}>
+      <div data-tut="steps-input" style={{ margin: "4px 0 10px" }}>
+        <input type="text" inputMode="numeric" value={val} autoFocus={autoFocusInput} onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, ""))} placeholder="לדוגמה 6500" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 12px", fontSize: 25, fontWeight: 600, textAlign: "center", fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <div style={{ textAlign: "center", fontSize: 14, color: C.sub, marginTop: 6 }}>צעדים</div>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: C.amberBg, overflow: "hidden", marginBottom: 8 }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: C.amber, borderRadius: 6 }} />
+      </div>
+      <div style={{ textAlign: "center", fontSize: 14, color: C.sub, marginBottom: 16 }}>{steps.toLocaleString()} מתוך יעד {goal.toLocaleString()} · מוסיף ~{kcal} קק״ל לתקציב</div>
+      <Btn onClick={() => onAdd(steps)}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
+      <div style={{ fontSize: 13, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>לשינוי יעד הצעדים - אפשר בפרופיל. הזנה חוזרת היום מעדכנת את הערך.</div>
+      <StepGuideLink style={{ marginTop: 10 }} />
+    </SheetShell>
+  );
+}
+
+function WaterModal({ currentMl, cupMl, onSetMl, onSetCup, onClose }) {
+  const [cup, setCup] = useState(cupMl || DEFAULT_CUP_ML);
+  const [free, setFree] = useState("");
+  const safeCup = Math.max(100, cup || DEFAULT_CUP_ML);
+  const ml = currentMl || 0;
+  const cups = Math.round((ml / safeCup) * 10) / 10;
+  const targetCups = Math.round(WATER_TARGET_ML / safeCup);
+  const frac = Math.max(0, Math.min(1, ml / WATER_TARGET_ML));
+  const add = (n) => onSetMl(Math.max(0, ml + n));
+  const setCupLive = (v) => { const c = Math.max(100, Math.min(1000, v)); setCup(c); onSetCup(c); };
+  const addFree = () => { const n = parseInt(free, 10) || 0; if (n >= 50) { add(n); setFree(""); } };
+  return (
+    <SheetShell title="עדכון מים" onClose={onClose}>
+      <div style={{ textAlign: "center", margin: "2px 0 10px" }}>
+        <div style={{ fontSize: 35, fontWeight: 700, color: C.ink }}>{cups} <span style={{ fontSize: 17, color: C.sub }}>כוסות</span></div>
+        <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>{ml.toLocaleString()} מ"ל מתוך {targetCups} כוסות (2 ליטר)</div>
+      </div>
+      <div style={{ height: 10, borderRadius: 6, background: C.waterBg, overflow: "hidden", marginBottom: 14 }}>
+        <div style={{ width: `${frac * 100}%`, height: "100%", background: C.water, borderRadius: 6, transition: "width .3s" }} />
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <button onClick={() => add(safeCup)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, cursor: "pointer" }}>+ כוס ({safeCup} מ"ל)</button>
+        <button onClick={() => add(500)} style={{ flex: 1, border: `1.5px solid ${C.water}`, background: C.waterBg, color: C.water, borderRadius: 12, padding: "12px 8px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, cursor: "pointer" }}>+ חצי ליטר</button>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <button onClick={() => add(-safeCup)} disabled={ml <= 0} style={{ flex: 1, border: `1.5px solid ${ml <= 0 ? C.line : C.water}`, background: C.panel, color: ml <= 0 ? C.faint : C.water, borderRadius: 12, padding: "10px 8px", fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: ml <= 0 ? "default" : "pointer", opacity: ml <= 0 ? 0.6 : 1 }}>- כוס (תיקון)</button>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+        <input type="text" inputMode="numeric" value={free} onChange={(e) => setFree(e.target.value.replace(/[^0-9]/g, ""))} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addFree(); } }} placeholder={'הוספת מ"ל חופשי (לפחות 50)'} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box" }} />
+        <button onClick={addFree} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.water, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+      </div>
+      <div style={{ textAlign: "center", marginBottom: 14 }}>
+        <button onClick={() => onSetMl(0)} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 14, textDecoration: "underline", cursor: "pointer", fontFamily: fontStack }}>איפוס היום</button>
+      </div>
+      <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 6 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 15, color: C.ink }}>גודל כוס</span>
+          <Stepper value={safeCup} set={setCupLive} step={10} suffix={'מ"ל'} />
+        </div>
+        <div style={{ fontSize: 13, color: C.faint, marginTop: 6 }}>היעד תמיד 2 ליטר; מספר הכוסות מתעדכן לפי גודל הכוס.</div>
+      </div>
+      <div style={{ fontSize: 13, color: C.faint, textAlign: "center", marginTop: 10 }}>כל שינוי נשמר מיד. אפשר לסגור בכל רגע.</div>
+    </SheetShell>
+  );
+}
+
+function CalorieGoalModal({ current, onClose, onAdd }) {
+  const [kcal, setKcal] = useState(current);
+  return (
+    <SheetShell title="עדכון יעד קלורי ליום" onClose={onClose}>
+      <div style={{ fontSize: 14, color: C.sub, marginBottom: 10, textAlign: "center", lineHeight: 1.6 }}>היעד היומי שלך לקלוריות. שינוי כאן דורס את הערך המחושב.</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", margin: "4px 0 18px" }}>
+        <Stepper value={kcal} set={(v) => setKcal(Math.max(KCAL_FLOOR, v))} step={10} min={KCAL_FLOOR} suffix="קק״ל" />
+      </div>
+      <Btn onClick={() => onAdd(kcal)}>שמור יעד</Btn>
+    </SheetShell>
+  );
+}
+
+function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg, attempts = 0, agree, setAgree }) {
+  const deniedText = reason === "device_limit"
+    ? "המייל שלך כבר מחובר בשני מכשירים. ניתן להשתמש ב-MyPrime בו-זמנית בשני מכשירים בלבד. התנתקי במכשיר אחר ונסי שוב, או פני למנהלת התוכנית."
+    : reason === "expired"
+    ? "תקופת השימוש באפליקציה הסתיימה. תודה שהיית חלק מהמסע שלנו 💜"
+    : reason === "cancelled"
+    ? "המנוי שלך בתוכנית אינו פעיל. אם לדעתך מדובר בטעות, פני בבקשה לצוות הטכני בווטסאפ 0547304177 או במייל support@myprime.co.il."
+    : "המייל הזה לא נמצא ברשימת המשתתפות בתוכנית. אם את רשומה לתוכנית, או שיש בעיה - פני בבקשה לצוות הטכני בווטסאפ 0547304177 או במייל support@myprime.co.il.";
+  const locked = reason === "not_registered" && attempts >= 5;
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center", fontFamily: fontStack }}>
+      <div style={{ width: 64, height: 64, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><Sparkles size={28} color={C.brand} /></div>
+      <div style={{ fontSize: 23, fontWeight: 600, color: C.ink, marginBottom: 6 }}>{name.trim() ? `היי ${name.trim()}!` : "ברוכה הבאה ל-MyPrime"}</div>
+      {status === "checking" && (
+        <><Loader size={26} color={C.brand} className="spin" style={{ marginTop: 18 }} /><div style={{ fontSize: 15, color: C.sub, marginTop: 12 }}>מאמתת את ההרשמה לתוכנית…</div></>
+      )}
+      {status === "form" && (
+        <>
+          <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 16px" }}>הזיני שם פרטי והמייל שאיתו נרשמת לתוכנית.</p>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="שם פרטי" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 10 }} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל איתו נרשמת לתוכנית" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
+          <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.7, textAlign: "right", marginBottom: 4 }}>
+            <Lock size={13} style={{ display: "inline", verticalAlign: "-2px", marginInlineEnd: 5 }} />
+            מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
+          </div>
+          <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 0 12px", textAlign: "right" }}>
+            <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
+            <span style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5 }}>קראתי ואני מאשרת את <a href={PRIVACY_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות הפרטיות</a> ו<a href={COOKIE_URL} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: C.brandD, textDecoration: "underline" }}>מדיניות העוגיות</a></span>
+          </div>
+          <div style={{ width: "100%" }}><Btn onClick={onSubmit}>כניסה</Btn></div>
+          {msg && <div style={{ fontSize: 14, color: C.amber, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}
+        </>
+      )}
+      {status === "denied" && (
+        <>
+          <div style={{ fontSize: 15, lineHeight: 1.7, margin: "12px 0 18px", background: C.amberBg, color: C.amber, padding: 12, borderRadius: 12 }}>{deniedText}</div>
+          {reason !== "expired" && reason !== "cancelled" && !locked && <div style={{ width: "100%" }}><Btn variant="ghost" onClick={onRetry}>נסי שוב / כתובת אחרת</Btn></div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose }) {
+  const [stage, setStage] = useState("confirm");
+  const [msgs, setMsgs] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(false);
+  const [pending, setPending] = useState(null);
+  const [logMsgs, setLogMsgs] = useState([]);
+  const [logInput, setLogInput] = useState("");
+  const [logLoading, setLogLoading] = useState(false);
+  const [logErr, setLogErr] = useState(false);
+  const [logItems, setLogItems] = useState(null);
+  const [logMeal, setLogMeal] = useState("בוקר");
+  const [logged, setLogged] = useState(false);
+  const endRef = useRef(null);
+  const inputRef = useRef(null);
+  useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading, logMsgs, logLoading, logItems, logged]);
+  const ctx = { proteinFocus };
+
+  const diet = profile.diet || [];
+  const allergies = profile.allergies || [];
+  const dislikes = (profile.dislikes || "").trim();
+  const toggle = (key, val) => setProfile({ ...profile, [key]: (profile[key] || []).includes(val) ? (profile[key] || []).filter((x) => x !== val) : [...(profile[key] || []), val] });
+  const chip = (on) => ({ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
+  const [newSens, setNewSens] = useState("");
+  const [want, setWant] = useState(null);
+  const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
+  const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
+
+  const run = async (history) => {
+    setLoading(true); setErr(false);
+    const r = await aiMealChat(history, ctx);
+    setLoading(false);
+    if (r.error || !r.text) { setErr(true); return; }
+    setMsgs([...history, { role: "assistant", content: r.text }]);
+  };
+  const startChat = () => {
+    const avoidList = [...allergies, ...(dislikes ? [dislikes] : [])].filter(Boolean);
+    const seed = `הקשר: נשארו לי כ-${Math.max(0, Math.round(remainingKcal))} קלוריות להיום`
+      + (proteinFocus && remainingProtein > 0 ? `, ונותרו כ-${Math.round(remainingProtein)} ג׳ חלבון ליעד` : "")
+      + (diet.length ? `. סגנון תזונה: ${diet.join(", ")}` : "")
+      + (avoidList.length ? `. חשוב מאוד - יש לי רגישות/אלרגיה, ואסור בשום אופן להציע לי מאכלים שמכילים: ${avoidList.join(", ")}. אם רעיון כולל אחד מהם, אל תציעי אותו בכלל, ותמיד הזכירי לי בעדינות לבדוק את רשימת הרכיבים המלאה לפני האכילה - כי לפעמים גם AI טועה.` : "")
+      + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
+      + (want ? `. אני מחפשת עכשיו: ${want}` : "")
+      + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
+    const h = [{ role: "user", content: seed }];
+    setMsgs(h); setStage("chat"); run(h);
+  };
+
+  const sendText = (t) => {
+    const text = (t || "").trim();
+    if (!text || loading) return;
+    const next = [...msgs, { role: "user", content: text }];
+    setMsgs(next); setInput(""); run(next);
+    const existing = [...diet, ...allergies, ...(dislikes ? dislikes.split(/[,،]/).map((s) => s.trim()).filter(Boolean) : [])];
+    const local = localPrefs(text, existing);
+    if (local.diet.length || local.avoid.length) setPending(local);
+    extractPreferences(text, existing).then((p) => {
+      const mDiet = [...new Set([...local.diet, ...((p.diet || []).filter((d) => !existing.includes(d)))])];
+      const mAvoid = [...new Set([...local.avoid, ...((p.avoid || []).filter((a) => !existing.includes(a)))])];
+      if (mDiet.length || mAvoid.length) setPending({ diet: mDiet, avoid: mAvoid });
+    });
+  };
+  const savePending = () => {
+    if (!pending) return;
+    const dietIds = DIET_OPTIONS.map((d) => d.id);
+    const newDiet = (pending.diet || []).filter((d) => dietIds.includes(d) && !diet.includes(d));
+    const newAllerg = (pending.avoid || []).filter((a) => SENSITIVITY_OPTIONS.includes(a) && !allergies.includes(a));
+    const restAvoid = (pending.avoid || []).filter((a) => !SENSITIVITY_OPTIONS.includes(a));
+    const newDislikes = [dislikes, ...restAvoid].filter(Boolean).join(", ");
+    setProfile({ ...profile, diet: [...diet, ...newDiet], allergies: [...allergies, ...newAllerg], dislikes: newDislikes });
+    setPending(null);
+  };
+
+  const defaultMeal = () => { const h = new Date().getHours(); if (h < 11) return "בוקר"; if (h < 16) return "צהריים"; if (h < 21) return "ערב"; return "נשנושים"; };
+  const runLog = async (history) => {
+    setLogLoading(true); setLogErr(false);
+    const r = await aiNutritionChat(history.map((m) => ({ role: m.role, content: m.content })));
+    setLogLoading(false);
+    if (!r.reply && (!r.items || !r.items.length)) { setLogErr(true); return; }
+    setLogMsgs([...history, { role: "assistant", content: r.reply }]);
+    setLogItems(r.done && r.items && r.items.length ? r.items : null);
+  };
+  const startLog = () => {
+    const last = [...msgs].reverse().find((m) => m.role === "assistant");
+    const ctxText = last ? last.content : "";
+    const seed = "אני רוצה להוסיף ליומן משהו מתוך מה שהצעת לי. "
+      + (ctxText ? "ההצעות שלך היו: " + ctxText + " " : "")
+      + "אם לא ברור מה בדיוק אכלתי או באיזו כמות - שאלי אותי שאלה אחת בכל פעם, ואז סכמי לרישום.";
+    const h = [{ role: "user", content: seed }];
+    setLogMsgs(h); setLogItems(null); setLogged(false); setLogMeal(defaultMeal()); setStage("log"); runLog(h);
+  };
+  const sendLog = (t) => {
+    const text = (t || "").trim();
+    if (!text || logLoading) return;
+    const next = [...logMsgs, { role: "user", content: text }];
+    setLogMsgs(next); setLogInput(""); setLogItems(null); runLog(next);
+  };
+  const doLog = () => {
+    if (!logItems || !logItems.length) return;
+    onLog(logItems.map((it) => ({ meal: logMeal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })));
+    setLogged(true);
+  };
+
+  const visible = msgs.slice(1); // hide the synthetic opening prompt
+  const hasAvoid = allergies.length > 0 || dislikes.length > 0;
+
+  return (
+    <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
+      {stage === "confirm" ? (
+        <div>
+          <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ - בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>מה את מחפשת עכשיו?</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+            {WANT_OPTIONS.map((w) => (<span key={w.id} onClick={() => setWant(want === w.id ? null : w.id)} style={chip(want === w.id)}>{w.emoji} {w.id}</span>))}
+          </div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+            {DIET_OPTIONS.map((d) => (<span key={d.id} onClick={() => toggle("diet", d.id)} style={chip(diet.includes(d.id))}>{d.emoji} {d.id}</span>))}
+          </div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות / אלרגיות</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
+            {SENSITIVITY_OPTIONS.map((s) => (<span key={s} onClick={() => toggle("allergies", s)} style={chip(allergies.includes(s))}>{s}</span>))}
+          </div>
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+            <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+            <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+          </div>
+          {customSens.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {customSens.map((s) => (
+                <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {s}
+                  <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          {!diet.length && !hasAvoid && <div style={{ fontSize: 14, color: C.faint, margin: "10px 0 0" }}>לא רשמת עדיין העדפות או רגישויות. אפשר לבחור עכשיו, או פשוט להמשיך.</div>}
+          {hasAvoid && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
+          <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
+        </div>
+      ) : stage === "log" ? (
+      <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {visible.map((m, i) => (
+            <div key={"sug" + i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8, opacity: 0.5 }}>
+              <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.5, padding: "9px 12px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+            </div>
+          ))}
+          {visible.length > 0 && <div style={{ textAlign: "center", fontSize: 13, color: C.faint, margin: "2px 0 12px" }}>- מוסיפים ליומן -</div>}
+          {logMsgs.slice(1).map((m, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+              <div style={{ maxWidth: "84%", fontSize: 16, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+            </div>
+          ))}
+          {logLoading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>רושמת…</div></div>}
+          {logErr && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. נסי שוב.</div>}
+          {logItems && !logged && (
+            <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, marginTop: 4 }}>
+              {logItems.map((it, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 15, padding: "4px 0", color: C.ink }}>
+                  <span>{it.name} · {it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"}</span>
+                  <span style={{ color: C.sub }}>{it.kcal} קק״ל</span>
+                </div>
+              ))}
+              <div style={{ fontSize: 14, color: C.sub, margin: "10px 0 6px" }}>לאיזו ארוחה?</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {MEALS.map((m) => (<span key={m} onClick={() => setLogMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === logMeal ? C.brand : "transparent", color: m === logMeal ? "#fff" : C.sub, boxShadow: m === logMeal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+              </div>
+            </div>
+          )}
+          {logged && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 14, marginTop: 6, fontSize: 16, fontWeight: 600, textAlign: "center" }}>✓ נוסף ליומן (וגם למועדפים והאחרונים)</div>}
+          <div ref={endRef} />
+        </div>
+        {logItems && !logged && <div style={{ marginBottom: 8 }}><Btn onClick={doLog}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ל{logMeal}</Btn></div>}
+        {logged ? (
+          <Btn variant="ghost" onClick={onClose}>סגירה</Btn>
+        ) : (
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+            <textarea value={logInput} onChange={(e) => setLogInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendLog(logInput); } }} disabled={logLoading} rows={1} placeholder={logLoading ? "רגע…" : "תשובה / מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: logLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+            <button onClick={() => sendLog(logInput)} disabled={logLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: logLoading ? 0.5 : 1 }}><Send size={18} /></button>
+          </div>
+        )}
+      </div>
+      ) : (
+      <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {visible.map((m, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+              <div style={{ maxWidth: "84%", fontSize: 16, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+            </div>
+          ))}
+          {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
+          {err && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
+          <div ref={endRef} />
+        </div>
+
+        {visible.length > 0 && !loading && (
+          <button onClick={startLog} style={{ width: "100%", marginBottom: 8, border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 12, padding: 11, fontSize: 16, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={17} /> אכלתי - הוסיפי ליומן</button>
+        )}
+
+        {!loading && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            <span onClick={() => sendText("תני לי בבקשה רעיון אחר")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>רעיון אחר</span>
+            <span onClick={() => sendText("אין לי את המצרכים האלה בבית")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אין לי את זה</span>
+          </div>
+        )}
+
+        {pending && (
+          <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
+            <div style={{ fontSize: 14, color: C.ink, marginBottom: 8, lineHeight: 1.5 }}>לשמור את זה להעדפות שלך לפעמים הבאות? <b>{[...(pending.diet || []), ...(pending.avoid || [])].join(", ")}</b></div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={savePending} style={{ border: "none", background: C.brand, color: "#fff", fontFamily: fontStack, fontSize: 14, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>שמרי</button>
+              <button onClick={() => setPending(null)} style={{ border: `1px solid ${C.line}`, background: "transparent", color: C.sub, fontFamily: fontStack, fontSize: 14, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>לא עכשיו</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+          <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(input); } }} disabled={loading} rows={1} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+          <button onClick={() => sendText(input)} disabled={loading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 }}><Send size={18} /></button>
+        </div>
+      </div>
+      )}
+    </SheetShell>
+  );
+}
+
+function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary }) {
+  const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
+  const hasManual = tasks.some((t) => !t.auto);
+  const total = tasks.length;
+  const r = 54, circ = 2 * Math.PI * r;
+  const frac = total ? done / total : 0;
+  const allDone = total > 0 && done >= total;
+  const dn = dowOf(date);
+  const dd = new Date(date);
+  const rel = relLabel(date);
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getDay()]}, ${dd.getDate()} ב${HE_MONTHS[dd.getMonth()]} · שבוע ${week}${dn >= 1 ? `, יום ${dn}` : ""}`;
+  return (
+    <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
+      <div data-tut="tracker" onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={16} color={C.brand} /> יומן המעקב שלי</div>
+        <div style={{ fontSize: 13.5, fontWeight: 500, color: C.sub, marginTop: 3 }}>{dateLine}</div>
+        {locked ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, fontSize: 15, color: C.sub }}><Clock size={15} color={C.faint} /> הדוח של היום ייפתח ב-19:00. אפשר להשלים בכל שעה אחרי זה.</div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
+            <div style={{ position: "relative", width: 120, height: 120, flexShrink: 0 }}>
+              <svg width={120} height={120} viewBox="0 0 132 132">
+                <circle cx="66" cy="66" r={r} fill="none" stroke="#FBE0EE" strokeWidth="10" />
+                <circle cx="66" cy="66" r={r} fill="none" stroke="#E8589B" strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)} transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
+              </svg>
+              <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", filter: done === 0 ? "grayscale(1) opacity(0.55)" : "none" }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 15, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
+              <div style={{ fontSize: 14.5, color: C.sub, marginTop: 2 }}>{allDone ? "סיימת את כל המשימות להיום!" : "המשימות של היום"}</div>
+              <button onClick={(e) => { e.stopPropagation(); onOpen && onOpen(); }} style={{ marginTop: 10, border: "none", borderRadius: 10, padding: "10px 12px", background: C.brand, color: "#fff", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", width: "100%" }}>{hasManual ? "הקישי למילוי המעקב" : "הקישי לצפייה במעקב"}</button>
+            </div>
+          </div>
+        )}
+        {(dn === 6 || dn === 0) && (
+          <div onClick={(e) => { e.stopPropagation(); onOpenSummary && onOpenSummary(); }} data-tut="weeklysummary" role="button" aria-label="סיכום שבועי" style={{ marginTop: 12, background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "11px 12px", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, color: C.brandD, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.brandD} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3v18h18" /><path d="M7 16v-5" /><path d="M12 16V8" /><path d="M17 16v-9" /></svg>
+            סיכום שבועי
+            <ChevronLeft size={16} color={C.brandD} />
+          </div>
+        )}
+      </div>
+      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} data-tut="cabinet" role="button" aria-label="ארון הגביעים" style={{ width: 84, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
+        <img src="/medals/trophy-icon.webp" alt="" width={72} height={58} style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
+        <div style={{ fontSize: 13.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
+        <ChevronLeft size={16} color="#fff" />
+      </div>
+    </div>
+  );
+}
+
+function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate, tipsSeen, onTipsSeen }) {
+  const hasAuto = tasks.some((t) => t.auto);
+  const showAutoNote = hasAuto && !(tipsSeen || []).includes("autotasks");
+  const dd = new Date(date);
+  const rel = relLabel(date);
+  const wk = Math.min(programWeekFor(startDate, date), 10);
+  const dn = dowOf(date);
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getDay()]}, ${dd.getDate()} ב${HE_MONTHS[dd.getMonth()]} · שבוע ${wk}${dn >= 1 ? `, יום ${dn}` : ""}`;
+  return (
+    <SheetShell title="המעקב היומי שלי" onClose={onClose}>
+      <div style={{ fontSize: 14, fontWeight: 500, color: C.sub, marginBottom: 8, textAlign: "right" }}>{dateLine}</div>
+      {showAutoNote && (
+        <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8, fontSize: 13.5, color: C.ink, lineHeight: 1.55, textAlign: "right" }}>
+          חלק מהמשימות מסומנות "אוטומטי" - הן מתעדכנות לבד לפי מה שמילאת בפלוס של הקלוריות והצעדים, בלי שתצטרכי למלא שוב.
+          <div style={{ textAlign: "left", marginTop: 6 }}><button onClick={() => onTipsSeen && onTipsSeen(["autotasks"])} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 13.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", padding: 0 }}>הבנתי</button></div>
+        </div>
+      )}
+      <div style={{ maxHeight: "58vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
+        {CHECKIN_GROUPS.map((g) => {
+          const items = tasks.filter((t) => t.group === g.id);
+          if (!items.length) return null;
+          return (
+            <div key={g.id}>
+              <div style={{ fontSize: 13.5, color: C.faint, margin: "12px 0 2px" }}>{g.label}</div>
+              {items.map((t) => {
+                const done = taskDone(t, answers, auto);
+                const autoNote = t.auto === "steps" ? "יש למלא בעיגול הצעדים" : t.auto === "water" ? "יש לעדכן בעיגול המים" : "יש למלא בעיגול הקלוריות";
+                return (
+                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
+                    <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                      <span style={{ fontSize: 16, color: C.ink }}>{t.label}{t.optional ? <span style={{ color: C.faint, fontSize: 13 }}> (רשות)</span> : null}</span>
+                      {t.auto && !done && <span style={{ fontSize: 12.5, color: C.amber, marginTop: 2 }}>{autoNote}</span>}
+                    </div>
+                    {t.auto ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, color: done ? C.brandD : C.faint, background: done ? C.brandBg : "transparent", padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}>{done ? <Check size={14} /> : null}{t.auto === "steps" && auto.steps != null ? `${auto.steps.toLocaleString()} · ` : ""}{t.auto === "water" && auto.water != null ? `${auto.water} · ` : ""}אוטומטי</span>
+                    ) : t.type === "number" ? (
+                      <Stepper value={answers[t.id] || 0} set={(v) => setValue(t.id, v)} step={1} min={0} />
+                    ) : (
+                      <button onClick={() => setValue(t.id, answers[t.id] === true ? null : true)} aria-label={t.label} style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${answers[t.id] === true ? C.brand : C.line}`, background: answers[t.id] === true ? C.brand : C.panel, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{answers[t.id] === true ? <Check size={16} /> : null}</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={onClose} style={{ marginTop: 14, width: "100%", border: "none", borderRadius: 12, padding: "13px", background: C.brand, color: "#fff", fontSize: 17, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>סגירה</button>
+    </SheetShell>
+  );
+}
+
+function CheckinCheer({ name, onClose }) {
+  const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
+  return (
+    <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        {Array.from({ length: 26 }).map((_, i) => (
+          <span key={i} style={{ position: "absolute", top: -12, left: `${(i * 3.9) % 100}%`, width: 8, height: 8, borderRadius: 2, background: colors[i % colors.length], animation: `confettiFall ${1 + (i % 5) * 0.15}s ease-out ${(i % 7) * 0.08}s forwards` }} />
+        ))}
+      </div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", textAlign: "center", maxWidth: 300, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
+        <img src={MEDAL_SRC} alt="" width={100} height={100} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.6s cubic-bezier(.2,1.3,.5,1) both" }} />
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginTop: 10 }}>מדליה נכנסה לאוסף!</div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""}. עוד יום שהשלמת, אני איתך 💜<div style={{ marginTop: 2, color: C.faint, fontSize: 14 }}>ענת</div></div>
+        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+function TrophyCheer({ week, name, onClose }) {
+  const colors = ["#F4C04A", C.brand, C.amber, C.info, C.macroC];
+  const src = week >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${Math.max(1, Math.min(9, week))}.webp`;
+  const champ = week >= 10;
+  return (
+    <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 47 }}>
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        {Array.from({ length: 36 }).map((_, i) => (
+          <span key={i} style={{ position: "absolute", top: -12, left: `${(i * 2.8) % 100}%`, width: 9, height: 9, borderRadius: 2, background: colors[i % colors.length], animation: `confettiFall ${1.1 + (i % 5) * 0.16}s ease-out ${(i % 9) * 0.07}s forwards` }} />
+        ))}
+      </div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.35)" }}>
+        <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
+        <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : "גביע השבוע נכנס לארון!"}</div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2, color: C.faint, fontSize: 14 }}>ענת</div></div>
+        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>{champ ? "סגירה 💜" : "ממשיכות חזק 💜"}</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+function FastingIntroModal({ onOptIn, onDismiss }) {
+  return (
+    <div onClick={onDismiss} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 48, fontFamily: fontStack, direction: "rtl" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", textAlign: "center", maxWidth: 330, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
+        <div style={{ fontSize: 40, lineHeight: 1 }}>🕘</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, marginTop: 10 }}>משימה חדשה: צום לסירוגין</div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 10, lineHeight: 1.65, textAlign: "right" }}>
+          היום העליתי לך סרטון על משימת הצום לסירוגין.<br />
+          אם את מעוניינת לנסות את המשימה - אשרי זאת בכפתור.<br />
+          תמיד אפשר לשנות את הבחירה בפרופיל.
+          <div style={{ marginTop: 8, color: C.faint, fontSize: 14 }}>ענת</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
+          <Btn onClick={onOptIn}>כן, אשמח לנסות 💜</Btn>
+          <button onClick={onDismiss} style={{ border: "none", background: "transparent", color: C.sub, fontFamily: fontStack, fontSize: 15, fontWeight: 600, cursor: "pointer", padding: "6px" }}>לא עכשיו</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function trackerStats(checkins) {
+  let days = 0;
+  for (const d in checkins) if (checkins[d] && checkins[d]._done) days++;
+  return { days };
+}
+
+// A weekly trophy is earned once the week's weekdays have passed (Friday <= today)
+// and every eligible non-Saturday day of that program week (from day 3) is completed.
+function weekTrophyEarned(checkins, startDate, w, today) {
+  const fri = addDays(startDate, (w - 1) * 7 + 5);
+  if (fri > today) return false;
+  let any = false;
+  for (let dnum = Math.max((w - 1) * 7 + 1, 3); dnum <= w * 7; dnum++) {
+    const date = addDays(startDate, dnum - 1);
+    if (date > today) break;
+    if (new Date(date).getDay() === 6) continue;
+    any = true;
+    if (!(checkins[date] && checkins[date]._done)) return false;
+  }
+  return any;
+}
+
+function CollectionModal({ checkins, startDate, today, onClose }) {
+  const { days } = trackerStats(checkins);
+  return (
+    <SheetShell title="ארון המדליות והגביעים" onClose={onClose}>
+      <div style={{ textAlign: "center", padding: "2px 0 8px" }}>
+        {days > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6, maxHeight: 176, overflowY: "auto", padding: "4px 2px" }}>
+            {Array.from({ length: days }).map((_, i) => <img key={i} src={MEDAL_SRC} alt="" width={40} height={40} style={{ display: "block" }} />)}
+          </div>
+        ) : (
+          <img src={MEDAL_SRC} alt="" width={64} height={64} style={{ filter: "grayscale(1) opacity(0.5)" }} />
+        )}
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginTop: 8 }}>{days} {days === 1 ? "מדליה" : "מדליות"}</div>
+        <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>כל יום שהשלמת שווה מדליה</div>
+      </div>
+      <div style={{ fontSize: 14, color: C.faint, margin: "8px 0 8px" }}>הגביעים שלך</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+        {Array.from({ length: 10 }).map((_, i) => {
+          const w = i + 1; const earned = weekTrophyEarned(checkins, startDate, w, today);
+          const src = w >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${w}.webp`;
+          return (
+            <div key={w} style={{ textAlign: "center", opacity: earned ? 1 : 0.32 }}>
+              <img src={src} alt="" width={58} height={58} style={{ filter: earned ? "none" : "grayscale(1)" }} />
+              <div style={{ fontSize: 12, color: earned ? C.brandD : C.faint, marginTop: 2 }}>{w >= 10 ? "אלופה" : `שבוע ${w}`}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע נכנס לארון כשמשלימים את ימי השבוע (ראשון עד שישי). שבת לא חובה.</div>
+    </SheetShell>
+  );
+}
+
+// Weekly-summary motivation, indexed by week-1 (1..10). DRAFT copy - owner will refine.
+const WEEKLY_MOTIVATION = [
+  "כל צעד קטן השבוע הוא הבסיס לשבוע הבא. אני איתך.",
+  "הגוף שלך כבר מרגיש את השינוי, גם אם המספרים עוד לא צועקים אותו.",
+  "את לא צריכה להיות מושלמת. את צריכה להמשיך - ואת ממשיכה.",
+  "השבוע הזה הוכיח שאת מסוגלת. תזכרי את זה כשיהיה קשה.",
+  "חצי הדרך מאחורייך. תראי כמה כבר השתנה.",
+  "ההרגלים שבנית הופכים לחלק ממך. זה כבר לא מאמץ, זה את.",
+  "כל בוקר שבחרת בעצמך השבוע - ניצחון. תספרי אותם.",
+  "הגוף בגיל הזה צריך סבלנות ואהבה, ואת נותנת לו בדיוק את זה.",
+  "עוד מעט הסיום, ואת נכנסת אליו חזקה יותר משהתחלת.",
+  "השבוע התוכנית מסתיימת, אבל העבודה שלך לא. כל מה שבנית בעשרת השבועות האלה - ההרגלים, המודעות, הדרך שבה את מתייחסת לעצמך - זה בדיוק מה שישמור על התוצאות הלאה. הסוד הוא להתמיד: להמשיך לזוז, לאכול נכון, לישון ולשתות, גם בלי המעקב היומי. את כבר יודעת איך. מכאן זה פשוט להמשיך להיות הגרסה הזאת של עצמך, יום אחרי יום. גאה בך, ובוטחת בך. 💜",
+];
+
+const SUMMARY_COUNT_PHRASE = {
+  journal: (c) => `מילאת יומן תזונה ב-${c} ימים`,
+  drinkbefore: (c) => `שתית לפני הארוחות ב-${c} ימים`,
+  protein: (c) => `הגעת ליעד החלבון ב-${c} ימים`,
+  noscreens: (c) => `בלי מסכים לפני השינה ב-${c} ימים`,
+  stopeating: (c) => `הפסקת לאכול שעתיים לפני השינה ב-${c} ימים`,
+  breathing: (c) => `תרגלת נשימות ב-${c} ימים`,
+  gratitude: (c) => `כתבת הכרת תודה ב-${c} ימים`,
+  grains: (c) => `דגנים מלאים או קטניות ב-${c} ימים`,
+  goodfat: (c) => `שומן בריא ב-${c} ימים`,
+  pelvic: (c) => `תרגלת רצפת אגן ב-${c} ימים`,
+  probiotics: (c) => `פרוביוטיקה ב-${c} ימים`,
+  antiinflam: (c) => `מזון אנטי-דלקתי ב-${c} ימים`,
+  calcium: (c) => `מזון עשיר בסידן ב-${c} ימים`,
+  sun: (c) => `חשיפה לשמש ב-${c} ימים`,
+  strength: (c) => `עשית ${c} אימוני כוח`,
+  mobility: (c) => `עשית ${c} אימוני מוביליטי`,
+};
+const SUMMARY_AVG_PHRASE = {
+  veg: (a) => `בממוצע ${a.avg} צבעי ירקות ביום`,
+  mealorder: (a) => `בממוצע ${a.avg} ארוחות בסדר אכילה ביום`,
+  water: (a) => `שתית בממוצע ${a.avg} כוסות מים ביום`,
+  sleephours: (a) => `ישנת בממוצע ${a.avg} שעות, ב-${a.n} לילות שדיווחת`,
+  fasting: (a) => `חלון צום בממוצע ${a.avg} שעות`,
+};
+
+function summaryWeekDates(week, startDate, today, keepShabbat) {
+  const out = []; const maxT = new Date(today).getTime();
+  for (let dnum = (week - 1) * 7 + 1; dnum <= week * 7; dnum++) {
+    const d = addDays(startDate, dnum - 1);
+    if (new Date(d).getTime() > maxT) break;
+    if (!unlockedOn(startDate, d, CHECKIN_UNLOCK)) continue;
+    if (!tasksForDate(startDate, d, keepShabbat).length) continue;
+    out.push(d);
+  }
+  return out;
+}
+function summaryStepsAvg(week, startDate, today, stepsByDate) {
+  if (week < 1) return null;
+  let sum = 0, n = 0; const maxT = new Date(today).getTime();
+  for (let dnum = (week - 1) * 7 + 1; dnum <= week * 7; dnum++) {
+    const d = addDays(startDate, dnum - 1);
+    if (new Date(d).getTime() > maxT) break;
+    const v = stepsByDate[d];
+    if (v != null && v > 0) { sum += v; n++; }
+  }
+  return n ? Math.round(sum / n) : null;
+}
+function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget, fasting) {
+  const dates = summaryWeekDates(week, startDate, today, keepShabbat);
+  const counts = {}, sums = {}, ns = {};
+  let calSum = 0, calN = 0, protSum = 0, protN = 0, calOnGoal = 0, sleepDays = 0, grainsDays = 0;
+  for (const d of dates) {
+    const ans = checkins[d] || {};
+    const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMl);
+    let sleepDay = false, grainDay = false;
+    for (const t of tasksForDate(startDate, d, keepShabbat, fasting)) {
+      if (t.type === "number") {
+        let v = null;
+        if (t.auto === "steps") v = stepsByDate[d];
+        else if (t.auto === "water") v = waterByDate[d];
+        else v = ans[t.id];
+        if (v != null && v > 0) { sums[t.id] = (sums[t.id] || 0) + v; ns[t.id] = (ns[t.id] || 0) + 1; }
+      } else if (taskDone(t, ans, au)) {
+        counts[t.id] = (counts[t.id] || 0) + 1;
+        if (t.id === "noscreens" || t.id === "stopeating") sleepDay = true; // at least one sleep-improvement task that day
+        if (t.id === "grains" || t.id === "goodfat") grainDay = true; // at least one of whole-grains / healthy-fat that day
+      }
+    }
+    if (sleepDay) sleepDays++;
+    if (grainDay) grainsDays++;
+    const dl = log.filter((e) => e.date === d);
+    if (dl.length) {
+      const kc = dl.reduce((s, e) => s + (e.kcal || 0), 0);
+      const pr = dl.reduce((s, e) => s + (e.p || 0), 0);
+      calSum += kc; calN++; protSum += pr; protN++;
+      if (dailyTarget > 0 && kc >= dailyTarget * 0.95 && kc <= dailyTarget * 1.05) calOnGoal++;
+    }
+  }
+  const avgs = {};
+  for (const id in sums) avgs[id] = { avg: Math.round(sums[id] / ns[id]), n: ns[id] };
+  return {
+    days: dates.length, counts, avgs,
+    journalDays: calN, sleepDays, grainsDays,
+    cal: calN ? { avg: Math.round(calSum / calN), target: Math.round(dailyTarget), onGoal: calOnGoal } : null,
+    protein: protN ? { avg: Math.round(protSum / protN), target: targets.protein } : null,
+    stepsPrev: summaryStepsAvg(week - 1, startDate, today, stepsByDate),
+  };
+}
+
+// ---- Weeks 2-10 weekly summary: curated per-week narrative (Anat voice). ----
+// Each week shows a CURATED subset of tasks (not every active task), matching the WhatsApp summaries.
+const WK_INTRO = {
+  2: ["שבועיים של תנועה קדימה - וכל פעולה שעשית בהם נחשבת! 🌱", "לא תמיד הכל נכנס בול לשגרה, וזה בסדר גמור. כל משימה שביצעת היא הוכחה שאת בוחרת בעצמך, וזה מה שבאמת חשוב.", "יש פה התקדמות, ויש רצון - וזה כל מה שצריך כדי לבנות יסודות חזקים לאורך זמן.", "בואי נעבור על המשימות:"],
+  3: ["השבוע הזה הוכחת לעצמך שאת מחויבת לתהליך ולשיפור באיכות החיים שלך, וכל משימה שביצעת היא הצלחה בפני עצמה.", "שימי לב למה כן עבד, תני מקום למה שפחות, ותזכרי: שינוי אמיתי נבנה עם גמישות וסבלנות 🙏", "בואי נעבור על המשימות ונראה איך את מעלה הילוך מכאן:"],
+  4: ["כבר חודש שלם של בחירה בעצמך - זה הישג ענק! 🎉", "ההתמדה שלך לאורך 4 שבועות מוכיחה שאת ממש בונה הרגלים שמחזיקים לאורך זמן. מה שעשית עד עכשיו הוא בסיס מצוין - זה הזמן להקשיב לעצמך, להתכוונן ולדייק את ההמשך. גם תהליך עמוק לוקח זמן להתייצב, ואת בתנועה הנכונה.", "בואי נעבור על המשימות ונראה איך את מעלה הילוך מכאן:"],
+  5: ["חמישה שבועות של עשייה, עקביות ובחירה מודעת בעצמך - זה הישג מרגש! 🌟", "כשאת מתמידה, את לא רק בונה תוצאות - את בונה אמון בעצמך. כל שבוע מחזק את הבסיס שלך, וכל צעד מעיד על עוצמה פנימית אמיתית. מה שביצעת חשוב, ומה שלא - לא מבטל שום דבר.", "בואי נעבור על המשימות:"],
+  6: ["שישה שבועות של התקדמות - זה כבר לא הרגל, זו דרך חיים 💪", "ההתמדה שלך מוכיחה שוב שאת מחויבת לעצמך ולבריאות שלך, וזה ניכר בכל רמה - בגוף, בנפש ובמחשבה. וזכרי, כל פעולה שעשית היא בחירה בעצמך, וכל בחירה כזו שווה המון. המסע הזה הוא לא מבחן - אלא תהליך שמתקדם בדיוק בקצב שלך 💛", "בואי נעבור על המשימות:"],
+  7: ["איזו דרך מרשימה עברת - 7 שבועות של מחויבות לעצמך! 👏", "את כבר לא בתחילת הדרך - את עמוק בתוך תהליך של שינוי אמיתי. ההתמדה שלך מוכיחה שוב ושוב שכשאת בוחרת בעצמך, את פורחת 🌸", "בואי נעבור על המשימות:"],
+  8: ["שמונה שבועות של בחירה מודעת בעצמך - זה מרשים ומעורר השראה ✨", "ההתמדה שלך היא לא רק עדות למחויבות - היא הדרך שבה את בונה שגרה חדשה ובריאה יותר. אולי לא הכל יצא לפי התכנון, אבל כל דבר שבחרת לעשות היה משמעותי. היופי בתהליך הזה הוא שהוא גמיש, נושם ומתאים את עצמו אלייך, לא להפך.", "בואי נעבור על המשימות:"],
+  9: ["כמעט 10 שבועות של התמדה - זה לא מובן מאליו, זה מרשים! 👏", "מהשבוע הראשון ועד עכשיו את מראה יציבות, נחישות והקשבה אמיתית לעצמך, והדרך שעשית עד כה היא כבר הישג בפני עצמו. וגם אם השבוע היה פחות מדויק - את עדיין ממשיכה בדרך שלך. החוכמה היא לא דווקא להספיק הכול, אלא לדעת לחזור לדברים שפספסת, ויש לך מספיק זמן לשם כך (עוד 3 חודשים שהאפליקציה פתוחה לך).", "בואי נעבור על המשימות:"],
+  10: ["10 שבועות של בחירה יומיומית בעצמך - וזה ניכר בכל צעד שלך 💪", "ההתמדה, המחויבות והנוכחות שלך הפכו את התהליך הזה למשהו עמוק ואמיתי. את יוצאת מהתוכנית לא רק עם תוצאות - אלא עם הרגלים, הבנה חדשה וכלים שילוו אותך קדימה. וזכרי, אין איחורים - יש לך עוד 3 חודשים לחזור למשימות, להשלים ולעבור שוב על התכנים, בזמן שלך.", "בואי נעבור על המשימות:"],
+};
+const WK_OUTRO = {
+  2: { lines: ["🌿 שבוע חדש = הזדמנות חדשה לזרוח!", "בחרי בעצמך גם השבוע, בצעד אחד בכל פעם - וזה כל מה שצריך 💫", "נמשיך ביום א' הקרוב, בינתיים מאחלת לך סוף שבוע מקסים ואל תשכחי את המשימות החדשות שלך 🙏"], ps: "כשאת עושה את הדברים בהדרגה - אין שום דבר שגדול עליך!" },
+  3: { lines: ["השבוע החדש שלפניך הוא הזדמנות לבחור שוב בעצמך - ולהוכיח לעצמך כמה את יכולה. המשיכי כך, את לגמרי בכיוון הנכון 🚀", "נמשיך ביום א' הקרוב, בינתיים תעשי כיף בסוף השבוע ואל תשכחי את המשימות החדשות שלך 🙏"], ps: "זכרי, הרגע שבו תתחילי להתייחס לכל קושי בדרך כעוד מדרגה שמאפשרת לך לצמוח - יהיה רגע שיכול לשנות את חייך!" },
+  4: { lines: ["השבוע הבא? הזדמנות לחגוג את הדרך ולהמשיך לעלות שלב 💪 דף חדש, אנרגיה חדשה - ממשיכים קדימה, עם חיוך ואמונה בך ✨", "נמשיך ביום א' הקרוב, בינתיים תעשי כיף בסוף השבוע ואל תשכחי את המשימות החדשות שלך 🙏"] },
+  5: { lines: ["השבוע הבא? הזדמנות להרגיש אפילו יותר קלילה, חזקה ומדויקת 💪 השבוע החדש הוא לא תיקון - הוא המשך.", "אני איתך - והדרך שלך פשוט מעוררת השראה ✨", "נמשיך ביום א' הקרוב, בינתיים תעשי כיף בסוף השבוע ואל תשכחי את המשימות החדשות שלך 🙏"] },
+  6: { lines: ["🌟 השבוע החדש מביא איתו הזדמנות לרענן, להתחזק, ולהתקרב עוד צעד למה שמדויק לך. אין צורך להיות מושלמת - רק להמשיך לבחור בעצמך, בכל יום מחדש 💖", "אני איתך - והדרך שלך פשוט מעוררת השראה ✨", "נמשיך ביום א' הקרוב..."] },
+  7: { lines: ["בשבוע הבא מזמינה אותך להמשיך ללטש, ליהנות מההישגים - ולהתאהב בתהליך עוד יותר 💪", "נמשיך ביום א' הקרוב...", "סופ\"ש נעים ✨"] },
+  8: { lines: ["השבוע הבא מחכה לך עם עוד שלב בהתפתחות - תני לעצמך ליהנות מהדרך 🌷", "נמשיך ביום א' הקרוב...", "סופ\"ש נעים ✨"] },
+  9: { lines: ["הזדמנות ליהנות מהפירות של כל מה שבנית עד עכשיו, ולהמשיך את התהליך בקצב שלך, בלי לחץ ועם הרבה אמונה 💛", "נמשיך ביום א' הקרוב...", "סופ\"ש נעים ✨"] },
+  10: { lines: ["זה אולי השבוע האחרון בתוכנית - אבל זו רק ההתחלה שלך 💫", "תזכרי: את יודעת להוביל את עצמך. כל מה שאת צריכה כבר נמצא בתוכך - יש לך את הזמן, יש לך את הכלים, ובעיקר יש לך את עצמך.", "אני גאה בך, ונרגשת לראות איך תמשיכי לפרוח גם בהמשך 🌸", "אני איתך 💜"] },
+};
+const WK_TASKS = {
+  2: ["steps", "journal", "strength", "veg_order"],
+  3: ["steps", "journal", "strength", "veg_order", "water_full", "protein"],
+  4: ["steps", "strength", "veg_order", "water_full", "protein", "sleep_full", "breathing"],
+  5: ["steps", "strength", "water_full", "protein", "sleep_full", "breathing", "gratitude"],
+  6: ["steps", "strength", "water_full", "grains_split", "sleep_full", "gratitude", "protein"],
+  7: ["steps", "strength", "pelvic", "water_full", "grains_combined", "sleep_full", "gratitude", "protein", "probiotics"],
+  8: ["steps", "strength", "pelvic", "water_simple", "grains_combined", "sleep_simple", "protein", "probiotics", "antiinflam", "fasting"],
+  9: ["steps", "strength_mobility", "pelvic", "water_simple", "grains_combined", "sleep_simple", "protein", "probiotics", "antiinflam", "bonedensity", "fasting"],
+  10: ["steps", "strength_mobility", "pelvic", "water_simple", "grains_combined", "sleep_simple", "protein", "probiotics", "antiinflam", "bonedensity", "fasting"],
+};
+// Build one summary line {t:title, e:emoji, d:detail, isNew?} from app data. Returns null to skip (e.g. fasting when off).
+// Hebrew dual-aware count phrases for the weekly summary (0 and 1 are handled inline below; these add the dual form for exactly 2).
+function sumDays(n) { return n === 1 ? "יום אחד" : n === 2 ? "יומיים" : `${n} ימים`; }
+function sumBDays(n) { return n === 1 ? "ביום אחד" : n === 2 ? "ביומיים" : `ב-${n} ימים`; }
+function sumTimes(n) { return n === 1 ? "פעם אחת" : n === 2 ? "פעמיים" : `${n} פעמים`; }
+
+function summaryTaskLine(key, week, data, fasting) {
+  const A = data.avgs || {}, K = data.counts || {};
+  const avg = (id) => (A[id] ? A[id].avg : 0);
+  const navg = (id) => (A[id] ? A[id].n : 0);
+  const cnt = (id) => (K[id] || 0);
+  const amt = (v, one, many) => (v === 1 ? one : `${typeof v === "number" ? v.toLocaleString() : v} ${many}`); // singular-aware amount
+  switch (key) {
+    case "steps": {
+      const n = navg("steps"), a = avg("steps").toLocaleString();
+      const d = n === 0 ? "השבוע עוד לא דיווחת על הצעדים."
+        : n === 1 ? `השבוע דיווחת פעם אחת על הצעדים - ${a} צעדים ביום.`
+        : <>השבוע דיווחת {sumTimes(n)} על הצעדים. ממוצע הצעדים לימים שדיווחת <b>השבוע</b> - {a} צעדים ביום בממוצע.</>;
+      return { e: "💃", t: "משימת הצעדים", d };
+    }
+    case "journal": {
+      const c = cnt("journal") || data.journalDays || 0;
+      const d = c === 0 ? "השבוע עוד לא מילאת יומן מעקב תזונה."
+        : c === 1 ? "מילאת יומן מעקב תזונה ביום אחד."
+        : `במהלך ${sumDays(c)} מילאת יומן מעקב תזונה.`;
+      return { e: "✍️", t: "משימת יומן תזונה", d };
+    }
+    case "strength": {
+      const c = cnt("strength");
+      const d = c === 0 ? "השבוע עוד לא ביצעת אימוני כוח."
+        : c === 1 ? "ביצעת השבוע אימון כוח אחד."
+        : `ביצעת השבוע ${c} אימוני כוח.`;
+      return { e: "🦾", t: "משימת אימוני כוח", d };
+    }
+    case "strength_mobility": {
+      const s = cnt("strength"), m = cnt("mobility");
+      const sTxt = s === 0 ? "לא ביצעת אימוני כוח" : s === 1 ? "ביצעת אימון כוח אחד" : `ביצעת ${s} אימוני כוח`;
+      const mTxt = m === 0 ? "ולא אימוני מוביליטי" : m === 1 ? "ואימון מוביליטי אחד" : `ו-${m} אימוני מוביליטי`;
+      const d = (s === 0 && m === 0) ? "השבוע עוד לא ביצעת אימוני כוח או מוביליטי." : `השבוע ${sTxt} ${mTxt} 🤸‍♀️`;
+      return { e: "🦾", t: "משימת אימוני כוח ומוביליטי", d };
+    }
+    case "veg_order": {
+      const v = avg("veg"), mo = avg("mealorder");
+      const d = (v === 0 && mo === 0) ? "השבוע עוד לא דיווחת על שילוב ירקות וסדר אכילה."
+        : `שילבת בממוצע ${amt(v, "צבע אחד", "צבעים")} של ירקות בכל יום, וגם שילבת סדר אכילה ב${mo === 1 ? "ארוחה אחת" : `-${mo} ארוחות`} בממוצע!`;
+      return { e: "🥦", t: "משימות תזונה - שילוב ירקות וסדר אכילה", d };
+    }
+    case "water_full": {
+      const db = cnt("drinkbefore"), cups = avg("water");
+      const cupsTxt = `בממוצע שתית ${amt(cups, "כוס אחת", "כוסות")} מים`;
+      const d = db === 0 ? `בשבוע האחרון עדיין לא דיווחת על מים לפני הארוחה. ${cupsTxt}.`
+        : db === 1 ? `בשבוע האחרון, ביום אחד שתית מים לפני הארוחה, ובסך הכל ${cupsTxt}.`
+        : `בשבוע האחרון, ${sumBDays(db)} שתית מים לפני הארוחה, ובסך הכל ${cupsTxt}.`;
+      return { e: "🥛", t: "משימת שתיית מים", d };
+    }
+    case "water_simple": {
+      const cups = avg("water");
+      const d = cups === 0 ? "השבוע עוד לא דיווחת על שתיית מים." : `בממוצע שתית ${amt(cups, "כוס אחת", "כוסות")} מים.`;
+      return { e: "🥛", t: "משימת שתיית מים", d };
+    }
+    case "protein": {
+      const c = cnt("protein");
+      const d = c === 0 ? "השבוע עוד לא עמדת ביעד החלבון."
+        : c === 1 ? "ביום אחד עמדת ביעד החלבון שלך."
+        : `במהלך ${sumDays(c)} עמדת ביעד החלבון שלך.`;
+      return { e: "🍶", t: "משימת יעד חלבון", d };
+    }
+    case "sleep_full": {
+      const sd = data.sleepDays || 0, h = avg("sleephours");
+      const base = sd === 0 ? "השבוע עוד לא ביצעת את משימות שיפור השינה" : sd === 1 ? "ביום אחד ביצעת את משימות שיפור השינה" : `במהלך ${sumDays(sd)} ביצעת את משימות שיפור השינה`;
+      const hTxt = h > 0 ? ` וישנת בממוצע ${amt(h, "שעה אחת", "שעות")} בימים שדיווחת` : "";
+      const d = (sd === 0 && h === 0) ? "השבוע עוד לא דיווחת על השינה." : `${base}${hTxt}.`;
+      return { e: "😴", t: "משימת שיפור השינה", d };
+    }
+    case "sleep_simple": {
+      const h = avg("sleephours");
+      const d = h === 0 ? "השבוע עוד לא דיווחת על שעות שינה." : `ישנת בממוצע ${amt(h, "שעה אחת", "שעות")} בימים שדיווחת.`;
+      return { e: "😴", t: "משימת שיפור השינה", d };
+    }
+    case "breathing": {
+      const c = cnt("breathing");
+      const d = c === 0 ? "השבוע עוד לא ביצעת תרגילי נשימה."
+        : c === 1 ? "ביום אחד ביצעת תרגילי נשימה."
+        : `במהלך ${sumDays(c)} ביצעת תרגילי נשימה.`;
+      return { e: "😮‍💨", t: "משימת תרגול נשימה", d };
+    }
+    case "gratitude": {
+      const c = cnt("gratitude");
+      const d = c === 0 ? "השבוע עוד לא ביצעת את משימת הכרת התודה."
+        : c === 1 ? "ביום אחד ביצעת את משימת הכרת התודה."
+        : `במהלך ${sumDays(c)} ביצעת את משימת הכרת התודה.`;
+      return { e: "🙏", t: "משימת הכרת התודה", d };
+    }
+    case "grains_split": {
+      const gf = cnt("goodfat"), gr = cnt("grains");
+      const part = (n, label) => n === 0 ? `עדיין לא הוספת ${label}` : n === 1 ? `ביום אחד הוספת ${label}` : `${sumBDays(n)} הוספת ${label}`;
+      const d = (gf === 0 && gr === 0) ? "השבוע עוד לא הוספת שומן בריא או דגנים מלאים." : `${part(gf, "שומן בריא")}, ו${part(gr, "דגנים מלאים ו/או קטניות")}.`;
+      return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d };
+    }
+    case "grains_combined": {
+      const c = data.grainsDays || 0;
+      const d = c === 0 ? "השבוע עוד לא הוספת דגנים מלאים, קטניות או שומן בריא."
+        : c === 1 ? "ביום אחד הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא."
+        : `במהלך ${sumDays(c)} הוספת דגנים מלאים ו/או קטניות ו/או שומן בריא.`;
+      return { e: "🌱", t: "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", d };
+    }
+    case "pelvic": {
+      const c = cnt("pelvic");
+      const d = c === 0 ? "השבוע עוד לא תרגלת את משימת רצפת האגן."
+        : c === 1 ? "תרגלת את משימת רצפת האגן פעם אחת."
+        : `תרגלת את משימת רצפת האגן ${sumTimes(c)}.`;
+      return { e: "🧘‍♀️", t: "משימת רצפת האגן", d, isNew: week === 7 };
+    }
+    case "probiotics": {
+      const c = cnt("probiotics");
+      const d = c === 0 ? "השבוע עוד לא הוספת פרוביוטיקה לתזונה."
+        : c === 1 ? "הוספת פרוביוטיקה לתזונה ביום אחד."
+        : `הוספת פרוביוטיקה לתזונה במשך ${sumDays(c)}.`;
+      return { e: "🪄", t: "משימת פרוביוטיקה", d, isNew: week === 7 };
+    }
+    case "antiinflam": {
+      const c = cnt("antiinflam");
+      const d = c === 0 ? "השבוע עוד לא עשית את משימת המזון האנטי-דלקתי."
+        : c === 1 ? "עשית את משימת המזון האנטי-דלקתי ביום אחד."
+        : `עשית את משימת המזון האנטי-דלקתי במשך ${sumDays(c)}.`;
+      return { e: "🙅‍♀️", t: "משימת מזון אנטי-דלקתי", d };
+    }
+    case "bonedensity": {
+      const ca = cnt("calcium"), su = cnt("sun");
+      const part = (n, verb) => n === 0 ? `עדיין לא ${verb}` : n === 1 ? `ביום אחד ${verb}` : `במשך ${sumDays(n)} ${verb}`;
+      const d = (ca === 0 && su === 0) ? "השבוע עוד לא דיווחת על סידן וחשיפה לשמש." : `${part(ca, "הוספת לתזונה מזון עשיר בסידן")}, ו${part(su, "דאגת לחשיפה בריאה לשמש")}.`;
+      return { e: "🦴", t: "משימת צפיפות העצם", d };
+    }
+    case "fasting": return fasting ? { e: "🕘", t: "משימת צום לסירוגין (רשות)", d: avg("fasting") === 0 ? "השבוע עוד אין נתוני צום לסירוגין." : `חלון הצום שלך נמשך ${amt(avg("fasting"), "שעה אחת", "שעות")} בממוצע.` } : null;
+    default: return null;
+  }
+}
+
+function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, stepGoal, fasting, onClose }) {
+  const week = Math.min(programWeekFor(startDate, date), 10);
+  const data = weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget, fasting);
+  // One-time baseline sanity note: Friday of week 2 only. If she is tracking well BELOW her goal,
+  // gently suggest a more realistic baseline (set in the profile). Anat's gradual increases continue from it.
+  const wkStepAvg = data.avgs.steps ? data.avgs.steps.avg : null;
+  const stepRecheckDir = (week === 2 && stepGoal != null && wkStepAvg != null)
+    ? (wkStepAvg < stepGoal * 0.8 ? "low" : wkStepAvg > stepGoal * 1.2 ? "high" : null)
+    : null;
+  const wk1 = week === 1;
+  const WK_ORD = ["", "הראשון", "השני", "השלישי", "הרביעי", "החמישי", "השישי", "השביעי", "השמיני", "התשיעי", "העשירי"];
+  const titleEl = <div style={{ fontWeight: 800, color: C.brandD, textAlign: "center", fontSize: 17.5, lineHeight: 1.4, marginBottom: 12 }}>{`סיכום שבועי של משימות השבוע ${WK_ORD[week] || ""} שלך במיי פריים!`}</div>;
+  // Achievements earned THIS week: daily medals (completed days) + the weekly trophy.
+  let wkMedals = 0;
+  for (let dnum = (week - 1) * 7 + 1; dnum <= week * 7; dnum++) {
+    const d = addDays(startDate, dnum - 1);
+    if (d > today) break;
+    if (checkins[d] && checkins[d]._done) wkMedals++;
+  }
+  const wkTrophy = weekTrophyEarned(checkins, startDate, week, today);
+  const achievementsEl = (wkMedals > 0 || wkTrophy) ? (
+    <div style={{ background: C.panel, border: `1.5px solid ${C.brand}`, borderRadius: 16, marginTop: 16, padding: "18px 14px", textAlign: "center", boxShadow: "0 2px 10px rgba(168,66,92,0.10)" }}>
+      <div style={{ fontSize: 18.5, fontWeight: 800, color: C.brandD, marginBottom: 14 }}>ההישגים שלך השבוע 🏆</div>
+      {wkMedals > 0 && (
+        <div style={{ marginBottom: wkTrophy ? 18 : 0 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6, marginBottom: 8 }}>
+            {Array.from({ length: wkMedals }).map((_, i) => (<img key={i} src={MEDAL_SRC} alt="" width={48} height={48} style={{ display: "block" }} />))}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.ink }}>{wkMedals} {wkMedals === 1 ? "מדליה יומית" : "מדליות יומיות"} השבוע</div>
+          <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>כל יום שהשלמת 💜</div>
+        </div>
+      )}
+      {wkTrophy && (
+        <div>
+          <img src={trophyForWeek(week)} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }} />
+          <div style={{ fontSize: 16, color: C.brandD, fontWeight: 800, marginTop: 6 }}>{week >= 10 ? "גביע האלופה נכנס לארון! 🎉" : "גביע השבוע נכנס לארון! 🎉"}</div>
+        </div>
+      )}
+    </div>
+  ) : null;
+  const stepsDays = data.avgs.steps ? data.avgs.steps.n : 0;
+  const stepsAvg = data.avgs.steps ? data.avgs.steps.avg : 0;
+  const journalDays = data.journalDays || 0;
+  const wk1HasData = stepsDays > 0 || journalDays > 0;
+  const wk1StepsLine = stepsDays === 0
+    ? "השבוע עוד לא דיווחת על הצעדים."
+    : stepsDays === 1
+    ? `השבוע דיווחת פעם אחת על הצעדים - ${stepsAvg.toLocaleString()} צעדים ביום.`
+    : <>השבוע דיווחת {sumTimes(stepsDays)} על הצעדים. ממוצע הצעדים לימים שדיווחת <b>השבוע</b> - {stepsAvg.toLocaleString()} צעדים ביום בממוצע.</>;
+  const wk1JournalLine = journalDays === 0
+    ? "השבוע עוד לא מילאת יומן מעקב תזונה."
+    : journalDays === 1
+    ? "מילאת יומן מעקב תזונה ביום אחד."
+    : `במהלך ${sumDays(journalDays)} מילאת יומן מעקב תזונה.`;
+  const wk1Lines = [
+    "סיימת את השבוע הראשון שלך - וזה לגמרי שווה חגיגה! 🎉",
+    "כל פעולה שביצעת השבוע היא משמעותית, ועוד צעד בכיוון הנכון 🌱",
+    "ההתחלה הזו מראה שיש לך את כל מה שצריך בשביל להצליח.",
+    wk1StepsLine,
+    wk1JournalLine,
+    "אני גאה בך - תמשיכי להוביל את עצמך קדימה 💖",
+    "נמשיך ביום א' הקרוב, בינתיים תעשי כיף בסוף השבוע ואל תשכחי את המשימות החדשות שלך 🙏",
+    "אני איתך,",
+  ];
+  const emptyState = <div style={{ textAlign: "center", color: C.sub, padding: "24px 12px", lineHeight: 1.7 }}>עוד אין נתונים לשבוע הזה.<br />ברגע שתתחילי למלא, הסיכום יופיע כאן.</div>;
+  const hasData = (data.avgs && Object.keys(data.avgs).length > 0) || (data.counts && Object.keys(data.counts).length > 0) || !!data.journalDays;
+  const intro = WK_INTRO[week] || [];
+  const outro = WK_OUTRO[week] || { lines: [] };
+  const taskLines = (WK_TASKS[week] || []).map((k) => summaryTaskLine(k, week, data, fasting)).filter(Boolean);
+  const recheckBox = stepRecheckDir && (
+    <div style={{ background: C.amberBg, border: `1.5px solid ${C.amber}`, borderRadius: 14, padding: "14px", margin: "4px 0 14px", fontSize: 15.5, color: C.ink, lineHeight: 1.65, textAlign: "right" }}>
+      {stepRecheckDir === "low"
+        ? <>שמנו לב שהשבוע הלכת בממוצע <b>{wkStepAvg.toLocaleString()}</b> צעדים ביום, מתחת ליעד הנוכחי ({stepGoal.toLocaleString()}). אם היעד מרגיש גבוה - אפשר לכוון בפרופיל בסיס ריאלי יותר שתנצחי אותו, וממנו נמשיך לעלות בהדרגה יחד 💜</>
+        : <>כל הכבוד - השבוע הלכת בממוצע <b>{wkStepAvg.toLocaleString()}</b> צעדים ביום, הרבה מעל היעד ({stepGoal.toLocaleString()}). את עוברת אותו שוב ושוב - אם בא לך אתגר, אפשר לכוון בפרופיל בסיס גבוה יותר, וממנו נמשיך לעלות בהדרגה יחד 💜</>}
+    </div>
+  );
+  return (
+    <SheetShell title={`סיכום שבוע ${week}`} onClose={onClose}>
+      {wk1 ? (
+        !wk1HasData ? emptyState : (
+          <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
+            {titleEl}
+            {wk1Lines.map((ln, i) => (<div key={i} style={{ marginBottom: 8 }}>{ln}</div>))}
+            <div style={{ fontWeight: 800, color: C.ink, marginBottom: 10 }}>ענת</div>
+            <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, marginTop: 8 }}><b>נ.ב.</b> אל תחששי לצאת מאזור הנוחות שלך - זה פתח לדברים מדהימים שמחכים לך בהמשך הדרך!</div>
+            {achievementsEl}
+          </div>
+        )
+      ) : !hasData ? emptyState : (
+        <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
+          {titleEl}
+          {intro.map((p, i) => (<div key={`i${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, margin: "12px 0" }}>
+            {taskLines.map((l, i) => (
+              <div key={`t${i}`}>
+                <div style={{ fontWeight: 700, color: C.ink, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  {l.isNew && <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: C.brand, borderRadius: 8, padding: "1px 8px" }}>חדש</span>}
+                  <span>{l.t} {l.e}</span>
+                </div>
+                <div style={{ color: C.sub, marginTop: 2 }}>{l.d}</div>
+              </div>
+            ))}
+          </div>
+          {recheckBox}
+          {outro.lines.map((p, i) => (<div key={`o${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
+          <div style={{ fontWeight: 800, color: C.ink, marginTop: 4 }}>ענת</div>
+          {outro.ps && <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, marginTop: 8 }}><b>נ.ב.</b> {outro.ps}</div>}
+          {achievementsEl}
+        </div>
+      )}
+    </SheetShell>
+  );
+}
+
+function StepSetupModal({ action, profile, stepsByDate, startDate, programWeek, onBaseline, onIncrease, onClose }) {
+  const isBaseline = action.kind === "baseline";
+  const measured = stepBaseline(stepsByDate, startDate);
+  const suggested = isBaseline
+    ? (measured != null ? measured : 3000)
+    : ((profile.stepGoal != null ? profile.stepGoal : (profile.stepBaseline || 0)) + action.inc);
+  const [val, setVal] = useState(Math.max(500, Math.round(suggested / 250) * 250));
+  const offset = stepGoalCumOffset(programWeek); // how much we add above the average to set the goal (e.g. +2,000 in week 2)
+  const goalVal = val + offset;
+  const stepBtn = { width: 46, height: 46, borderRadius: 12, border: `1px solid ${C.line}`, background: C.panel, color: C.brand, fontSize: 25, fontWeight: 700, cursor: "pointer", fontFamily: fontStack };
+  return (
+    <SheetShell title={isBaseline ? "יעד הצעדים שלך" : "היעד שלך עולה"} onClose={onClose}>
+      <div style={{ textAlign: "right", fontSize: 15.5, color: C.sub, lineHeight: 1.7, marginBottom: 14 }}>
+        {isBaseline
+          ? (measured != null
+            ? <>לפי הצעדים שמדדנו עד כה, הממוצע שלך הוא בערך <b style={{ color: C.ink }}>{val.toLocaleString()}</b> צעדים ביום. המשימה לשבוע הקרוב: להוסיף עוד <b style={{ color: C.ink }}>{offset.toLocaleString()}</b> צעדים. אפשר לשנות את הממוצע למטה אם הוא לא מדויק.</>
+            : <>בואי נקבע מאיפה מתחילים. כמה צעדים בערך את עושה ביום רגיל? למספר הזה נוסיף <b style={{ color: C.ink }}>{offset.toLocaleString()}</b> צעדים, וזה יהיה היעד שלך לשבוע הקרוב.<div style={{ fontSize: 13.5, color: C.faint, marginTop: 6 }}>לא בטוחה? בתחילת הדרך רוב הנשים נעות בין 2,000 ל-4,000. תמיד אפשר לעדכן.</div></>)
+          : <>כל הכבוד על ההתמדה. השבוע מוסיפים לקצב - היעד עולה ב-<b style={{ color: C.ink }}>{action.inc.toLocaleString()}</b>. אפשר לאשר או לשנות. ממשיכות לעלות 💜</>}
+      </div>
+      <div style={{ fontSize: 13.5, color: C.faint, textAlign: "center", marginBottom: 4 }}>{isBaseline ? "הממוצע שלך" : "היעד החדש"}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: isBaseline ? 12 : 18 }}>
+        <button onClick={() => setVal((v) => v + 250)} style={stepBtn}>+</button>
+        <div style={{ textAlign: "center", minWidth: 110 }}>
+          <div style={{ fontSize: 31, fontWeight: 800, color: C.ink }}>{val.toLocaleString()}</div>
+          <div style={{ fontSize: 13.5, color: C.faint }}>צעדים ביום</div>
+        </div>
+        <button onClick={() => setVal((v) => Math.max(500, v - 250))} style={stepBtn}>-</button>
+      </div>
+      {isBaseline && offset > 0 && (
+        <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 12, padding: "11px 13px", marginBottom: 16, textAlign: "center", fontSize: 15.5, color: C.ink }}>
+          היעד שלך לשבוע הקרוב: <b style={{ color: C.amber }}>{goalVal.toLocaleString()} צעדים</b> <span style={{ color: C.sub, fontSize: 14 }}>({val.toLocaleString()} + {offset.toLocaleString()})</span>
+        </div>
+      )}
+      <button onClick={() => (isBaseline ? onBaseline(val) : onIncrease(action.week, val))} style={{ width: "100%", border: "none", borderRadius: 12, padding: "13px", background: C.brand, color: "#fff", fontSize: 17, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>
+        {isBaseline ? (offset > 0 ? `מאשרת - היעד שלי ${goalVal.toLocaleString()}` : `מאשרת, נתחיל מ-${val.toLocaleString()}`) : `מאשרת - ${val.toLocaleString()} צעדים`}
+      </button>
+    </SheetShell>
+  );
+}
+
+function GoalBumpModal({ info, name, onClose }) {
+  const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
+  const newGoal = info ? info.newGoal : 0;
+  const inc = info ? info.inc : 0;
+  return (
+    <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+        {Array.from({ length: 26 }).map((_, i) => (
+          <span key={i} style={{ position: "absolute", top: -12, left: `${(i * 3.9) % 100}%`, width: 8, height: 8, borderRadius: 2, background: colors[i % colors.length], animation: `confettiFall ${1 + (i % 5) * 0.15}s ease-out ${(i % 7) * 0.08}s forwards` }} />
+        ))}
+      </div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
+        <div style={{ fontSize: 51 }}>👟</div>
+        <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 6 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""} 🤍</div>
+        <div style={{ fontSize: 17, color: C.ink, marginTop: 10, lineHeight: 1.55 }}>היעד היומי שלך עלה היום ל-<b style={{ color: C.brandD }}>{newGoal.toLocaleString()} צעדים</b> (+{inc.toLocaleString()}).</div>
+        <div style={{ fontSize: 15, color: C.sub, marginTop: 8 }}>ממשיכות צעד אחרי צעד!</div>
+        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכה</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+function DevDateBar({ onAnchor }) {
+  const setDay = (d) => { try { window.localStorage.setItem("myprime_dev_today", d); } catch (e) {} window.location.reload(); };
+  const reset = () => { try { window.localStorage.removeItem("myprime_dev_today"); } catch (e) {} window.location.reload(); };
+  const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
+  return (
+    <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
+      <span style={{ opacity: 0.7 }}>DEV - יום מדומה</span>
+      <button onClick={() => setDay(addDays(TODAY, -1))} style={btn}>-1</button>
+      <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
+      <button onClick={() => setDay(addDays(TODAY, 1))} style={btn}>+1</button>
+      <button onClick={reset} style={btn}>איפוס</button>
+      <button onClick={() => onAnchor && onAnchor()} style={{ ...btn, background: "#0a7" }}>קבע יום 1</button>
+    </div>
+  );
+}
+
+const TIPS = [
+  { key: "cal", sel: "cal", title: "הוספת מזון ופעילות (כפתור +)", due: (c) => c.progDay >= 3, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת ואת הפעילות הגופנית שעשית (חוץ מהצעדים). יש כמה דרכים: לספר במילים או בדיבור מה אכלת, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה. אפשר לעדכן בכל פעם שאת מוסיפה משהו, לאורך כל היום.", prompt: "רוצה שאראה לך דוגמה?", choice: { yes: "כן, בבקשה", no: "אין צורך, נמשיך" } },
+  { key: "steps", sel: "steps", title: "מילוי הצעדים", guide: true, due: (c) => c.stepsOpen, text: "כאן את ממלאת את הצעדים שלך. כדי לדעת כמה צעדים עשית, פתחי את אפליקציית הבריאות בטלפון (Apple Health באייפון, Samsung Health בסמסונג), מצאי את מספר הצעדים של היום, והזיני אותו כאן. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן - אל דאגה." },
+  { key: "tracker", sel: "tracker", title: "המשימות היומיות", due: (c) => c.checkinOpen, text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך המשימות שלך בשלב הזה - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
+  { key: "cabinet", sel: "cabinet", title: "ארון ההישגים", due: (c) => c.checkinOpen, text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
+  { key: "trackerfill", sel: "tracker", due: (c) => c.manualTracker, text: "מהיום אנחנו מתחילות למלא את יומן המעקב במשימות שלא נכנסות באופן אוטומטי. היום לדוגמה נוספה משימת אימון כוח, ולאחר שתבצעי אימון כוח את יכולה לסמן וי במעקב." },
+  { key: "stepbaseline", sel: "stepbanner", title: "קביעת בסיס הצעדים", due: (c) => c.stepBanner, text: "הגיע הזמן לקבוע את נקודת ההתחלה שלך במשימת הצעדים. זו נקודת הבסיס שממנה נעלה יחד בהדרגה - ותמיד אפשר לשנות אותה בהמשך." },
+  { key: "water", sel: "water", title: "טבעת המים", due: (c) => c.waterOpen, text: "נוספה טבעת המים 💧 היעד הוא 2 ליטר ביום. בכל לחיצה על הפלוס מוסיפים כוס, ושם גם אפשר לקבוע את גודל הכוס שלך - כדי שהספירה תתאים בדיוק לכוס שאת שותה ממנה." },
+  { key: "protein", sel: "protein", title: "טבעת החלבון", due: (c) => c.macroOpen, text: "נוספה טבעת החלבון. אותה את לא ממלאת - היא מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי." },
+  { key: "weeklysummary", sel: "weeklysummary", title: "הסיכום השבועי", due: (c) => c.week === 1 && c.weeklySummaryShown, text: "זה השבוע הראשון שלך בתוכנית! כאן מחכה לך סיכום שבועי קצר. ואם שכחת למלא משהו בימים שעברו - אפשר להשלים ולפתוח שוב את הסיכום, והוא יתעדכן." },
+];
+
+// ===== Day-3 guided app tour ("סיור באפליקציה") =====
+// view = the screen the bubble belongs to (gates rendering): "day" | "caloriemenu" | "addfood" | "steps".
+// open = the screen the tour itself opens when this step becomes active (demo-driven nav). undefined = leave as-is.
+// tap:true = no screen-blocking backdrop; advances when the real action fires (event). Otherwise a button advances.
+const TOUR_YES = [
+  { view: "day", open: "day", sel: "cal", tap: true, event: "addcalorie", text: "בואי ננסה יחד 🙂 לחצי על כפתור ה-➕ של הקלוריות." },
+  { view: "caloriemenu", open: "caloriemenu", sel: "entry-food", text: "בוחרים 'הוספת מזון'." },
+  { view: "addfood", open: "addfood", sel: "method-history", text: "הדרך הכי מהירה - מוצרים שכבר הוספת נשמרים כאן וחוזרים בהקשה אחת. מושלם לדברים שחוזרים על עצמם 💜" },
+  { view: "addfood", open: "addfood", sel: "method-ai", text: "ובשביל משהו חדש - הכי פשוט לספר לי. בהקשה על 'ספרי לי מה אכלת' אפשר לכתוב או לדבר בחופשיות, למשל 'חביתה משתי ביצים וכוס קפה'. אני אעריך את הקלוריות ואוסיף ליומן - וככל שתפרטי יותר, ההערכה מדויקת יותר." },
+  { view: "day", open: "day", sel: "diarylist", text: "כל פריט שתוסיפי מופיע כאן ביומן שלך - ובלחיצה עליו תמיד אפשר לערוך או למחוק אותו." },
+  { view: "caloriemenu", open: "caloriemenu", sel: "entry-activity", text: "ובאותו כפתור אפשר גם להוסיף פעילות גופנית. כל אימון או פעילות שתזיני מתווספים לתקציב הקלוריות היומי שלך, כלומר מגדילים את הכמות שמותר לך לאכול באותו יום. הליכה לא נספרת כאן - היא נמדדת לבד דרך הצעדים 💜" },
+  { view: "day", open: "day", sel: "steps", tap: true, event: "opensteps", text: "עכשיו הצעדים 👟 לחצי על הפלוס של הצעדים." },
+  { view: "steps", open: "steps", sel: "steps-input", text: <>כאן מזינים את מספר הצעדים. פותחים את אפליקציית הבריאות בטלפון, רואים כמה צעדים נצברו היום, ומזינים את המספר כאן. <b>אפשר לעדכן את הצעדים כמה פעמים שתרצי במהלך היום (וגם לימים קודמים) - אל דאגה.</b></> },
+  { view: "day", open: "day", sel: "tracker", text: "וכאן המשימות היומיות. שתי המשימות הראשונות מסומנות אוטומטית כשאת ממלאת בפלוס את הצעדים והקלוריות 💜" },
+];
+const TOUR_NO = [
+  { view: "day", open: "day", sel: "steps", text: "כאן את ממלאת את הצעדים שלך. כדי לדעת כמה צעדים עשית, פתחי את אפליקציית הבריאות בטלפון, מצאי את מספר הצעדים של היום, והזיני אותו כאן. תמיד אפשר לעדכן." },
+  { view: "day", open: "day", sel: "tracker", text: "כאן ממלאים את המשימות היומיות. בכל יום מחכות לך המשימות שלך - הקישי כדי לסמן מה השלמת, וכל יום שתסיימי מזכה אותך במדליה 💜" },
+];
+const TOUR_TAIL = [
+  { view: "day", open: "day", sel: "cabinet", text: "כאן נאספים ההישגים שלך - המדליות היומיות והגביעים השבועיים. כיף לחזור ולראות כמה התקדמת לאורך הדרך." },
+  { view: "day", open: "day", sel: "nav-day", text: "כפתור 'היומן' תמיד יחזיר אותך לכאן - למסך מילוי המשימות היומיות." },
+  { view: "day", open: "day", sel: "nav-report", text: "ב'דוח' תוכלי לעקוב אחרי ההתקדמות שלך לאורך זמן, במגוון מדדים." },
+  { view: "day", open: "day", sel: "nav-fab", text: "ה-➕ שבמרכז הוא קיצור דרך מהיר לכל הפעולות החשובות, מכל מסך באפליקציה." },
+  { view: "day", open: "day", sel: "nav-recipes", text: "ב'מתכונים' מחכים לך כל המתכונים של התוכנית - ואם תרצי, אפשר להוסיף אותם ליומן בלחיצה." },
+  { view: "day", open: "day", sel: "nav-profile", text: "ב'פרופיל' נמצאות ההעדפות התזונתיות שלך ונתונים נוספים, כמו היעד הקלורי המומלץ ויעד הצעדים היומי. ניתן לעדכן את נתוני הפרופיל בכל זמן שתרצי :)" },
+  { view: "day", open: "day", sel: "notesfab", text: "יש לך הערה? נשמח מאוד לשמוע כדי לשפר 💜 כפתור הבועה כאן בצד שמאל זמין לך בכל מסך - אפשר להשאיר לנו הערה מכל מקום באפליקציה." },
+  { view: "day", open: "day", sel: "daystrip", text: "את יכולה תמיד לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך (סוויפ)." },
+  { view: "day", open: "day", sel: "tourbtn", btn: "סיימנו", last: true, text: "ואם לא הספקת לקלוט הכל - אל דאגה 💜 תמיד אפשר להתחיל את הסיור מחדש דרך כפתור 'סיור באפליקציה' כאן במסך, או למצוא תשובות ב'שאלות ותשובות' שבפרופיל." },
+];
+function buildTour(path) {
+  const intro = { view: "day", open: "day", sel: "cal", prompt: "רוצה שאראה לך דוגמה?", choice: { yes: "כן, בבקשה", no: "אין צורך, נמשיך" }, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת ואת הפעילות הגופנית שעשית (חוץ מהצעדים). יש כמה דרכים: לספר במילים או בדיבור מה אכלת, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה." };
+  if (!path) return [intro];
+  return [intro, ...(path === "yes" ? TOUR_YES : TOUR_NO), ...TOUR_TAIL];
+}
+
+// Entries below restate copy already in the app (no new claims).
+const FAQ_ITEMS = [
+  { q: "איך מתקינים את האפליקציה בטלפון (כמו אפליקציה רגילה)?", a: "באנדרואיד פותחים בדפדפן Chrome, נכנסים לתפריט שלוש הנקודות ובוחרים 'הוספה למסך הבית'. באייפון פותחים ב-Safari, מקישים על כפתור השיתוף ובוחרים 'הוספה למסך הבית'. כך נוצר אייקון של האפליקציה במסך הבית, ואפשר לפתוח אותה בלחיצה אחת כמו אפליקציה רגילה." },
+  { q: "האפליקציה נראית ישנה או לא מתעדכנת - איך מרעננים?", a: "באנדרואיד אפשר למשוך את המסך כלפי מטה כדי לרענן, או לסגור את האפליקציה ולפתוח שוב. באייפון משיכה למטה לא עובדת - צריך לסגור את האפליקציה לגמרי (להחליק מלמטה למעלה, לעצור באמצע, ולהחליק את הכרטיס של האפליקציה כלפי מעלה), ואז לפתוח שוב מהאייקון. אם גם אחרי זה היא עדיין נראית ישנה, אפשר להסיר אותה ממסך הבית ולהוסיף מחדש - אבל שימי לב שזה מאפס את הנתונים במכשיר, אז כדאי לעשות קודם גיבוי במסך הפרופיל." },
+  { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
+  { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
+  { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
+  { q: "כמה קלוריות מותר לי לאכול היום?", a: "היעד הקלורי היומי מחושב לפי הגיל, המשקל, הגובה ורמת הפעילות שלך, ומופיע בעיגול הקלוריות ('מתוך ...'). אפשר לראות אותו גם במסך הפרופיל." },
+  { q: "שכחתי להזין יום שלם - מה עושים?", a: "אפשר לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך, ולמלא בדיעבד." },
+  { q: "איך עורכים או מוחקים פריט שהוספתי?", a: "בהקשה על הפריט ברשימת 'מה שהוזן היום' ביומן אפשר לערוך אותו או למחוק אותו." },
+  { q: "מה זה המדליות והגביעים?", a: "על כל יום שבו תשלימי את כל המשימות מקבלים מדליה, ועל שבוע שלם - גביע. הכל נאסף בארון ההישגים." },
+  { q: "למה משימות חדשות מופיעות לאורך התוכנית?", a: "המשימות נפתחות בהדרגה כדי לא להעמיס בבת אחת. כל כמה ימים מצטרפת משימה חדשה, צעד אחרי צעד." },
+];
+
+function FaqModal({ onClose, onStartTour }) {
+  const [open, setOpen] = useState(-1);
+  const topics = TIPS.filter((t) => t.key === "cal");
+  const Item = ({ q, a, guide, i }) => (
+    <div onClick={() => setOpen(open === i ? -1 : i)} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 13px", marginBottom: 8, cursor: "pointer" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 15.5, fontWeight: 600, color: C.ink }}>{q}</span>
+        <ChevronDown size={18} color={C.sub} style={{ flexShrink: 0, transform: open === i ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+      </div>
+      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>{a}{guide && <StepGuideLink style={{ marginTop: 10 }} />}</div>}
+    </div>
+  );
+  return (
+    <SheetShell title="שאלות ותשובות" onClose={onClose}>
+      <div style={{ maxHeight: "62vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
+        <div style={{ fontSize: 14, color: C.sub, marginBottom: 10, lineHeight: 1.6 }}>כל מה שכדאי לדעת על השימוש באפליקציה, במקום אחד. הקישי על שאלה כדי לפתוח.</div>
+        <div style={{ background: C.infoBg, borderRadius: 12, padding: "11px 13px", marginBottom: 12, fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}>יש לך שאלה נוספת שלא מופיעה כאן? אפשר לשלוח אותה בקבוצה ולקבל מענה.</div>
+        {onStartTour && <button onClick={onStartTour} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: "none", borderRadius: 12, padding: "13px", marginBottom: 14, background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={17} /> סיור באפליקציה <span style={{ fontWeight: 400, fontSize: 13, opacity: 0.9 }}>(מעבר לשבוע ראשון, יום שלישי)</span></button>}
+        {FAQ_ITEMS.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} guide={f.guide} i={i} />)}
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: "16px 0 8px" }}>מסכים באפליקציה</div>
+        {topics.map((t, j) => <Item key={`t${j}`} q={t.title} a={t.text} i={100 + j} />)}
+      </div>
+    </SheetShell>
+  );
+}
+
+function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
+  const [rect, setRect] = useState(null);
+  const cur = steps[idx];
+  useEffect(() => {
+    let cancelled = false;
+    setRect(null);
+    if (!cur.sel) return;
+    const el = document.querySelector(`[data-tut="${cur.sel}"]`);
+    if (!el) return;
+    try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
+    const t = setTimeout(() => { if (!cancelled) { try { setRect(el.getBoundingClientRect()); } catch (e) {} } }, 380);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [idx, cur.sel]);
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const tap = !!cur.tap;
+  const stop = (e) => e.stopPropagation();
+  // Bubble position: nav-bar steps sit just above the bottom bar; element high -> below it; element low -> pinned to top.
+  const isNav = cur.sel && (cur.sel.indexOf("nav-") === 0);
+  const bubblePos = !rect ? { bottom: 28 } : (isNav ? { bottom: vh - rect.top + 12 } : (rect.top < vh * 0.5 ? { top: rect.bottom + 12 } : { top: 12 }));
+  const pad = 8;
+  const hT = rect ? Math.max(0, rect.top - pad) : 0, hB = rect ? rect.bottom + pad : 0, hL = rect ? Math.max(0, rect.left - pad) : 0, hR = rect ? rect.right + pad : 0;
+  return (
+    <>
+      {tap && rect ? (
+        // Tap steps: dim everything EXCEPT the highlighted element (4 strips), so only that element (and the bubble) are tappable.
+        <>
+          <div onClick={stop} style={{ position: "fixed", top: 0, left: 0, right: 0, height: hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div onClick={stop} style={{ position: "fixed", top: hB, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div onClick={stop} style={{ position: "fixed", top: hT, left: 0, width: hL, height: hB - hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div onClick={stop} style={{ position: "fixed", top: hT, left: hR, right: 0, height: hB - hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div style={{ position: "fixed", top: hT, left: hL, width: hR - hL, height: hB - hT, borderRadius: 16, border: "2px solid #fff", zIndex: 99997, pointerEvents: "none" }} />
+        </>
+      ) : (
+        <>
+          {!tap && <div onClick={stop} style={{ position: "fixed", inset: 0, zIndex: 99996 }} />}
+          {rect && <div style={{ position: "fixed", top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 16, boxShadow: "0 0 0 9999px rgba(0,0,0,0.62)", border: "2px solid #fff", zIndex: 99997, pointerEvents: "none", transition: "all .2s" }} />}
+          {!rect && !tap && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
+        </>
+      )}
+      <div style={{ position: "fixed", left: 16, right: 16, ...bubblePos, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
+        <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>{cur.text}</div>
+        {cur.guide && <StepGuideLink linkOnly style={{ marginBottom: 12 }} />}
+        {cur.prompt && <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 10 }}>{cur.prompt}</div>}
+        {cur.choice ? (
+          <>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => onChoice && onChoice(true)} style={{ flex: 1, border: "none", borderRadius: 10, padding: "11px", background: C.brand, color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.choice.yes}</button>
+              <button onClick={() => onChoice && onChoice(false)} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.choice.no}</button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+              {onEnd ? <button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button> : <span />}
+              {steps.length > 1 && <span style={{ fontSize: 12.5, color: C.faint }}>{idx + 1}/{steps.length}</span>}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12.5, color: C.faint }}>{steps.length > 1 ? `${idx + 1}/${steps.length}` : ""}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {idx > 0 && onBack && <button onClick={onBack} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 16px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
+                {!tap && <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.btn || "המשך"}</button>}
+              </div>
+            </div>
+            {onEnd && !cur.last && <div style={{ marginTop: 10, textAlign: "center" }}><button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button></div>}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function RestoreScreen({ email, busy, onRestore, onSkip }) {
+  const [code, setCode] = useState("");
+  const [err, setErr] = useState("");
+  const submit = async () => { setErr(""); const r = await onRestore(code); if (!r.ok) setErr(r.msg || "שגיאה."); };
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", fontFamily: fontStack }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "26px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Lock size={22} color={C.brand} /><span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>מצאנו גיבוי מוצפן</span></div>
+        <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 16 }}>קיים גיבוי מוצפן עבור <span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{email}</span>. הזיני את קוד הגיבוי כדי לשחזר את כל הנתונים שלך למכשיר הזה.</p>
+        <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
+        <input value={code} onChange={(e) => { setCode(e.target.value); setErr(""); }} type="password" placeholder="הקוד שבחרת" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${err ? C.amber : C.line}`, borderRadius: 10, padding: "12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+        {err && <div style={{ fontSize: 14, color: C.amber, marginTop: 6 }}>{err}</div>}
+      </div>
+      <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", flexDirection: "column", gap: 8 }}>
+        <Btn disabled={busy || !code.trim()} onClick={submit}>{busy ? "משחזר..." : "שחזרי את הנתונים"}</Btn>
+        <Btn variant="ghost" onClick={onSkip} style={{ color: C.sub }}>התחלה מחדש (בלי שחזור)</Btn>
+      </div>
+    </div>
+  );
+}
+
+function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCode, onClose }) {
+  const enabled = !!(backup && backup.enabled);
+  const [mode, setMode] = useState(enabled ? "view" : "enable"); // view | enable | reset
+  const [email, setEmail] = useState(((backup && backup.email) || gateEmail || "").trim());
+  const [code, setCode] = useState("");
+  const [code2, setCode2] = useState("");
+  const [msg, setMsg] = useState(null);
+  const run = async (fn) => { setMsg(null); const r = await fn(); setMsg({ ok: r.ok, text: r.msg }); return r; };
+  const codeOk = code.trim().length >= 4 && code === code2;
+  const inputS = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", marginBottom: 8 };
+  return (
+    <SheetShell title="גיבוי מוצפן" onClose={onClose}>
+      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 14 }}>הנתונים שלך נשמרים במכשיר. גיבוי מוצפן שומר עותק בענן שרק את יכולה לפתוח - אף אחד, גם לא מיי פריים, לא רואה את התוכן.</p>
+      {enabled && mode === "view" && (
+        <>
+          <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 14.5, color: C.brandD, lineHeight: 1.6 }}>הגיבוי המוצפן מופעל ומגובה אוטומטית פעם ביום. משויך ל-<span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{(backup && backup.email) || gateEmail}</span>.</div>
+          <Btn disabled={busy} onClick={() => run(onBackupNow)}>{busy ? "מגבה..." : "גבה עכשיו"}</Btn>
+          <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setMsg(null); setCode(""); setCode2(""); setMode("reset"); }} style={{ color: C.sub }}>איפוס קוד</Btn></div>
+        </>
+      )}
+      {mode === "reset" && (
+        <>
+          <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>בחרי קוד חדש. הנתונים שבמכשיר יגובו מחדש עם הקוד החדש.</div>
+          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="קוד חדש" style={inputS} />
+          <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב" style={inputS} />
+          <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onResetCode(code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מעדכן..." : "עדכון קוד"}</Btn>
+          <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setMsg(null); setMode("view"); }} style={{ color: C.sub }}>ביטול</Btn></div>
+        </>
+      )}
+      {!enabled && mode === "enable" && (
+        <>
+          <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>אימייל לגיבוי</div>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="name@example.com" style={{ ...inputS, direction: "ltr", textAlign: "left" }} />
+          <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
+          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="קוד אישי שתזכרי" style={inputS} />
+          <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב" style={inputS} />
+          <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: "10px 12px", borderRadius: 10, lineHeight: 1.55, marginBottom: 12, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>אי אפשר לשחזר את הקוד. אם תשכחי אותו, לא נוכל לפתוח את הגיבוי בטלפון חדש. רשמי אותו במקום בטוח.</span></div>
+          <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onEnable(email, code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מפעיל..." : "הפעלת גיבוי מוצפן"}</Btn>
+        </>
+      )}
+      {msg && <div style={{ fontSize: 14, color: msg.ok ? C.brandD : C.amber, marginTop: 10, textAlign: "center" }}>{msg.text}</div>}
+    </SheetShell>
+  );
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+// Subscribes the device to the daily 19:00 reminder. Requests permission (must be
+// from a user gesture on iOS), then registers a push subscription and stores it server-side.
+async function enableDailyReminder(email) {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    return { ok: false, reason: "unsupported" };
+  }
+  let perm = Notification.permission;
+  if (perm === "default") {
+    try { perm = await Notification.requestPermission(); } catch (e) { return { ok: false, reason: "error" }; }
+  }
+  if (perm !== "granted") return { ok: false, reason: perm === "denied" ? "denied" : "dismissed" };
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const r = await fetch("/api/subscribe");
+    const j = await r.json();
+    if (!j || !j.publicKey) return { ok: false, reason: "not_configured" };
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(j.publicKey) });
+    }
+    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", subscription: sub }) });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: "error" };
+  }
+}
+
+async function disableDailyReminder() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+  } catch (e) {}
+}
+
+function ReminderRow({ email }) {
+  const supported = typeof navigator !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const [status, setStatus] = useState("loading"); // on | off | denied | unsupported | loading
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!supported) { if (alive) setStatus("unsupported"); return; }
+      if (Notification.permission === "denied") { if (alive) setStatus("denied"); return; }
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (alive) setStatus(sub && Notification.permission === "granted" ? "on" : "off");
+      } catch (e) { if (alive) setStatus("off"); }
+    })();
+    return () => { alive = false; };
+  }, [supported]);
+  const turnOn = async () => {
+    setBusy(true);
+    const r = await enableDailyReminder(email);
+    setBusy(false);
+    if (r.ok) setStatus("on");
+    else if (r.reason === "denied") setStatus("denied");
+    else if (r.reason === "unsupported") setStatus("unsupported");
+  };
+  const turnOff = async () => { setBusy(true); await disableDailyReminder(); setBusy(false); setStatus("off"); };
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, gap: 10 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Clock size={18} color={C.brand} /> תזכורת יומית ב-19:00</span>
+      {status === "on" && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 14, color: C.brand, fontWeight: 600 }}>מופעלת</span><span onClick={busy ? undefined : turnOff} style={{ fontSize: 13.5, color: C.faint, cursor: "pointer", textDecoration: "underline" }}>כיבוי</span></span>}
+      {status === "off" && <button onClick={busy ? undefined : turnOn} style={{ flexShrink: 0, border: "none", background: C.brand, color: "#fff", borderRadius: 10, padding: "8px 16px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>הפעלה</button>}
+      {status === "denied" && <span style={{ fontSize: 12.5, color: C.faint, maxWidth: 180, textAlign: "end" }}>ההתראות חסומות. אפשר לאפשר אותן בהגדרות הדפדפן או המכשיר.</span>}
+      {status === "unsupported" && <span style={{ fontSize: 12.5, color: C.faint, maxWidth: 180, textAlign: "end" }}>באייפון צריך קודם להוסיף את האפליקציה למסך הבית.</span>}
+      {status === "loading" && <span style={{ fontSize: 13, color: C.faint }}>...</span>}
+    </div>
+  );
+}
+
+export default function App() {
+  const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: [], keepShabbat: false, fasting: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
+  const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
+  const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
+  const [tab, setTab] = useState("day");
+  const [profile, setProfile] = useState(saved?.profile || DEFAULT_PROFILE);
+  const [log, setLog] = useState(saved?.log || INITIAL_LOG);
+  const [weights, setWeights] = useState(saved?.weights || initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate));
+  const [activityLog, setActivityLog] = useState(saved?.activityLog || []);
+  const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
+  const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
+  const [checkins, setCheckins] = useState(saved?.checkins || {});
+  const celebRef = useRef({ mounted: false, trophies: 0 });
+  const [cheerTrophyWeek, setCheerTrophyWeek] = useState(1);
+  const [goalAckWeek, setGoalAckWeek] = useState(saved?.goalAckWeek || 0);
+  const [goalBump, setGoalBump] = useState(null);
+  const [favorites, setFavorites] = useState(saved?.favorites || []);
+  const [selectedDate, setSelectedDate] = useState(TODAY);
+  const [today, setToday] = useState(TODAY);
+  useEffect(() => {
+    if (DEV) return; // dev "today" is simulated/fixed; the DevDateBar reloads to change it. Never clobber it with the real date.
+    const id = setInterval(() => {
+      const now = ymd(new Date());
+      if (now !== today) { setToday(now); setSelectedDate((sd) => (sd === today ? now : sd)); }
+    }, 60000);
+    return () => clearInterval(id);
+  }, [today]);
+  const [modal, setModal] = useState(null);
+  const [sheet, setSheet] = useState(null);
+  const [tour, setTour] = useState(null);
+  const [showIntro, setShowIntro] = useState(saved ? false : true);
+  const [notes, setNotes] = useState([]);
+  const [bkRestore, setBkRestore] = useState("idle"); // idle | checking | offer | none
+  const [bkBusy, setBkBusy] = useState(false);
+  const [gate, setGate] = useState("checking");
+  const [gateReason, setGateReason] = useState("");
+  const [gateEmail, setGateEmail] = useState("");
+  const [gateName, setGateName] = useState("");
+  const [gateMsg, setGateMsg] = useState("");
+  const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
+  const [gateAttempts, setGateAttempts] = useState(0);
+  const [gateAgree, setGateAgree] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  useEffect(() => { const t = setTimeout(() => setShowSplash(false), 2000); return () => clearTimeout(t); }, []);
+
+  // Android/Samsung hardware "back": intercept so the app doesn't close instantly.
+  // Back first closes an open sheet/modal; otherwise it asks whether to leave.
+  const [showExit, setShowExit] = useState(false);
+  const modalRef = useRef(modal); modalRef.current = modal;
+  const sheetRef = useRef(sheet); sheetRef.current = sheet;
+  const exitRef = useRef(showExit); exitRef.current = showExit;
+  const leavingRef = useRef(false);
+  useEffect(() => {
+    try { window.history.pushState({ mp: 1 }, ""); } catch (e) {}
+    const onPop = () => {
+      if (leavingRef.current) return;
+      if (modalRef.current) setModal(null);
+      else if (sheetRef.current) setSheet(null);
+      else if (exitRef.current) setShowExit(false);
+      else setShowExit(true);
+      try { window.history.pushState({ mp: 1 }, ""); } catch (e) {}
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const confirmExit = () => { leavingRef.current = true; setShowExit(false); try { window.history.go(-2); } catch (e) {} };
+
+  const checkAccess = async (em, nm) => {
+    setGate("checking"); setGateMsg("");
+    try {
+      const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
+      const d = await r.json();
+      if (d.allowed) {
+        try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
+        if (d.startDate) { setGateStartDate(d.startDate); try { localStorage.setItem("myprime_start_date", d.startDate); } catch (e) {} }
+        setGateReason(""); setGate("ok");
+      } else {
+        const rsn = d.reason || "not_registered";
+        if (rsn === "not_registered") setGateAttempts((n) => n + 1);
+        setGateReason(rsn); setGate("denied");
+      }
+    } catch (e) { setGateMsg("תקלת תקשורת. נסי שוב."); setGate("form"); }
+  };
+  useEffect(() => {
+    let em = "", nm = "";
+    try { em = localStorage.getItem("myprime_access_email") || ""; nm = localStorage.getItem("myprime_access_name") || ""; } catch (e) {}
+    if (nm) setGateName(nm);
+    if (em) { setGateEmail(em); checkAccess(em, nm); } else { setGate("form"); }
+  }, []);
+  // Keep the program start date aligned with the registration sheet for returning users.
+  useEffect(() => {
+    if (DEV) return; // in DEV the start date is simulated for testing - never cap it to the sheet date
+    if (gate !== "ok" || !onboarded || !gateStartDate) return;
+    if (profile.startDate && profile.startDate <= gateStartDate) return;
+    setProfile((p) => ({ ...p, startDate: gateStartDate }));
+  }, [gate, onboarded, gateStartDate]);
+  const submitGate = () => {
+    const e = gateEmail.trim().toLowerCase(); const n = gateName.trim();
+    if (!n) { setGateMsg("נא להזין שם פרטי."); return; }
+    if (!e || !e.includes("@")) { setGateMsg("נא להזין כתובת מייל תקינה."); return; }
+    if (!gateAgree) { setGateMsg("יש לאשר את מדיניות הפרטיות כדי להמשיך."); return; }
+    checkAccess(e, n);
+  };
+  const retryGate = () => { try { localStorage.removeItem("myprime_access_email"); localStorage.removeItem("myprime_start_date"); } catch (e) {} setGateEmail(""); setGateMsg(""); setGateReason(""); setGateStartDate(""); setGate("form"); };
+
+  const targets = useMemo(() => computeTargets(profile), [profile]);
+  const dailyTarget = profile.calorieOverride || targets.targetKcal;
+  const programWeek = programWeekFor(profile.startDate, TODAY);
+  // ===== App tour controller (day-3 guided "סיור באפליקציה") =====
+  const introLock = programWeekFor(profile.startDate, TODAY) === 1 && programDayNumber(profile.startDate, TODAY) <= 2;
+  const tourView = sheet === "caloriemenu" ? "caloriemenu" : sheet === "steps" ? "steps" : (modal && modal.kind && modal.kind !== "recipe") ? "addfood" : "day";
+  const markTourSeen = () => setProfile((p) => (p.tipsSeen || []).includes("appTour") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "appTour"] });
+  const startTour = () => setTour({ steps: buildTour(null), i: 0 });
+  const tourChoice = (yes) => setTour({ steps: buildTour(yes ? "yes" : "no"), i: 1 });
+  const tourAdvance = () => {
+    if (!tour) return;
+    const ni = tour.i + 1;
+    if (ni >= tour.steps.length) { setTour(null); markTourSeen(); setSheet(null); setModal(null); } else setTour({ ...tour, i: ni });
+  };
+  const tourEnd = () => {
+    const steps = (tour && tour.steps.length > 1) ? tour.steps : buildTour("no");
+    setTour({ steps, i: steps.length - 1 });
+  };
+  const tourBack = () => { if (tour && tour.i > 0) setTour({ ...tour, i: tour.i - 1 }); };
+  const tourEvent = (key) => {
+    if (!tour) return;
+    const cur = tour.steps[tour.i];
+    if (!cur || !cur.tap || cur.event !== key) return;
+    const ni = tour.i + 1;
+    if (ni >= tour.steps.length) { setTour(null); markTourSeen(); } else setTour({ ...tour, i: ni });
+  };
+  // Demo-driven navigation: the tour opens each step's screen itself (so the user doesn't have to fill anything in).
+  useEffect(() => {
+    if (!tour) return;
+    const cur = tour.steps[tour.i];
+    if (!cur || !cur.open) return;
+    if (cur.open === "caloriemenu") { if (modal) setModal(null); if (sheet !== "caloriemenu") setSheet("caloriemenu"); }
+    else if (cur.open === "steps") { if (modal) setModal(null); if (sheet !== "steps") setSheet("steps"); }
+    else if (cur.open === "addfood") { if (sheet) setSheet(null); if (!modal || modal.kind === "recipe") setModal({ kind: "food", preMeal: null, editEntry: null }); }
+    else if (cur.open === "day") { if (sheet) setSheet(null); if (modal) setModal(null); }
+  }, [tour]);
+  useEffect(() => {
+    if (gate !== "ok" || !onboarded || showIntro || tab !== "day" || tour) return;
+    const pd = programDayNumber(profile.startDate, TODAY);
+    const wk = programWeekFor(profile.startDate, TODAY);
+    if (wk === 1 && pd >= 3 && !(profile.tipsSeen || []).includes("appTour")) {
+      const t = setTimeout(() => setTour({ steps: buildTour(null), i: 0 }), 700);
+      return () => clearTimeout(t);
+    }
+  }, [gate, onboarded, showIntro, tab, tour, profile.tipsSeen, profile.startDate]);
+  // ===== Daily 19:00 reminder (web push) =====
+  const [notifyPrompt, setNotifyPrompt] = useState(false);
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (gate !== "ok" || !gateEmail) return;
+    if ("Notification" in window && Notification.permission === "granted") enableDailyReminder(gateEmail).catch(() => {});
+  }, [gate, gateEmail]);
+  useEffect(() => {
+    if (gate !== "ok" || !onboarded || showIntro || tour || tab !== "day") return;
+    const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+    if (!supported || Notification.permission !== "default") return;
+    if ((profile.tipsSeen || []).includes("notifyAsked")) return;
+    const t = setTimeout(() => setNotifyPrompt(true), 1400);
+    return () => clearTimeout(t);
+  }, [gate, onboarded, showIntro, tour, tab, profile.tipsSeen]);
+  const markNotifyAsked = () => setProfile((p) => (p.tipsSeen || []).includes("notifyAsked") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "notifyAsked"] });
+  const acceptNotify = async () => { setNotifyPrompt(false); markNotifyAsked(); await enableDailyReminder(gateEmail); };
+  const dismissNotify = () => { setNotifyPrompt(false); markNotifyAsked(); };
+  const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
+  const stepsOpenToday = unlockedOn(profile.startDate, selectedDate, STEPS_UNLOCK);
+  // Step goal: she sets the baseline once, then accepts increases via a prominent banner (never silent).
+  const stepAction = pendingStepAction(profile, programWeek, goalAckWeek);
+  const confirmBaseline = (val) => { setProfile((p) => ({ ...p, stepBaseline: val, stepGoal: val + stepGoalCumOffset(programWeek) })); setGoalAckWeek(highestBumpAtOrBelow(programWeek)); setSheet(null); };
+  const confirmIncrease = (week, val) => { setProfile((p) => ({ ...p, stepGoal: val })); setGoalAckWeek(week); setSheet(null); };
+  const recDayLog = log.filter((e) => e.date === selectedDate);
+  const recRemainingKcal = (dailyTarget + activityLog.filter((a) => a.date === selectedDate).reduce((s, a) => s + a.kcal, 0)) - recDayLog.reduce((s, e) => s + e.kcal, 0);
+  const recRemainingProtein = Math.max(0, targets.protein - recDayLog.reduce((s, e) => s + (e.p || 0), 0));
+  const recMealsHad = recDayLog.map((e) => e.name).join(", ");
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, checkins, goalAckWeek })); } catch (e) {}
+  }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, checkins, goalAckWeek]);
+
+  // New device: if there is no local data yet but a cloud backup exists for this email, offer restore.
+  useEffect(() => {
+    if (gate !== "ok" || onboarded || saved) return;
+    if (bkRestore !== "idle") return;
+    const email = (gateEmail || "").trim().toLowerCase();
+    if (!email || !bkSubtle) { setBkRestore("none"); return; }
+    setBkRestore("checking");
+    (async () => { const r = await bkFetch(email); setBkRestore(r && r.exists ? "offer" : "none"); })();
+  }, [gate, onboarded, saved, gateEmail, bkRestore]);
+
+  // Auto-backup: once a day, a few seconds after the first load/change of the day.
+  useEffect(() => {
+    if (gate !== "ok" || !onboarded) return;
+    if (!(profile.backup && profile.backup.enabled)) return;
+    const code = bkGetCode();
+    const email = ((profile.backup && profile.backup.email) || gateEmail || "").trim().toLowerCase();
+    if (!code || !email || !bkSubtle) return;
+    let last = ""; try { last = localStorage.getItem(BK_LAST_KEY) || ""; } catch (e) {}
+    if (last === today) return;
+    const t = setTimeout(async () => {
+      try {
+        const plaintext = localStorage.getItem(STORAGE_KEY);
+        if (!plaintext) return;
+        const ok = await bkUpload(email, code, plaintext);
+        if (ok) { try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} }
+      } catch (e) {}
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [gate, onboarded, profile, log, checkins, stepsByDate, waterByDate, weights, today]);
+
+  const doRestore = async (code) => {
+    const email = (gateEmail || "").trim().toLowerCase();
+    if (!code.trim()) return { ok: false, msg: "יש להזין קוד." };
+    setBkBusy(true);
+    try {
+      const r = await bkFetch(email);
+      if (!r || !r.exists) { setBkBusy(false); return { ok: false, msg: "לא נמצא גיבוי לאימייל הזה." }; }
+      const plaintext = await bkDecrypt(code, r.blob);
+      JSON.parse(plaintext); // sanity
+      localStorage.setItem(STORAGE_KEY, plaintext);
+      bkSetCode(code);
+      try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {}
+      window.location.reload();
+      return { ok: true };
+    } catch (e) { setBkBusy(false); return { ok: false, msg: "קוד שגוי, נסי שוב." }; }
+  };
+  const backupNow = async () => {
+    const code = bkGetCode();
+    const email = ((profile.backup && profile.backup.email) || gateEmail || "").trim().toLowerCase();
+    if (!code || !email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
+    setBkBusy(true);
+    try {
+      const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "");
+      setBkBusy(false);
+      if (ok) { try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} return { ok: true, msg: "גובה בהצלחה." }; }
+      return { ok: false, msg: "הגיבוי נכשל, נסי שוב." };
+    } catch (e) { setBkBusy(false); return { ok: false, msg: "הגיבוי נכשל, נסי שוב." }; }
+  };
+  const enableBackup = async (email, code) => {
+    const em = (email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return { ok: false, msg: "אימייל לא תקין." };
+    if (code.trim().length < 4) return { ok: false, msg: "קוד קצר מדי." };
+    if (!bkSubtle) return { ok: false, msg: "הדפדפן אינו תומך בהצפנה." };
+    bkSetCode(code);
+    setBkBusy(true);
+    try {
+      const ok = await bkUpload(em, code, localStorage.getItem(STORAGE_KEY) || "");
+      setBkBusy(false);
+      if (!ok) { bkSetCode(""); return { ok: false, msg: "ההפעלה נכשלה, נסי שוב." }; }
+      setProfile((p) => ({ ...p, backup: { enabled: true, email: em } }));
+      try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {}
+      return { ok: true, msg: "הגיבוי המוצפן הופעל." };
+    } catch (e) { setBkBusy(false); bkSetCode(""); return { ok: false, msg: "ההפעלה נכשלה, נסי שוב." }; }
+  };
+  const resetBackupCode = async (newCode) => {
+    if (newCode.trim().length < 4) return { ok: false, msg: "קוד קצר מדי." };
+    const email = ((profile.backup && profile.backup.email) || gateEmail || "").trim().toLowerCase();
+    if (!email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
+    setBkBusy(true);
+    try {
+      const ok = await bkUpload(email, newCode, localStorage.getItem(STORAGE_KEY) || "");
+      setBkBusy(false);
+      if (!ok) return { ok: false, msg: "האיפוס נכשל, נסי שוב." };
+      bkSetCode(newCode);
+      try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {}
+      return { ok: true, msg: "הקוד עודכן והנתונים גובו מחדש." };
+    } catch (e) { setBkBusy(false); return { ok: false, msg: "האיפוס נכשל, נסי שוב." }; }
+  };
+
+  const finishOnboarding = (p, bk) => {
+    const backup = { enabled: !!(bk && bk.enabled), email: (bk && bk.email) || (gateEmail || "").trim().toLowerCase() };
+    if (bk && bk.enabled && bk.code) { bkSetCode(bk.code); try { localStorage.removeItem(BK_LAST_KEY); } catch (e) {} }
+    setProfile({ ...p, calorieOverride: null, name: gateName || p.name || "", backup });
+    setWeights(initWeights(p.weightKg, p.startDate)); setOnboarded(true);
+  };
+  const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
+  const editEntry = (e) => setModal(e.unit === "serving" ? { kind: "recipe", recipe: null, editEntry: e } : { kind: "food", preMeal: null, editEntry: e });
+  const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
+  const commit = (payload) => {
+    const date = modal?.editEntry ? modal.editEntry.date : selectedDate;
+    if (modal?.editEntry) setLog((l) => l.map((e) => e.id === modal.editEntry.id ? { ...e, ...payload, date } : e));
+    else {
+      const items = Array.isArray(payload) ? payload : [payload];
+      setLog((l) => [...l, ...items.map((p, i) => ({ id: "n" + Date.now() + i, date, ...p }))]);
+      setFavorites((fs) => {
+        let next = fs.slice();
+        items.forEach((p) => {
+          const name = (p.name || "").trim();
+          const g = p.g;
+          if (!name || !g) return;
+          const per100 = { kcal: Math.round((p.kcal || 0) / g * 100), p: Math.round((p.p || 0) / g * 100), f: Math.round((p.f || 0) / g * 100), c: Math.round((p.c || 0) / g * 100) };
+          const fav = { id: "fav_" + name, name, per100, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0, unit: p.unit || "g", lastG: g };
+          next = next.filter((x) => x.name !== name);
+          next.unshift(fav);
+        });
+        return next.slice(0, 20);
+      });
+    }
+    setModal(null);
+  };
+  const addRecipe = (r) => setModal({ kind: "recipe", recipe: r, editEntry: null });
+  const saveRecipe = (payload, editId) => {
+    if (editId) setLog((l) => l.map((x) => x.id === editId ? { ...x, ...payload } : x));
+    else setLog((l) => [...l, { id: "n" + Date.now(), date: selectedDate, ...payload }]);
+    setModal(null);
+  };
+  const addActivity = (a) => { setActivityLog((l) => [...l, { id: "a" + Date.now(), date: selectedDate, name: a.name, kcal: Math.round(a.kcal) }]); setSheet(null); };
+  const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
+  const setStepsForDate = (date, n) => setStepsByDate((s) => ({ ...s, [date]: Math.max(0, Math.round(n || 0)) }));
+  const setCheckinValue = (date, taskId, value) => setCheckins((c) => { const day = { ...(c[date] || {}) }; if (value === null || value === undefined || value === "") delete day[taskId]; else day[taskId] = value; return { ...c, [date]: day }; });
+  useEffect(() => {
+    const cupMl = profile.cupMl || DEFAULT_CUP_ML;
+    const total = programDayNumber(profile.startDate, today);
+    let changed = false, celebrate = false;
+    const next = { ...checkins };
+    for (let n = 1; n <= total; n++) {
+      const d = addDays(profile.startDate, n - 1);
+      if (dayComplete(profile.startDate, d, profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl) && !(checkins[d] && checkins[d]._done)) {
+        next[d] = { ...(next[d] || {}), _done: true }; changed = true; celebrate = true;
+      }
+    }
+    if (changed) setCheckins(next);
+    let tcount = 0, maxW = 0;
+    for (let w = 1; w <= 10; w++) if (weekTrophyEarned(next, profile.startDate, w, today)) { tcount++; maxW = w; }
+    if (!celebRef.current.mounted) { celebRef.current = { mounted: true, trophies: tcount }; return; }
+    if (tcount > celebRef.current.trophies) { celebRef.current.trophies = tcount; setCheerTrophyWeek(maxW); setSheet("trophyCheer"); }
+    else if (celebrate) setSheet("checkinCheer");
+  }, [checkins, log, stepsByDate, waterByDate, targets, profile.startDate, profile.keepShabbat, today]);
+  // Intermittent-fasting intro bubble: once, on the day screen, from week 8 day 4 (Wednesday) onward.
+  useEffect(() => {
+    if (!onboarded || showIntro || tab !== "day") return;
+    if (sheet || modal || showExit) return;
+    if (profile.fasting) return; // already opted in (e.g. via the profile toggle)
+    if ((profile.tipsSeen || []).includes("fastingintro")) return;
+    const wd = dowOf(today); // 0=Sat, 1=Sun .. 6=Fri
+    const eligible = (programWeek === 8 && wd >= 4) || programWeek > 8;
+    if (eligible) setSheet("fastingIntro");
+  }, [programWeek, today, tab, sheet, modal, showExit, onboarded, showIntro, profile.fasting, profile.tipsSeen]);
+  const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
+  const setWeightForDate = (date, kg) => { setWeights((w) => [...w.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
+  const reportAddWeight = () => setSheet("weight");
+  const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
+  const devAnchorDay1 = () => {
+    const sun = sundayOf(TODAY);
+    try {
+      const blob = { onboarded: true, profile: { ...profile, startDate: sun, tipsSeen: [], stepBaseline: null, stepGoal: null, calorieOverride: null }, log: [], weights: initWeights(profile.weightKg, sun), activityLog: [], waterByDate: {}, stepsByDate: {}, favorites, checkins: {}, goalAckWeek: 0 };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
+      localStorage.setItem("myprime_dev_today", sun);
+    } catch (e) {}
+    window.location.reload();
+  };
+  const logoutDevice = async () => {
+    const em = (gateEmail || (() => { try { return localStorage.getItem("myprime_access_email") || ""; } catch (e) { return ""; } })()).trim().toLowerCase();
+    try { if (em) await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}&logout=1`); } catch (e) {}
+    try { localStorage.removeItem("myprime_access_email"); localStorage.removeItem("myprime_start_date"); } catch (e) {}
+    setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg(""); setGateStartDate(""); setGateAttempts(0); setGateAgree(false); setSheet(null);
+  };
+  const resetDemo = () => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
+    try { localStorage.removeItem("myprime_start_date"); } catch (e) {}
+    setGate("form"); setGateEmail(""); setGateName(""); setGateReason(""); setGateMsg(""); setGateStartDate(""); setGateAttempts(0);
+    setOnboarded(false); setShowIntro(true); setTab("day"); setModal(null); setSheet(null);
+    setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate)); setSelectedDate(TODAY);
+    setCheckins({});
+    setProfile(DEFAULT_PROFILE);
+  };
+  const onPickEntry = (id) => {
+    if (id === "food") { openAdd("food", null); tourEvent("pickfood"); }
+    else if (id === "ai") openAdd("ai", null);
+    else if (id === "activity") setSheet("activity");
+    else if (id === "recommend") setSheet("recommend");
+    else if (id === "steps") setSheet("steps");
+    else if (id === "water") addWaterGlass();
+    else if (id === "weight") setSheet("weight");
+    else if (id === "calorie") setSheet("calorie");
+  };
+
+  const sweetsOpen = unlockedOn(profile.startDate, TODAY, SWEETS_UNLOCK);
+  const tabs = [
+    { id: "day", ic: Home, label: "יומן" },
+    { id: "report", ic: TrendingDown, label: "דוח" },
+    { id: "recipes", ic: ChefHat, label: "מתכונים" },
+    { id: "profile", ic: User, label: "פרופיל" },
+  ];
+
+  return (
+    <div dir="rtl" className="app-outer">
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600&display=swap');
+        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        ::-webkit-scrollbar{width:0;height:0}
+        button{font-family:'Rubik',sans-serif}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .spin{animation:spin 1s linear infinite}
+        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(212,93,121,0.5)}50%{box-shadow:0 0 0 8px rgba(212,93,121,0)}}
+        .spin-pulse{animation:pulse 1.2s ease-in-out infinite}
+        @keyframes flameFlicker{0%,100%{transform:rotate(-6deg) scale(1)}50%{transform:rotate(6deg) scale(1.18)}}
+        @keyframes fabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+        @keyframes fabGlow{0%,100%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 0 rgba(212,93,121,0.45)}50%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 12px rgba(212,93,121,0)}}
+        .fab-center{animation:fabFloat 3.2s ease-in-out infinite, fabGlow 2.2s ease-in-out infinite}
+        .streak-pill:active{transform:scale(0.96)}
+        @keyframes cheerPop{0%{transform:scale(0.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+        @keyframes medalIn{0%{transform:scale(0) rotate(-25deg);opacity:0}55%{transform:scale(1.2) rotate(8deg)}75%{transform:scale(0.95) rotate(-3deg)}100%{transform:scale(1) rotate(0);opacity:1}}
+        @keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(150px) rotate(360deg);opacity:0}}
+        @keyframes splashFade{0%{opacity:0}12%{opacity:1}82%{opacity:1}100%{opacity:0}}
+        .app-outer{min-height:100vh;min-height:100dvh;background:${C.bg};display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;font-family:${fontStack}}
+        .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
+        @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;border-radius:0;box-shadow:none;border:none}}`}</style>
+      <div className="phone-frame">
+        {showSplash && <SplashScreen />}
+        {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
+        {gate !== "ok" ? (
+          <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} attempts={gateAttempts} agree={gateAgree} setAgree={setGateAgree} />
+        ) : !onboarded ? (
+          bkRestore === "offer" ? (
+            <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={() => setBkRestore("none")} />
+          ) : bkRestore === "checking" ? (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.faint, fontFamily: fontStack }}>טוען...</div>
+          ) : (
+            <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} email={gateEmail} fixedStart={gateStartDate} /></div>
+          )
+        ) : (
+          <>
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
+              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
+              {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
+            </div>
+            <div style={{ position: "relative", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", opacity: introLock ? 0.4 : 1, pointerEvents: introLock ? "none" : "auto" }}>
+              {tabs.slice(0, 2).map((t) => {
+                const active = tab === t.id;
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+              })}
+              <button data-tut="nav-fab" onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
+              {tabs.slice(2).map((t) => {
+                const active = tab === t.id;
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+              })}
+            </div>
+            {introLock && <div style={{ position: "absolute", top: 2, right: 14, background: C.faint, color: "#fff", fontSize: 11.5, fontWeight: 700, padding: "3px 12px", borderRadius: 999, zIndex: 20, fontFamily: fontStack }}>בקרוב</div>}
+            </div>
+
+            {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
+            {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} onStartTour={() => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
+            {sheet === "backup" && <BackupModal backup={profile.backup} gateEmail={gateEmail} busy={bkBusy} onEnable={enableBackup} onBackupNow={backupNow} onResetCode={resetBackupCode} onClose={() => setSheet(null)} />}
+            {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
+            {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} autoFocusInput={!tour} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
+            {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onSetMl={(ml) => setWaterForDate(selectedDate, ml)} onSetCup={(cup) => setProfile({ ...profile, cupMl: cup })} onClose={() => setSheet(null)} />}
+            {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
+            {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
+            {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
+            {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
+            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
+            {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
+            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} onClose={() => setSheet(null)} />}
+            {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
+            {modal && (modal.kind === "recipe"
+              ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
+              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
+            {tour && tour.steps[tour.i] && tour.steps[tour.i].view === tourView && <TutorialOverlay steps={tour.steps} idx={tour.i} onNext={tourAdvance} onChoice={tourChoice} onEnd={tourEnd} onBack={tourBack} />}
+          </>
+        )}
+        {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
+        {gate === "ok" && showIntro && <IntroOverlay name={profile.name || gateName} onClose={() => setShowIntro(false)} />}
+        {gate === "ok" && notifyPrompt && (
+          <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 55 }}>
+            <div style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 340, textAlign: "center", fontFamily: fontStack }}>
+              <div style={{ fontSize: 34, marginBottom: 6 }}>🔔</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 8 }}>שנזכיר לך כל ערב?</div>
+              <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>נשמח לשלוח לך תזכורת קטנה כל יום ב-19:00, כשיומן המעקב נפתח. אפשר לכבות בכל רגע בפרופיל.</p>
+              {/iphone|ipad|ipod/i.test(navigator.userAgent || "") && <p style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, margin: "0 0 14px" }}>כשיופיע חלון של הטלפון - בחרי "אישור".</p>}
+              <Btn onClick={acceptNotify}>כן, הזכירו לי</Btn>
+              <Btn variant="ghost" onClick={dismissNotify} style={{ marginTop: 8 }}>לא עכשיו</Btn>
+            </div>
+          </div>
+        )}
+        {showExit && (
+          <div onClick={() => setShowExit(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 50 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+              <div style={{ fontSize: 20, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לצאת מ-MyPrime?</div>
+              <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>אפשר להישאר ולהמשיך בדיוק מאיפה שעצרת.</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <Btn onClick={() => setShowExit(false)}>להישאר</Btn>
+                <Btn variant="ghost" onClick={confirmExit}>לצאת</Btn>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
