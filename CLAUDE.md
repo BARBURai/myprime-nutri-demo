@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.90`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `1.93`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,24 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v1.93 - Notification opt-in step in onboarding
+- Added a 6th onboarding step (step 5, "תזכורת יומית"): value framing + "אפשרי תזכורת יומית" button (the tap satisfies the iOS user-gesture requirement) -> enableDailyReminder(email). New OnboardNotify component. Progress bar 5->6 segments; footer now finishes at step 5 (step 4 -> "המשך").
+- iOS branch: if iOS and NOT installed to home screen (Safari), shows install-first guidance instead of a button that can't work; supported/denied/error states handled. Fixed 19:00 (custom time deferred - free, needs hourly cron).
+- Day-screen one-time prompt (v1.92) kept: granted users never see it (gated on permission "default"); only nudges those who skipped / existing users.
+- VERSION 1.92->1.93. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
+
+## v1.92 - Daily 19:00 reminder (Web Push)
+- NEW FEATURE: native Web Push (VAPID) on the existing Vercel + Upstash stack (no Firebase). Reminds each subscribed woman at 19:00 Israel that the diary is open.
+- NEW FILES: public/sw.js (service worker: push + notificationclick), api/subscribe.js (GET returns VAPID public key, POST stores subscription in Redis HASH `push:subs`), api/notify.js (cron target: sends to all subs, prunes 404/410, gated to hour===19 Asia/Jerusalem unless ?force=1), vercel.json (crons 16:00 & 17:00 UTC -> code gates to 19:00 Israel, DST-safe). package.json: added web-push.
+- App.jsx client: registers /sw.js; silent re-subscribe on every open if permission already granted; ReminderRow in profile (enable/off/denied/unsupported states, uses Clock icon); one-time opt-in prompt card on the day screen (after intro/tour, gated by tipsSeen "notifyAsked"); helpers enableDailyReminder/disableDailyReminder/urlBase64ToUint8Array. Passes gateEmail to ProfileScreen.
+- iOS caveats (documented): push only on iOS 16.4+, app installed to home screen, permission from a user gesture. Android/desktop work in-browser. Reused lessons from the owner's barbur-poker FCM knowledge (notificationclick handler, gesture-triggered permission, re-register on open).
+- REQUIRES OWNER VERCEL SETUP (feature is inert until done): env VAPID_PUBLIC, VAPID_PRIVATE (generated), VAPID_SUBJECT (mailto:), CRON_SECRET (for Vercel cron auth) and/or NOTIFY_SECRET (for external cron). Deploy with vercel.json for crons (or hit /api/notify?secret=... from an external cron at 19:00 Israel). Test send: /api/notify?secret=...&force=1.
+- VERSION 1.91->1.92. esbuild clean, check-logic 7/7, 0 em/en dashes, api+sw node --check ok, JSON valid. CHANGED/NEW FILES: src/App.jsx, CLAUDE.md, public/sw.js, api/subscribe.js, api/notify.js, vercel.json, package.json.
+
+## v1.91 - Tour button shows day 3+ (not only day 3)
+- The on-screen "סיור באפליקציה" pill was gated to progDay===3 && week===1 (exact day 3). Changed to week===1 && progDay>=3 && tour-not-completed, so a woman entering on day 4+ (within week 1) still sees a way to open the tour from the main screen; it hides once she finishes the tour (appTour in tipsSeen). Auto-tour already covered pd>=3; this is the manual entry point. Context: week-1 group entering on day 4 tomorrow (week-2 group not invited yet).
+- VERSION 1.90->1.91. esbuild clean, check-logic 7/7, 0 em/en dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
 
 ## v1.90 - Weight confirm modal: choice before changing
 - Profile weight modal was post-save (only "הבנתי", number already changed). Now it confirms BEFORE applying: saving "משקל התחלתי"/"משקל יעד" stashes the value (pendingWeight) and opens "רק לוודא" with two buttons: "אני רוצה לשנות בכל זאת" (applies) and "צאי בלי לשנות" (ghost, cancels). Backdrop tap = cancel. The number is NOT changed unless she confirms.

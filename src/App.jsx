@@ -393,7 +393,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "1.90";
+const VERSION = "1.93";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -623,6 +623,34 @@ function Field({ label, children }) {
   );
 }
 
+function OnboardNotify({ email }) {
+  const supported = typeof navigator !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const isIOS = /iphone|ipad|ipod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
+  const standalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true);
+  const needInstall = isIOS && !standalone;
+  const [st, setSt] = useState(typeof Notification !== "undefined" && Notification.permission === "granted" ? "on" : "idle");
+  const turnOn = async () => {
+    setSt("busy");
+    const r = await enableDailyReminder(email);
+    if (r.ok) setSt("on");
+    else if (r.reason === "denied") setSt("denied");
+    else setSt("err");
+  };
+  const note = (txt) => <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", fontSize: 14.5, color: C.brandD, lineHeight: 1.6 }}>{txt}</div>;
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><span style={{ fontSize: 24 }}>🔔</span><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>תזכורת יומית</span></div>
+      <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginBottom: 16 }}>נזכיר לך כל יום ב-19:00, כשיומן המעקב נפתח, להקדיש רגע ולמלא את היום. אפשר לכבות בכל רגע מהפרופיל.</div>
+      {!supported ? note("הדפדפן הזה לא תומך בתזכורות. אפשר להמשיך בלי - זה לא משפיע על המעקב.")
+        : needInstall ? note("כדי לקבל תזכורות באייפון, קודם הוסיפי את האפליקציה למסך הבית ופתחי אותה משם. אפשר להמשיך עכשיו ולהפעיל אחר כך מהפרופיל.")
+        : st === "on" ? <div style={{ background: "#E8F3EC", borderRadius: 12, padding: "12px 14px", fontSize: 15, color: "#3B7A57", fontWeight: 600 }}>מצוין! נזכיר לך כל ערב ב-19:00 💜</div>
+        : st === "denied" ? note("ההתראות חסומות במכשיר. אפשר לאפשר אותן בהגדרות, או להמשיך בלי.")
+        : <Btn onClick={turnOn} disabled={st === "busy"}>{st === "busy" ? "רגע..." : "אפשרי תזכורת יומית"}</Btn>}
+      {st === "err" && <div style={{ fontSize: 13.5, color: C.sub, marginTop: 8 }}>לא הצלחנו להפעיל כרגע. אפשר לנסות שוב מהפרופיל.</div>}
+    </>
+  );
+}
+
 function Onboarding({ onFinish, name, email, fixedStart }) {
   const [step, setStep] = useState(0);
   const [age, setAge] = useState("");
@@ -678,7 +706,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "10px 20px 16px" }}>
         <div style={{ display: "flex", gap: 6, margin: "6px 0 8px" }}>
-          {[0, 1, 2, 3, 4].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
+          {[0, 1, 2, 3, 4, 5].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
         </div>
         <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginBottom: 8 }}>v{VERSION}</div>
         <div onClick={() => setShowInstall(true)} style={{ background: C.brandBg, border: `1.5px solid ${C.brand}`, borderRadius: 14, padding: "12px 14px", marginBottom: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
@@ -881,11 +909,12 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
             </div>
           </>
         )}
+        {step === 5 && (<OnboardNotify email={email} />)}
       </div>
 
       <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", gap: 10, alignItems: "center" }}>
         {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
-        {step < 4 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
+        {step < 5 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
       </div>
 
       {confirmNoSens && (
@@ -1043,7 +1072,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       </div>
       {introLock && <div style={{ position: "absolute", top: 10, left: 16, background: C.faint, color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 11px", borderRadius: 999, fontFamily: fontStack }}>בקרוב</div>}
       </div>
-      {progDay === 3 && week === 1 && (
+      {week === 1 && progDay >= 3 && !(tipsSeen || []).includes("appTour") && (
       <div style={{ display: "flex", justifyContent: "center", padding: "6px 16px 0" }}>
         <button data-tut="tourbtn" onClick={onStartTour} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 999, padding: "5px 14px", fontSize: 13, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={15} /> סיור באפליקציה</button>
       </div>
@@ -1485,7 +1514,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, maxStart }) {
+function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, maxStart, gateEmail }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
@@ -1610,6 +1639,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
           </div>
         )}
       </div>
+
+      <ReminderRow email={gateEmail} />
 
       <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, cursor: "pointer" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות, תשובות ועזרה</span>
@@ -3927,6 +3958,88 @@ function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCo
   );
 }
 
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+// Subscribes the device to the daily 19:00 reminder. Requests permission (must be
+// from a user gesture on iOS), then registers a push subscription and stores it server-side.
+async function enableDailyReminder(email) {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    return { ok: false, reason: "unsupported" };
+  }
+  let perm = Notification.permission;
+  if (perm === "default") {
+    try { perm = await Notification.requestPermission(); } catch (e) { return { ok: false, reason: "error" }; }
+  }
+  if (perm !== "granted") return { ok: false, reason: perm === "denied" ? "denied" : "dismissed" };
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const r = await fetch("/api/subscribe");
+    const j = await r.json();
+    if (!j || !j.publicKey) return { ok: false, reason: "not_configured" };
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(j.publicKey) });
+    }
+    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", subscription: sub }) });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: "error" };
+  }
+}
+
+async function disableDailyReminder() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+  } catch (e) {}
+}
+
+function ReminderRow({ email }) {
+  const supported = typeof navigator !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const [status, setStatus] = useState("loading"); // on | off | denied | unsupported | loading
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!supported) { if (alive) setStatus("unsupported"); return; }
+      if (Notification.permission === "denied") { if (alive) setStatus("denied"); return; }
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (alive) setStatus(sub && Notification.permission === "granted" ? "on" : "off");
+      } catch (e) { if (alive) setStatus("off"); }
+    })();
+    return () => { alive = false; };
+  }, [supported]);
+  const turnOn = async () => {
+    setBusy(true);
+    const r = await enableDailyReminder(email);
+    setBusy(false);
+    if (r.ok) setStatus("on");
+    else if (r.reason === "denied") setStatus("denied");
+    else if (r.reason === "unsupported") setStatus("unsupported");
+  };
+  const turnOff = async () => { setBusy(true); await disableDailyReminder(); setBusy(false); setStatus("off"); };
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, gap: 10 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Clock size={18} color={C.brand} /> תזכורת יומית ב-19:00</span>
+      {status === "on" && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 14, color: C.brand, fontWeight: 600 }}>מופעלת</span><span onClick={busy ? undefined : turnOff} style={{ fontSize: 13.5, color: C.faint, cursor: "pointer", textDecoration: "underline" }}>כיבוי</span></span>}
+      {status === "off" && <button onClick={busy ? undefined : turnOn} style={{ flexShrink: 0, border: "none", background: C.brand, color: "#fff", borderRadius: 10, padding: "8px 16px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>הפעלה</button>}
+      {status === "denied" && <span style={{ fontSize: 12.5, color: C.faint, maxWidth: 180, textAlign: "end" }}>ההתראות חסומות. אפשר לאפשר אותן בהגדרות הדפדפן או המכשיר.</span>}
+      {status === "unsupported" && <span style={{ fontSize: 12.5, color: C.faint, maxWidth: 180, textAlign: "end" }}>באייפון צריך קודם להוסיף את האפליקציה למסך הבית.</span>}
+      {status === "loading" && <span style={{ fontSize: 13, color: C.faint }}>...</span>}
+    </div>
+  );
+}
+
 export default function App() {
   const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: [], keepShabbat: false, fasting: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
@@ -4077,6 +4190,26 @@ export default function App() {
       return () => clearTimeout(t);
     }
   }, [gate, onboarded, showIntro, tab, tour, profile.tipsSeen, profile.startDate]);
+  // ===== Daily 19:00 reminder (web push) =====
+  const [notifyPrompt, setNotifyPrompt] = useState(false);
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (gate !== "ok" || !gateEmail) return;
+    if ("Notification" in window && Notification.permission === "granted") enableDailyReminder(gateEmail).catch(() => {});
+  }, [gate, gateEmail]);
+  useEffect(() => {
+    if (gate !== "ok" || !onboarded || showIntro || tour || tab !== "day") return;
+    const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+    if (!supported || Notification.permission !== "default") return;
+    if ((profile.tipsSeen || []).includes("notifyAsked")) return;
+    const t = setTimeout(() => setNotifyPrompt(true), 1400);
+    return () => clearTimeout(t);
+  }, [gate, onboarded, showIntro, tour, tab, profile.tipsSeen]);
+  const markNotifyAsked = () => setProfile((p) => (p.tipsSeen || []).includes("notifyAsked") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "notifyAsked"] });
+  const acceptNotify = async () => { setNotifyPrompt(false); markNotifyAsked(); await enableDailyReminder(gateEmail); };
+  const dismissNotify = () => { setNotifyPrompt(false); markNotifyAsked(); };
   const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
   const stepsOpenToday = unlockedOn(profile.startDate, selectedDate, STEPS_UNLOCK);
   // Step goal: she sets the baseline once, then accepts increases via a prominent banner (never silent).
@@ -4339,7 +4472,7 @@ export default function App() {
               {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={DEV ? null : gateStartDate} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
             </div>
             <div style={{ position: "relative", flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", opacity: introLock ? 0.4 : 1, pointerEvents: introLock ? "none" : "auto" }}>
@@ -4381,6 +4514,17 @@ export default function App() {
         )}
         {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {gate === "ok" && showIntro && <IntroOverlay name={profile.name || gateName} onClose={() => setShowIntro(false)} />}
+        {gate === "ok" && notifyPrompt && (
+          <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 55 }}>
+            <div style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 340, textAlign: "center", fontFamily: fontStack }}>
+              <div style={{ fontSize: 34, marginBottom: 6 }}>🔔</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 8 }}>שנזכיר לך כל ערב?</div>
+              <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>נשמח לשלוח לך תזכורת קטנה כל יום ב-19:00, כשיומן המעקב נפתח. אפשר לכבות בכל רגע בפרופיל.</p>
+              <Btn onClick={acceptNotify}>כן, הזכירו לי</Btn>
+              <Btn variant="ghost" onClick={dismissNotify} style={{ marginTop: 8 }}>לא עכשיו</Btn>
+            </div>
+          </div>
+        )}
         {showExit && (
           <div onClick={() => setShowExit(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 50 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
