@@ -418,7 +418,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.04";
+const VERSION = "3.05";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2303,7 +2303,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
     try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
   };
   const [qtyOrigin, setQtyOrigin] = useState("list");
-  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setQUnit(null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setQUnit(f.combo ? (f.measures.find((m) => m.label === "מנה") || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
   const videoRef = useRef(null);
   const scanControlsRef = useRef(null);
   const [scanState, setScanState] = useState("idle");
@@ -2491,7 +2491,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               return (
                 <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
                   <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לכמות אחרת - הקישי על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
-                  <button onClick={() => { commit({ meal, name: f.name, g, unit: f.unit || "g", source: "verified", ...n }, true); setAddedKeys((k) => [...k, f.id]); }} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
+                  <button onClick={() => { commit({ meal, name: f.name, g, unit: f.unit || "g", source: "verified", ...(f.combo ? { servingG: (f.measures.find((m) => m.label === "מנה") || {}).g } : {}), ...n }, true); setAddedKeys((k) => [...k, f.id]); }} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
                 </div>
               );
             })}
@@ -2604,7 +2604,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                     const defName = aiDoneItems.map((it) => it.name).join(" + ");
                     const oneName = aiOneName.trim() || defName;
                     const doCommit = () => {
-                      if (multi && aiAsOne) commit([{ meal, name: oneName, g: sums.g || 1, unit: "g", source: "estimated", kcal: sums.kcal, p: sums.p, f: sums.f, c: sums.c }]);
+                      if (multi && aiAsOne) commit([{ meal, name: oneName, g: sums.g || 1, unit: "g", source: "estimated", kcal: sums.kcal, p: sums.p, f: sums.f, c: sums.c, servingG: sums.g || 1 }]);
                       else commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })));
                     };
                     return (
@@ -2657,9 +2657,11 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               const au = qUnit || base;
               const isBase = au.g <= 1;
               const ml = food.unit === "ml";
+              const isCombo = food.combo || (food.name || "").includes(" + ");
               const seenM = {};
               const merged = [];
-              for (const m of (ml ? [...measuresForUnit(food.unit), ...food.measures] : [...food.measures, ...measuresForUnit(food.unit)])) { if (m.g > 1 && !seenM[m.label]) { seenM[m.label] = 1; merged.push(m); } }
+              const pool = isCombo ? food.measures : (ml ? [...measuresForUnit(food.unit), ...food.measures] : [...food.measures, ...measuresForUnit(food.unit)]);
+              for (const m of pool) { if (m.g > 1 && !seenM[m.label]) { seenM[m.label] = 1; merged.push(m); } }
               const units = [base, ...merged];
               const count = isBase ? grams : Math.max(1, Math.round(grams / au.g));
               return (
@@ -2681,7 +2683,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
             </div>
-            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
+            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(food.combo ? { servingG: (food.measures.find((m) => m.label === "מנה") || {}).g } : {}), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
           </>
         )}
@@ -4527,7 +4529,10 @@ export default function App() {
           const g = p.g;
           if (!name || !g) return;
           const per100 = { kcal: Math.round((p.kcal || 0) / g * 100), p: Math.round((p.p || 0) / g * 100), f: Math.round((p.f || 0) / g * 100), c: Math.round((p.c || 0) / g * 100) };
-          const fav = { id: "fav_" + name, name, per100, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0, unit: p.unit || "g", lastG: g };
+          const isServing = p.servingG && p.servingG > 0;
+          const fav = isServing
+            ? { id: "fav_" + name, name, per100, measures: [{ label: "מנה", g: Math.round(p.servingG) }, { label: "100 ג׳", g: 100 }], def: 0, unit: p.unit || "g", lastG: g, combo: true }
+            : { id: "fav_" + name, name, per100, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0, unit: p.unit || "g", lastG: g };
           next = next.filter((x) => x.name !== name);
           next.unshift(fav);
         });
