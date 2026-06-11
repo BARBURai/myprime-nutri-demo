@@ -198,8 +198,14 @@ function lerpHex(a, b, t) {
 }
 const HE_MONTHS = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
 
+// "today" instant -> the DEVICE's local calendar date (app works by the user's own timezone).
 function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
-function addDays(dateStr, n) { const d = new Date(dateStr); d.setDate(d.getDate() + n); return ymd(d); }
+// A "YYYY-MM-DD" string is a pure calendar date. Parse/format/compute it in UTC so date math
+// never shifts with the device timezone (a UTC-midnight Date read with local getters breaks west of UTC).
+function pad2(n) { return String(n).padStart(2, "0"); }
+function parseDay(dateStr) { const [y, m, d] = (dateStr || "").split("-").map(Number); return new Date(Date.UTC(y || 1970, (m || 1) - 1, d || 1)); }
+function fmtDay(d) { return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`; }
+function addDays(dateStr, n) { const d = parseDay(dateStr); d.setUTCDate(d.getUTCDate() + n); return fmtDay(d); }
 function relLabel(dateStr) {
   const today = ymd(new Date());
   if (dateStr === today) return "היום";
@@ -207,8 +213,8 @@ function relLabel(dateStr) {
   return null;
 }
 function prettyDate(dateStr) {
-  const d = new Date(dateStr);
-  return `${HE_DAYS[d.getDay()]}, ${d.getDate()} ב${HE_MONTHS[d.getMonth()]}`;
+  const d = parseDay(dateStr);
+  return `${HE_DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ב${HE_MONTHS[d.getUTCMonth()]}`;
 }
 const DEV = (() => { try { return new URLSearchParams(window.location.search).has("dev"); } catch (e) { return false; } })();
 const TODAY = (() => {
@@ -220,14 +226,14 @@ const TODAY = (() => {
   } catch (e) {}
   return ymd(new Date());
 })();
-function sundayOf(dateStr) { const d = new Date(dateStr); d.setDate(d.getDate() - d.getDay()); return ymd(d); }
+function sundayOf(dateStr) { const d = parseDay(dateStr); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return fmtDay(d); }
 function listSundays() {
   const base = sundayOf(TODAY);
   const out = [];
   for (let i = -8; i <= 0; i++) {
     const v = addDays(base, i * 7);
-    const d = new Date(v);
-    out.push({ value: v, label: `יום ראשון, ${d.getDate()} ב${HE_MONTHS[d.getMonth()]}` });
+    const d = parseDay(v);
+    out.push({ value: v, label: `יום ראשון, ${d.getUTCDate()} ב${HE_MONTHS[d.getUTCMonth()]}` });
   }
   return out;
 }
@@ -261,7 +267,7 @@ const DIET_OPTIONS = [
 const SENSITIVITY_OPTIONS = ["גלוטן", "חלב / לקטוז", "ביצים", "אגוזים", "בוטנים", "סויה", "דגים", "שומשום"];
 const WANT_OPTIONS = [{ id: "ארוחה מלאה", emoji: "🍽️" }, { id: "משהו קל", emoji: "🥗" }, { id: "חטיף", emoji: "🍎" }, { id: "משקה", emoji: "🥤" }];
 // Day of week for a date: 1=ראשון(Sun) .. 6=שישי(Fri), 0=שבת(Sat, rest day).
-function dowOf(dateStr) { const g = new Date(dateStr).getDay(); return g === 6 ? 0 : g + 1; }
+function dowOf(dateStr) { const g = parseDay(dateStr).getUTCDay(); return g === 6 ? 0 : g + 1; }
 // Baseline = her average daily steps over week 1 (measured from day 2 onward).
 function stepBaseline(stepsByDate, startDate) {
   let sum = 0, n = 0;
@@ -418,7 +424,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.08";
+const VERSION = "3.10";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1069,7 +1075,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const goDay = (delta) => {
     const minT = new Date(profile.startDate).getTime(), maxT = new Date(today).getTime();
     let d = addDays(date, delta);
-    if (profile.keepShabbat && new Date(d).getDay() === 6) d = addDays(d, delta);
+    if (profile.keepShabbat && parseDay(d).getUTCDay() === 6) d = addDays(d, delta);
     const t = new Date(d).getTime();
     if (t < minT || t > maxT) return;
     setDate(d);
@@ -1086,13 +1092,13 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       <div style={{ position: "relative" }}>
       <div data-tut="daystrip" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px", opacity: introLock ? 0.4 : 1, pointerEvents: introLock ? "none" : "auto" }}>
         {days.map((d) => {
-          const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = new Date(d); const isRest = profile.keepShabbat && dd.getDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
+          const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = parseDay(d); const isRest = profile.keepShabbat && dd.getUTCDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
           return (
             <button key={d} ref={sel ? selRef : null} disabled={off} onClick={() => { if (!off) setDate(d); }} title={isRest ? "שבת - יום מנוחה" : (isFuture ? "יום עתידי - ייפתח בתאריך הזה" : undefined)} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, overflow: "hidden", padding: 0, background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: off ? C.faint : (sel ? "#fff" : C.ink), cursor: off ? "default" : "pointer", opacity: off ? 0.4 : 1, textAlign: "center" }}>
               {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
               <div style={{ padding: "7px 0" }}>
-                <div style={{ fontSize: 14, opacity: 0.85 }}>{HE_DAYS[dd.getDay()]}</div>
-                <div style={{ fontSize: 18, fontWeight: 700, margin: "2px 0" }}>{dd.getDate()}/{dd.getMonth() + 1}</div>
+                <div style={{ fontSize: 14, opacity: 0.85 }}>{HE_DAYS[dd.getUTCDay()]}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, margin: "2px 0" }}>{dd.getUTCDate()}/{dd.getUTCMonth() + 1}</div>
                 <div style={{ height: 4, margin: "5px 6px 0", borderRadius: 3, position: "relative", background: sel ? "rgba(255,255,255,0.35)" : C.line, overflow: "hidden" }}>
                   {pct > 0 && <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: `${Math.round(pct * 100)}%`, borderRadius: 3, background: sel ? "#fff" : lerpHex("#F4B8D2", "#D81B7A", pct) }} />}
                 </div>
@@ -1206,18 +1212,18 @@ function WeighInTips({ style }) {
 }
 
 function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDate = {}, startDate, stepGoalStored, stepsOpen, today = TODAY, onEditSteps }) {
-  const data = weights.map((w) => ({ ...w, label: `${new Date(w.date).getDate()}/${new Date(w.date).getMonth() + 1}` }));
+  const data = weights.map((w) => ({ ...w, label: `${parseDay(w.date).getUTCDate()}/${parseDay(w.date).getUTCMonth() + 1}` }));
   const change = Math.round((weights[weights.length - 1].kg - weights[0].kg) * 10) / 10;
   const current = weights[weights.length - 1].kg;
-  const lastWDate = new Date(weights[weights.length - 1].date);
-  const lastWUpdate = `${lastWDate.getDate()}.${lastWDate.getMonth() + 1}.${lastWDate.getFullYear()}`;
+  const lastWDate = parseDay(weights[weights.length - 1].date);
+  const lastWUpdate = `${lastWDate.getUTCDate()}.${lastWDate.getUTCMonth() + 1}.${lastWDate.getUTCFullYear()}`;
   const calByDate = {};
   log.forEach((e) => { calByDate[e.date] = (calByDate[e.date] || 0) + e.kcal; });
   const goalKcal = targets.targetKcal;
   const calSeries = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(TODAY, i - 6);
-    const dd = new Date(d);
-    return { label: `${dd.getDate()}/${dd.getMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
+    const dd = parseDay(d);
+    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
   });
   const loggedDays = calSeries.filter((x) => x.kcal > 0);
   // A day counts as "met the calorie goal" only if she ate CLOSE to the target. Trivial/partial logging
@@ -1243,7 +1249,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
       {stepsOpen && (() => {
         const sData = Array.from({ length: 14 }, (_, i) => {
           const d = addDays(today, -13 + i);
-          return { label: `${new Date(d).getDate()}/${new Date(d).getMonth() + 1}`, steps: stepsByDate[d] || 0 };
+          return { label: `${parseDay(d).getUTCDate()}/${parseDay(d).getUTCMonth() + 1}`, steps: stepsByDate[d] || 0 };
         });
         const stepsToday = stepsByDate[today] || 0;
         const baseline = stepBaseline(stepsByDate, startDate);
@@ -2144,10 +2150,11 @@ function NotesFab({ notes, setNotes, screen, userName }) {
       {open && (
         <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 45 }} onClick={() => setOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxWidth: 460, maxHeight: "82%", borderRadius: 20, padding: "20px 22px 24px", overflowY: "auto", fontFamily: fontStack, border: `2.5px solid ${C.brand}`, boxShadow: "0 14px 44px rgba(0,0,0,0.34)", boxSizing: "border-box" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>הערות לאפליקציה</span>
               <button onClick={() => setOpen(false)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
             </div>
+            <div style={{ fontSize: 13.5, color: C.sub, lineHeight: 1.6, marginBottom: 12 }}>כל הערה תעזור לנו לשפר 💜 ואם תרצי שנחזור אלייך, אנא הוסיפי בהודעה את מספר הטלפון שלך</div>
             <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={4} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
             <Btn onClick={add}>הוסיפי הערה</Btn>
             {notes.length > 0 && (
@@ -3261,9 +3268,9 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   const frac = total ? done / total : 0;
   const allDone = total > 0 && done >= total;
   const dn = dowOf(date);
-  const dd = new Date(date);
+  const dd = parseDay(date);
   const rel = relLabel(date);
-  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getDay()]}, ${dd.getDate()} ב${HE_MONTHS[dd.getMonth()]} · שבוע ${week}${dn >= 1 ? `, יום ${dn}` : ""}`;
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · שבוע ${week}${dn >= 1 ? `, יום ${dn}` : ""}`;
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
       <div data-tut="tracker" onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
@@ -3313,11 +3320,11 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
 function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate, tipsSeen, onTipsSeen }) {
   const hasAuto = tasks.some((t) => t.auto);
   const showAutoNote = hasAuto && !(tipsSeen || []).includes("autotasks");
-  const dd = new Date(date);
+  const dd = parseDay(date);
   const rel = relLabel(date);
   const wk = Math.min(programWeekFor(startDate, date), 10);
   const dn = dowOf(date);
-  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getDay()]}, ${dd.getDate()} ב${HE_MONTHS[dd.getMonth()]} · שבוע ${wk}${dn >= 1 ? `, יום ${dn}` : ""}`;
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · שבוע ${wk}${dn >= 1 ? `, יום ${dn}` : ""}`;
   return (
     <SheetShell title="המעקב היומי שלי" onClose={onClose}>
       <div style={{ fontSize: 14, fontWeight: 500, color: C.sub, marginBottom: 8, textAlign: "right" }}>{dateLine}</div>
@@ -3438,7 +3445,7 @@ function weekTrophyEarned(checkins, startDate, w, today) {
   for (let dnum = Math.max((w - 1) * 7 + 1, 3); dnum <= w * 7; dnum++) {
     const date = addDays(startDate, dnum - 1);
     if (date > today) break;
-    if (new Date(date).getDay() === 6) continue;
+    if (parseDay(date).getUTCDay() === 6) continue;
     any = true;
     if (!(checkins[date] && checkins[date]._done)) return false;
   }
