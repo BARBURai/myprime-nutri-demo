@@ -411,7 +411,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.0";
+const VERSION = "3.02";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1831,7 +1831,7 @@ function photoHeadsup35Seen() { try { return localStorage.getItem("myprime_photo
 function markPhotoHeadsup35() { try { localStorage.setItem("myprime_photo_hs35", "1"); } catch (e) {} }
 
 async function aiNutritionChat(messages) {
-  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) שאלי שאלה אחת בכל פעם, ורק על מה שבאמת חסר וחשוב - אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) אם חסר מידע על כמה דברים - שאלי על כולם בהודעה אחת (אפשר כרשימה קצרה), לא שאלה אחרי שאלה. שאלי רק על מה שבאמת חסר וחשוב, אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות מיותרות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, system, messages }),
@@ -2141,7 +2141,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
   const [searching, setSearching] = useState(false);
   const [qUnit, setQUnit] = useState(null); // feature: quantity unit x count (null = base grams)
   const [addedKeys, setAddedKeys] = useState([]); // feature: multi-add from favorites
-  const [aiAsOne, setAiAsOne] = useState(false); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product
+  const [aiAsOne, setAiAsOne] = useState(true); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product (default = one product, recommended)
   const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
   const [mKcal, setMKcal] = useState(""); const [mProt, setMProt] = useState(""); const [mFat, setMFat] = useState(""); const [mCarb, setMCarb] = useState("");
   const mInput = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", background: C.panel };
@@ -2194,6 +2194,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
   const finishItems = (items) => {
     setReconciling(true);
     setAiDoneItems(null);
+    setAiAsOne(true); setAiOneName("");
     reconcileWithDb(items)
       .then((enriched) => setAiDoneItems(enriched))
       .catch(() => setAiDoneItems(items.map((it) => ({ ...it, source: "estimated" }))))
@@ -2581,8 +2582,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                           <div style={{ marginBottom: 10 }}>
                             <div style={{ fontSize: 13, color: C.sub, margin: "4px 0 6px" }}>איך לשמור?</div>
                             <div style={{ display: "flex", gap: 6 }}>
-                              <span onClick={() => setAiAsOne(false)} style={{ flex: 1, textAlign: "center", fontSize: 14, padding: "8px 6px", borderRadius: 9, cursor: "pointer", background: !aiAsOne ? C.brandBg : "transparent", color: !aiAsOne ? C.brandD : C.sub, boxShadow: !aiAsOne ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>לפי הרכיבים</span>
-                              <span onClick={() => setAiAsOne(true)} style={{ flex: 1, textAlign: "center", fontSize: 14, padding: "8px 6px", borderRadius: 9, cursor: "pointer", background: aiAsOne ? C.brandBg : "transparent", color: aiAsOne ? C.brandD : C.sub, boxShadow: aiAsOne ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>כמוצר אחד</span>
+                              <span onClick={() => setAiAsOne(true)} style={{ flex: 1.35, textAlign: "center", fontSize: 14, fontWeight: 700, padding: "10px 6px", borderRadius: 9, cursor: "pointer", background: aiAsOne ? C.brandBg : "transparent", color: aiAsOne ? C.brandD : C.sub, boxShadow: aiAsOne ? `inset 0 0 0 2px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>כמוצר אחד <span style={{ fontSize: 11, fontWeight: 500 }}>· מומלץ</span></span>
+                              <span onClick={() => setAiAsOne(false)} style={{ flex: 1, textAlign: "center", fontSize: 14, padding: "10px 6px", borderRadius: 9, cursor: "pointer", background: !aiAsOne ? C.brandBg : "transparent", color: !aiAsOne ? C.brandD : C.sub, boxShadow: !aiAsOne ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>לפי הרכיבים</span>
                             </div>
                             {aiAsOne && (
                               <div style={{ marginTop: 8 }}>
@@ -2596,7 +2597,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                       </>
                     );
                   })()}
-                  <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setAiDoneItems(null)}>אני רוצה לשנות</Btn></div>
+                  <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { try { aiInputRef.current && aiInputRef.current.focus(); } catch (e) {} }}>רוצה לשנות או להוסיף? כתבי בתיבה למטה</Btn></div>
                 </div>
               )}
               <div ref={aiEndRef} />

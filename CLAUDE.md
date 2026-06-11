@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `3.0`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `3.02`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,16 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v3.02 - AI result screen: non-destructive 'change' + 'one product' is the recommended default
+- "אני רוצה לשנות" used to setAiDoneItems(null), wiping the resolved result with no way back (an accidental tap forced starting over). Now it just focuses the chat input and KEEPS the result + "הוסיפי ליומן" - she can type a change (sendAi updates the card via finishItems) or still commit as-is. Relabeled "רוצה לשנות או להוסיף? כתבי בתיבה למטה".
+- The "כמוצר אחד / לפי הרכיבים" toggle now DEFAULTS to "כמוצר אחד" (aiAsOne init true + reset to true in finishItems on every new result), and that option is emphasized: placed first (rightmost RTL), bold, wider (flex 1.35), 2px brand border when selected, with a "· מומלץ" tag.
+- VERSION 3.01->3.02. esbuild clean, check-logic 7/7, 0 dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
+
+## v3.01 - AI asks all clarifying questions at once
+- The aiNutritionChat system prompt (src/App.jsx ~line 1834) said "שאלי שאלה אחת בכל פעם" which made it drip-feed clarifications (asks sugar, waits, asks milk, waits...). Changed to: if several things are missing, ask about ALL of them in ONE message (short list), not one after another - still only what is truly missing for calories, never re-asking what was said.
+- No format/JSON change. The AI cache is unaffected: clarifying-question turns have items:[] and are never cached (only resolved item-responses are), so the new behavior takes effect immediately.
+- VERSION 3.0->3.01. esbuild clean, check-logic 7/7, 0 dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
 
 ## v3.0 - Shared product catalog + AI result cache (cost saving, self-cleaning)
 NEW lib/foodcheck.js (shared by api, kept OUTSIDE /api so it is not a route): normName() + plausiblePer100() (Atwater kcal~=4P+9F+4C within generous slack + 0-900 kcal / 0-100 macro range limits) + sourceRank() (verified/barcode=3 > estimated=1). This is the ENTRY GATE to the shared catalog - anything failing stays private.
