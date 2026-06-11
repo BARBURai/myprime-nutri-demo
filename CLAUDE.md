@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `3.04`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `3.06`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,22 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v3.06 - Fix "gibberish" reply in the nutrition chat
+Pilot report: after answering quantity questions the AI sent an unintelligible (gibberish) message, and writing again repeated it. Cause: when the model JSON was truncated/garbled (max_tokens too low), extractAiJson failed and the OLD fallback showed the stripped raw text (JSON remnants = gibberish); worse, the broken raw was stored in aiApi history, poisoning the next turn.
+- aiNutritionChat max_tokens 800 -> 1200 (the main cause: long replies/many items truncated mid-JSON).
+- On parse failure: salvage just the "reply" string via regex if present, else a clean retry message ("רגע, לא הצלחתי לנתח את זה במלואו..."). Never display raw JSON remnants.
+- raw stored in history is now the valid JSON when parsed, or a CLEAN JSON string ({reply,done:false,items:[]}) on fallback - so a failed turn no longer poisons the conversation.
+- VERSION 3.05->3.06. esbuild clean, check-logic 7/7, 0 dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
+
+## v3.05 - Combined products reused by SERVING (מנה), not grams
+From pilot (Ron screenshot): a "כמוצר אחד" combo like "נס קפה + חלב + סוכר" was saved unit g and showed irrelevant gram/spoon/portion measures on re-add. Fix: combos are now reused by serving.
+- The AI combined commit passes servingG = total grams of the combo.
+- commit() favorite reconstruction: when p.servingG, the favorite gets measures [{מנה, servingG}, {100 ג׳,100}], def 0, and combo:true (instead of generic 100/כף/כפית).
+- Qty screen: for a combo (food.combo OR name includes " + ") it skips the measuresForUnit merge and shows only its own measures; pickFood opens a combo on the מנה unit. So "1 מנה" = the whole combo and +/- adds 2, 3 servings (2 coffees).
+- Re-adding a combo (both the quick + and the name->qty path) now re-passes servingG so the serving favorite is preserved, not overwritten with generic measures.
+- NOTE: applies to combos saved from v3.05 on; a combo saved earlier needs to be re-logged once (re-run the AI combine) to gain the מנה measure.
+- VERSION 3.04->3.05. esbuild clean, check-logic 7/7, 0 dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
 
 ## v3.04 - Favorites multi-add UX: top Done button, clearer hints, cups for drinks
 From pilot testing (Ron) on the אחרונים ומועדפים multi-add:

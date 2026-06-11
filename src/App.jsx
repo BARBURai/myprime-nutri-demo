@@ -418,7 +418,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.05";
+const VERSION = "3.06";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1841,7 +1841,7 @@ async function aiNutritionChat(messages) {
   const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) אם חסר מידע על כמה דברים - שאלי על כולם בהודעה אחת (אפשר כרשימה קצרה), לא שאלה אחרי שאלה. שאלי רק על מה שבאמת חסר וחשוב, אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות מיותרות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 800, system, messages }),
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1200, system, messages }),
   });
   const data = await res.json();
   const photoCount = Number(res.headers.get("x-photo-count")) || null;
@@ -1854,9 +1854,16 @@ async function aiNutritionChat(messages) {
   }
   const text = (data.content || []).map((i) => i.text || "").join("");
   const obj = extractAiJson(text);
-  const parsed = obj || { reply: (text || "").replace(/\{[\s\S]*\}/g, "").trim() || "לא הבנתי, אפשר לנסות שוב?", done: false, items: [] };
+  let parsed = obj;
+  if (!parsed) {
+    // JSON failed (e.g. truncated/garbled). Salvage just the reply text if possible; never show raw remnants.
+    let rep = "";
+    const m = (text || "").match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (m) { try { rep = JSON.parse('"' + m[1] + '"'); } catch (e) { rep = m[1]; } }
+    parsed = { reply: rep || "רגע, לא הצלחתי לנתח את זה במלואו 🙂 אפשר לכתוב שוב בקצרה מה אכלת ובאיזו כמות?", done: false, items: [] };
+  }
   return {
-    raw: text,
+    raw: obj ? text : JSON.stringify({ reply: parsed.reply, done: false, items: [] }),
     limited: false,
     photoCount,
     reply: (parsed.reply || "") + (softLimit ? "\n\nזו הייתה המנה האחרונה במכסת ה-AI להיום 💜 מכאן אפשר להמשיך לתעד דרך חיפוש או ברקוד, ומחר המכסה מתאפסת." : ""),
