@@ -23,6 +23,23 @@ function aiHeaders() {
   return h;
 }
 const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
+// Shared product catalog (server side). Best-effort; never blocks the UI.
+const CATALOG_ENDPOINT = "/api/catalog";
+function catalogAdd(item) {
+  try {
+    const g = Number(item && item.g) || 0;
+    if (!item || !item.name || g <= 0 || item.source === "manual") return;
+    const per100 = { kcal: Math.round((Number(item.kcal) || 0) / g * 100), p: Math.round((Number(item.p) || 0) / g * 100), f: Math.round((Number(item.f) || 0) / g * 100), c: Math.round((Number(item.c) || 0) / g * 100) };
+    fetch(CATALOG_ENDPOINT, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name: String(item.name).trim(), per100, unit: item.unit || "g", source: item.source || "estimated" }) }).catch(() => {});
+  } catch (e) { /* ignore */ }
+}
+async function catalogSearch(term) {
+  try {
+    const r = await fetch(`${CATALOG_ENDPOINT}?q=${encodeURIComponent(term)}`, { headers: aiHeaders() });
+    const d = await r.json();
+    return (d && d.items) || [];
+  } catch (e) { return []; }
+}
 const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a4%d7%a8%d7%98%d7%99%d7%95%d7%aa/";
 const COOKIE_URL = import.meta.env.VITE_COOKIE_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a7%d7%95%d7%a7%d7%99%d7%96/";
 const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || "";
@@ -394,7 +411,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "2.12";
+const VERSION = "3.0";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2119,8 +2136,12 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
   const [grams, setGrams] = useState(state.editEntry?.g || 100);
   const [query, setQuery] = useState("");
   const [dbResults, setDbResults] = useState([]);
+  const [catResults, setCatResults] = useState([]);
   const [dbSource, setDbSource] = useState("il");
   const [searching, setSearching] = useState(false);
+  const [qUnit, setQUnit] = useState(null); // feature: quantity unit x count (null = base grams)
+  const [addedKeys, setAddedKeys] = useState([]); // feature: multi-add from favorites
+  const [aiAsOne, setAiAsOne] = useState(false); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product
   const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
   const [mKcal, setMKcal] = useState(""); const [mProt, setMProt] = useState(""); const [mFat, setMFat] = useState(""); const [mCarb, setMCarb] = useState("");
   const mInput = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", background: C.panel };
@@ -2135,9 +2156,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
 
   useEffect(() => {
     const q = query.trim();
-    if (!q || step !== "list") { setDbResults([]); setSearching(false); return; }
+    if (!q || step !== "list") { setDbResults([]); setCatResults([]); setSearching(false); return; }
     setSearching(true);
     const id = setTimeout(async () => {
+      catalogSearch(q).then((cat) => setCatResults(cat || [])).catch(() => setCatResults([]));
       try {
         let items = await searchIsraeliDB(q);
         let src = "il";
@@ -2250,7 +2272,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
     try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
   };
   const [qtyOrigin, setQtyOrigin] = useState("list");
-  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setQUnit(null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
   const videoRef = useRef(null);
   const scanControlsRef = useRef(null);
   const [scanState, setScanState] = useState("idle");
@@ -2396,6 +2418,16 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                 </div>
               );
             })}
+            {query && catResults.filter((f) => !filtered.some((x) => x.name === f.name)).length > 0 && <div style={{ fontSize: 14, color: C.faint, margin: "12px 0 2px" }}>מהקטלוג שלנו</div>}
+            {query && catResults.filter((f) => !filtered.some((x) => x.name === f.name)).map((f) => {
+              const g = f.measures[f.def].g; const n = nutritionFor(f, g);
+              return (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => commit({ meal, name: f.name, g, unit: f.unit || "g", source: f.source === "verified" ? "verified" : "estimated", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                </div>
+              );
+            })}
             {query && <div style={{ fontSize: 14, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
             {query && dbResults.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
@@ -2406,7 +2438,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                 </div>
               );
             })}
-            {query && !searching && filtered.length === 0 && dbResults.length === 0 && (
+            {query && !searching && filtered.length === 0 && dbResults.length === 0 && catResults.length === 0 && (
               <div style={{ padding: "14px 0", textAlign: "center" }}>
                 <div style={{ fontSize: 15, color: C.faint, marginBottom: 10 }}>לא נמצאו תוצאות ל"{query}"</div>
                 <Btn variant="ghost" onClick={() => setStep("manual")}>להזין את הערכים ידנית</Btn>
@@ -2422,14 +2454,16 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
             </div>
             {(favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
               const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
+              const added = addedKeys.includes(f.id);
               return (
                 <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <button onClick={() => { commit({ meal, name: f.name, g, unit: f.unit || "g", source: "verified", ...n }, true); setAddedKeys((k) => [...k, f.id]); }} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
                 </div>
               );
             })}
-            <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>הקשה אחת על + מוסיפה עם הכמות האחרונה - בלי להזין שוב</span></div>
+            {addedKeys.length > 0 && <div style={{ marginTop: 14 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>כל הקשה על + מוסיפה פריט עם הכמות האחרונה - אפשר להוסיף כמה ברצף ואז "סיום"</span></div>
           </>
         )}
         {step === "barcode" && (
@@ -2532,7 +2566,36 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                   <div style={{ fontSize: 12, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז - סריקת ברקוד היא המדויקת ביותר.</div>
                   <div style={{ fontSize: 13, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
-                  <Btn onClick={() => commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })))}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ליומן</Btn>
+                  {(() => {
+                    const multi = aiDoneItems.length >= 2;
+                    const sums = aiDoneItems.reduce((a, it) => ({ g: a.g + (it.grams || 0), kcal: a.kcal + (it.kcal || 0), p: a.p + (it.p || 0), f: a.f + (it.f || 0), c: a.c + (it.c || 0) }), { g: 0, kcal: 0, p: 0, f: 0, c: 0 });
+                    const defName = aiDoneItems.map((it) => it.name).join(" + ");
+                    const oneName = aiOneName.trim() || defName;
+                    const doCommit = () => {
+                      if (multi && aiAsOne) commit([{ meal, name: oneName, g: sums.g || 1, unit: "g", source: "estimated", kcal: sums.kcal, p: sums.p, f: sums.f, c: sums.c }]);
+                      else commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })));
+                    };
+                    return (
+                      <>
+                        {multi && (
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{ fontSize: 13, color: C.sub, margin: "4px 0 6px" }}>איך לשמור?</div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <span onClick={() => setAiAsOne(false)} style={{ flex: 1, textAlign: "center", fontSize: 14, padding: "8px 6px", borderRadius: 9, cursor: "pointer", background: !aiAsOne ? C.brandBg : "transparent", color: !aiAsOne ? C.brandD : C.sub, boxShadow: !aiAsOne ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>לפי הרכיבים</span>
+                              <span onClick={() => setAiAsOne(true)} style={{ flex: 1, textAlign: "center", fontSize: 14, padding: "8px 6px", borderRadius: 9, cursor: "pointer", background: aiAsOne ? C.brandBg : "transparent", color: aiAsOne ? C.brandD : C.sub, boxShadow: aiAsOne ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>כמוצר אחד</span>
+                            </div>
+                            {aiAsOne && (
+                              <div style={{ marginTop: 8 }}>
+                                <input value={aiOneName} onChange={(e) => setAiOneName(e.target.value)} placeholder={defName} style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", background: C.panel }} />
+                                <div style={{ fontSize: 12, color: C.faint, marginTop: 5, lineHeight: 1.5 }}>יישמר כמוצר אחד במועדפים · {sums.kcal} קק״ל · {sums.g} ג׳. בפעם הבאה תוסיפי אותו בהקשה אחת.</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <Btn onClick={doCommit}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> הוסיפי ליומן</Btn>
+                      </>
+                    );
+                  })()}
                   <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setAiDoneItems(null)}>אני רוצה לשנות</Btn></div>
                 </div>
               )}
@@ -2556,14 +2619,28 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
             )}
             <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>שיוך לארוחה</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
-            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>מידת בית</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>{food.measures.map((ms) => (<span key={ms.label} onClick={() => setGrams(ms.g)} style={{ fontSize: 15, padding: "6px 11px", borderRadius: 8, cursor: "pointer", background: grams === ms.g ? C.brandBg : "transparent", color: grams === ms.g ? C.brandD : C.sub, boxShadow: grams === ms.g ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{ms.label}{ms.label.includes(String(ms.g)) ? "" : ` · ${ms.g} ${unitLabel}`}</span>))}</div>
-            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>או כמות מדויקת</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
-              <button onClick={() => setGrams(Math.max(5, grams - 10))} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 22, color: C.ink }}>−</button>
-              <div style={{ minWidth: 70, textAlign: "center" }}><span style={{ fontSize: 27, fontWeight: 600, color: C.ink }}>{grams}</span> <span style={{ fontSize: 15, color: C.sub }}>{unitLabel}</span></div>
-              <button onClick={() => setGrams(grams + 10)} style={{ width: 36, height: 36, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", fontSize: 22, color: C.ink }}>+</button>
-            </div>
+            <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>כמות</div>
+            {(() => {
+              const base = { label: unitLabel, g: 1 };
+              const au = qUnit || base;
+              const isBase = au.g <= 1;
+              const units = [base, ...food.measures.filter((m) => m.g > 1)];
+              const count = isBase ? grams : Math.max(1, Math.round(grams / au.g));
+              return (
+                <>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setQUnit(null); else { setQUnit(u); setGrams(u.g); } }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
+                    <button onClick={() => setGrams(Math.max(au.g, grams - au.g))} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
+                      <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                      <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
+                    </div>
+                    <button onClick={() => setGrams(grams + au.g)} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
+                  </div>
+                  <div style={{ textAlign: "center", fontSize: 14, color: C.faint, marginBottom: 14, minHeight: 18 }}>{!isBase ? `= ${grams} ${unitLabel}` : ""}</div>
+                </>
+              );
+            })()}
             <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
@@ -4401,7 +4478,7 @@ export default function App() {
   const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
   const editEntry = (e) => setModal(e.unit === "serving" ? { kind: "recipe", recipe: null, editEntry: e } : { kind: "food", preMeal: null, editEntry: e });
   const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
-  const commit = (payload) => {
+  const commit = (payload, keepOpen) => {
     const date = modal?.editEntry ? modal.editEntry.date : selectedDate;
     if (modal?.editEntry) setLog((l) => l.map((e) => e.id === modal.editEntry.id ? { ...e, ...payload, date } : e));
     else {
@@ -4420,8 +4497,9 @@ export default function App() {
         });
         return next.slice(0, 20);
       });
+      items.forEach((p) => catalogAdd(p)); // grow the shared catalog (manual entries are skipped inside)
     }
-    setModal(null);
+    if (!keepOpen) setModal(null);
   };
   const addRecipe = (r) => setModal({ kind: "recipe", recipe: r, editEntry: null });
   const saveRecipe = (payload, editId) => {

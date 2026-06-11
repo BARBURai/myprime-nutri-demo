@@ -15,6 +15,8 @@
 //  While the Upstash vars are unset, the limit is simply OFF (the app still works).
 //  The photo budget is a hard server-side cap (per email) so it cannot be reset by clearing the browser.
 
+import { normName } from "../lib/foodcheck.js";
+
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 30);
 const BURST_LIMIT = Number(process.env.AI_BURST_LIMIT || 10);
@@ -23,6 +25,13 @@ const PHOTO_LIMIT = Number(process.env.AI_PHOTO_LIMIT || 70);
 async function redis(base, token, ...args) {
   const path = args.map((a) => encodeURIComponent(String(a))).join("/");
   const r = await fetch(`${base}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  const d = await r.json();
+  return d.result;
+}
+
+// POST form - use for commands with large/arbitrary values (e.g. caching a JSON response).
+async function redisPost(base, token, cmd) {
+  const r = await fetch(base, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(cmd) });
   const d = await r.json();
   return d.result;
 }
@@ -42,9 +51,32 @@ export default async function handler(req, res) {
   // A "photo" call is any request whose messages include an image block.
   const isPhoto = Array.isArray(body && body.messages) && body.messages.some((m) => Array.isArray(m.content) && m.content.some((c) => c && c.type === "image"));
 
-  // --- per-user rate limit (server side) ---
   const base = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  // --- AI result cache: identical first-turn TEXT queries skip the AI call entirely ---
+  // Saves cost and keeps answers consistent. Photos and multi-turn refinements are never cached.
+  const msgs = Array.isArray(body && body.messages) ? body.messages : [];
+  const userMsgs = msgs.filter((m) => m && m.role === "user");
+  const asstMsgs = msgs.filter((m) => m && m.role === "assistant");
+  const firstTurn = userMsgs.length === 1 && asstMsgs.length === 0;
+  const lastUserText = (() => { const m = userMsgs[userMsgs.length - 1]; if (!m) return ""; if (typeof m.content === "string") return m.content; if (Array.isArray(m.content)) return m.content.filter((c) => c && c.type === "text").map((c) => c.text).join(" "); return ""; })();
+  const normQuery = normName(lastUserText);
+  const cacheable = !isPhoto && firstTurn && normQuery.length >= 2 && normQuery.length <= 200;
+  const cacheKey = `aicache:${normQuery}`;
+  if (base && token && cacheable) {
+    try {
+      const hit = await redis(base, token, "GET", cacheKey);
+      if (hit) {
+        const day = israelDay();
+        redis(base, token, "INCR", `usage:${day}:cachehits`).then((c) => { if (c === 1) redis(base, token, "EXPIRE", `usage:${day}:cachehits`, 691200); }).catch(() => {});
+        res.setHeader("x-ai-cache", "hit");
+        return res.status(200).json(JSON.parse(hit));
+      }
+    } catch (e) { console.warn("ai-cache read error:", String(e)); }
+  }
+
+  // --- per-user rate limit (server side) ---
   if (base && token) {
     try {
       const uid = String(req.headers["x-user-id"] || "").trim().toLowerCase();
@@ -97,6 +129,29 @@ export default async function handler(req, res) {
       body: JSON.stringify(body),
     });
     const data = await r.json();
+    // Best-effort usage logging for the daily morning report (never blocks the response).
+    if (base && token && r.ok && data && data.usage) {
+      try {
+        const day = israelDay();
+        const inTok = Number(data.usage.input_tokens) || 0;
+        const outTok = Number(data.usage.output_tokens) || 0;
+        const c = await redis(base, token, "INCR", `usage:${day}:calls`);
+        await redis(base, token, "INCRBY", `usage:${day}:in`, inTok);
+        await redis(base, token, "INCRBY", `usage:${day}:out`, outTok);
+        if (c === 1) { for (const sfx of ["calls", "in", "out"]) await redis(base, token, "EXPIRE", `usage:${day}:${sfx}`, 691200); } // ~8 days
+        if (isPhoto) { const pc = await redis(base, token, "INCR", `usage:${day}:photos`); if (pc === 1) await redis(base, token, "EXPIRE", `usage:${day}:photos`, 691200); }
+      } catch (e) { console.warn("usage-log error:", String(e)); }
+    }
+    // Cache the result for identical first-turn text queries (only when it produced real items).
+    if (base && token && r.ok && cacheable) {
+      try {
+        const txt = (data.content || []).filter((b) => b && b.type === "text").map((b) => b.text).join("\n");
+        const mm = txt.replace(/```json|```/g, "").match(/\{[\s\S]*\}/);
+        const obj = mm ? JSON.parse(mm[0]) : null;
+        const items = obj && Array.isArray(obj.items) ? obj.items : [];
+        if (items.length) await redisPost(base, token, ["SET", cacheKey, JSON.stringify(data), "EX", "2592000"]); // 30 days
+      } catch (e) { console.warn("ai-cache write error:", String(e)); }
+    }
     return res.status(r.status).json(data);
   } catch (e) {
     return res.status(500).json({ error: String(e) });

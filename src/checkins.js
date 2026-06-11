@@ -46,7 +46,7 @@ export const CHECKIN_TASKS = [
   { id: "probiotics", label: "פרוביוטיקה", type: "bool", group: "food", startWeek: 7, startDow: 4, recur: "daily" },
 
   { id: "antiinflam", label: "מזון אנטי-דלקתי", type: "bool", group: "food", startWeek: 8, startDow: 2, recur: "daily" },
-  { id: "fasting", label: "חלון צום לסירוגין (שעות)", type: "number", group: "food", startWeek: 8, startDow: 5, recur: "daily", optional: true },
+  { id: "fasting", label: "חלון צום לסירוגין (שעות)", type: "number", group: "food", startWeek: 8, startDow: 4, recur: "daily", optional: true },
 
   { id: "calcium", label: "מזון עשיר בסידן", type: "bool", group: "food", startWeek: 9, startDow: 4, recur: "daily" },
   { id: "sun", label: "חשיפה בריאה לשמש", type: "bool", group: "extra", startWeek: 9, startDow: 4, recur: "daily" },
