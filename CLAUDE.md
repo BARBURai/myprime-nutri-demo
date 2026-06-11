@@ -78,7 +78,7 @@ The AI features only work when deployed (or with the functions running), since t
 - **ZIP FILENAME (owner request, v1.30): name the zip `nutri-v<version-without-dots>.zip`** - e.g. v1.30 -> `nutri-v130.zip`, v1.31 -> `nutri-v131.zip`. Do NOT name it "handoff" (that name is reserved for the full-project snapshot the owner builds to start a new chat; our delivery zip is changed-files-only).
 - **ALWAYS deliver BOTH a zip AND the individual changed files, every time (owner request, v1.01).** The owner uploads from both computer (zip is convenient there) and phone (zip downloads/extracts poorly on mobile, so the standalone files are needed). So every delivery `present_files` must include: the zip, plus each changed file on its own (e.g. `App.jsx`, `CLAUDE.md`). Do not send only the zip.
 - **ZIP = CHANGED FILES ONLY, PATHS RELATIVE TO THE REPO ROOT (owner request, from v0.76; path fix v0.79).** The zip must contain ONLY the files/folders that changed since the previously delivered version, and their paths must be **relative to the repo root** - i.e. `src/App.jsx`, `CLAUDE.md`, `api/usda.js` - **NOT** wrapped in a `myprime-nutrition-demo/` top folder. The repo IS that folder, so a wrapper makes GitHub double-nest (`myprime-nutrition-demo/src/App.jsx` inside the repo) and the folder-drag fails. Build it by `cd` into the project dir and zipping the relative paths (e.g. `cd .../myprime-nutrition-demo && zip out.zip src/App.jsx CLAUDE.md`). Do NOT include unchanged heavy folders - especially `public/` (~2MB). Most turns this is just `src/App.jsx` (+ `CLAUDE.md`; `api/*.js`/`feedback/Code.gs` only when they change). Still deliver the standalone `src/App.jsx` alongside the zip, state the version, and say which files to re-upload.
-- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `3.06`.
+- **Bump `VERSION` by 0.01 on every change**, and **state the new version number in the chat reply** (the owner tracks versions; it also shows in the UI). Current version: `3.08`.
 - **Preserve the existing structure**, variable/component names, and writing style. Change only what the request needs.
 - **Brand voice (Anat Harel):** warm, personal, conversational — "a friend talking, not a marketer selling." No marketing-speak. Applies to all user-facing Hebrew copy.
 - **Program logic:** protein and trackers (nutrition/water) are relevant only **from week 3**. Before that they do not appear at all (not locked, not "opens in week X").
@@ -432,6 +432,23 @@ Owner filled all of week 1 but got no medal, no confetti, no trophy. ROOT CAUSE:
 - Open design question raised by owner: what the streak ("ימים ברצף") means as a reward and how backfilling past days affects it. No code change yet - awaiting his decision (keep streak as a motivator vs simplify to medal-per-day + trophy-per-week only).
 - VERSION 0.92->0.93 (App.jsx only).
 
+
+## v3.08 - Fix: app stuck on yesterday's date (stale "today")
+Pilot report (iPhone): a user joined Wed, and on Thu the app still showed Wed as היום - it had given a trophy for finishing the previous day and opened the next day, always one day behind. Two root causes:
+1. "today" was only refreshed by a 60s setInterval. On mobile/PWA (esp. iOS) timers are suspended while the app is backgrounded, so on resume the date was not recomputed promptly and stayed frozen. FIX: also recompute today immediately on visibilitychange (visible), window focus, and pageshow (bfcache restore) - listeners added in the same effect (deps [today]) so the closure stays fresh. If the user was viewing the old "today", the selected date advances to the new today.
+2. ymd() used toISOString() = the UTC date, which can be a day behind the Israel local date late at night. FIX: ymd() now builds the key from LOCAL date parts (getFullYear/Month/Date). All date keys round-trip through ymd, and all users are in Israel (UTC+2/+3) so date-string parsing stays consistent.
+- Note for users: still requires the app to be open/resumed; a fully suspended app updates the moment it returns to the foreground.
+- VERSION 3.07->3.08. esbuild clean, check-logic 7/7, 0 dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
+
+## v3.07 - Profile toggle: hide trophies & medals entirely
+For women who feel gamification is unnecessary. New profile flag profile.hideRewards (default off = shown). When ON, ALL gamification UI is hidden:
+- CheckinCard (day screen): the medal inside the progress ring is replaced by the day's completion count number; the "ארון הגביעים" cabinet column is removed. (Prop hideRewards passed from DayScreen render.)
+- Cheer popups: the daily medal cheer (checkinCheer) and weekly trophy cheer (trophyCheer) are suppressed - the effect still marks days _done and tracks the trophy count, just no popup. Added profile.hideRewards to the effect deps.
+- WeeklySummaryModal: the "ההישגים שלך השבוע" achievements block is gated off (prop hideRewards).
+- Guided tour: buildTour(path, hideRewards) filters out the cabinet step (sel==="cabinet") so it is skipped; threaded through all 4 callers. The cabinet coachmark tip was already excluded from the auto-tip list.
+- ProfileScreen: new toggle row after ReminderRow - "גביעים ומדליות" מוצגים/מוסתרים with an explanation; daily task tracking stays as usual.
+- The collection sheet stays in code but is unreachable when the cabinet button is hidden.
+- VERSION 3.06->3.07. esbuild clean, check-logic 7/7, 0 dashes. CHANGED FILES: src/App.jsx, CLAUDE.md.
 
 ## v3.06 - Fix "gibberish" reply in the nutrition chat
 Pilot report: after answering quantity questions the AI sent an unintelligible (gibberish) message, and writing again repeated it. Cause: when the model JSON was truncated/garbled (max_tokens too low), extractAiJson failed and the OLD fallback showed the stripped raw text (JSON remnants = gibberish); worse, the broken raw was stored in aiApi history, poisoning the next turn.

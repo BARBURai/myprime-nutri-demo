@@ -198,7 +198,7 @@ function lerpHex(a, b, t) {
 }
 const HE_MONTHS = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
 
-function ymd(d) { return d.toISOString().slice(0, 10); }
+function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function addDays(dateStr, n) { const d = new Date(dateStr); d.setDate(d.getDate() + n); return ymd(d); }
 function relLabel(dateStr) {
   const today = ymd(new Date());
@@ -418,7 +418,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.06";
+const VERSION = "3.08";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1150,7 +1150,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </div>
         )}
 
-        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} />}
+        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} hideRewards={!!profile.hideRewards} />}
 
         {dayAct.length > 0 && (
           <>
@@ -1674,6 +1674,14 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
       </div>
 
       <ReminderRow email={gateEmail} />
+
+      <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><img src="/medals/trophy-icon.webp" alt="" width={22} height={18} style={{ display: "block" }} /> גביעים ומדליות</span>
+          <button onClick={() => setProfile({ ...profile, hideRewards: !profile.hideRewards })} style={{ flexShrink: 0, border: profile.hideRewards ? `1px solid ${C.line}` : "none", background: profile.hideRewards ? "transparent" : C.brand, color: profile.hideRewards ? C.sub : "#fff", borderRadius: 10, padding: "8px 18px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{profile.hideRewards ? "מוסתרים" : "מוצגים"}</button>
+        </div>
+        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>{profile.hideRewards ? "המדליות, הגביעים וחלונות החגיגה מוסתרים. אפשר להחזיר בכל רגע." : "אם הגביעים והמדליות לא בשבילך - אפשר להסתיר אותם לגמרי (גם את חלונות החגיגה). מעקב המשימות היומי נשאר כרגיל."}</div>
+      </div>
 
       <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, cursor: "pointer" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות, תשובות ועזרה</span>
@@ -3245,7 +3253,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   );
 }
 
-function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary }) {
+function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary, hideRewards }) {
   const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
   const hasManual = tasks.some((t) => !t.auto);
   const total = tasks.length;
@@ -3270,7 +3278,11 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
                 <circle cx="66" cy="66" r={r} fill="none" stroke="#FBE0EE" strokeWidth="10" />
                 <circle cx="66" cy="66" r={r} fill="none" stroke="#E8589B" strokeWidth="10" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ * (1 - frac)} transform="rotate(-90 66 66)" style={{ transition: "stroke-dashoffset .5s ease" }} />
               </svg>
-              <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", filter: done === 0 ? "grayscale(1) opacity(0.55)" : "none" }} />
+              {hideRewards ? (
+                <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", fontSize: 32, fontWeight: 800, color: done === 0 ? C.faint : C.brand }}>{done}</div>
+              ) : (
+                <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", filter: done === 0 ? "grayscale(1) opacity(0.55)" : "none" }} />
+              )}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>{done} <span style={{ fontSize: 15, fontWeight: 400, color: C.sub }}>מתוך {total}</span></div>
@@ -3287,11 +3299,13 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
           </div>
         )}
       </div>
+      {!hideRewards && (
       <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} data-tut="cabinet" role="button" aria-label="ארון הגביעים" style={{ width: 84, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
         <img src="/medals/trophy-icon.webp" alt="" width={72} height={58} style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
         <div style={{ fontSize: 13.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
         <ChevronLeft size={16} color="#fff" />
       </div>
+      )}
     </div>
   );
 }
@@ -3741,7 +3755,7 @@ function summaryTaskLine(key, week, data, fasting) {
   }
 }
 
-function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, stepGoal, fasting, onClose }) {
+function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, stepGoal, fasting, hideRewards, onClose }) {
   const week = Math.min(programWeekFor(startDate, date), 10);
   const data = weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget, fasting);
   // One-time baseline sanity note: Friday of week 2 only. If she is tracking well BELOW her goal,
@@ -3761,7 +3775,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
     if (checkins[d] && checkins[d]._done) wkMedals++;
   }
   const wkTrophy = weekTrophyEarned(checkins, startDate, week, today);
-  const achievementsEl = (wkMedals > 0 || wkTrophy) ? (
+  const achievementsEl = (!hideRewards && (wkMedals > 0 || wkTrophy)) ? (
     <div style={{ background: C.panel, border: `1.5px solid ${C.brand}`, borderRadius: 16, marginTop: 16, padding: "18px 14px", textAlign: "center", boxShadow: "0 2px 10px rgba(168,66,92,0.10)" }}>
       <div style={{ fontSize: 18.5, fontWeight: 800, color: C.brandD, marginBottom: 14 }}>ההישגים שלך השבוע 🏆</div>
       {wkMedals > 0 && (
@@ -3975,10 +3989,11 @@ const TOUR_TAIL = [
   { view: "day", open: "day", sel: "daystrip", text: "את יכולה תמיד לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך (סוויפ)." },
   { view: "day", open: "day", sel: "tourbtn", btn: "סיימנו", last: true, text: "ואם לא הספקת לקלוט הכל - אל דאגה 💜 תמיד אפשר להתחיל את הסיור מחדש דרך כפתור 'סיור באפליקציה' כאן במסך, או למצוא תשובות ב'שאלות ותשובות' שבפרופיל." },
 ];
-function buildTour(path) {
+function buildTour(path, hideRewards) {
   const intro = { view: "day", open: "day", sel: "cal", prompt: "רוצה שאראה לך דוגמה?", choice: { yes: "כן, בבקשה", no: "אין צורך, נמשיך" }, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת ואת הפעילות הגופנית שעשית (חוץ מהצעדים). יש כמה דרכים: לספר במילים או בדיבור מה אכלת, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה." };
   if (!path) return [intro];
-  return [intro, ...(path === "yes" ? TOUR_YES : TOUR_NO), ...TOUR_TAIL];
+  const seq = [intro, ...(path === "yes" ? TOUR_YES : TOUR_NO), ...TOUR_TAIL];
+  return hideRewards ? seq.filter((s) => s.sel !== "cabinet") : seq;
 }
 
 // Entries below restate copy already in the app (no new claims).
@@ -4261,11 +4276,16 @@ export default function App() {
   const [today, setToday] = useState(TODAY);
   useEffect(() => {
     if (DEV) return; // dev "today" is simulated/fixed; the DevDateBar reloads to change it. Never clobber it with the real date.
-    const id = setInterval(() => {
+    const sync = () => {
       const now = ymd(new Date());
       if (now !== today) { setToday(now); setSelectedDate((sd) => (sd === today ? now : sd)); }
-    }, 60000);
-    return () => clearInterval(id);
+    };
+    const id = setInterval(sync, 60000);
+    const onVis = () => { if (document.visibilityState === "visible") sync(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", sync);
+    window.addEventListener("pageshow", sync);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", sync); window.removeEventListener("pageshow", sync); };
   }, [today]);
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
@@ -4352,15 +4372,15 @@ export default function App() {
   const introLock = programWeekFor(profile.startDate, TODAY) === 1 && programDayNumber(profile.startDate, TODAY) <= 2;
   const tourView = sheet === "caloriemenu" ? "caloriemenu" : sheet === "steps" ? "steps" : (modal && modal.kind && modal.kind !== "recipe") ? "addfood" : "day";
   const markTourSeen = () => setProfile((p) => (p.tipsSeen || []).includes("appTour") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "appTour"] });
-  const startTour = () => setTour({ steps: buildTour(null), i: 0 });
-  const tourChoice = (yes) => setTour({ steps: buildTour(yes ? "yes" : "no"), i: 1 });
+  const startTour = () => setTour({ steps: buildTour(null, profile.hideRewards), i: 0 });
+  const tourChoice = (yes) => setTour({ steps: buildTour(yes ? "yes" : "no", profile.hideRewards), i: 1 });
   const tourAdvance = () => {
     if (!tour) return;
     const ni = tour.i + 1;
     if (ni >= tour.steps.length) { setTour(null); markTourSeen(); setSheet(null); setModal(null); } else setTour({ ...tour, i: ni });
   };
   const tourEnd = () => {
-    const steps = (tour && tour.steps.length > 1) ? tour.steps : buildTour("no");
+    const steps = (tour && tour.steps.length > 1) ? tour.steps : buildTour("no", profile.hideRewards);
     setTour({ steps, i: steps.length - 1 });
   };
   const tourBack = () => { if (tour && tour.i > 0) setTour({ ...tour, i: tour.i - 1 }); };
@@ -4386,7 +4406,7 @@ export default function App() {
     const pd = programDayNumber(profile.startDate, TODAY);
     const wk = programWeekFor(profile.startDate, TODAY);
     if (wk === 1 && pd >= 3 && !(profile.tipsSeen || []).includes("appTour")) {
-      const t = setTimeout(() => setTour({ steps: buildTour(null), i: 0 }), 700);
+      const t = setTimeout(() => setTour({ steps: buildTour(null, profile.hideRewards), i: 0 }), 700);
       return () => clearTimeout(t);
     }
   }, [gate, onboarded, showIntro, tab, tour, profile.tipsSeen, profile.startDate]);
@@ -4574,9 +4594,13 @@ export default function App() {
     let tcount = 0, maxW = 0;
     for (let w = 1; w <= 10; w++) if (weekTrophyEarned(next, profile.startDate, w, today)) { tcount++; maxW = w; }
     if (!celebRef.current.mounted) { celebRef.current = { mounted: true, trophies: tcount }; return; }
-    if (tcount > celebRef.current.trophies) { celebRef.current.trophies = tcount; setCheerTrophyWeek(maxW); setSheet("trophyCheer"); }
-    else if (celebrate) setSheet("checkinCheer");
-  }, [checkins, log, stepsByDate, waterByDate, targets, profile.startDate, profile.keepShabbat, today]);
+    const newTrophy = tcount > celebRef.current.trophies;
+    if (newTrophy) celebRef.current.trophies = tcount;
+    if (!profile.hideRewards) {
+      if (newTrophy) { setCheerTrophyWeek(maxW); setSheet("trophyCheer"); }
+      else if (celebrate) setSheet("checkinCheer");
+    }
+  }, [checkins, log, stepsByDate, waterByDate, targets, profile.startDate, profile.keepShabbat, profile.hideRewards, today]);
   // Intermittent-fasting intro bubble: once, on the day screen, from week 8 day 4 (Wednesday) onward.
   useEffect(() => {
     if (!onboarded || showIntro || tab !== "day") return;
@@ -4708,7 +4732,7 @@ export default function App() {
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
-            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} onClose={() => setSheet(null)} />}
+            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
