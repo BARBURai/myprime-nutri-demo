@@ -418,7 +418,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.03";
+const VERSION = "3.04";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2483,18 +2483,19 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
             <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
               {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
             </div>
+            <div style={{ fontSize: 13, color: C.sub, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 10 }}>הקישי <b>+</b> להוספה מהירה בכמות הרגילה, או על <b>שם הפריט</b> כדי לבחור כמות אחרת (למשל 2 כוסות). בסיום הקישי "סיום".</div>
+            {addedKeys.length > 0 && <div style={{ marginBottom: 12 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
             {(favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
               const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
               const added = addedKeys.includes(f.id);
               return (
                 <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לכמות אחרת - הקישי על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
                   <button onClick={() => { commit({ meal, name: f.name, g, unit: f.unit || "g", source: "verified", ...n }, true); setAddedKeys((k) => [...k, f.id]); }} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
                 </div>
               );
             })}
             {addedKeys.length > 0 && <div style={{ marginTop: 14 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
-            <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>+ מוסיף מהר בכמות הרגילה · הקשה על שם הפריט כדי לבחור כמות אחרת (למשל 2 כוסות). אפשר להוסיף כמה ברצף ואז "סיום".</span></div>
           </>
         )}
         {step === "barcode" && (
@@ -2655,7 +2656,11 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               const base = { label: unitLabel, g: 1 };
               const au = qUnit || base;
               const isBase = au.g <= 1;
-              const units = [base, ...food.measures.filter((m) => m.g > 1)];
+              const ml = food.unit === "ml";
+              const seenM = {};
+              const merged = [];
+              for (const m of (ml ? [...measuresForUnit(food.unit), ...food.measures] : [...food.measures, ...measuresForUnit(food.unit)])) { if (m.g > 1 && !seenM[m.label]) { seenM[m.label] = 1; merged.push(m); } }
+              const units = [base, ...merged];
               const count = isBase ? grams : Math.max(1, Math.round(grams / au.g));
               return (
                 <>
