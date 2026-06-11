@@ -174,6 +174,13 @@ const FOODS = [
   { id: "almond", name: "שקדים", search: "שקדים אגוזים", per100: { kcal: 579, p: 21, f: 50, c: 22 }, measures: [{ label: "חופן", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "potato", name: "תפוח אדמה מבושל", search: "תפוח אדמה תפוד", per100: { kcal: 87, p: 2, f: 0.1, c: 20 }, measures: [{ label: "בינוני", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "lentil", name: "עדשים מבושלות", search: "עדשים קטניות", per100: { kcal: 116, p: 9, f: 0.4, c: 20 }, measures: [{ label: "כוס", g: 198 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "sugar", name: "סוכר", search: "סוכר לבן חום קוביה", per100: { kcal: 387, p: 0, f: 0, c: 100 }, measures: [{ label: "כפית", g: 4 }, { label: "כף", g: 12 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "oil", name: "שמן", search: "שמן קנולה חמניות זית", per100: { kcal: 884, p: 0, f: 100, c: 0 }, measures: [{ label: "כף", g: 15 }, { label: "כפית", g: 5 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "butter", name: "חמאה", search: "חמאה", per100: { kcal: 717, p: 0.9, f: 81, c: 0.1 }, measures: [{ label: "כף", g: 14 }, { label: "כפית", g: 5 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "honey", name: "דבש", search: "דבש", per100: { kcal: 304, p: 0.3, f: 0, c: 82 }, measures: [{ label: "כף", g: 21 }, { label: "כפית", g: 7 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "flour", name: "קמח", search: "קמח לבן מלא", per100: { kcal: 364, p: 10, f: 1, c: 76 }, measures: [{ label: "כף", g: 8 }, { label: "כוס", g: 125 }, { label: "100 ג׳", g: 100 }], def: 2 },
+  { id: "salt", name: "מלח", search: "מלח", per100: { kcal: 0, p: 0, f: 0, c: 0 }, measures: [{ label: "כפית", g: 6 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  { id: "blackcoffee", name: "קפה שחור", search: "קפה שחור נמס אספרסו בלי חלב", per100: { kcal: 2, p: 0.1, f: 0, c: 0.3 }, measures: [{ label: "כוס", g: 200 }, { label: "100 מ\"ל", g: 100 }], def: 0, unit: "ml" },
 ];
 const FOOD_BY_ID = Object.fromEntries(FOODS.map((f) => [f.id, f]));
 const RECENT = [
@@ -411,7 +418,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.02";
+const VERSION = "3.03";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2018,14 +2025,37 @@ function strongMatch(aiName, dbName) {
   let hit = 0; for (const w of bt) if (at.has(w)) hit++;
   return at.size > 0 && hit >= Math.min(2, at.size);
 }
-async function lookupProduct(name, en) {
-  // 1. Israeli national DB (Hebrew name) - best for Israeli foods.
-  try { const il = await searchIsraeliDB(name); for (const r of il) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return { ...r, source: "db" }; } catch (e) {}
-  // 2. USDA FoodData Central (English query) - best for generic cooked foods.
-  if (en) { try { const us = await searchUSDA(en); for (const r of us) if (r.per100 && r.per100.kcal && strongMatch(en, r.name)) return { ...r, source: "usda" }; } catch (e) {} }
-  // 3. Open Food Facts (Hebrew/brand) - packaged products.
-  try { const off = await searchOpenFoodFacts(name); for (const r of off) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) return { ...r, source: "db" }; } catch (e) {}
+// Session cache of resolved foods. Avoids re-hitting the network for the same
+// product (e.g. when only the quantity changed: 2 -> 3 teaspoons of sugar).
+const RECON_CACHE = new Map();
+function reconKey(name, en) { return String(name || "").trim().toLowerCase().replace(/\s+/g, " ") + "|" + String(en || "").trim().toLowerCase(); }
+// Match an item name against the local FOODS spine (staples like sugar/milk/oil).
+function localFoodMatch(name) {
+  const nq = String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!nq) return null;
+  for (const f of FOODS) {
+    const fn = f.name.trim().toLowerCase();
+    if (nq === fn || nq.includes(fn)) return f;
+  }
   return null;
+}
+async function lookupProduct(name, en) {
+  const ck = reconKey(name, en);
+  if (RECON_CACHE.has(ck)) return RECON_CACHE.get(ck);
+  let result = null;
+  // 1. Local spine - instant, no network (basic staples: sugar, milk, oil, salt...).
+  const lf = localFoodMatch(name);
+  if (lf && lf.per100 && lf.per100.kcal != null) result = { name: lf.name, per100: lf.per100, source: "verified" };
+  // 2. Our shared catalog - fast, grows with use (anything resolved before).
+  if (!result) { try { const cat = await catalogSearch(name); const hit = (cat || []).find((c) => c.per100 && c.per100.kcal && strongMatch(name, c.name)); if (hit) result = { name: hit.name, per100: hit.per100, source: hit.source === "verified" ? "db" : "estimated" }; } catch (e) {} }
+  // 3. Israeli national DB (Hebrew name).
+  if (!result) { try { const il = await searchIsraeliDB(name); for (const r of il) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) { result = { ...r, source: "db" }; break; } } catch (e) {} }
+  // 4. USDA FoodData Central (English query).
+  if (!result && en) { try { const us = await searchUSDA(en); for (const r of us) if (r.per100 && r.per100.kcal && strongMatch(en, r.name)) { result = { ...r, source: "usda" }; break; } } catch (e) {} }
+  // 5. Open Food Facts (Hebrew/brand).
+  if (!result) { try { const off = await searchOpenFoodFacts(name); for (const r of off) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) { result = { ...r, source: "db" }; break; } } catch (e) {} }
+  RECON_CACHE.set(ck, result);
+  return result;
 }
 async function reconcileWithDb(items) {
   return Promise.all((items || []).map(async (it) => {
@@ -2464,7 +2494,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               );
             })}
             {addedKeys.length > 0 && <div style={{ marginTop: 14 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
-            <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>כל הקשה על + מוסיפה פריט עם הכמות האחרונה - אפשר להוסיף כמה ברצף ואז "סיום"</span></div>
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 12, background: C.bg, padding: 9, borderRadius: 10, display: "flex", gap: 6 }}><Zap size={13} style={{ flexShrink: 0, marginTop: 1 }} /> <span>+ מוסיף מהר בכמות הרגילה · הקשה על שם הפריט כדי לבחור כמות אחרת (למשל 2 כוסות). אפשר להוסיף כמה ברצף ואז "סיום".</span></div>
           </>
         )}
         {step === "barcode" && (
@@ -2646,7 +2676,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
             </div>
-            <Btn onClick={() => commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...nut })}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
+            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
           </>
         )}
