@@ -1,5 +1,5 @@
 // Serverless proxy to the Israeli national nutrition database ("צמרת", Ministry of Health)
-// published on data.gov.il (CKAN). No API key required — open government data.
+// published on data.gov.il (CKAN). No API key required - open government data.
 //
 // The dataset's resources are NOT datastore-active (they are downloadable CSV files,
 // last updated 2022), so `datastore_search` returns nothing. This function therefore
@@ -114,11 +114,26 @@ async function getCsvFoods(url) {
 }
 
 async function datastoreSearch(id, q) {
-  const url = `${BASE}/datastore_search?resource_id=${id}&q=${encodeURIComponent(q)}&limit=20`;
-  const r = await fetch(url);
-  const j = await r.json();
-  const records = (j.result && j.result.records) || [];
-  return records.map(normalize).filter((x) => x && x.kcal > 0).slice(0, 12);
+  // The datastore's default full-text search matches WHOLE words only, so a
+  // partial prefix typed mid-word ("שנ", "שני") returns nothing until the full
+  // word. We therefore try a PREFIX query first (PostgreSQL tsquery "term:*",
+  // plain=false), falling back to the plain word search. The prefix variant is
+  // only attempted for a single clean token (tsquery syntax breaks on spaces).
+  const urls = [];
+  if (/^[\u0590-\u05FFA-Za-z0-9"']+$/.test(q)) {
+    urls.push(`${BASE}/datastore_search?resource_id=${id}&q=${encodeURIComponent(q + ":*")}&plain=false&limit=20`);
+  }
+  urls.push(`${BASE}/datastore_search?resource_id=${id}&q=${encodeURIComponent(q)}&limit=20`);
+  for (const url of urls) {
+    try {
+      const r = await fetch(url);
+      const j = await r.json();
+      const records = (j && j.result && j.result.records) || [];
+      const items = records.map(normalize).filter((x) => x && x.kcal > 0).slice(0, 12);
+      if (items.length) return items;
+    } catch (e) { /* try next variant */ }
+  }
+  return [];
 }
 
 function toItems(list) {
@@ -144,7 +159,7 @@ export default async function handler(req, res) {
       if (items.length) return res.status(200).json({ items: toItems(items), source: "datastore", resource_id: r.id });
     }
 
-    // 2) CSV fallback — download + parse + cache, then substring-search the names.
+    // 2) CSV fallback - download + parse + cache, then substring-search the names.
     const csvRes = resources.filter((x) => /csv/.test(x.format) || /\.csv(\?|$)/i.test(x.url)).slice(0, 4);
     let firstHeaders = null;
     for (const r of csvRes) {
