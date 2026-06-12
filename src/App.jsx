@@ -28,7 +28,9 @@ const CATALOG_ENDPOINT = "/api/catalog";
 function catalogAdd(item) {
   try {
     const g = Number(item && item.g) || 0;
-    if (!item || !item.name || g <= 0 || item.source === "manual") return;
+    // Skip combined personal meals ("a + b + c"): they are one woman's plate,
+    // not a reusable product, so they should never surface to other users.
+    if (!item || !item.name || g <= 0 || item.source === "manual" || item.combo || String(item.name).includes(" + ")) return;
     const per100 = { kcal: Math.round((Number(item.kcal) || 0) / g * 100), p: Math.round((Number(item.p) || 0) / g * 100), f: Math.round((Number(item.f) || 0) / g * 100), c: Math.round((Number(item.c) || 0) / g * 100) };
     if (!(per100.kcal > 0)) return; // never poison the shared catalog with 0-kcal rows
     fetch(CATALOG_ENDPOINT, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name: String(item.name).trim(), per100, unit: item.unit || "g", source: item.source || "estimated" }) }).catch(() => {});
@@ -38,8 +40,9 @@ async function catalogSearch(term) {
   try {
     const r = await fetch(`${CATALOG_ENDPOINT}?q=${encodeURIComponent(term)}`, { headers: aiHeaders() });
     const d = await r.json();
-    // Hide any legacy 0-kcal rows that slipped in before the guard in catalogAdd.
-    return (((d && d.items) || [])).filter((it) => it && it.per100 && it.per100.kcal > 0);
+    // Hide legacy 0-kcal rows and combined personal meals ("a + b + c") that
+    // were stored before the guards in catalogAdd, so they stop showing to everyone.
+    return (((d && d.items) || [])).filter((it) => it && it.per100 && it.per100.kcal > 0 && !String(it.name || "").includes(" + "));
   } catch (e) { return []; }
 }
 const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a4%d7%a8%d7%98%d7%99%d7%95%d7%aa/";
@@ -426,7 +429,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.11";
+const VERSION = "3.12";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
