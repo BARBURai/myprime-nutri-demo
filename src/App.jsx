@@ -30,6 +30,7 @@ function catalogAdd(item) {
     const g = Number(item && item.g) || 0;
     if (!item || !item.name || g <= 0 || item.source === "manual") return;
     const per100 = { kcal: Math.round((Number(item.kcal) || 0) / g * 100), p: Math.round((Number(item.p) || 0) / g * 100), f: Math.round((Number(item.f) || 0) / g * 100), c: Math.round((Number(item.c) || 0) / g * 100) };
+    if (!(per100.kcal > 0)) return; // never poison the shared catalog with 0-kcal rows
     fetch(CATALOG_ENDPOINT, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name: String(item.name).trim(), per100, unit: item.unit || "g", source: item.source || "estimated" }) }).catch(() => {});
   } catch (e) { /* ignore */ }
 }
@@ -37,7 +38,8 @@ async function catalogSearch(term) {
   try {
     const r = await fetch(`${CATALOG_ENDPOINT}?q=${encodeURIComponent(term)}`, { headers: aiHeaders() });
     const d = await r.json();
-    return (d && d.items) || [];
+    // Hide any legacy 0-kcal rows that slipped in before the guard in catalogAdd.
+    return (((d && d.items) || [])).filter((it) => it && it.per100 && it.per100.kcal > 0);
   } catch (e) { return []; }
 }
 const PRIVACY_URL = import.meta.env.VITE_PRIVACY_URL || "https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a4%d7%a8%d7%98%d7%99%d7%95%d7%aa/";
@@ -424,7 +426,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.10";
+const VERSION = "3.11";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1971,7 +1973,10 @@ async function searchIsraeliDB(q) {
   return (data.items || []).map((it, i) => ({
     id: "il_" + i,
     name: it.name,
-    per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
+    // The endpoint returns each item with macros NESTED under `per100`
+    // ({ name, per100: { kcal, ... } }). Read from there; fall back to a flat
+    // shape so we stay correct if the response shape ever changes again.
+    per100: it.per100 || { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
     measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
     def: 0,
   }));
@@ -2008,7 +2013,7 @@ async function searchUSDA(q) {
     return (data.items || []).map((it, i) => ({
       id: "usda_" + i,
       name: it.name + (it.brand ? ` · ${it.brand}` : ""),
-      per100: { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
+      per100: it.per100 || { kcal: it.kcal, p: it.p, f: it.f, c: it.c },
       measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
       def: 0,
     }));
@@ -2054,9 +2059,21 @@ function reconKey(name, en) { return String(name || "").trim().toLowerCase().rep
 function localFoodMatch(name) {
   const nq = String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
   if (!nq) return null;
+  const qt = nq.split(" ");
   for (const f of FOODS) {
     const fn = f.name.trim().toLowerCase();
-    if (nq === fn || nq.includes(fn)) return f;
+    if (nq === fn) return f; // exact staple name
+    // Otherwise the staple must appear as CONSECUTIVE WHOLE WORDS and the query
+    // must be essentially that staple (at most one extra word). This stops
+    // "שמן" (884 kcal/100g) from matching inside "ספריי שמן" / a whole dish like
+    // "חציל אפוי בתנור עם ספריי שמן" and being scaled to the dish's weight.
+    const ft = fn.split(" ");
+    if (qt.length > ft.length + 1) continue;
+    for (let i = 0; i + ft.length <= qt.length; i++) {
+      let ok = true;
+      for (let j = 0; j < ft.length; j++) if (qt[i + j] !== ft[j]) { ok = false; break; }
+      if (ok) return f;
+    }
   }
   return null;
 }
@@ -4462,25 +4479,31 @@ export default function App() {
     (async () => { const r = await bkFetch(email); setBkRestore(r && r.exists ? "offer" : "none"); })();
   }, [gate, onboarded, saved, gateEmail, bkRestore]);
 
-  // Auto-backup: once a day, a few seconds after the first load/change of the day.
+  // Auto-backup: debounced after EVERY change, plus a flush when the app is
+  // hidden/closed. (Was once-a-day and early, so anything logged later in the
+  // day was never backed up - if storage was then evicted/restored, it was lost.)
+  // Uploads only when the content actually changed since the last upload.
+  const bkSentRef = useRef("");
   useEffect(() => {
     if (gate !== "ok" || !onboarded) return;
     if (!(profile.backup && profile.backup.enabled)) return;
     const code = bkGetCode();
     const email = ((profile.backup && profile.backup.email) || gateEmail || "").trim().toLowerCase();
     if (!code || !email || !bkSubtle) return;
-    let last = ""; try { last = localStorage.getItem(BK_LAST_KEY) || ""; } catch (e) {}
-    if (last === today) return;
-    const t = setTimeout(async () => {
+    const flush = async () => {
       try {
         const plaintext = localStorage.getItem(STORAGE_KEY);
-        if (!plaintext) return;
+        if (!plaintext || plaintext === bkSentRef.current) return;
         const ok = await bkUpload(email, code, plaintext);
-        if (ok) { try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} }
+        if (ok) { bkSentRef.current = plaintext; try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} }
       } catch (e) {}
-    }, 4000);
-    return () => clearTimeout(t);
-  }, [gate, onboarded, profile, log, checkins, stepsByDate, waterByDate, weights, today]);
+    };
+    const t = setTimeout(flush, 12000); // debounce: each change resets the timer
+    const onHide = () => { if (document.visibilityState === "hidden") flush(); };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => { clearTimeout(t); document.removeEventListener("visibilitychange", onHide); window.removeEventListener("pagehide", flush); };
+  }, [gate, onboarded, profile, log, checkins, stepsByDate, waterByDate, weights, today, gateEmail]);
 
   const doRestore = async (code) => {
     const email = (gateEmail || "").trim().toLowerCase();
