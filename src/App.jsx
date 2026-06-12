@@ -429,7 +429,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.13";
+const VERSION = "3.14";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2037,7 +2037,13 @@ async function searchUSDA(q) {
 
 // Short Hebrew→English food query for USDA lookups (used only when the
 // Hebrew DBs return nothing, and for the AI logging path via item.en).
+// Successful translations are cached for the session so the same word never
+// costs a second AI call.
+const TRANSLATE_CACHE = new Map();
 async function translateFoodToEnglish(q) {
+  const key = String(q || "").trim().toLowerCase();
+  if (!key) return "";
+  if (TRANSLATE_CACHE.has(key)) return TRANSLATE_CACHE.get(key);
   try {
     const res = await fetch(AI_ENDPOINT, {
       method: "POST", headers: aiHeaders(),
@@ -2049,7 +2055,9 @@ async function translateFoodToEnglish(q) {
     });
     const data = await res.json();
     const t = (data.content || []).map((i) => i.text || "").join("").trim();
-    return t.replace(/^["']|["']$/g, "").slice(0, 60);
+    const out = t.replace(/^["']|["']$/g, "").slice(0, 60);
+    if (out) TRANSLATE_CACHE.set(key, out); // cache only successes; a transient failure can retry
+    return out;
   } catch (e) { return ""; }
 }
 
@@ -2238,22 +2246,41 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
     commit({ meal, name, g: amount, unit: mUnit, source: "manual", ...n });
   };
 
+  // Two-stage search. Stage A (fast, cheap): our catalog + the Israeli national
+  // DB. Stage B (expensive: Open Food Facts, then AI-translate + USDA) runs only
+  // after the user has PAUSED typing and only from 3 chars, so partial prefixes
+  // no longer burn AI calls or flash "לא נמצאו". A run id guards against
+  // out-of-order responses (an older slower query can never overwrite a newer one).
+  const searchRunRef = useRef(0);
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2 || step !== "list") { setDbResults([]); setCatResults([]); setSearching(false); return; }
+    if (q.length < 2 || step !== "list") { searchRunRef.current++; setDbResults([]); setCatResults([]); setSearching(false); return; }
+    const run = ++searchRunRef.current;
+    const alive = () => run === searchRunRef.current;
     setSearching(true);
-    const id = setTimeout(async () => {
-      catalogSearch(q).then((cat) => setCatResults(cat || [])).catch(() => setCatResults([]));
+    let ilFound = false, fbSet = false;
+    const tA = setTimeout(async () => {
+      catalogSearch(q).then((cat) => { if (alive()) setCatResults(cat || []); }).catch(() => { if (alive()) setCatResults([]); });
       try {
-        let items = await searchIsraeliDB(q);
-        let src = "il";
-        if (!items.length) { items = await searchOpenFoodFacts(q); src = "off"; }
-        if (!items.length) { const en = await translateFoodToEnglish(q); if (en) { items = await searchUSDA(en); src = "usda"; } }
+        const items = await searchIsraeliDB(q);
+        if (!alive()) return;
+        if (items.length) { ilFound = true; setDbResults(items); setDbSource("il"); setSearching(false); }
+        else if (!fbSet) setDbResults([]);
+      } catch (e) { if (alive() && !fbSet) setDbResults([]); }
+    }, 350);
+    const tB = setTimeout(async () => {
+      if (!alive() || ilFound) return;
+      if (q.length < 3) { setSearching(false); return; }
+      try {
+        let items = await searchOpenFoodFacts(q); let src = "off";
+        if (!items.length && alive()) { const en = await translateFoodToEnglish(q); if (en && alive()) { items = await searchUSDA(en); src = "usda"; } }
+        if (!alive() || ilFound) return;
+        fbSet = items.length > 0;
         setDbResults(items); setDbSource(src);
-      } catch (e) { setDbResults([]); }
-      finally { setSearching(false); }
-    }, 450);
-    return () => clearTimeout(id);
+      } catch (e) { if (alive() && !ilFound) setDbResults([]); }
+      finally { if (alive() && !ilFound) setSearching(false); }
+    }, 1200);
+    return () => { clearTimeout(tA); clearTimeout(tB); };
   }, [query, step]);
   const fileRef = useRef(null);
   const [photoState, setPhotoState] = useState("capture");
@@ -2517,7 +2544,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                 </div>
               );
             })}
-            {query.trim().length >= 2 && <div style={{ fontSize: 14, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
+            {query.trim().length >= 2 && dbResults.length > 0 && <div style={{ fontSize: 14, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
             {query && dbResults.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
@@ -2527,6 +2554,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                 </div>
               );
             })}
+            {query.trim().length >= 2 && searching && filtered.length === 0 && dbResults.length === 0 && catResults.length === 0 && (
+              <div style={{ padding: "16px 0", textAlign: "center", fontSize: 15, color: C.faint, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Loader size={15} className="spin" /> מחפשת…</div>
+            )}
             {query.trim().length >= 2 && !searching && filtered.length === 0 && dbResults.length === 0 && catResults.length === 0 && (
               <div style={{ padding: "14px 0", textAlign: "center" }}>
                 <div style={{ fontSize: 15, color: C.faint, marginBottom: 10 }}>לא נמצאו תוצאות ל"{query}"</div>
