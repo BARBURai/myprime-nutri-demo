@@ -429,7 +429,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.12";
+const VERSION = "3.13";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1969,7 +1969,11 @@ function localPrefs(text, existing) {
   return { diet, avoid };
 }
 
-async function searchIsraeliDB(q) {
+// The data.gov.il datastore is intermittently empty/slow, so the same query can
+// return results one second and nothing the next. We cache only SUCCESSES for the
+// session (so once a food is found it stays found) and retry once before giving up.
+const IL_CACHE = new Map();
+async function ilFetchOnce(q) {
   const res = await fetch(`/api/il-food?q=${encodeURIComponent(q)}`);
   if (!res.ok) return [];
   const data = await res.json();
@@ -1983,6 +1987,14 @@ async function searchIsraeliDB(q) {
     measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
     def: 0,
   }));
+}
+async function searchIsraeliDB(q) {
+  const key = String(q || "").trim();
+  if (IL_CACHE.has(key)) return IL_CACHE.get(key);
+  let items = await ilFetchOnce(key);
+  if (!items.length) items = await ilFetchOnce(key); // one retry for the flaky datastore
+  if (items.length) IL_CACHE.set(key, items); // cache only successes; a transient miss can still recover
+  return items;
 }
 
 async function searchOpenFoodFacts(q) {
@@ -2228,7 +2240,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
 
   useEffect(() => {
     const q = query.trim();
-    if (!q || step !== "list") { setDbResults([]); setCatResults([]); setSearching(false); return; }
+    if (q.length < 2 || step !== "list") { setDbResults([]); setCatResults([]); setSearching(false); return; }
     setSearching(true);
     const id = setTimeout(async () => {
       catalogSearch(q).then((cat) => setCatResults(cat || [])).catch(() => setCatResults([]));
@@ -2418,7 +2430,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
   }, [scanState]);
   const photoItems = [{ f: FOOD_BY_ID["rice"], g: 158 }, { f: FOOD_BY_ID["chk"], g: 120 }, { f: FOOD_BY_ID["sal"], g: 80 }];
   const localPool = [...(favorites || []), ...FOODS.filter((f) => !(favorites || []).some((fav) => fav.name === f.name))];
-  const filtered = query.trim() ? localPool.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
+  const filtered = query.trim().length >= 2 ? localPool.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
   const nut = food ? nutritionFor(food, grams) : null;
   const unitLabel = unitLabelFor(food?.unit);
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
@@ -2475,11 +2487,15 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
         )}
         {step === "list" && (
           <>
-            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", marginBottom: 4, color: C.faint }}>
-              <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+            {/* Pin the meal chips + search box to the top of the scroll area so the
+                keyboard and incoming results never push the input out of view. */}
+            <div style={{ position: "sticky", top: 0, zIndex: 3, background: C.panel, paddingBottom: 8 }}>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", color: C.faint }}>
+                <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+              </div>
             </div>
             {query && filtered.length > 0 && <div style={{ fontSize: 14, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
             {query && filtered.map((f) => {
@@ -2501,7 +2517,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                 </div>
               );
             })}
-            {query && <div style={{ fontSize: 14, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
+            {query.trim().length >= 2 && <div style={{ fontSize: 14, color: C.faint, margin: "12px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>{dbSource === "il" ? "מאגר התזונה הלאומי · משרד הבריאות" : dbSource === "usda" ? "USDA FoodData Central · ערכים גנריים" : "תוצאות מ-Open Food Facts"} {searching && <Loader size={12} className="spin" />}</div>}
             {query && dbResults.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
@@ -2511,13 +2527,13 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                 </div>
               );
             })}
-            {query && !searching && filtered.length === 0 && dbResults.length === 0 && catResults.length === 0 && (
+            {query.trim().length >= 2 && !searching && filtered.length === 0 && dbResults.length === 0 && catResults.length === 0 && (
               <div style={{ padding: "14px 0", textAlign: "center" }}>
                 <div style={{ fontSize: 15, color: C.faint, marginBottom: 10 }}>לא נמצאו תוצאות ל"{query}"</div>
                 <Btn variant="ghost" onClick={() => setStep("manual")}>להזין את הערכים ידנית</Btn>
               </div>
             )}
-            {!query && <div style={{ fontSize: 14, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
+            {query.trim().length < 2 && <div style={{ fontSize: 14, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
           </>
         )}
         {step === "history" && (
