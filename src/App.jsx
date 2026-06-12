@@ -429,7 +429,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.14";
+const VERSION = "3.15";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2464,7 +2464,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
   const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "92%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", overflowY: "auto", fontFamily: fontStack }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "92%", borderRadius: "20px 20px 0 0", padding: "14px 16px 18px", fontFamily: fontStack, ...(step === "list" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
           <button onClick={close} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
@@ -2514,9 +2514,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
         )}
         {step === "list" && (
           <>
-            {/* Pin the meal chips + search box to the top of the scroll area so the
-                keyboard and incoming results never push the input out of view. */}
-            <div style={{ position: "sticky", top: 0, zIndex: 3, background: C.panel, paddingBottom: 8 }}>
+            {/* Fixed (non-scrolling) header: meal chips + search box. The results
+                below get their own scroll area, so the input can never be
+                scrolled out of view - regardless of keyboard behavior. */}
+            <div style={{ flexShrink: 0, background: C.panel, paddingBottom: 8 }}>
               <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
                 {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
               </div>
@@ -2524,6 +2525,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                 <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
               </div>
             </div>
+            <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
             {query && filtered.length > 0 && <div style={{ fontSize: 14, color: C.faint, margin: "10px 0 2px" }}>מהמאגר המקומי</div>}
             {query && filtered.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
@@ -2564,6 +2566,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               </div>
             )}
             {query.trim().length < 2 && <div style={{ fontSize: 14, color: C.faint, marginTop: 12, background: C.bg, padding: 11, borderRadius: 10, lineHeight: 1.6, textAlign: "center" }}>הקלידי שם מזון כדי לחפש במאגר התזונה הישראלי וב-Open Food Facts</div>}
+            </div>
           </>
         )}
         {step === "history" && (
@@ -4731,6 +4734,40 @@ export default function App() {
   };
 
   const sweetsOpen = unlockedOn(profile.startDate, TODAY, SWEETS_UNLOCK);
+
+  // Keyboard-aware viewport. On Android, Chrome by default only PANS the visual
+  // viewport when the keyboard opens (the page keeps its full height), so our
+  // bottom-anchored sheets end up behind the keyboard and the browser drags the
+  // whole page up - sticky headers included. Two complementary fixes:
+  // 1) Ask the browser to RESIZE the layout instead (interactive-widget=
+  //    resizes-content, Chrome 108+). The frame then shrinks above the keyboard.
+  // 2) Fallback for browsers that ignore it: track visualViewport and cap the
+  //    frame height via the --vvh CSS variable (used by .phone-frame).
+  useEffect(() => {
+    try {
+      const m = document.querySelector('meta[name="viewport"]');
+      if (m && !/interactive-widget/.test(m.getAttribute("content") || "")) {
+        m.setAttribute("content", (m.getAttribute("content") || "width=device-width, initial-scale=1") + ", interactive-widget=resizes-content");
+      }
+    } catch (e) {}
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      try {
+        const kb = Math.max(0, window.innerHeight - vv.height);
+        if (kb > 80) { // keyboard (or similar) is up
+          document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
+          window.scrollTo(0, 0);
+        } else {
+          document.documentElement.style.removeProperty("--vvh");
+        }
+      } catch (e) {}
+    };
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => { vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply); };
+  }, []);
+
   const tabs = [
     { id: "day", ic: Home, label: "יומן" },
     { id: "report", ic: BarChart3, label: "דוח" },
@@ -4759,7 +4796,7 @@ export default function App() {
         @keyframes splashFade{0%{opacity:0}12%{opacity:1}82%{opacity:1}100%{opacity:0}}
         .app-outer{min-height:100vh;min-height:100dvh;background:${C.bg};display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;font-family:${fontStack}}
         .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
-        @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;border-radius:0;box-shadow:none;border:none}}`}</style>
+        @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;height:var(--vvh,100dvh);border-radius:0;box-shadow:none;border:none}}`}</style>
       <div className="phone-frame">
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
