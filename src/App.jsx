@@ -11,6 +11,7 @@ import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
+import { ContentDayCard, ContentModule } from "./content/ContentModule";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -222,6 +223,9 @@ function prettyDate(dateStr) {
   return `${HE_DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ב${HE_MONTHS[d.getUTCMonth()]}`;
 }
 const DEV = (() => { try { return new URLSearchParams(window.location.search).has("dev"); } catch (e) { return false; } })();
+// Course content module ("הסרטונים שלך היום"). Dev-only for now so the pilot
+// women never see it; flip to `true` when it is ready to ship to users.
+const CONTENT_ENABLED = DEV;
 const TODAY = (() => {
   try {
     if (DEV) {
@@ -429,7 +433,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.15";
+const VERSION = "3.16";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1015,7 +1019,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
     </div>
   );
 }
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, introLock = false, overlayOpen = false }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onOpenContent, introLock = false, overlayOpen = false }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + (e.kcal || 0), 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -1144,6 +1148,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         </div>
       ) : (
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "0 16px" }}>
+        {CONTENT_ENABLED && <ContentDayCard week={week} dow={dow} C={C} font={fontStack} onOpen={onOpenContent} />}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", justifyItems: "center", alignItems: "start", rowGap: 10, columnGap: 6, marginTop: 2, marginBottom: 10 }}>
           <div data-tut="cal" style={{ gridColumn: 1, gridRow: 1 }}><Ring consumed={consumed} budget={budget} size={124} onPlus={onAddCalorie} /></div>
           {stepsOpen && <div data-tut="steps" style={{ gridColumn: 2, gridRow: 1 }}><MetricRing value={steps} goal={dayStepGoal || 0} verb="צעדת" color={C.amber} track={C.amberBg} label="צעדים" sub={dayStepGoal ? `מתוך ${dayStepGoal.toLocaleString()}` : ""} onPlus={onEditSteps} size={124} /></div>}
@@ -4813,7 +4818,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onOpenContent={() => setSheet("content")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
@@ -4850,6 +4855,7 @@ export default function App() {
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
+            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} C={C} font={fontStack} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
               : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
