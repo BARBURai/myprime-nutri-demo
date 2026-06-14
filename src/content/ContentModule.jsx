@@ -93,7 +93,7 @@ export function ContentModule({ week, dow, C, font, onClose }) {
   if (!day) {
     return (
       <div style={overlay}>
-        <div style={head}><span style={headTitle}>הסרטונים שלך</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
+        <div style={head}><button onClick={onClose} style={backBtn}><ChevronRight size={18} /> חזרה ליומן</button><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 28, textAlign: "center", color: C.sub, fontSize: 16, lineHeight: 1.7 }}>
           אין תוכן ליום הזה.<br />נתראה ביום הבא 💜
         </div>
@@ -109,7 +109,7 @@ export function ContentModule({ week, dow, C, font, onClose }) {
     return (
       <div style={overlay}>
         <div style={head}>
-          <button onClick={() => setIdx(null)} style={backBtn}><ChevronRight size={18} /> חזרה</button>
+          <button onClick={() => setIdx(null)} style={backBtn}><ChevronRight size={18} /> חזרה לסרטונים שלך היום</button>
           <button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 28px" }}>
@@ -143,7 +143,7 @@ export function ContentModule({ week, dow, C, font, onClose }) {
   // ----- Day list -----
   return (
     <div style={overlay}>
-      <div style={head}><span style={headTitle}>הסרטונים שלך</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
+      <div style={head}><button onClick={onClose} style={backBtn}><ChevronRight size={18} /> חזרה ליומן</button><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 28px" }}>
         <div style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, borderRadius: 18, padding: "16px 16px 18px", color: "#fff", marginBottom: 14 }}>
           <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.3 }}>הסרטונים שלך היום</div>
