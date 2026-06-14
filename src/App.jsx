@@ -11,7 +11,7 @@ import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
-import { ContentDayCard, ContentModule } from "./content/ContentModule";
+import { ContentDayCard, ContentModule, contentForDay } from "./content/ContentModule";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -433,7 +433,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.16";
+const VERSION = "3.17";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1139,6 +1139,12 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto 14px" }} />
           <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>ברוכה הבאה לאפליקציית המעקב של מיי פריים 360</div>
           <div style={{ fontSize: 16, color: C.sub, marginTop: 12, lineHeight: 1.75 }}>ביומיים הראשונים עדיין אין מעקב. {progDay === 1 ? "מחרתיים" : "מחר"} מתחילות יחד, צעד אחרי צעד, ותקבלי כאן ביום שלישי את כל ההסברים על השימוש באפליקציה.</div>
+          {CONTENT_ENABLED && contentForDay(week, dow) && (
+            <div style={{ marginTop: 22 }}>
+              <div style={{ fontSize: 16, color: C.sub, lineHeight: 1.75, marginBottom: 14 }}>בינתיים, את מוזמנת לצפות בסרטונים היומיים שלך כאן באפליקציה 💜</div>
+              <div style={{ textAlign: "right" }}><ContentDayCard week={week} dow={dow} C={C} font={fontStack} onOpen={onOpenContent} /></div>
+            </div>
+          )}
         </div>
       ) : isShabbatRest ? (
         <div style={{ padding: "36px 24px 60px", textAlign: "center", color: C.faint }}>

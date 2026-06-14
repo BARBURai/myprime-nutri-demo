@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Play, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ChevronRight, ChevronLeft, X, Loader } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
+export { contentForDay } from "./data";
 
 /* ============================================================
    MyPrime course content module (core).
