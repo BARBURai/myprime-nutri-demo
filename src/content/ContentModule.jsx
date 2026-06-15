@@ -71,8 +71,8 @@ export function ContentDayCard({ week, dow, C, font, onOpen }) {
         <Film size={22} color="#fff" />
       </div>
       <div style={{ flex: 1, textAlign: "right" }}>
-        <div style={{ fontSize: 18, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>הסרטונים שלך היום</div>
-        <div style={{ fontSize: 15.5, color: C.brandD, marginTop: 3 }}>{day.theme ? day.theme + " · " : ""}{n} {n === 1 ? "פריט" : "פריטים"}</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>הסרטונים שלך היום</div>
+        <div style={{ fontSize: 17, color: C.brandD, marginTop: 4 }}>{day.theme ? day.theme + " · " : ""}{n} {n === 1 ? "פריט" : "פריטים"}</div>
       </div>
       <ChevronLeft size={20} color={C.brand} style={{ flexShrink: 0 }} />
     </div>
@@ -113,11 +113,11 @@ export function ContentModule({ week, dow, C, font, onClose }) {
           <button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 28px" }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, lineHeight: 1.35, marginBottom: 4 }}>{l.title}</div>
-          <div style={{ fontSize: 13.5, color: C.faint, marginBottom: 16 }}>שיעור {idx + 1} מתוך {day.lessons.length} · {tm.label}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: C.ink, lineHeight: 1.3, marginBottom: 6 }}>{l.title}</div>
+          <div style={{ fontSize: 16, color: C.sub, marginBottom: 18 }}>שיעור {idx + 1} מתוך {day.lessons.length} · {tm.label}</div>
 
           {l.text && l.text.length > 0 && (
-            <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.75, marginBottom: showVideo || l.pdf ? 18 : 4 }}>
+            <div style={{ fontSize: 18, color: C.ink, lineHeight: 1.85, marginBottom: showVideo || l.pdf ? 20 : 6 }}>
               {l.text.map((p, i) => (<div key={i} style={{ marginBottom: 10 }}>{p}</div>))}
             </div>
           )}
@@ -139,7 +139,7 @@ export function ContentModule({ week, dow, C, font, onClose }) {
                   <div style={{ width: 42, height: 42, borderRadius: 11, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><ExternalLink size={20} color={C.brand} /></div>
                   <div style={{ flex: 1, textAlign: "right" }}>
                     <div style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{lk.label}</div>
-                    <div style={{ fontSize: 13.5, color: C.sub }}>לחצי לפתיחה</div>
+                    <div style={{ fontSize: 15, color: C.sub }}>לחצי לפתיחה</div>
                   </div>
                   <ExternalLink size={18} color={C.faint} style={{ flexShrink: 0 }} />
                 </a>
@@ -153,7 +153,7 @@ export function ContentModule({ week, dow, C, font, onClose }) {
               <div style={{ width: 42, height: 42, borderRadius: 11, background: C.brand, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><FileText size={20} color="#fff" /></div>
               <div style={{ flex: 1, textAlign: "right" }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD }}>דף להורדה</div>
-                <div style={{ fontSize: 13.5, color: C.brandD }}>PDF · נפתח בלחיצה</div>
+                <div style={{ fontSize: 15, color: C.brandD }}>PDF · נפתח בלחיצה</div>
               </div>
               <Download size={20} color={C.brand} style={{ flexShrink: 0 }} />
             </a>
@@ -170,7 +170,7 @@ export function ContentModule({ week, dow, C, font, onClose }) {
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 28px" }}>
         <div style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, borderRadius: 18, padding: "16px 16px 18px", color: "#fff", marginBottom: 14 }}>
           <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.3 }}>הסרטונים שלך היום</div>
-          <div style={{ fontSize: 14.5, opacity: 0.92, marginTop: 4 }}>שבוע {day.week} יום {day.day}{day.theme ? " · " + day.theme : ""}</div>
+          <div style={{ fontSize: 17, opacity: 0.92, marginTop: 5 }}>שבוע {day.week} יום {day.day}{day.theme ? " · " + day.theme : ""}</div>
         </div>
         {day.lessons.map((l, i) => {
           const tm = typeMeta(l.type);
@@ -180,8 +180,8 @@ export function ContentModule({ week, dow, C, font, onClose }) {
               style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13, marginBottom: 10, cursor: "pointer", background: C.panel }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><tm.Icon size={21} color={C.brand} /></div>
               <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
-                <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{l.title}</div>
-                <div style={{ fontSize: 15, color: C.ink, marginTop: 3 }}>{meta}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{l.title}</div>
+                <div style={{ fontSize: 17, color: C.ink, marginTop: 4 }}>{meta}</div>
               </div>
               <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
             </div>
