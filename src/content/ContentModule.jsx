@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Play, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ChevronRight, ChevronLeft, X, Loader } from "lucide-react";
+import { Play, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, X, Loader } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
 export { contentForDay } from "./data";
 
@@ -71,8 +71,8 @@ export function ContentDayCard({ week, dow, C, font, onOpen }) {
         <Film size={22} color="#fff" />
       </div>
       <div style={{ flex: 1, textAlign: "right" }}>
-        <div style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>הסרטונים שלך היום</div>
-        <div style={{ fontSize: 13.5, color: C.brandD, marginTop: 2 }}>{day.theme ? day.theme + " · " : ""}{n} {n === 1 ? "פריט" : "פריטים"}</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>הסרטונים שלך היום</div>
+        <div style={{ fontSize: 15.5, color: C.brandD, marginTop: 3 }}>{day.theme ? day.theme + " · " : ""}{n} {n === 1 ? "פריט" : "פריטים"}</div>
       </div>
       <ChevronLeft size={20} color={C.brand} style={{ flexShrink: 0 }} />
     </div>
@@ -124,6 +124,29 @@ export function ContentModule({ week, dow, C, font, onClose }) {
 
           {showVideo && <BunnyPlayer videoId={l.videoId} C={C} font={font} />}
 
+          {l.image && (
+            <div style={{ borderRadius: 14, overflow: "hidden", marginBottom: 16 }}>
+              <img src={l.image} alt={l.title} style={{ width: "100%", display: "block", borderRadius: 14 }} />
+            </div>
+          )}
+
+          {l.links && l.links.length > 0 && (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, marginBottom: 10 }}>לינקים לציוד:</div>
+              {l.links.map((lk, i) => (
+                <a key={i} href={lk.url} target="_blank" rel="noreferrer"
+                  style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", border: `1.5px solid ${C.line}`, background: C.bg, borderRadius: 14, padding: "13px 14px", marginBottom: 10 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 11, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><ExternalLink size={20} color={C.brand} /></div>
+                  <div style={{ flex: 1, textAlign: "right" }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{lk.label}</div>
+                    <div style={{ fontSize: 13.5, color: C.sub }}>לחצי לפתיחה</div>
+                  </div>
+                  <ExternalLink size={18} color={C.faint} style={{ flexShrink: 0 }} />
+                </a>
+              ))}
+            </div>
+          )}
+
           {l.pdf && (
             <a href={PDF_BASE + l.pdf} target="_blank" rel="noreferrer"
               style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", border: `1.5px solid ${C.brand}`, background: C.brandBg, borderRadius: 14, padding: "13px 14px", marginTop: 4 }}>
@@ -157,8 +180,8 @@ export function ContentModule({ week, dow, C, font, onClose }) {
               style={{ display: "flex", alignItems: "center", gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13, marginBottom: 10, cursor: "pointer", background: C.panel }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><tm.Icon size={21} color={C.brand} /></div>
               <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
-                <div style={{ fontSize: 16.5, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{l.title}</div>
-                <div style={{ fontSize: 13.5, color: C.faint, marginTop: 2 }}>{meta}</div>
+                <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{l.title}</div>
+                <div style={{ fontSize: 15, color: C.sub2 || C.ink, opacity: 0.7, marginTop: 3 }}>{meta}</div>
               </div>
               <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
             </div>
