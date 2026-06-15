@@ -85,7 +85,7 @@ export function ContentModule({ week, dow, C, font, onClose }) {
   const [idx, setIdx] = useState(null); // null = list view, number = lesson detail
 
   const overlay = { position: "absolute", inset: 0, zIndex: 36, background: C.panel, display: "flex", flexDirection: "column", fontFamily: font, direction: "rtl" };
-  const head = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${C.line}`, flexShrink: 0 };
+  const head = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px) + 48px)", borderBottom: `1px solid ${C.line}`, flexShrink: 0 };
   const headTitle = { fontSize: 20, fontWeight: 700, color: C.ink };
   const backBtn = { display: "flex", alignItems: "center", gap: 4, border: `1px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 999, padding: "7px 14px", fontSize: 15, fontWeight: 600, fontFamily: font, cursor: "pointer" };
   const closeBtn = { border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 };
