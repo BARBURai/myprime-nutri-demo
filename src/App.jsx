@@ -433,7 +433,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.21";
+const VERSION = "3.22";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2135,8 +2135,17 @@ async function reconcileWithDb(items) {
       const m = await lookupProduct(it.name, it.en);
       if (m) {
         const scale = (it.grams || 100) / 100;
+        const dbKcal = Math.round(m.per100.kcal * scale);
+        // Sanity check: if the DB value is more than 40% away from the AI estimate,
+        // the DB matched the wrong product (e.g. a combo item with wrong per100).
+        // In that case keep the AI's own estimate and just upgrade the source label.
+        const aiKcal = it.kcal || 0;
+        const tooFarOff = aiKcal > 5 && (dbKcal > aiKcal * 1.4 || dbKcal < aiKcal * 0.6);
+        if (tooFarOff) {
+          return { ...it, source: "estimated" };
+        }
         return { ...it, source: m.source || "db", matched: m.name,
-          kcal: Math.round(m.per100.kcal * scale), p: Math.round((m.per100.p || 0) * scale),
+          kcal: dbKcal, p: Math.round((m.per100.p || 0) * scale),
           f: Math.round((m.per100.f || 0) * scale), c: Math.round((m.per100.c || 0) * scale) };
       }
     } catch (e) {}
