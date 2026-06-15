@@ -181,7 +181,7 @@ export function ContentModule({ week, dow, C, font, onClose }) {
               <div style={{ width: 44, height: 44, borderRadius: 12, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><tm.Icon size={21} color={C.brand} /></div>
               <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
                 <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{l.title}</div>
-                <div style={{ fontSize: 15, color: C.sub2 || C.ink, opacity: 0.7, marginTop: 3 }}>{meta}</div>
+                <div style={{ fontSize: 15, color: C.ink, marginTop: 3 }}>{meta}</div>
               </div>
               <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
             </div>
