@@ -433,7 +433,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.25";
+const VERSION = "3.27";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2076,9 +2076,25 @@ async function translateFoodToEnglish(q) {
    Name search is fuzzier than a barcode (no unique id), so we only accept a
    STRONG match; otherwise the AI estimate is kept. */
 function normName(s) { return String(s || "").replace(/["'.,()\[\]/-]/g, " ").replace(/\s+/g, " ").trim().toLowerCase(); }
+// Word stems that turn a food into a much denser one (seeds, oil, powder, dried,
+// roasted, sweetened, jam, snack, spread, butter, flour, syrup...). If the DB name
+// adds one of these and the query never used it, it is a different food with a very
+// different calorie density (e.g. "אבטיח" -> "גרעיני אבטיח" at ~560 kcal/100g), so we
+// must NOT treat it as a match.
+const CONCENTRATORS = ["גרעינ", "זרעי", "זרעים", "שמן", "אבק", "מיובש", "יבש", "קלוי", "מסוכר", "ממותק", "סוכר", "ריבת", "ריבה", "מרוכז", "תרכיז", "סירופ", "חטיף", "ממרח", "חמאת", "קמח", "פתית"];
+function addsConcentrator(aWords, bWords) {
+  for (const w of bWords) {
+    if (aWords.has(w)) continue;
+    for (const c of CONCENTRATORS) if (w.includes(c)) return true;
+  }
+  return false;
+}
 function strongMatch(aiName, dbName) {
   const a = normName(aiName), b = normName(dbName);
   if (!a || !b) return false;
+  const aWords = new Set(a.split(" ").filter(Boolean));
+  const bWords = b.split(" ").filter(Boolean);
+  if (addsConcentrator(aWords, bWords)) return false;
   if (b.includes(a) || a.includes(b)) return true;
   const at = new Set(a.split(" ").filter((w) => w.length >= 2));
   const bt = b.split(" ").filter((w) => w.length >= 2);
@@ -2136,11 +2152,19 @@ async function reconcileWithDb(items) {
       if (m) {
         const scale = (it.grams || 100) / 100;
         const dbKcal = Math.round(m.per100.kcal * scale);
-        // Sanity check: if the DB value is more than 40% away from the AI estimate,
-        // the DB matched the wrong product (e.g. a combo item with wrong per100).
-        // In that case keep the AI's own estimate and just upgrade the source label.
+        // Sanity check: if the DB value is far from the AI estimate, the DB matched
+        // the wrong product (e.g. a combo item with wrong per100). In that case keep
+        // the AI's own estimate and just mark it as estimated.
         const aiKcal = it.kcal || 0;
-        const tooFarOff = aiKcal > 5 && (dbKcal > aiKcal * 1.4 || dbKcal < aiKcal * 0.6);
+        // Ratio guard for normal foods.
+        const ratioOff = aiKcal > 5 && (dbKcal > aiKcal * 1.4 || dbKcal < aiKcal * 0.6);
+        // Absolute guard for low-calorie foods (espresso, black coffee, tea, diet
+        // drinks): aiKcal is tiny so the ratio guard cannot run, and a wrong high
+        // per-100g match (e.g. a dry powder scaled onto a liquid volume) would slip
+        // through and inflate the value. A near-zero AI estimate must not become a
+        // meaningfully caloric value via the DB.
+        const lowCalOff = aiKcal <= 5 && dbKcal > aiKcal + 25;
+        const tooFarOff = ratioOff || lowCalOff;
         if (tooFarOff) {
           return { ...it, source: "estimated" };
         }
@@ -2327,7 +2351,17 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
     setAiDoneItems(null);
     setAiAsOne(true); setAiOneName("");
     reconcileWithDb(items)
-      .then((enriched) => setAiDoneItems(enriched))
+      .then((enriched) => {
+        setAiDoneItems(enriched);
+        // Keep the chat bubble and the saved card in sync: if reconciliation changed
+        // the calorie total from the AI's own estimate, tell her the final number that
+        // was actually logged, so the two never contradict each other on screen.
+        const aiTot = (items || []).reduce((s, it) => s + (Number(it.kcal) || 0), 0);
+        const dbTot = (enriched || []).reduce((s, it) => s + (Number(it.kcal) || 0), 0);
+        if (Math.abs(dbTot - aiTot) >= 3) {
+          setAiMsgs((m) => [...m, { role: "assistant", text: `עדכנתי את הקלוריות לפי המאגר: סה״כ ${dbTot} קק״ל 💜` }]);
+        }
+      })
       .catch(() => setAiDoneItems(items.map((it) => ({ ...it, source: "estimated" }))))
       .finally(() => setReconciling(false));
   };
