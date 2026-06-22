@@ -433,7 +433,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.27";
+const VERSION = "3.28";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2081,7 +2081,7 @@ function normName(s) { return String(s || "").replace(/["'.,()\[\]/-]/g, " ").re
 // adds one of these and the query never used it, it is a different food with a very
 // different calorie density (e.g. "אבטיח" -> "גרעיני אבטיח" at ~560 kcal/100g), so we
 // must NOT treat it as a match.
-const CONCENTRATORS = ["גרעינ", "זרעי", "זרעים", "שמן", "אבק", "מיובש", "יבש", "קלוי", "מסוכר", "ממותק", "סוכר", "ריבת", "ריבה", "מרוכז", "תרכיז", "סירופ", "חטיף", "ממרח", "חמאת", "קמח", "פתית"];
+const CONCENTRATORS = ["גרעינ", "זרעי", "זרעים", "שמן", "אבק", "מיובש", "יבש", "קלוי", "ריבת", "ריבה", "מרוכז", "תרכיז", "סירופ", "חטיף", "ממרח", "חמאת", "קמח", "פתית"];
 function addsConcentrator(aWords, bWords) {
   for (const w of bWords) {
     if (aWords.has(w)) continue;
@@ -2350,8 +2350,14 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
     setReconciling(true);
     setAiDoneItems(null);
     setAiAsOne(true); setAiOneName("");
-    reconcileWithDb(items)
+    const fallback = (items || []).map((it) => ({ ...it, source: "estimated" }));
+    // Never let a slow or unresponsive food DB hang the spinner: if reconciliation does
+    // not finish within the time limit, fall back to the AI estimate and show the card.
+    const TIMED_OUT = Symbol("recon-timeout");
+    const timeout = new Promise((resolve) => setTimeout(() => resolve(TIMED_OUT), 7000));
+    Promise.race([reconcileWithDb(items), timeout])
       .then((enriched) => {
+        if (enriched === TIMED_OUT) { setAiDoneItems(fallback); return; }
         setAiDoneItems(enriched);
         // Keep the chat bubble and the saved card in sync: if reconciliation changed
         // the calorie total from the AI's own estimate, tell her the final number that
@@ -2362,7 +2368,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
           setAiMsgs((m) => [...m, { role: "assistant", text: `עדכנתי את הקלוריות לפי המאגר: סה״כ ${dbTot} קק״ל 💜` }]);
         }
       })
-      .catch(() => setAiDoneItems(items.map((it) => ({ ...it, source: "estimated" }))))
+      .catch(() => setAiDoneItems(fallback))
       .finally(() => setReconciling(false));
   };
   const recRef = useRef(null);
