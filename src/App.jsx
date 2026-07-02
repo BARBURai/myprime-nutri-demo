@@ -434,7 +434,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.31";
+const VERSION = "3.32";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2291,7 +2291,7 @@ function NotesFab({ notes, setNotes, screen, userName }) {
 /* ============================================================
    ADD / EDIT MODAL
    ============================================================ */
-function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent, startDate }) {
+function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onTourEvent, startDate }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
   const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || "בוקר");
   const [food, setFood] = useState(state.editEntry ? (FOODS.find((f) => f.name === state.editEntry.name) || foodFromEntry(state.editEntry)) : null);
@@ -2303,6 +2303,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
   const [searching, setSearching] = useState(false);
   const [qUnit, setQUnit] = useState(null); // feature: quantity unit x count (null = base grams)
   const [addedKeys, setAddedKeys] = useState([]); // feature: multi-add from favorites
+  const [histTab, setHistTab] = useState("fav"); // "fav" | "recent" (favorites is the default)
+  const [delTarget, setDelTarget] = useState(null); // { item, list } pending delete confirmation
   const [aiAsOne, setAiAsOne] = useState(true); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product (default = one product, recommended)
   const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
   const [mKcal, setMKcal] = useState(""); const [mProt, setMProt] = useState(""); const [mFat, setMFat] = useState(""); const [mCarb, setMCarb] = useState("");
@@ -2668,26 +2670,48 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
             </div>
           </>
         )}
-        {step === "history" && (
+        {step === "history" && (() => {
+          const list = histTab === "fav" ? (favorites || []) : (recents || []);
+          const quickMeal = (() => { const h = new Date().getHours(); return h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; })();
+          const tabBtn = (id, label) => (
+            <button onClick={() => setHistTab(id)} style={{ flex: 1, border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 6px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, background: histTab === id ? C.panel : "transparent", color: histTab === id ? C.brandD : C.sub, boxShadow: histTab === id ? "0 1px 4px rgba(168,66,92,0.14)" : "none" }}>{label}</button>
+          );
+          return (
           <>
-            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-              {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+            <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
+              {tabBtn("fav", "המועדפים שלי")}
+              {tabBtn("recent", "אחרונים")}
             </div>
-            <div style={{ fontSize: 13, color: C.sub, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 10 }}>הקישי <b>+</b> להוספה מהירה בכמות הרגילה, או על <b>שם הפריט</b> כדי לבחור כמות אחרת (למשל 2 כוסות). בסיום הקישי "סיום".</div>
+            <div style={{ fontSize: 13, color: C.sub, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 10 }}>הקישי <b>+</b> להוספה מהירה, או על <b>שם הפריט</b> כדי לבחור כמות אחרת. הפריט ייכנס לארוחה לפי שעת היום, ותמיד אפשר לשנות ביומן.</div>
             {addedKeys.length > 0 && <div style={{ marginBottom: 12 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
-            {(favorites && favorites.length ? favorites : RECENT.map((r) => ({ ...FOOD_BY_ID[r.foodId], lastG: r.g }))).map((f) => {
+            {list.length === 0 && (
+              <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>{histTab === "fav" ? "עדיין אין לך מועדפים. אחרי שתוסיפי מוצר, נשאל אם לשמור אותו כאן 💜" : "עדיין אין מוצרים אחרונים."}</div>
+            )}
+            {list.map((f) => {
               const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
               const added = addedKeys.includes(f.id);
               return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לכמות אחרת - הקישי על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
-                  <button onClick={() => { commit({ meal, name: f.name, g, unit: f.unit || "g", source: "verified", ...(f.combo ? { servingG: (f.measures.find((m) => m.label === "מנה") || {}).g } : {}), ...n }, true); setAddedKeys((k) => [...k, f.id]); }} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
+                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לכמות אחרת - הקישי על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
+                  <button onClick={() => setDelTarget({ item: f, list: histTab })} aria-label="הסרה מהרשימה" style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: "transparent", color: C.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trash2 size={16} /></button>
+                  <button onClick={() => { commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...(f.combo ? { servingG: (f.measures.find((m) => m.label === "מנה") || {}).g } : {}), ...n }, true); setAddedKeys((k) => [...k, f.id]); }} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
                 </div>
               );
             })}
             {addedKeys.length > 0 && <div style={{ marginTop: 14 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
+            {delTarget && (
+              <div onClick={() => setDelTarget(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 30 }}>
+                <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 8 }}>להסיר את {delTarget.item.name}?</div>
+                  <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>הפריט יוסר מ{delTarget.list === "fav" ? "מועדפים" : "אחרונים"}. זה מסיר רק מהרשימה - מה שכבר תיעדת ביומן לא מושפע.</div>
+                  <Btn onClick={() => { if (delTarget.list === "fav") onDeleteFavorite(delTarget.item.id); else onDeleteRecent(delTarget.item.id); setDelTarget(null); }} style={{ background: "#D7263D" }}>הסירי</Btn>
+                  <Btn variant="ghost" onClick={() => setDelTarget(null)} style={{ marginTop: 8 }}>ביטול</Btn>
+                </div>
+              </div>
+            )}
           </>
-        )}
+          );
+        })()}
         {step === "barcode" && (
           <div>
             {scanState === "idle" && (
@@ -4441,6 +4465,18 @@ function ReminderRow({ email }) {
   );
 }
 
+// Build a reusable favorite/recent entry from a committed journal item.
+function foodEntryFromPayload(p) {
+  const name = (p.name || "").trim();
+  const g = p.g;
+  if (!name || !g) return null;
+  const per100 = { kcal: Math.round((p.kcal || 0) / g * 100), p: Math.round((p.p || 0) / g * 100), f: Math.round((p.f || 0) / g * 100), c: Math.round((p.c || 0) / g * 100) };
+  const isServing = p.servingG && p.servingG > 0;
+  return isServing
+    ? { id: "fav_" + name, name, per100, measures: [{ label: "מנה", g: Math.round(p.servingG) }, { label: "100 ג׳", g: 100 }], def: 0, unit: p.unit || "g", lastG: g, combo: true }
+    : { id: "fav_" + name, name, per100, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0, unit: p.unit || "g", lastG: g };
+}
+
 export default function App() {
   const DEFAULT_PROFILE = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sundayOf(TODAY), calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: [], keepShabbat: false, fasting: false, cupMl: DEFAULT_CUP_ML, diet: [], allergies: [], dislikes: "", name: "" };
   const saved = useMemo(() => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }, []);
@@ -4458,6 +4494,8 @@ export default function App() {
   const [goalAckWeek, setGoalAckWeek] = useState(saved?.goalAckWeek || 0);
   const [goalBump, setGoalBump] = useState(null);
   const [favorites, setFavorites] = useState(saved?.favorites || []);
+  const [recents, setRecents] = useState(saved?.recents || []);
+  const [favPrompt, setFavPrompt] = useState(null); // {entry} offered to save to favorites
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [today, setToday] = useState(TODAY);
   useEffect(() => {
@@ -4628,8 +4666,8 @@ export default function App() {
   const recMealsHad = recDayLog.map((e) => e.name).join(", ");
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, checkins, goalAckWeek })); } catch (e) {}
-  }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, checkins, goalAckWeek]);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, recents, checkins, goalAckWeek })); } catch (e) {}
+  }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, recents, checkins, goalAckWeek]);
 
   // New device: if there is no local data yet but a cloud backup exists for this email, offer restore.
   useEffect(() => {
@@ -4735,29 +4773,28 @@ export default function App() {
   const openAdd = (kind, preMeal) => { setSheet(null); setModal({ kind, preMeal: preMeal || null, editEntry: null }); };
   const editEntry = (e) => setModal(e.unit === "serving" ? { kind: "recipe", recipe: null, editEntry: e } : { kind: "food", preMeal: null, editEntry: e });
   const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
+  const deleteFavorite = (id) => setFavorites((fs) => fs.filter((x) => x.id !== id));
+  const deleteRecent = (id) => setRecents((rs) => rs.filter((x) => x.id !== id));
+  const saveFavorite = () => { if (favPrompt) setFavorites((fs) => [favPrompt, ...fs.filter((x) => x.name !== favPrompt.name)]); setFavPrompt(null); };
   const commit = (payload, keepOpen) => {
     const date = modal?.editEntry ? modal.editEntry.date : selectedDate;
     if (modal?.editEntry) setLog((l) => l.map((e) => e.id === modal.editEntry.id ? { ...e, ...payload, date } : e));
     else {
       const items = Array.isArray(payload) ? payload : [payload];
       setLog((l) => [...l, ...items.map((p, i) => ({ id: "n" + Date.now() + i, date, ...p }))]);
-      setFavorites((fs) => {
-        let next = fs.slice();
-        items.forEach((p) => {
-          const name = (p.name || "").trim();
-          const g = p.g;
-          if (!name || !g) return;
-          const per100 = { kcal: Math.round((p.kcal || 0) / g * 100), p: Math.round((p.p || 0) / g * 100), f: Math.round((p.f || 0) / g * 100), c: Math.round((p.c || 0) / g * 100) };
-          const isServing = p.servingG && p.servingG > 0;
-          const fav = isServing
-            ? { id: "fav_" + name, name, per100, measures: [{ label: "מנה", g: Math.round(p.servingG) }, { label: "100 ג׳", g: 100 }], def: 0, unit: p.unit || "g", lastG: g, combo: true }
-            : { id: "fav_" + name, name, per100, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0, unit: p.unit || "g", lastG: g };
-          next = next.filter((x) => x.name !== name);
-          next.unshift(fav);
-        });
-        return next.slice(0, 20);
+      // Recently used list (auto, capped). Favorites are chosen by the user, not auto-filled.
+      setRecents((rs) => {
+        let next = rs.slice();
+        items.forEach((p) => { const e = foodEntryFromPayload(p); if (!e) return; next = next.filter((x) => x.name !== e.name); next.unshift(e); });
+        return next.slice(0, 40);
       });
       items.forEach((p) => catalogAdd(p)); // grow the shared catalog (manual entries are skipped inside)
+      // After a regular add (not a quick-add from the list), offer to save a single new
+      // item to favorites - only if it is not already a favorite.
+      if (!keepOpen) {
+        const cands = items.map(foodEntryFromPayload).filter(Boolean).filter((e) => !favorites.some((f) => f.name === e.name));
+        if (cands.length === 1) setFavPrompt(cands[0]);
+      }
     }
     if (!keepOpen) setModal(null);
   };
@@ -4963,12 +5000,23 @@ export default function App() {
             {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} C={C} font={fontStack} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
-              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
+              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} recents={recents} onDeleteFavorite={deleteFavorite} onDeleteRecent={deleteRecent} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
             {tour && tour.steps[tour.i] && tour.steps[tour.i].view === tourView && <TutorialOverlay steps={tour.steps} idx={tour.i} onNext={tourAdvance} onChoice={tourChoice} onEnd={tourEnd} onBack={tourBack} />}
           </>
         )}
         {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {gate === "ok" && showIntro && <IntroOverlay name={profile.name || gateName} onClose={() => setShowIntro(false)} />}
+        {favPrompt && (
+          <div onClick={() => setFavPrompt(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+              <div style={{ fontSize: 30, marginBottom: 4 }}>💜</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 6 }}>לשמור למועדפים?</div>
+              <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>{favPrompt.name}<br />כדי שתוכלי להוסיף אותו שוב בהקשה אחת.</div>
+              <Btn onClick={saveFavorite}>כן, שמרי</Btn>
+              <Btn variant="ghost" onClick={() => setFavPrompt(null)} style={{ marginTop: 8 }}>לא תודה</Btn>
+            </div>
+          </div>
+        )}
         {gate === "ok" && notifyPrompt && (
           <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 55 }}>
             <div style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 340, textAlign: "center", fontFamily: fontStack }}>
