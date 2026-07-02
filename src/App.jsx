@@ -434,7 +434,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.32";
+const VERSION = "3.34";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1193,7 +1193,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
             <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
               <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
-              <div style={{ fontSize: 14, color: C.faint }}>{e.meal} · {e.unit === "serving" ? `${e.servings} ${e.servings === 1 ? "מנה" : "מנות"}` : `${e.g} ${e.unit === "ml" ? "מ\"ל" : "ג׳"}`} · {e.kcal} קק״ל</div>
+              <div style={{ fontSize: 14, color: C.faint }}>{e.meal} · {e.unit === "serving" ? `${e.servings} ${e.servings === 1 ? (e.pieceUnit || "מנה") : (e.pieceUnit === "חתיכה" ? "חתיכות" : "מנות")}` : `${e.g} ${e.unit === "ml" ? "מ\"ל" : "ג׳"}`} · {e.kcal} קק״ל</div>
               {((e.p || 0) + (e.f || 0) + (e.c || 0) > 0) && (
                 <div style={{ fontSize: 12.5, color: C.faint, marginTop: 2 }}>חלבון {Math.round(e.p || 0)} · שומן {Math.round(e.f || 0)} · פחמ׳ {Math.round(e.c || 0)} ג׳</div>
               )}
@@ -1872,7 +1872,7 @@ function photoHeadsup35Seen() { try { return localStorage.getItem("myprime_photo
 function markPhotoHeadsup35() { try { localStorage.setItem("myprime_photo_hs35", "1"); } catch (e) {} }
 
 async function aiNutritionChat(messages) {
-  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) אם חסר מידע על כמה דברים - שאלי על כולם בהודעה אחת (אפשר כרשימה קצרה), לא שאלה אחרי שאלה. שאלי רק על מה שבאמת חסר וחשוב, אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות מיותרות. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. הערכות סבירות בלבד.";
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) אם חסר מידע על כמה דברים - שאלי על כולם בהודעה אחת (אפשר כרשימה קצרה), לא שאלה אחרי שאלה. שאלי רק על מה שבאמת חסר וחשוב, אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות מיותרות. אם המשתמשת הכינה מאכל שמתחלק ליחידות (פשטידה, תבנית עוגה, סיר תבשיל, מגש וכו') - זהי זאת, והתייחסי אליו כמוצר אחד שמתחלק לחתיכות (אל תפרקי אותו לרכיבים). אם היא לא ציינה כמה חתיכות/מנות יצאו מכל המאכל וכמה חתיכות היא אכלה - שאלי את שתי השאלות בהודעה אחת. בפריט כזה החזירי את הערכים של המאכל ה**שלם** (grams ו-kcal והמאקרו של כל התבנית), והוסיפי שני שדות: pieces (מספר החתיכות הכולל) ו-ate (כמה חתיכות היא אכלה). בפריט רגיל שאינו מתחלק לחתיכות - אל תוסיפי את השדות pieces ו-ate. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. עבור מאכל שמתחלק לחתיכות הוסיפי לפריט גם \"pieces\":מספר_חתיכות_כולל ו-\"ate\":כמה_אכלה (עם ערכי המאכל השלם). הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1200, system, messages }),
@@ -1902,7 +1902,20 @@ async function aiNutritionChat(messages) {
     photoCount,
     reply: (parsed.reply || "") + (softLimit ? "\n\nזו הייתה המנה האחרונה במכסת ה-AI להיום 💜 מכאן אפשר להמשיך לתעד דרך חיפוש או ברקוד, ומחר המכסה מתאפסת." : ""),
     done: !!parsed.done,
-    items: (parsed.items || []).map((it) => ({ name: it.name, en: it.en || "", grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) })),
+    items: (parsed.items || []).map((it) => {
+      const base = { name: it.name, en: it.en || "", grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) };
+      const pieces = Math.round(Number(it.pieces) || 0);
+      const ate = Number(it.ate) || 0;
+      // Divided homemade dish (e.g. a quiche cut into 8): the AI returns whole-dish
+      // values + pieces + ate. Convert to what she actually ate, and carry the piece
+      // size so it saves as a "חתיכה" serving.
+      if (pieces > 1 && ate > 0) {
+        const pieceG = Math.max(1, Math.round(base.grams / pieces));
+        const frac = ate / pieces;
+        return { ...base, unit: "serving", grams: Math.round(base.grams * frac), kcal: Math.round(base.kcal * frac), p: Math.round(base.p * frac), f: Math.round(base.f * frac), c: Math.round(base.c * frac), pieceG, servings: ate, pieceUnit: "חתיכה", _pieces: true };
+      }
+      return base;
+    }),
   };
 }
 
@@ -2174,6 +2187,7 @@ async function lookupProduct(name, en) {
 async function reconcileWithDb(items) {
   return Promise.all((items || []).map(async (it) => {
     try {
+      if (it._pieces) return { ...it, source: "estimated" }; // homemade divided dish: keep AI estimate
       const m = await lookupProduct(it.name, it.en);
       if (m) {
         const scale = (it.grams || 100) / 100;
@@ -2293,7 +2307,7 @@ function NotesFab({ notes, setNotes, screen, userName }) {
    ============================================================ */
 function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onTourEvent, startDate }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
-  const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || "בוקר");
+  const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || (() => { const h = new Date().getHours(); return h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; })());
   const [food, setFood] = useState(state.editEntry ? (FOODS.find((f) => f.name === state.editEntry.name) || foodFromEntry(state.editEntry)) : null);
   const [grams, setGrams] = useState(state.editEntry?.g || 100);
   const [query, setQuery] = useState("");
@@ -2472,7 +2486,14 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
     try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
   };
   const [qtyOrigin, setQtyOrigin] = useState("list");
-  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה") || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit)) || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const servingFields = (f, g) => {
+    if (!f.combo) return {};
+    const sm = f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit));
+    if (!sm) return {};
+    if (f.pieceUnit) return { servingG: sm.g, unit: "serving", servings: Math.max(1, Math.round(g / (sm.g || 1))), pieceUnit: f.pieceUnit };
+    return { servingG: sm.g };
+  };
   const videoRef = useRef(null);
   const scanControlsRef = useRef(null);
   const [scanState, setScanState] = useState("idle");
@@ -2694,7 +2715,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                 <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
                   <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לכמות אחרת - הקישי על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
                   <button onClick={() => setDelTarget({ item: f, list: histTab })} aria-label="הסרה מהרשימה" style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: "transparent", color: C.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trash2 size={16} /></button>
-                  <button onClick={() => { commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...(f.combo ? { servingG: (f.measures.find((m) => m.label === "מנה") || {}).g } : {}), ...n }, true); setAddedKeys((k) => [...k, f.id]); }} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
+                  <button onClick={() => { commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...servingFields(f, g), ...n }, true); setAddedKeys((k) => [...k, f.id]); }} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
                 </div>
               );
             })}
@@ -2830,7 +2851,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                     const oneName = aiOneName.trim() || defName;
                     const doCommit = () => {
                       if (multi && aiAsOne) commit([{ meal, name: oneName, g: sums.g || 1, unit: "g", source: "estimated", kcal: sums.kcal, p: sums.p, f: sums.f, c: sums.c, servingG: sums.g || 1 }]);
-                      else commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c })));
+                      else commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c, ...(it._pieces ? { servingG: it.pieceG, servings: it.servings, pieceUnit: it.pieceUnit } : {}) })));
                     };
                     return (
                       <>
@@ -2908,7 +2929,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
             </div>
-            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...(food.combo ? { servingG: (food.measures.find((m) => m.label === "מנה") || {}).g } : {}), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
+            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
           </>
         )}
@@ -4473,7 +4494,7 @@ function foodEntryFromPayload(p) {
   const per100 = { kcal: Math.round((p.kcal || 0) / g * 100), p: Math.round((p.p || 0) / g * 100), f: Math.round((p.f || 0) / g * 100), c: Math.round((p.c || 0) / g * 100) };
   const isServing = p.servingG && p.servingG > 0;
   return isServing
-    ? { id: "fav_" + name, name, per100, measures: [{ label: "מנה", g: Math.round(p.servingG) }, { label: "100 ג׳", g: 100 }], def: 0, unit: p.unit || "g", lastG: g, combo: true }
+    ? { id: "fav_" + name, name, per100, measures: [{ label: p.pieceUnit || "מנה", g: Math.round(p.servingG) }, { label: "100 ג׳", g: 100 }], def: 0, unit: p.unit || "g", lastG: Math.round(p.servingG), combo: true, pieceUnit: p.pieceUnit || null }
     : { id: "fav_" + name, name, per100, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0, unit: p.unit || "g", lastG: g };
 }
 
