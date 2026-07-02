@@ -434,7 +434,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.30";
+const VERSION = "3.31";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1194,6 +1194,9 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
             <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
               <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
               <div style={{ fontSize: 14, color: C.faint }}>{e.meal} · {e.unit === "serving" ? `${e.servings} ${e.servings === 1 ? "מנה" : "מנות"}` : `${e.g} ${e.unit === "ml" ? "מ\"ל" : "ג׳"}`} · {e.kcal} קק״ל</div>
+              {((e.p || 0) + (e.f || 0) + (e.c || 0) > 0) && (
+                <div style={{ fontSize: 12.5, color: C.faint, marginTop: 2 }}>חלבון {Math.round(e.p || 0)} · שומן {Math.round(e.f || 0)} · פחמ׳ {Math.round(e.c || 0)} ג׳</div>
+              )}
             </div>
             <button onClick={() => editEntry(e)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Pencil size={15} /></button>
             <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
