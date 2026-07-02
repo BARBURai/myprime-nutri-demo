@@ -34,7 +34,8 @@ function catalogAdd(item) {
     if (!item || !item.name || g <= 0 || item.source === "manual" || item.combo || String(item.name).includes(" + ")) return;
     const per100 = { kcal: Math.round((Number(item.kcal) || 0) / g * 100), p: Math.round((Number(item.p) || 0) / g * 100), f: Math.round((Number(item.f) || 0) / g * 100), c: Math.round((Number(item.c) || 0) / g * 100) };
     if (!(per100.kcal > 0)) return; // never poison the shared catalog with 0-kcal rows
-    fetch(CATALOG_ENDPOINT, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name: String(item.name).trim(), per100, unit: item.unit || "g", source: item.source || "estimated" }) }).catch(() => {});
+    if (!nutritionPlausible(per100)) return; // never store nutritionally inconsistent data in the shared catalog
+    fetch(CATALOG_ENDPOINT, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name: String(item.name).trim(), per100, unit: item.unit || "g", source: item.catSource || item.source || "estimated" }) }).catch(() => {});
   } catch (e) { /* ignore */ }
 }
 async function catalogSearch(term) {
@@ -433,7 +434,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.28";
+const VERSION = "3.30";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2077,10 +2078,9 @@ async function translateFoodToEnglish(q) {
    STRONG match; otherwise the AI estimate is kept. */
 function normName(s) { return String(s || "").replace(/["'.,()\[\]/-]/g, " ").replace(/\s+/g, " ").trim().toLowerCase(); }
 // Word stems that turn a food into a much denser one (seeds, oil, powder, dried,
-// roasted, sweetened, jam, snack, spread, butter, flour, syrup...). If the DB name
-// adds one of these and the query never used it, it is a different food with a very
-// different calorie density (e.g. "אבטיח" -> "גרעיני אבטיח" at ~560 kcal/100g), so we
-// must NOT treat it as a match.
+// roasted, jam, snack, spread, butter, flour...). If the DB name adds one of these
+// and the query never used it, it is a different food with a very different calorie
+// density (e.g. "אבטיח" -> "גרעיני אבטיח"), so we must NOT treat it as a match.
 const CONCENTRATORS = ["גרעינ", "זרעי", "זרעים", "שמן", "אבק", "מיובש", "יבש", "קלוי", "ריבת", "ריבה", "מרוכז", "תרכיז", "סירופ", "חטיף", "ממרח", "חמאת", "קמח", "פתית"];
 function addsConcentrator(aWords, bWords) {
   for (const w of bWords) {
@@ -2088,6 +2088,29 @@ function addsConcentrator(aWords, bWords) {
     for (const c of CONCENTRATORS) if (w.includes(c)) return true;
   }
   return false;
+}
+// Atwater sanity check for a per-100(g/ml) nutrition record from an external DB.
+// Real labels deviate a little (rounding, fiber, sugar alcohols), so we only reject a
+// record when it is clearly internally inconsistent: a single macro that alone holds
+// more calories than the whole product, or macros implying substantially MORE calories
+// than stated (the signature of an inflated/corrupt row, e.g. protein entered per-cup
+// into the per-100g field). Under-counting is normal and never blocked.
+function nutritionPlausible(per100) {
+  const kcal = Number(per100 && per100.kcal) || 0;
+  const p = Number(per100 && per100.p) || 0;
+  const f = Number(per100 && per100.f) || 0;
+  const c = Number(per100 && per100.c) || 0;
+  if (kcal <= 0) return true; // no calories to compare against
+  // A single macro cannot legitimately hold much more energy than the whole product
+  // (the 1.2 tolerance absorbs Atwater rounding, e.g. pure oil where 9 kcal/g slightly
+  // overshoots the real 8.84).
+  if (p * 4 > kcal * 1.2 + 5) return false;
+  if (f * 9 > kcal * 1.2 + 5) return false;
+  if (c * 4 > kcal * 1.2 + 5) return false;
+  // Macros implying substantially MORE calories than stated = inflated/corrupt row.
+  const est = p * 4 + c * 4 + f * 9;
+  if (est > kcal * 1.30 + 5) return false;
+  return true;
 }
 function strongMatch(aiName, dbName) {
   const a = normName(aiName), b = normName(dbName);
@@ -2135,13 +2158,13 @@ async function lookupProduct(name, en) {
   const lf = localFoodMatch(name);
   if (lf && lf.per100 && lf.per100.kcal != null) result = { name: lf.name, per100: lf.per100, source: "verified" };
   // 2. Our shared catalog - fast, grows with use (anything resolved before).
-  if (!result) { try { const cat = await catalogSearch(name); const hit = (cat || []).find((c) => c.per100 && c.per100.kcal && strongMatch(name, c.name)); if (hit) result = { name: hit.name, per100: hit.per100, source: hit.source === "verified" ? "db" : "estimated" }; } catch (e) {} }
+  if (!result) { try { const cat = await catalogSearch(name); const hit = (cat || []).find((c) => c.per100 && c.per100.kcal && nutritionPlausible(c.per100) && strongMatch(name, c.name)); if (hit) result = { name: hit.name, per100: hit.per100, source: hit.source === "verified" ? "db" : "estimated" }; } catch (e) {} }
   // 3. Israeli national DB (Hebrew name).
-  if (!result) { try { const il = await searchIsraeliDB(name); for (const r of il) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) { result = { ...r, source: "db" }; break; } } catch (e) {} }
+  if (!result) { try { const il = await searchIsraeliDB(name); for (const r of il) if (r.per100 && r.per100.kcal && nutritionPlausible(r.per100) && strongMatch(name, r.name)) { result = { ...r, source: "db" }; break; } } catch (e) {} }
   // 4. USDA FoodData Central (English query).
-  if (!result && en) { try { const us = await searchUSDA(en); for (const r of us) if (r.per100 && r.per100.kcal && strongMatch(en, r.name)) { result = { ...r, source: "usda" }; break; } } catch (e) {} }
+  if (!result && en) { try { const us = await searchUSDA(en); for (const r of us) if (r.per100 && r.per100.kcal && nutritionPlausible(r.per100) && strongMatch(en, r.name)) { result = { ...r, source: "usda" }; break; } } catch (e) {} }
   // 5. Open Food Facts (Hebrew/brand).
-  if (!result) { try { const off = await searchOpenFoodFacts(name); for (const r of off) if (r.per100 && r.per100.kcal && strongMatch(name, r.name)) { result = { ...r, source: "db" }; break; } } catch (e) {} }
+  if (!result) { try { const off = await searchOpenFoodFacts(name); for (const r of off) if (r.per100 && r.per100.kcal && nutritionPlausible(r.per100) && strongMatch(name, r.name)) { result = { ...r, source: "db" }; break; } } catch (e) {} }
   RECON_CACHE.set(ck, result);
   return result;
 }
@@ -2444,7 +2467,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
     try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
   };
   const [qtyOrigin, setQtyOrigin] = useState("list");
-  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setQUnit(f.combo ? (f.measures.find((m) => m.label === "מנה") || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה") || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
   const videoRef = useRef(null);
   const scanControlsRef = useRef(null);
   const [scanState, setScanState] = useState("idle");
@@ -2453,13 +2476,26 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
   const lookupBarcode = async (code) => {
     setScanState("looking");
     try {
-      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_he,generic_name,generic_name_he,brands,nutriments`);
+      const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_he,generic_name,generic_name_he,brands,nutriments,serving_size,serving_quantity`);
       const d = await r.json();
       if (d.status !== 1 || !d.product) { setScanState("notfound"); return; }
       const p = d.product, n = p.nutriments || {};
       const name = (p.product_name_he || p.generic_name_he || p.product_name || p.generic_name || p.brands || "מוצר").trim();
-      const food = { id: "bc_" + code, name, per100: { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) }, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }], def: 0 };
-      pickFood(food, 100);
+      const per100 = { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) };
+      // Reject clearly-broken external data (e.g. protein entered per-package into the
+      // per-100g field) instead of logging a wrong number. She is sent to the label
+      // photo / manual entry instead.
+      if (!nutritionPlausible(per100)) { setScanState("baddata"); return; }
+      // Package serving size (e.g. a 200g cup) - the amount most women actually eat.
+      // Offer it as "מנה" and default to it; fall back to 100 g when OFF has no serving.
+      let servG = Number(p.serving_quantity) || 0;
+      if (!servG && p.serving_size) { const mm = String(p.serving_size).match(/([\d.]+)/); if (mm) servG = parseFloat(mm[1]); }
+      servG = Math.round(servG || 0);
+      const measures = servG > 0
+        ? [{ label: "מנה", g: servG }, { label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }]
+        : [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }];
+      const food = { id: "bc_" + code, name, per100, measures, def: 0, servingDefault: servG > 0 };
+      pickFood(food, servG > 0 ? servG : 100);
     } catch (e) { setScanState("error"); }
   };
   const startScan = () => setScanState("scanning");
@@ -2695,6 +2731,17 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
                 <Btn variant="ghost" onClick={() => setScanState("idle")}>נסי שוב לסרוק</Btn>
               </div>
             )}
+            {scanState === "baddata" && (
+              <div style={{ textAlign: "center", padding: "16px 0" }}>
+                <div style={{ fontSize: 16, color: C.ink, marginBottom: 14, lineHeight: 1.6 }}>הערכים של המוצר הזה מהמאגר לא נראים תקינים, אז לא הוספתי אותם כדי לא לתעד מספר שגוי. אפשר לצלם את <b>התווית התזונתית</b> ואזהה את הערכים, או להזין ידנית 💜</div>
+                <label style={{ display: "block", marginBottom: 10 }}>
+                  <input type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} />
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 17, fontWeight: 500, cursor: "pointer" }}><Camera size={18} /> צלמי את התווית התזונתית</span>
+                </label>
+                <Btn variant="ghost" onClick={() => setStep("manual")} style={{ marginBottom: 8 }}>להזין את הערכים ידנית</Btn>
+                <Btn variant="ghost" onClick={() => setScanState("idle")}>נסי שוב לסרוק</Btn>
+              </div>
+            )}
             {scanState === "error" && (
               <div style={{ textAlign: "center", padding: "20px 0" }}>
                 <div style={{ fontSize: 16, color: C.amber, marginBottom: 12, lineHeight: 1.6 }}>לא ניתן לפתוח את המצלמה. ודאי שאישרת גישה למצלמה בדפדפן, או הקלידי את הברקוד ידנית.</div>
@@ -2834,7 +2881,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, onTourEvent
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
             </div>
-            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(food.combo ? { servingG: (food.measures.find((m) => m.label === "מנה") || {}).g } : {}), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
+            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...(food.combo ? { servingG: (food.measures.find((m) => m.label === "מנה") || {}).g } : {}), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
           </>
         )}
