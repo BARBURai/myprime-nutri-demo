@@ -58,14 +58,8 @@ export const CONTENT_DAYS = [
           "ענת"
         ],
         "videoId": "2978141e-ed8b-47d6-aec1-7739aa0e62b9",
-        "pdf": null
-      },
-      {
-        "title": "דפי משימה - צבירת צעדים",
-        "type": "pdf",
-        "text": null,
-        "videoId": null,
-        "pdf": "W01D02-task-2.pdf"
+        "pageImages": ["W01D02-task-1.jpg", "W01D02-task-2.jpg", "W01D02-task-3.jpg"],
+        "pdf": "W01D02-task.pdf"
       }
     ]
   },
@@ -84,6 +78,7 @@ export const CONTENT_DAYS = [
           "ענת"
         ],
         "videoId": "b2960889-4541-4cd5-aaf3-e72ed0b87aac",
+        "pageImages": ["W01D03-task-1.jpg", "W01D03-task-2.jpg", "W01D03-task-3.jpg"],
         "pdf": "W01D03-task.pdf"
       },
       {
@@ -339,6 +334,7 @@ export const CONTENT_DAYS = [
           "ענת"
         ],
         "videoId": "c6526279-7692-471d-bfe2-731ddf43a0a3",
+        "pageImages": ["W02D04-task-1.jpg", "W02D04-task-2.jpg", "W02D04-task-3.jpg"],
         "pdf": "W02D04-task.pdf"
       }
     ]
