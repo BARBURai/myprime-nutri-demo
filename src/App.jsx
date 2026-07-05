@@ -434,7 +434,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.44";
+const VERSION = "3.45";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1100,7 +1100,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
     <div style={{ padding: "8px 0 24px" }}>
       {tipIdx >= 0 && tipIdx < tipQueue.length && <TutorialOverlay steps={tipQueue} idx={tipIdx} onNext={tipAdvance} onChoice={tipChoose} />}
       <div style={{ position: "relative" }}>
-      <div data-tut="daystrip" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px", opacity: introLock ? 0.4 : 1, pointerEvents: introLock ? "none" : "auto" }}>
+      <div data-tut="daystrip" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
           const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = parseDay(d); const isRest = profile.keepShabbat && dd.getUTCDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
           return (
@@ -1117,7 +1117,6 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           );
         })}
       </div>
-      {introLock && <div style={{ position: "absolute", top: 10, left: 16, background: C.faint, color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 11px", borderRadius: 999, fontFamily: fontStack }}>בקרוב</div>}
       </div>
       {week === 1 && progDay >= 3 && (
       <div style={{ display: "flex", justifyContent: "center", padding: "6px 16px 0" }}>
@@ -4534,6 +4533,7 @@ export default function App() {
   }, [today]);
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
+  const [lockMsg, setLockMsg] = useState(null);
   const [tour, setTour] = useState(null);
   const [showIntro, setShowIntro] = useState(saved ? false : true);
   const [notes, setNotes] = useState([]);
@@ -4987,20 +4987,38 @@ export default function App() {
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
             </div>
             <div style={{ position: "relative", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)", opacity: introLock ? 0.4 : 1, pointerEvents: introLock ? "none" : "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)" }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
+                const locked = introLock && (t.id === "report" || t.id === "recipes");
+                if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
                 return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
-              <button data-tut="nav-fab" onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
+              {introLock
+                ? <button data-tut="nav-fab" onClick={() => setLockMsg("plus")} aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: C.faint, opacity: 0.55, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
+                : <button data-tut="nav-fab" onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>}
               {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
+                const locked = introLock && (t.id === "report" || t.id === "recipes");
+                if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
                 return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
             </div>
-            {introLock && <div style={{ position: "absolute", top: 2, right: 14, background: C.faint, color: "#fff", fontSize: 11.5, fontWeight: 700, padding: "3px 12px", borderRadius: 999, zIndex: 20, fontFamily: fontStack }}>בקרוב</div>}
             </div>
 
+            {lockMsg && (
+              <div onClick={() => setLockMsg(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 60 }}>
+                <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>🌱</div>
+                  <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginBottom: 18 }}>
+                    {lockMsg === "report" && "הדוח ייפתח ביום ג'. בימים הראשונים אנחנו מתמקדות בסרטוני הפתיחה וההיכרות עם התוכנית."}
+                    {lockMsg === "recipes" && "המתכונים ייפתחו ביום ג'. בימים הראשונים אנחנו מתמקדות בסרטוני הפתיחה וההיכרות עם התוכנית."}
+                    {lockMsg === "plus" && "רישום ביומן ייפתח ביום ג'. בימים הראשונים אנחנו מתמקדות בסרטוני הפתיחה וההיכרות עם התוכנית."}
+                  </div>
+                  <Btn onClick={() => setLockMsg(null)}>הבנתי</Btn>
+                </div>
+              </div>
+            )}
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} onStartTour={() => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
             {sheet === "backup" && <BackupModal backup={profile.backup} gateEmail={gateEmail} busy={bkBusy} onEnable={enableBackup} onBackupNow={backupNow} onResetCode={resetBackupCode} onClose={() => setSheet(null)} />}

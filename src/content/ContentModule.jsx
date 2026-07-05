@@ -18,7 +18,7 @@ const FAV_KEY = "mp_content_fav_v1";
 function loadStore(key) { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) { return {}; } }
 function saveStore(key, obj) { try { localStorage.setItem(key, JSON.stringify(obj)); } catch (e) {} }
 function lessonKey(week, day, i) { return `W${week}D${day}-${i}`; }
-function tracksProgress(day) { return !!day && !(day.week === 1 && day.day <= 2); }
+function tracksProgress(day) { return !!day; }
 function hasTaskWord(l) { return /משימ/.test((l && l.title) || ""); }
 function hasPages(l) { return !!(l && l.pageImages && l.pageImages.length); }
 function matchesChip(l, chip) {
