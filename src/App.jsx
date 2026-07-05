@@ -357,16 +357,18 @@ function trophyForWeek(w) {
   return "/medals/trophy-" + Math.max(1, Math.min(9, w)) + ".webp";
 }
 // Pulls the values the app already tracks so she is not asked twice.
-function autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl) {
+function autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog) {
   const steps = (stepsByDate && stepsByDate[date]) || 0;
   const cups = Math.round((waterMlOf(waterByDate ? waterByDate[date] : 0) / (cupMl || DEFAULT_CUP_ML)) * 10) / 10;
   const dayLog = (log || []).filter((e) => e.date === date);
   const proteinHad = dayLog.reduce((s, e) => s + (e.p || 0), 0);
+  const strengthLogged = (activityLog || []).some((a) => a.date === date && a.name === "אימון כוח");
   return {
     steps: steps > 0 ? steps : null,
     water: cups > 0 ? cups : null,
     journal: dayLog.length > 0,
     protein: !!(targets && targets.protein && proteinHad >= targets.protein * 0.95),
+    strengthLogged,
   };
 }
 // A day is auto-marked complete (_done) by an effect in App the moment every
@@ -380,6 +382,8 @@ function taskDone(task, answers, auto) {
     if (task.auto === "protein") return auto.protein;
   }
   const v = answers[task.id];
+  // Strength: done if she logged an "אימון כוח" activity that day, or checked it manually.
+  if (task.id === "strength" && auto && auto.strengthLogged) return true;
   if (task.type === "number") return v != null && v > 0;
   return v === true;
 }
@@ -394,13 +398,13 @@ function tasksForDate(startDate, date, keepShabbat, fasting) {
 }
 // A day is complete (earns a medal) when every REQUIRED active task is done - automatically,
 // no "I finished" button needed. Optional tasks (e.g. fasting) never block completion.
-function dayComplete(startDate, date, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl) {
+function dayComplete(startDate, date, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog) {
   if (!TRACKER_ENABLED) return false;
   if (!unlockedOn(startDate, date, CHECKIN_UNLOCK)) return false;
   const ts = tasksForDate(startDate, date, keepShabbat).filter((t) => !t.optional);
   if (!ts.length) return false;
   const ans = (checkins && checkins[date]) || {};
-  const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl);
+  const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog);
   return ts.every((t) => taskDone(t, ans, au));
 }
 const seedEntry = (id, date, meal, foodId, g, source = "verified") => {
@@ -434,7 +438,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.45";
+const VERSION = "3.46";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1066,7 +1070,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const ciWeek = Math.min(week, 10);
   const ciTasks = checkinOpen ? tasksForDate(profile.startDate, date, profile.keepShabbat, profile.fasting) : [];
   const ciAnswers = (checkins && checkins[date]) || {};
-  const ciAuto = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMlD);
+  const ciAuto = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMlD, activityLog);
   const ciLocked = date === today && new Date().getHours() < CHECKIN_REVEAL_HOUR;
   useEffect(() => { if (selRef.current) selRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, [date]);
   const backN = Math.min(74, Math.max(0, programDayNumber(profile.startDate, today) - 1));
@@ -1077,7 +1081,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
     const ts = tasksForDate(profile.startDate, d, profile.keepShabbat).filter((t) => !t.optional);
     if (!ts.length) return 0;
     const ans = (checkins && checkins[d]) || {};
-    const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMlD);
+    const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMlD, activityLog);
     const dn = ts.filter((t) => taskDone(t, ans, au)).length;
     return dn / ts.length;
   };
@@ -3566,15 +3570,19 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
               <div style={{ fontSize: 13.5, color: C.faint, margin: "12px 0 2px" }}>{g.label}</div>
               {items.map((t) => {
                 const done = taskDone(t, answers, auto);
+                const strengthAuto = t.id === "strength" && auto && auto.strengthLogged; // logged as an activity in the journal
                 const autoNote = t.auto === "steps" ? "יש למלא בעיגול הצעדים" : t.auto === "water" ? "יש לעדכן בעיגול המים" : "יש למלא בעיגול הקלוריות";
                 return (
                   <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
                     <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                       <span style={{ fontSize: 16, color: C.ink }}>{t.label}{t.optional ? <span style={{ color: C.faint, fontSize: 13 }}> (רשות)</span> : null}</span>
                       {t.auto && !done && <span style={{ fontSize: 12.5, color: C.amber, marginTop: 2 }}>{autoNote}</span>}
+                      {strengthAuto && <span style={{ fontSize: 12.5, color: C.brandD, marginTop: 2 }}>נרשם ביומן הפעילות</span>}
                     </div>
                     {t.auto ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, color: done ? C.brandD : C.faint, background: done ? C.brandBg : "transparent", padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}>{done ? <Check size={14} /> : null}{t.auto === "steps" && auto.steps != null ? `${auto.steps.toLocaleString()} · ` : ""}{t.auto === "water" && auto.water != null ? `${auto.water} · ` : ""}אוטומטי</span>
+                    ) : strengthAuto ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, color: C.brandD, background: C.brandBg, padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}><Check size={14} />אוטומטי</span>
                     ) : t.type === "number" ? (
                       <Stepper value={answers[t.id] || 0} set={(v) => setValue(t.id, v)} step={1} min={0} />
                     ) : (
@@ -3770,13 +3778,13 @@ function summaryStepsAvg(week, startDate, today, stepsByDate) {
   }
   return n ? Math.round(sum / n) : null;
 }
-function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget, fasting) {
+function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget, fasting, activityLog) {
   const dates = summaryWeekDates(week, startDate, today, keepShabbat);
   const counts = {}, sums = {}, ns = {};
   let calSum = 0, calN = 0, protSum = 0, protN = 0, calOnGoal = 0, sleepDays = 0, grainsDays = 0;
   for (const d of dates) {
     const ans = checkins[d] || {};
-    const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMl);
+    const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, cupMl, activityLog);
     let sleepDay = false, grainDay = false;
     for (const t of tasksForDate(startDate, d, keepShabbat, fasting)) {
       if (t.type === "number") {
@@ -3985,9 +3993,9 @@ function summaryTaskLine(key, week, data, fasting) {
   }
 }
 
-function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, stepGoal, fasting, hideRewards, onClose }) {
+function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, name, dailyTarget, stepGoal, fasting, hideRewards, activityLog, onClose }) {
   const week = Math.min(programWeekFor(startDate, date), 10);
-  const data = weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget, fasting);
+  const data = weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, waterByDate, targets, cupMl, keepShabbat, dailyTarget, fasting, activityLog);
   // One-time baseline sanity note: Friday of week 2 only. If she is tracking well BELOW her goal,
   // gently suggest a more realistic baseline (set in the profile). Anat's gradual increases continue from it.
   const wkStepAvg = data.avgs.steps ? data.avgs.steps.avg : null;
@@ -4836,7 +4844,7 @@ export default function App() {
     const next = { ...checkins };
     for (let n = 1; n <= total; n++) {
       const d = addDays(profile.startDate, n - 1);
-      if (dayComplete(profile.startDate, d, profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl) && !(checkins[d] && checkins[d]._done)) {
+      if (dayComplete(profile.startDate, d, profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog) && !(checkins[d] && checkins[d]._done)) {
         next[d] = { ...(next[d] || {}), _done: true }; changed = true; celebrate = true;
       }
     }
@@ -4850,7 +4858,7 @@ export default function App() {
       if (newTrophy) { setCheerTrophyWeek(maxW); setSheet("trophyCheer"); }
       else if (celebrate) setSheet("checkinCheer");
     }
-  }, [checkins, log, stepsByDate, waterByDate, targets, profile.startDate, profile.keepShabbat, profile.hideRewards, today]);
+  }, [checkins, log, stepsByDate, waterByDate, activityLog, targets, profile.startDate, profile.keepShabbat, profile.hideRewards, today]);
   // Intermittent-fasting intro bubble: once, on the day screen, from week 8 day 4 (Wednesday) onward.
   useEffect(() => {
     if (!onboarded || showIntro || tab !== "day") return;
@@ -5030,11 +5038,11 @@ export default function App() {
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
-            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
+            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
-            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} onClose={() => setSheet(null)} />}
+            {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} C={C} font={fontStack} onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
