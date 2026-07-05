@@ -72,18 +72,17 @@ export function ContentDayCard({ week, dow, C, font, onOpen }) {
   return (
     <div onClick={onOpen} role="button" aria-label="הסרטונים שלך היום"
       style={{ background: C.brandBg, border: `1.5px solid ${C.brand}`, borderRadius: 16, padding: "13px 14px", marginBottom: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, fontFamily: font }}>
-      <div style={{ width: 44, height: 44, borderRadius: 12, background: C.brand, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 3px 9px ${C.brand}55` }}><Film size={22} color="#fff" /></div>
-      <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>הסרטונים שלך היום</div>
-        <div style={{ fontSize: 17, color: C.brandD, marginTop: 4 }}>{day.theme ? day.theme + " · " : ""}{n} {n === 1 ? "פריט" : "פריטים"}</div>
+      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: C.brand, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 3px 9px ${C.brand}55` }}><Film size={22} color="#fff" /></div>
         {track && (
-          <div style={{ marginTop: 9 }}>
-            <div style={{ height: 7, borderRadius: 999, background: "#ffffff", overflow: "hidden", boxShadow: `inset 0 0 0 1px ${C.brand}22` }}>
-              <div style={{ height: "100%", width: `${pct}%`, background: "#4E9E76", borderRadius: 999, transition: "width .3s" }} />
-            </div>
-            <div style={{ fontSize: 14, color: C.brandD, marginTop: 5, fontWeight: 600 }}>{doneCount} מתוך {n} הושלמו</div>
+          <div style={{ width: 44, height: 5, borderRadius: 999, background: "#ffffff", overflow: "hidden", boxShadow: `inset 0 0 0 1px ${C.brand}22` }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: "#4E9E76", borderRadius: 999, transition: "width .3s" }} />
           </div>
         )}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>הסרטונים שלך היום</div>
+        <div style={{ fontSize: 15, color: C.brandD, marginTop: 3 }}>{day.theme ? day.theme + " · " : ""}{track ? `${doneCount}/${n}` : `${n} ${n === 1 ? "פריט" : "פריטים"}`}</div>
       </div>
       <ChevronLeft size={20} color={C.brand} style={{ flexShrink: 0 }} />
     </div>
