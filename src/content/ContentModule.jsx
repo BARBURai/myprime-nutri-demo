@@ -10,6 +10,8 @@ export { contentForDay } from "./data";
    search, type filter chips, drip. A "דף" (task page) = a lesson with
    pageImages (page images shown one under the other) + a download file.
    Completion/favorites are on-device only, NOT wired to the daily ring.
+   Video lessons auto-mark complete after 80% real (cumulative) watch time
+   via Bunny player.js timeupdate; manual mark stays available in parallel.
    Week 1 days 1-2 (intro) have no progress tracking. No em or en dashes.
    ============================================================ */
 
@@ -39,10 +41,39 @@ const TYPE_META = {
 function typeMeta(t) { return TYPE_META[t] || TYPE_META.video; }
 const FILTER_CHIPS = [["all", "הכל"], ["workout", "אימונים"], ["task", "משימות"], ["video", "סרטונים"], ["pdf", "דפים"]];
 
-function BunnyPlayer({ videoId, C, font }) {
+// Load Bunny's player.js once (hosted on Bunny CDN). Resolves when playerjs is ready.
+const PLAYERJS_SRC = "https://assets.mediadelivery.net/playerjs/player-0.1.0.min.js";
+let playerjsPromise = null;
+function loadPlayerJs() {
+  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
+  if (window.playerjs) return Promise.resolve(window.playerjs);
+  if (playerjsPromise) return playerjsPromise;
+  playerjsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = PLAYERJS_SRC; s.async = true;
+    s.onload = () => setTimeout(() => (window.playerjs ? resolve(window.playerjs) : reject(new Error("playerjs missing"))), 0);
+    s.onerror = () => reject(new Error("playerjs load failed"));
+    document.head.appendChild(s);
+  });
+  return playerjsPromise;
+}
+
+const WATCH_THRESHOLD = 0.8; // mark complete after 80% real watch time
+const SEEK_GAP = 3;          // seconds: a jump larger than this between timeupdates is a seek, not playback
+
+function BunnyPlayer({ videoId, C, font, onReach80 }) {
   const [url, setUrl] = useState(null);
   const [err, setErr] = useState(false);
   const liveRef = useRef(true);
+  const iframeRef = useRef(null);
+  // watch-tracking refs (do not trigger re-render)
+  const durationRef = useRef(0);
+  const watchedRef = useRef(0);     // cumulative real seconds watched
+  const lastTimeRef = useRef(null); // previous currentTime seen
+  const firedRef = useRef(false);   // 80% already reported
+  const reachCbRef = useRef(onReach80);
+  useEffect(() => { reachCbRef.current = onReach80; }, [onReach80]);
+
   useEffect(() => {
     liveRef.current = true;
     setUrl(null); setErr(false);
@@ -52,10 +83,49 @@ function BunnyPlayer({ videoId, C, font }) {
       .catch(() => { if (liveRef.current) setErr(true); });
     return () => { liveRef.current = false; };
   }, [videoId]);
+
+  // Reset tracking whenever the video changes.
+  useEffect(() => {
+    durationRef.current = 0; watchedRef.current = 0; lastTimeRef.current = null; firedRef.current = false;
+  }, [videoId]);
+
+  // Attach player.js and accumulate real watch time (seeks ignored).
+  useEffect(() => {
+    if (!url || !iframeRef.current) return;
+    let player = null; let cancelled = false;
+    loadPlayerJs().then((playerjs) => {
+      if (cancelled || !iframeRef.current) return;
+      try {
+        player = new playerjs.Player(iframeRef.current);
+        player.on("ready", () => {
+          try { player.getDuration((dur) => { if (dur && dur > 0) durationRef.current = dur; }); } catch (e) {}
+        });
+        player.on("timeupdate", (data) => {
+          const t = data && typeof data.seconds === "number" ? data.seconds : (typeof data === "number" ? data : null);
+          if (t == null) return;
+          if (data && typeof data.duration === "number" && data.duration > 0) durationRef.current = data.duration;
+          const prev = lastTimeRef.current;
+          if (prev != null) {
+            const delta = t - prev;
+            // count only forward playback in small increments; ignore seeks/rewinds
+            if (delta > 0 && delta <= SEEK_GAP) watchedRef.current += delta;
+          }
+          lastTimeRef.current = t;
+          const dur = durationRef.current;
+          if (!firedRef.current && dur > 0 && watchedRef.current >= dur * WATCH_THRESHOLD) {
+            firedRef.current = true;
+            if (reachCbRef.current) reachCbRef.current();
+          }
+        });
+      } catch (e) {}
+    }).catch(() => {});
+    return () => { cancelled = true; try { if (player && player.off) { player.off("timeupdate"); player.off("ready"); } } catch (e) {} };
+  }, [url]);
+
   const box = { position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", background: "#000", marginBottom: 16 };
   if (err) return (<div style={{ ...box, paddingTop: 0, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "22px 16px", textAlign: "center" }}><span style={{ fontSize: 14.5, color: C.sub, fontFamily: font, lineHeight: 1.6 }}>לא הצלחנו לטעון את הסרטון כרגע. נסי לרענן את האפליקציה בעוד רגע.</span></div>);
   if (!url) return (<div style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}><Loader size={26} className="spin" /></span></div>);
-  return (<div style={box}><iframe src={url} loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }} title="סרטון" /></div>);
+  return (<div style={box}><iframe ref={iframeRef} src={url} loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }} title="סרטון" /></div>);
 }
 
 export function ContentDayCard({ week, dow, C, font, onOpen }) {
@@ -70,12 +140,12 @@ export function ContentDayCard({ week, dow, C, font, onOpen }) {
   }
   const pct = track && n > 0 ? Math.round(doneCount / n * 100) : 0;
   return (
-    <div onClick={onOpen} role="button" aria-label="הסרטונים שלך היום"
+    <div data-tut="contentcard" onClick={onOpen} role="button" aria-label="הסרטונים שלך היום"
       style={{ background: C.brandBg, border: `1.5px solid ${C.brand}`, borderRadius: 16, padding: "13px 14px", marginBottom: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, fontFamily: font }}>
       <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: C.brand, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 3px 9px ${C.brand}55` }}><Film size={22} color="#fff" /></div>
         {track && (
-          <div style={{ width: 44, height: 5, borderRadius: 999, background: "#ffffff", overflow: "hidden", boxShadow: `inset 0 0 0 1px ${C.brand}22` }}>
+          <div data-tut="contentbar" style={{ width: 44, height: 5, borderRadius: 999, background: "#ffffff", overflow: "hidden", boxShadow: `inset 0 0 0 1px ${C.brand}22` }}>
             <div style={{ height: "100%", width: `${pct}%`, background: "#4E9E76", borderRadius: 999, transition: "width .3s" }} />
           </div>
         )}
@@ -89,7 +159,7 @@ export function ContentDayCard({ week, dow, C, font, onOpen }) {
   );
 }
 
-export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose }) {
+export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent }) {
   const allDays = CONTENT_DAYS;
   const isOpenDay = (w, d) => (w < todayWeek) || (w === todayWeek && d <= todayDow);
   const openDaysList = allDays.filter((dd) => isOpenDay(dd.week, dd.day)).slice().sort((a, b) => a.week - b.week || a.day - b.day);
@@ -120,6 +190,8 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   const isDone = (w, d, i) => !!done[lessonKey(w, d, i)];
   const isFav = (w, d, i) => !!fav[lessonKey(w, d, i)];
   const toggleDone = (w, d, i) => setDone((s) => { const n = { ...s }; const k = lessonKey(w, d, i); if (n[k]) delete n[k]; else n[k] = 1; saveStore(DONE_KEY, n); return n; });
+  // Auto-complete: mark done without ever un-marking (re-watching keeps it done).
+  const markDone = (w, d, i) => setDone((s) => { const k = lessonKey(w, d, i); if (s[k]) return s; const n = { ...s, [k]: 1 }; saveStore(DONE_KEY, n); return n; });
   const toggleFav = (w, d, i) => setFav((s) => { const n = { ...s }; const k = lessonKey(w, d, i); if (n[k]) delete n[k]; else n[k] = 1; saveStore(FAV_KEY, n); return n; });
   const dayDoneCount = (dd) => dd.lessons.reduce((s, _l, i) => s + (isDone(dd.week, dd.day, i) ? 1 : 0), 0);
 
@@ -136,7 +208,11 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     return null;
   };
 
-  const goLesson = (w, d, i, from, pagesOnly) => { setOrigin(from); setOpenL({ week: w, day: d, i, pagesOnly: !!pagesOnly }); };
+  const goLesson = (w, d, i, from, pagesOnly) => { setOrigin(from); setOpenL({ week: w, day: d, i, pagesOnly: !!pagesOnly }); if (onTourEvent) onTourEvent("openlesson"); };
+
+  // Report tour-relevant view changes so a guided tour can follow the user's taps.
+  useEffect(() => { if (onTourEvent) onTourEvent("contentopen"); }, []);
+  useEffect(() => { if (onTourEvent) onTourEvent(view === "all" ? "tab-all" : view === "today" ? "tab-today" : null); }, [view]);
 
   const overlay = { position: "absolute", inset: 0, zIndex: 36, background: C.panel, display: "flex", flexDirection: "column", fontFamily: font, direction: "rtl" };
   const head = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px) + 48px)", borderBottom: `1px solid ${C.line}`, flexShrink: 0 };
@@ -150,7 +226,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     return (
       <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 12, padding: 4, marginBottom: 14 }}>
         {[["today", "היום"], ["all", "כל התוכנית"]].map(([id, lbl]) => (
-          <button key={id} onClick={() => setView(id)} style={{ flex: 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 6px", fontFamily: font, fontSize: 16, fontWeight: 700, background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl}</button>
+          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 6px", fontFamily: font, fontSize: 16, fontWeight: 700, background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl}</button>
         ))}
       </div>
     );
@@ -257,8 +333,8 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
             <div style={{ fontSize: 16, color: C.sub, marginBottom: 14 }}>שיעור {openL.i + 1} מתוך {dd.lessons.length} · {tm.label}</div>
 
             <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-              {track && statusBtn(dOn, () => toggleDone(openL.week, openL.day, openL.i), "#4E9E76", C.brand, <Check size={18} />, "הושלם", "סמני כהושלם")}
-              {statusBtn(fOn, () => toggleFav(openL.week, openL.day, openL.i), "#D7263D", "#D7263D", <Heart size={18} fill={fOn ? "#fff" : "none"} />, "במועדפים", "סמני כמועדף")}
+              {track && <div data-tut="lesson-done" style={{ flex: 1, display: "flex" }}>{statusBtn(dOn, () => toggleDone(openL.week, openL.day, openL.i), "#4E9E76", C.brand, <Check size={18} />, "הושלם", "סמני כהושלם")}</div>}
+              <div data-tut="lesson-fav" style={{ flex: 1, display: "flex" }}>{statusBtn(fOn, () => toggleFav(openL.week, openL.day, openL.i), "#D7263D", "#D7263D", <Heart size={18} fill={fOn ? "#fff" : "none"} />, "במועדפים", "סמני כמועדף")}</div>
             </div>
 
             {l.text && l.text.length > 0 && (
@@ -267,7 +343,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               </div>
             )}
 
-            {l.videoId && <BunnyPlayer videoId={l.videoId} C={C} font={font} />}
+            {l.videoId && <div data-tut="lessonplayer"><div style={{ fontSize: 14, fontWeight: 700, color: C.brandD, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Play size={15} /> לחצי לצפייה</div><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => markDone(openL.week, openL.day, openL.i) : undefined} /></div>}
             {l.image && (<div style={{ borderRadius: 14, overflow: "hidden", marginBottom: 16 }}><img src={l.image} alt={l.title} style={{ width: "100%", display: "block", borderRadius: 14 }} /></div>)}
             <PageImages l={l} />
 
