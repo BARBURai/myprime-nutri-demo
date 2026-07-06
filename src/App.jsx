@@ -438,7 +438,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.46";
+const VERSION = "3.49";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1024,7 +1024,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
     </div>
   );
 }
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onOpenContent, introLock = false, overlayOpen = false }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onOpenContent, onOpenOnboard, introLock = false, overlayOpen = false }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + (e.kcal || 0), 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -1139,15 +1139,24 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         </div>
       )}
       {isIntro ? (
-        <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "40px 24px 64px", textAlign: "center" }}>
-          <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto 14px" }} />
-          <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>ברוכה הבאה לאפליקציית המעקב של מיי פריים 360</div>
-          <div style={{ fontSize: 16, color: C.sub, marginTop: 12, lineHeight: 1.75 }}>ביומיים הראשונים עדיין אין מעקב. {progDay === 1 ? "מחרתיים" : "מחר"} מתחילות יחד, צעד אחרי צעד, ותקבלי כאן ביום שלישי את כל ההסברים על השימוש באפליקציה.</div>
-          {CONTENT_ENABLED && contentForDay(week, dow) && (
-            <div style={{ marginTop: 22 }}>
-              <div style={{ fontSize: 16, color: C.sub, lineHeight: 1.75, marginBottom: 14 }}>בינתיים, את מוזמנת לצפות בסרטונים היומיים שלך כאן באפליקציה 💜</div>
-              <div style={{ textAlign: "right" }}><ContentDayCard week={week} dow={dow} C={C} font={fontStack} onOpen={onOpenContent} /></div>
+        <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "34px 20px 64px" }}>
+          <div style={{ textAlign: "center", marginBottom: 22 }}>
+            <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto 14px" }} />
+            <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>ברוכה הבאה למיי פריים 💜</div>
+          </div>
+          {progDay === 1 && (
+            <div data-tut="onboardcard" onClick={onOpenOnboard} role="button" aria-label="הדרכה ראשונית"
+              style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, borderRadius: 16, padding: "14px 15px", marginBottom: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, fontFamily: fontStack, boxShadow: "0 4px 14px rgba(168,66,92,0.28)" }}>
+              <div style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,0.22)", display: "flex", alignItems: "center", justifyContent: "center" }}><Sparkles size={22} color="#fff" /></div>
+              <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", lineHeight: 1.4 }}>הדרכה ראשונית</div>
+                <div style={{ fontSize: 15, color: "rgba(255,255,255,0.92)", marginTop: 3 }}>כל מה שצריך לדעת כדי להתחיל 💜</div>
+              </div>
+              <ChevronLeft size={20} color="#fff" style={{ flexShrink: 0 }} />
             </div>
+          )}
+          {CONTENT_ENABLED && contentForDay(week, dow) && (
+            <div style={{ textAlign: "right" }}><ContentDayCard week={week} dow={dow} C={C} font={fontStack} onOpen={onOpenContent} /></div>
           )}
         </div>
       ) : isShabbatRest ? (
@@ -2226,6 +2235,56 @@ function SplashScreen() {
       <div style={{ position: "absolute", top: 14, left: 14, background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, padding: "4px 12px", borderRadius: 999 }}>בטה</div>
       <img src={MEDAL_SRC} alt="" width={150} height={150} style={{ display: "block", marginBottom: 20 }} />
       <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.45, maxWidth: 320 }}>ברוכה הבאה לאפליקציית המעקב היומי של מיי פריים</div>
+    </div>
+  );
+}
+
+const ONBOARD_SLIDES = [
+  { img: "/onboard/onboard-1.jpg", text: "ברוכה הבאה 🌸 לפני שאנחנו יוצאות לדרך, בואי אכיר לך את האפליקציה בפחות מדקה. אין צורך לזכור הכל - תמיד אפשר לחזור להדרכה הזו ולצפות בה שוב. אני איתך 🌸 ענת" },
+  { img: "/onboard/onboard-2.jpg", text: "בכל יום יחכו לך כאן הסרטונים והתכנים של אותו יום. כדי לפתוח אותם, פשוט לוחצים על הכרטיס 'הסרטונים שלך היום' במסך הראשי." },
+  { img: "/onboard/onboard-4.jpg", text: "לאחר קריאת ההנחיות שכתבתי לך, לוחצים על הסרטון כדי להתחיל לצפות. אחרי שתסיימי, הסרטון יסומן כהושלם באופן אוטומטי - את לא צריכה לעשות דבר 💜 ואם תרצי, תמיד אפשר לסמן שהשלמת גם בעצמך." },
+  { img: "/onboard/onboard-5.jpg", text: "אהבת סרטון במיוחד ותרצי לחזור אליו בקלות? סמני אותו בלב, והוא יישמר לך ברשימת המועדפים - כך תמצאי אותו בכל רגע." },
+  { img: "/onboard/onboard-6.jpg", text: "בתוך מסך הסרטונים יש שתי תצוגות: 'היום' - התכנים של היום הנוכחי. 'כל התוכנית' - כל מה שכבר נפתח, מסודר לפי שבוע ויום. שם גם קל למצוא בנפרד את האימונים, השיעורים, המועדפים שלך והמשימות." },
+  { img: "/onboard/onboard-7.jpg", text: "הפס הקטן שעל כרטיס הסרטונים מראה כמה מהתכנים של היום כבר השלמת. ככל שתתקדמי הוא יתמלא - דרך נחמדה לעקוב אם פספסת משהו 💜" },
+  { img: "/onboard/onboard-8.jpg", text: "זהו, את מוכנה 🌸 בהמשך השבוע ובמהלך התוכנית יתווספו דברים חדשים לאפליקציה לפי ההתקדמות. אל דאגה - ברגע שמשהו חדש מתחיל, יהיה לך הסבר מסודר עליו. נשאר רק להתחיל. אני כאן איתך בכל צעד בדרך. בהצלחה 💜 ענת" },
+];
+
+function OnboardingModal({ onClose }) {
+  const [i, setI] = useState(0);
+  const n = ONBOARD_SLIDES.length;
+  const last = i === n - 1;
+  const s = ONBOARD_SLIDES[i];
+  const touch = useRef(null);
+  const onTS = (e) => { touch.current = e.changedTouches[0].clientX; };
+  const onTE = (e) => {
+    if (touch.current == null) return;
+    const dx = e.changedTouches[0].clientX - touch.current; touch.current = null;
+    if (Math.abs(dx) < 40) return;
+    // RTL: swipe left (dx<0) => next, swipe right (dx>0) => previous
+    if (dx < 0 && i < n - 1) setI(i + 1);
+    if (dx > 0 && i > 0) setI(i - 1);
+  };
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18, zIndex: 48 }}>
+      <div style={{ background: C.panel, borderRadius: 22, width: "100%", maxWidth: 420, maxHeight: "90%", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: fontStack, boxShadow: "0 16px 48px rgba(0,0,0,0.34)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px 4px" }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: C.brandD }}>הדרכה ראשונית</span>
+          <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={22} /></button>
+        </div>
+        <div onTouchStart={onTS} onTouchEnd={onTE} style={{ flex: 1, overflowY: "auto", padding: "6px 20px 16px", textAlign: "center" }}>
+          <img src={s.img} alt="" style={{ width: "100%", maxWidth: 300, aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 16, display: "block", margin: "0 auto 16px", background: C.bg }} />
+          <p style={{ fontSize: 16.5, color: C.ink, lineHeight: 1.75, margin: 0, whiteSpace: "pre-line" }}>{s.text}</p>
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 7, padding: "4px 0 2px" }}>
+          {ONBOARD_SLIDES.map((_, k) => (
+            <span key={k} onClick={() => setI(k)} style={{ width: k === i ? 22 : 8, height: 8, borderRadius: 999, background: k === i ? C.brand : C.line, cursor: "pointer", transition: "width .2s, background .2s" }} />
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 10, padding: "10px 18px max(14px, env(safe-area-inset-bottom))" }}>
+          {i > 0 && <button onClick={() => setI(i - 1)} style={{ flex: 1, border: `1.5px solid ${C.brand}`, background: C.panel, color: C.brandD, borderRadius: 12, padding: "12px 0", fontSize: 16, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
+          <button onClick={() => (last ? onClose() : setI(i + 1))} style={{ flex: 2, border: "none", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", borderRadius: 12, padding: "12px 0", fontSize: 16, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{last ? "מתחילות! 💜" : "הבא"}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4227,12 +4286,16 @@ const TOUR_TAIL = [
   { view: "day", open: "day", sel: "daystrip", text: "את יכולה תמיד לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך (סוויפ)." },
   { view: "day", open: "day", sel: "tourbtn", btn: "סיימנו", last: true, text: "ואם לא הספקת לקלוט הכל - אל דאגה 💜 תמיד אפשר להתחיל את הסיור מחדש דרך כפתור 'סיור באפליקציה' כאן במסך, או למצוא תשובות ב'שאלות ותשובות' שבפרופיל." },
 ];
+const TOUR_GATE = { view: "day", open: "day", gate: true, prompt: "תרצי הדרכה קצרה על מה שהתחדש היום באפליקציה?", choice: { yes: "כן, בבקשה", no: "אין צורך" }, text: "" };
 function buildTour(path, hideRewards) {
   const intro = { view: "day", open: "day", sel: "cal", prompt: "רוצה שאראה לך דוגמה?", choice: { yes: "כן, בבקשה", no: "אין צורך, נמשיך" }, text: "בלחיצה על הפלוס את ממלאת את המזון שאכלת ואת הפעילות הגופנית שעשית (חוץ מהצעדים). יש כמה דרכים: לספר במילים או בדיבור מה אכלת, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה." };
+  if (path === "gate") return [TOUR_GATE];
   if (!path) return [intro];
   const seq = [intro, ...(path === "yes" ? TOUR_YES : TOUR_NO), ...TOUR_TAIL];
   return hideRewards ? seq.filter((s) => s.sel !== "cabinet") : seq;
 }
+// The single closing bubble shown when a user declines the gate (points to the restart button).
+function tourLastOnly() { return [TOUR_TAIL[TOUR_TAIL.length - 1]]; }
 
 // Entries below restate copy already in the app (no new claims).
 const FAQ_ITEMS = [
@@ -4314,19 +4377,21 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
         </>
       )}
       <div style={{ position: "fixed", left: 16, right: 16, ...bubblePos, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
-        <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>{cur.text}</div>
+        {cur.text && <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>{cur.text}</div>}
         {cur.guide && <StepGuideLink linkOnly style={{ marginBottom: 12 }} />}
-        {cur.prompt && <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 10 }}>{cur.prompt}</div>}
+        {cur.prompt && <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 12 }}>{cur.prompt}</div>}
         {cur.choice ? (
           <>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => onChoice && onChoice(true)} style={{ flex: 1, border: "none", borderRadius: 10, padding: "11px", background: C.brand, color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.choice.yes}</button>
               <button onClick={() => onChoice && onChoice(false)} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.choice.no}</button>
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
-              {onEnd ? <button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button> : <span />}
-              {steps.length > 1 && <span style={{ fontSize: 12.5, color: C.faint }}>{idx + 1}/{steps.length}</span>}
-            </div>
+            {!cur.gate && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                {onEnd ? <button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button> : <span />}
+                {steps.length > 1 && <span style={{ fontSize: 12.5, color: C.faint }}>{idx + 1}/{steps.length}</span>}
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -4626,7 +4691,15 @@ export default function App() {
   const tourView = sheet === "caloriemenu" ? "caloriemenu" : sheet === "steps" ? "steps" : (modal && modal.kind && modal.kind !== "recipe") ? "addfood" : "day";
   const markTourSeen = () => setProfile((p) => (p.tipsSeen || []).includes("appTour") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "appTour"] });
   const startTour = () => setTour({ steps: buildTour(null, profile.hideRewards), i: 0 });
-  const tourChoice = (yes) => setTour({ steps: buildTour(yes ? "yes" : "no", profile.hideRewards), i: 1 });
+  const tourChoice = (yes) => {
+    const cur = tour && tour.steps[tour.i];
+    if (cur && cur.gate) {
+      if (yes) setTour({ steps: buildTour(null, profile.hideRewards), i: 0 });
+      else setTour({ steps: tourLastOnly(), i: 0 });
+      return;
+    }
+    setTour({ steps: buildTour(yes ? "yes" : "no", profile.hideRewards), i: 1 });
+  };
   const tourAdvance = () => {
     if (!tour) return;
     const ni = tour.i + 1;
@@ -4659,7 +4732,7 @@ export default function App() {
     const pd = programDayNumber(profile.startDate, TODAY);
     const wk = programWeekFor(profile.startDate, TODAY);
     if (wk === 1 && pd >= 3 && !(profile.tipsSeen || []).includes("appTour")) {
-      const t = setTimeout(() => setTour({ steps: buildTour(null, profile.hideRewards), i: 0 }), 700);
+      const t = setTimeout(() => setTour({ steps: buildTour("gate", profile.hideRewards), i: 0, gate: true }), 700);
       return () => clearTimeout(t);
     }
   }, [gate, onboarded, showIntro, tab, tour, profile.tipsSeen, profile.startDate]);
@@ -4989,7 +5062,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onOpenContent={() => setSheet("content")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
+              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
@@ -5045,6 +5118,7 @@ export default function App() {
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} C={C} font={fontStack} onClose={() => setSheet(null)} />}
+            {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
               : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} recents={recents} onDeleteFavorite={deleteFavorite} onDeleteRecent={deleteRecent} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
