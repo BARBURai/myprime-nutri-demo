@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.52";
+const VERSION = "3.53";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2373,7 +2373,7 @@ function NotesFab({ notes, setNotes, screen, userName }) {
 /* ============================================================
    ADD / EDIT MODAL
    ============================================================ */
-function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onTourEvent, startDate }) {
+function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onUndoEntry, onTourEvent, startDate }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
   const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || (() => { const h = new Date().getHours(); return h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; })());
   const [food, setFood] = useState(state.editEntry ? (FOODS.find((f) => f.name === state.editEntry.name) || foodFromEntry(state.editEntry)) : null);
@@ -2385,6 +2385,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [searching, setSearching] = useState(false);
   const [qUnit, setQUnit] = useState(null); // feature: quantity unit x count (null = base grams)
   const [addedKeys, setAddedKeys] = useState([]); // feature: multi-add from favorites
+  const [addedMap, setAddedMap] = useState({}); // favId -> created journal entry id (for undo)
   const [histTab, setHistTab] = useState("fav"); // "fav" | "recent" (favorites is the default)
   const [delTarget, setDelTarget] = useState(null); // { item, list } pending delete confirmation
   const [aiAsOne, setAiAsOne] = useState(true); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product (default = one product, recommended)
@@ -2781,9 +2782,21 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               const added = addedKeys.includes(f.id);
               return (
                 <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לכמות אחרת - הקישי על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
+                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לביטול - הקישי שוב על הוי · לכמות אחרת - על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
                   <button onClick={() => setDelTarget({ item: f, list: histTab })} aria-label="הסרה מהרשימה" style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: "transparent", color: C.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trash2 size={16} /></button>
-                  <button onClick={() => { commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...servingFields(f, g), ...n }, true); setAddedKeys((k) => [...k, f.id]); }} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
+                  <button onClick={() => {
+                    if (added) {
+                      const eid = addedMap[f.id];
+                      if (eid && onUndoEntry) onUndoEntry(eid);
+                      setAddedKeys((k) => k.filter((x) => x !== f.id));
+                      setAddedMap((m) => { const n = { ...m }; delete n[f.id]; return n; });
+                    } else {
+                      const eid = "n" + Date.now();
+                      commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...servingFields(f, g), ...n, _entryId: eid }, true);
+                      setAddedKeys((k) => [...k, f.id]);
+                      setAddedMap((m) => ({ ...m, [f.id]: eid }));
+                    }
+                  }} aria-label={added ? "ביטול הוספה" : "הוספה"} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
                 </div>
               );
             })}
@@ -4892,7 +4905,7 @@ export default function App() {
     if (modal?.editEntry) setLog((l) => l.map((e) => e.id === modal.editEntry.id ? { ...e, ...payload, date } : e));
     else {
       const items = Array.isArray(payload) ? payload : [payload];
-      setLog((l) => [...l, ...items.map((p, i) => ({ id: "n" + Date.now() + i, date, ...p }))]);
+      setLog((l) => [...l, ...items.map((p, i) => ({ id: p._entryId || ("n" + Date.now() + i), date, ...p, _entryId: undefined }))]);
       // Recently used list (auto, capped). Favorites are chosen by the user, not auto-filled.
       setRecents((rs) => {
         let next = rs.slice();
@@ -5130,7 +5143,7 @@ export default function App() {
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
-              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} recents={recents} onDeleteFavorite={deleteFavorite} onDeleteRecent={deleteRecent} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
+              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} recents={recents} onDeleteFavorite={deleteFavorite} onDeleteRecent={deleteRecent} onUndoEntry={deleteEntry} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
             {tour && tour.steps[tour.i] && tour.steps[tour.i].view === tourView && <TutorialOverlay steps={tour.steps} idx={tour.i} onNext={tourAdvance} onChoice={tourChoice} onEnd={tourEnd} onBack={tourBack} />}
           </>
         )}
