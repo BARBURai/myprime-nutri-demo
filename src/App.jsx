@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.58";
+const VERSION = "3.59";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1725,7 +1725,13 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
   const commit = () => { const k = edit.key; if (k === "weightKg" || k === "goalWeightKg") { setPendingWeight({ key: k, value: edit.value }); setEdit(null); return; } setProfile({ ...profile, [k]: edit.value }); setEdit(null); };
   const confirmWeight = () => { if (pendingWeight) setProfile({ ...profile, [pendingWeight.key]: pendingWeight.value }); setPendingWeight(null); };
   const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
-  const startLabel = (listSundays().find((s) => s.value === profile.startDate) || {}).label || profile.startDate;
+  const startLabel = (() => {
+    // Build the Hebrew label from the date itself - the Sunday list only covers past
+    // weeks, so a future start date used to fall through and show the raw ISO value.
+    const d = profile.startDate ? parseDay(profile.startDate) : null;
+    if (!d || isNaN(d.getTime())) return profile.startDate || "";
+    return `יום ראשון, ${d.getUTCDate()} ב${HE_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  })();
   const calNow = profile.calorieOverride || targets.targetKcal;
 
   const EditRow = ({ label, display, onClick }) => (
