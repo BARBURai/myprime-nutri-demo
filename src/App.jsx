@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.59";
+const VERSION = "3.60";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1761,7 +1761,14 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
             <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.weightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
             <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
             <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
-            <EditRow label="תחילת התוכנית" display={startLabel} onClick={() => open({ key: "startDate", label: "תחילת התוכנית", type: "date", init: profile.startDate })} />
+            {maxStart ? (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 16, padding: "12px 0", borderTop: `1px solid ${C.line}` }}>
+                <span style={{ color: C.sub }}>תחילת התוכנית</span>
+                <span style={{ fontWeight: 600, color: C.brandD }}>{startLabel}</span>
+              </div>
+            ) : (
+              <EditRow label="תחילת התוכנית" display={startLabel} onClick={() => open({ key: "startDate", label: "תחילת התוכנית", type: "date", init: profile.startDate })} />
+            )}
             <div onClick={() => setProfile({ ...profile, keepShabbat: !profile.keepShabbat })} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
               <div>
                 <div style={{ fontSize: 16, color: C.ink }}>שומרת שבת</div>
