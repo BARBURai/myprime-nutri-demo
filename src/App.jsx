@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.62";
+const VERSION = "3.63";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2417,6 +2417,19 @@ const ONBOARD_SLIDES = [
 // Catch-up review for participants whose first login is mid-programme: the same
 // material the drip-fed tips would have covered, as one calm stepped read-through.
 // `at` is the unlock point, used both to label the slide and to decide whether to show it.
+// The how-to-use material, reworded for someone joining mid-programme (the day-1
+// carousel opens with "before we set out", which no longer fits here).
+const CATCHUP_GUIDE = [
+  { img: "/pdf/onboard-1.jpg", title: "ברוכה הבאה", text: "ברוכה הבאה 🌸 בואי אכיר לך את האפליקציה בכמה שקפים קצרים - מה יש בה ואיך משתמשים. אין צורך לזכור הכל, תמיד אפשר לחזור להדרכה הזו ולצפות בה שוב. אני איתך 🌸 ענת" },
+  { img: "/pdf/onboard-2.jpg", title: "הסרטונים שלך היום", text: "בכל יום יחכו לך כאן הסרטונים והתכנים של אותו יום. כדי לפתוח אותם, פשוט לוחצים על הכרטיס 'הסרטונים שלך היום' במסך הראשי." },
+  { img: "/pdf/onboard-4.jpg", title: "איך צופים", text: "לאחר קריאת ההנחיות שכתבתי לך, לוחצים על הסרטון כדי להתחיל לצפות. אחרי שתסיימי, הסרטון יסומן כהושלם באופן אוטומטי - את לא צריכה לעשות דבר 💜 ואם תרצי, תמיד אפשר לסמן שהשלמת גם בעצמך." },
+  { img: "/pdf/onboard-5.jpg", title: "מועדפים", text: "אהבת סרטון במיוחד ותרצי לחזור אליו בקלות? סמני אותו בלב, והוא יישמר לך ברשימת המועדפים - כך תמצאי אותו בכל רגע." },
+  { img: "/pdf/onboard-9.jpg", title: "אפשרויות הנגן", text: "בכל סרטון יש כמה אפשרויות נוחות: אפשר להגדיל אותו למסך מלא בלחיצה על הריבוע שבפינה - מומלץ מאוד לצפייה נעימה 💜 וגם לשלוט בעוצמת הקול לפי מה שנוח לך." },
+  { img: "/pdf/onboard-6.jpg", title: "היום מול כל התוכנית", text: "בתוך מסך הסרטונים יש שתי תצוגות: 'היום' - התכנים של היום הנוכחי. 'כל התוכנית' - כל מה שכבר נפתח, מסודר לפי שבוע ויום. שם גם קל למצוא בנפרד את המשימות, האימונים, השיעורים והמועדפים שלך." },
+  { img: "/pdf/onboard-7.jpg", title: "מעקב ההתקדמות", text: "הפס הקטן שעל כרטיס הסרטונים מראה כמה מהתכנים של היום כבר השלמת. ככל שתתקדמי הוא יתמלא - דרך נחמדה לעקוב אם פספסת משהו 💜" },
+  { img: "/pdf/onboard-8.jpg", title: "וזהו", text: "זהו, עכשיו את מכירה את האפליקציה 🌸 ככל שתתקדמי בתוכנית יתווספו עוד דברים, וכשמשהו חדש מתחיל יהיה לך הסבר עליו. אני כאן איתך בכל צעד בדרך. בהצלחה 💜 ענת" },
+];
+
 const CATCHUP_SLIDES = [
   { key: "cal", when: "שבוע 1", day: 1, title: "הוספת מזון ופעילות (כפתור +)", text: "בלחיצה על הפלוס את ממלאת מה אכלת ואיזו פעילות גופנית עשית (חוץ מהצעדים). אפשר לספר במילים או בדיבור, לצלם את הארוחה, לסרוק ברקוד, או לחפש מזון ברשימה." },
   { key: "steps", when: "שבוע 1, יום 2", day: 2, title: "טבעת הצעדים", text: "כאן ממלאים את הצעדים היומיים. פותחים את אפליקציית הבריאות בטלפון (Apple Health באייפון, Samsung Health בסמסונג), רואים את מספר הצעדים של היום, ומזינים אותו. עדיף למלא לקראת סוף היום, ותמיד אפשר לעדכן." },
@@ -2429,7 +2442,11 @@ const CATCHUP_SLIDES = [
 ];
 
 function CatchupModal({ progDay, onClose }) {
-  const slides = CATCHUP_SLIDES.filter((s) => progDay >= s.day);
+  // Part 1: how the app works (with images). Part 2: which features are already open for her.
+  const slides = [
+    ...CATCHUP_GUIDE.map((g) => ({ ...g, guide: true })),
+    ...CATCHUP_SLIDES.filter((s) => progDay >= s.day),
+  ];
   const [i, setI] = useState(0);
   const n = slides.length;
   if (!n) return null;
@@ -2442,15 +2459,14 @@ function CatchupModal({ progDay, onClose }) {
           <span style={{ fontSize: 15, fontWeight: 700, color: C.brandD }}>הדרכה וסקירה קצרה</span>
           <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={22} /></button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 22px 18px", textAlign: "right" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.brand, marginBottom: 6 }}>{s.when}</div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 22px 18px", textAlign: s.guide ? "center" : "right" }}>
+          {s.guide && s.img && <img src={s.img} alt="" style={{ width: "100%", maxWidth: 260, aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 16, display: "block", margin: "0 auto 14px", background: C.bg }} />}
+          {!s.guide && <div style={{ fontSize: 13, fontWeight: 700, color: C.brand, marginBottom: 6 }}>{s.when}</div>}
           <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.4, marginBottom: 10 }}>{s.title}</div>
           <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>{s.text}</p>
         </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: 7, padding: "4px 0 2px" }}>
-          {slides.map((_, k) => (
-            <span key={k} onClick={() => setI(k)} style={{ width: k === i ? 22 : 8, height: 8, borderRadius: 999, background: k === i ? C.brand : C.line, cursor: "pointer", transition: "width .2s, background .2s" }} />
-          ))}
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, padding: "6px 0 2px", fontSize: 13, color: C.faint }}>
+          <span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{i + 1} / {n}</span>
         </div>
         <div style={{ display: "flex", gap: 10, padding: "10px 18px max(14px, env(safe-area-inset-bottom))" }}>
           {i > 0 && <button onClick={() => setI(i - 1)} style={{ flex: 1, border: `1.5px solid ${C.brand}`, background: C.panel, color: C.brandD, borderRadius: 12, padding: "12px 0", fontSize: 16, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
