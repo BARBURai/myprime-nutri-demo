@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.54";
+const VERSION = "3.56";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -702,6 +702,15 @@ function OnboardNotify({ email }) {
   );
 }
 
+function OpenFromIconNote() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.brandBg, borderRadius: 12, padding: "10px 12px", margin: "0 0 14px" }}>
+      <img src="/icon-192.png" alt="אייקון מיי פריים 360" width={40} height={40} style={{ borderRadius: 9, flexShrink: 0 }} />
+      <div style={{ fontSize: 14.5, color: C.brandD, fontWeight: 600, lineHeight: 1.5, textAlign: "right" }}>אחרי ההתקנה, עברי למסך הבית של הטלפון (או לרשימת כל האפליקציות), חפשי את אפליקציית מיי פריים 360 עם האייקון הזה, ולחצי עליו - ומשם נמשיך יחד 💜</div>
+    </div>
+  );
+}
+
 function InstallGuideModal({ onClose }) {
   const waHref = "https://wa.me/972547304177?text=" + encodeURIComponent("היי, אני צריכה עזרה בהתקנת האפליקציה של מיי פריים");
   return (
@@ -713,16 +722,17 @@ function InstallGuideModal({ onClose }) {
         <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
           <li>פתחי את האפליקציה בדפדפן Chrome.</li>
           <li>הקישי על תפריט שלוש הנקודות (⋮) בפינה העליונה.</li>
-          <li>בחרי "הוספה למסך הבית" (או "התקנת אפליקציה").</li>
+          <li>בחרי "התקנה ויצירת קיצור דרך" (בחלק מהטלפונים כתוב "הוספה למסך הבית" או "התקנת אפליקציה").</li>
           <li>אשרי - והאייקון יופיע במסך הבית.</li>
         </ol>
         <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
-        <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 16px", paddingInlineStart: 20 }}>
+        <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
           <li>פתחי את האפליקציה בדפדפן Safari.</li>
           <li>הקישי על כפתור השיתוף (ריבוע עם חץ כלפי מעלה).</li>
           <li>גללי ובחרי "הוספה למסך הבית".</li>
           <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
         </ol>
+        <OpenFromIconNote />
         <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>לרענון האפליקציה באייפון</div>
         <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.7, margin: "0 0 16px" }}>באייפון משיכה למטה לא מרעננת את האפליקציה. כדי לרענן: סגרי אותה לגמרי (החליקי מלמטה למעלה ועצרי באמצע, ואז החליקי את הכרטיס של האפליקציה כלפי מעלה), ופתחי שוב מהאייקון.</p>
         <a href={waHref} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "12px", fontSize: 15, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}><MessageCircle size={18} /> צריכה עזרה? וואטסאפ</a>
@@ -733,6 +743,7 @@ function InstallGuideModal({ onClose }) {
 }
 
 function InstallGate({ onSkip }) {
+  const [confirmBrowser, setConfirmBrowser] = useState(false);
   const isIOS = /iphone|ipad|ipod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
   const waHref = "https://wa.me/972547304177?text=" + encodeURIComponent("היי, אני צריכה עזרה בהתקנת האפליקציה של מיי פריים");
   return (
@@ -741,7 +752,7 @@ function InstallGate({ onSkip }) {
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>📲</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>כדי להתחיל, מומלצת התקנה על הטלפון</div>
-          <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>ההתקנה נותנת לך אייקון משלה במסך הבית ופתיחה מהירה כמו אפליקציה רגילה. אחרי ההתקנה, פתחי את האפליקציה מהאייקון החדש - ומשם נמשיך יחד 💜</p>
+          <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>ההתקנה נותנת לך אייקון משלה במסך הבית ופתיחה מהירה כמו אפליקציה רגילה.</p>
         </div>
         {isIOS ? (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
@@ -759,18 +770,30 @@ function InstallGate({ onSkip }) {
             <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
               <li>ודאי שאת בדפדפן Chrome.</li>
               <li>הקישי על תפריט שלוש הנקודות (⋮) בפינה העליונה.</li>
-              <li>בחרי "הוספה למסך הבית" (או "התקנת אפליקציה").</li>
+              <li>בחרי "התקנה ויצירת קיצור דרך" (בחלק מהטלפונים כתוב "הוספה למסך הבית" או "התקנת אפליקציה").</li>
               <li>אשרי - והאייקון יופיע במסך הבית.</li>
             </ol>
           </div>
         )}
+        <OpenFromIconNote />
         <a href={waHref} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "13px", fontSize: 15.5, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>
           <MessageCircle size={19} /> צריכה עזרה? דברי איתנו בוואטסאפ
         </a>
       </div>
       <div style={{ padding: "10px 20px max(16px, env(safe-area-inset-bottom))", borderTop: `1px solid ${C.line}` }}>
-        <button onClick={onSkip} style={{ width: "100%", border: `1.5px solid ${C.line}`, background: C.panel, color: C.sub, borderRadius: 12, padding: "13px", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>אמשיך בדפדפן בינתיים</button>
+        <button onClick={() => setConfirmBrowser(true)} style={{ width: "100%", border: `1.5px solid ${C.line}`, background: C.panel, color: C.sub, borderRadius: 12, padding: "13px", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>אמשיך בדפדפן בינתיים</button>
       </div>
+      {confirmBrowser && (
+        <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: C.panel, borderRadius: 16, padding: 22, maxWidth: 360, width: "100%", textAlign: "right", fontFamily: fontStack }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>בחרת להמשיך בדפדפן 💜</div>
+            <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7, marginBottom: 8 }}>שני דברים שכדאי לדעת:</div>
+            <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7, marginBottom: 8 }}><b style={{ color: C.brandD }}>1.</b> שמרי את הקישור במועדפים, כדי שתמיד תוכלי לחזור בקלות.</div>
+            <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7, marginBottom: 18 }}><b style={{ color: C.brandD }}>2.</b> הנתונים שאת ממלאת נשמרים בדפדפן הזה. כדי לא לאבד אותם אם תחליפי מכשיר או תעברי לאפליקציה - כדאי להפעיל גיבוי. תגיעי לאפשרות הזאת עוד מעט, בהמשך ההרשמה.</div>
+            <Btn onClick={onSkip}>הבנתי, נמשיך</Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

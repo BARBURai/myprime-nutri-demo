@@ -73,11 +73,13 @@ function findCol(headerCells, names) {
 
 function isTrue(v) { return /^\s*true\s*$/i.test(String(v || "")); }
 
-// Access window ends 70 days + 3 months after the (Sunday) start date, inclusive of the last day.
-function isExpired(startSunday) {
+// Access window ends 70 days + N months after the (Sunday) start date, inclusive of the
+// last day. N defaults to 3 but can be overridden per participant via the sheet.
+function isExpired(startSunday, extraMonths) {
+  const months = (Number.isFinite(extraMonths) && extraMonths > 0) ? Math.floor(extraMonths) : 3;
   const exp = new Date(startSunday.getTime());
   exp.setUTCDate(exp.getUTCDate() + 70);
-  exp.setUTCMonth(exp.getUTCMonth() + 3);
+  exp.setUTCMonth(exp.getUTCMonth() + months);
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   return today.getTime() > exp.getTime();
@@ -103,7 +105,7 @@ export default async function handler(req, res) {
   if (!sheetUrl) return res.status(200).json({ allowed: true, reason: "not_configured", configured: false });
   if (!email) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
 
-  let startStr = null, found = false, cancelled = false;
+  let startStr = null, found = false, cancelled = false, extraMonths = null;
   try {
     // Cache-busting: Google's published CSV can serve a stale copy for a few minutes.
     // Appending a timestamp helps fetch a fresher version, and we ask fetch not to cache.
@@ -115,11 +117,12 @@ export default async function handler(req, res) {
     // Locate the "ביטלה" (cancellation) and start-date columns by header name.
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
-    let cancelCol = -1, startCol = -1, headerFound = false;
+    let cancelCol = -1, startCol = -1, monthsCol = -1, headerFound = false;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
       cancelCol = findCol(header, ["ביטלה"]);
       startCol = findCol(header, ["360 - FINAL PERSONAL START", "FINAL PERSONAL START", "PERSONAL START"]);
+      monthsCol = findCol(header, ["חודשי גישה נוספים"]);
       headerFound = cancelCol !== -1 || startCol !== -1;
     }
 
@@ -147,6 +150,12 @@ export default async function handler(req, res) {
       } else if (/(^|,)\s*TRUE\s*(,|$)/i.test(line)) {
         cancelled = true; // fallback only when the header wasn't found
       }
+
+      // Extra access months (overrides the default 3). Blank / invalid keeps the default.
+      if (monthsCol !== -1 && cells[monthsCol] != null && String(cells[monthsCol]).trim() !== "") {
+        const n = parseInt(String(cells[monthsCol]).replace(/[^\d]/g, ""), 10);
+        if (Number.isFinite(n) && n > 0) extraMonths = n;
+      }
     });
   } catch (e) {
     return res.status(200).json({ allowed: false, reason: "fetch_failed", configured: true });
@@ -157,7 +166,7 @@ export default async function handler(req, res) {
   // 2) usage window (only when a parseable start date exists for this participant)
   const startSunday = parseDateToSunday(startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
-  if (startSunday && isExpired(startSunday)) {
+  if (startSunday && isExpired(startSunday, extraMonths)) {
     return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate });
   }
 
