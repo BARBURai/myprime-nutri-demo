@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.57";
+const VERSION = "3.58";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1116,6 +1116,30 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
     </div>
   );
 }
+// Shown when a participant has finished signing up but her programme starts on a
+// later Sunday. Day 1 (and everything with it) unlocks at midnight on that date.
+function PreStartScreen({ name, startDate }) {
+  const start = new Date(startDate);
+  const daysLeft = Math.max(0, Math.ceil((start - new Date(TODAY)) / 86400000));
+  const dateStr = start.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" });
+  const dayName = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"][start.getDay()];
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: "40px 24px 40px", textAlign: "center", fontFamily: fontStack }}>
+      <img src={MEDAL_SRC} alt="" width={96} height={96} style={{ display: "block", margin: "0 auto 18px" }} />
+      <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>הכל מוכן{name && name.trim() ? `, ${name.trim()}` : ""} 💜</div>
+      <div style={{ background: C.brandBg, borderRadius: 16, padding: "18px 16px", margin: "20px 0 18px" }}>
+        <div style={{ fontSize: 16, color: C.brandD, lineHeight: 1.6 }}>התוכנית שלך מתחילה ביום {dayName}</div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.brandD, margin: "6px 0 10px" }}>{dateStr}</div>
+        <div style={{ fontSize: 17, fontWeight: 600, color: C.brand }}>{daysLeft === 0 ? "מתחילות מחר!" : daysLeft === 1 ? "נשאר יום אחד" : `נשארו ${daysLeft} ימים`}</div>
+      </div>
+      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: "0 0 8px" }}>בינתיים אין מה למלא - נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
+      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
+      <div style={{ fontSize: 14, color: C.faint, lineHeight: 1.6, marginTop: 22 }}>אם תרצי, אפשר לעדכן את הפרטים שלך בכל רגע דרך הפרופיל.</div>
+      <div style={{ textAlign: "center", fontSize: 12.5, color: C.faint, marginTop: 26 }}>MyPrime · v{VERSION}</div>
+    </div>
+  );
+}
+
 function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onOpenContent, onOpenOnboard, catchupDue = false, onOpenCatchup, introLock = false, overlayOpen = false }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + (e.kcal || 0), 0);
@@ -4865,6 +4889,8 @@ export default function App() {
   const programWeek = programWeekFor(profile.startDate, TODAY);
   // ===== App tour controller (day-3 guided "סיור באפליקציה") =====
   const introLock = programWeekFor(profile.startDate, TODAY) === 1 && programDayNumber(profile.startDate, TODAY) <= 2;
+  // Signed up, but her programme starts on a later date - everything unlocks at midnight on day 1.
+  const preStart = programDayNumber(profile.startDate, TODAY) < 1;
   const tourView = sheet === "caloriemenu" ? "caloriemenu" : sheet === "steps" ? "steps" : (modal && modal.kind && modal.kind !== "recipe") ? "addfood" : "day";
   const markTourSeen = () => setProfile((p) => (p.tipsSeen || []).includes("appTour") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "appTour"] });
   const startTour = () => setTour({ steps: buildTour(null, profile.hideRewards), i: 0 });
@@ -5246,7 +5272,7 @@ export default function App() {
         ) : (
           <>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
@@ -5255,16 +5281,16 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)" }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
-                const locked = introLock && (t.id === "report" || t.id === "recipes");
+                const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
                 return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
-              {introLock
+              {(introLock || preStart)
                 ? <button data-tut="nav-fab" onClick={() => setLockMsg("plus")} aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: C.faint, opacity: 0.55, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
                 : <button data-tut="nav-fab" onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>}
               {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
-                const locked = introLock && (t.id === "report" || t.id === "recipes");
+                const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
                 return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
@@ -5276,9 +5302,11 @@ export default function App() {
                 <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
                   <div style={{ fontSize: 28, marginBottom: 8 }}>🌱</div>
                   <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginBottom: 18 }}>
-                    {lockMsg === "report" && "הדוח ייפתח ביום ג'. בימים הראשונים אנחנו מתמקדות בסרטוני הפתיחה וההיכרות עם התוכנית."}
-                    {lockMsg === "recipes" && "המתכונים ייפתחו ביום ג'. בימים הראשונים אנחנו מתמקדות בסרטוני הפתיחה וההיכרות עם התוכנית."}
-                    {lockMsg === "plus" && "רישום ביומן ייפתח ביום ג'. בימים הראשונים אנחנו מתמקדות בסרטוני הפתיחה וההיכרות עם התוכנית."}
+                    {preStart ? "החלק הזה ייפתח כשהתוכנית שלך מתחילה. נתראה כאן ביום הראשון 💜" : (<>
+                      {lockMsg === "report" && "הדוח ייפתח ביום ג'. בימים הראשונים אנחנו מתמקדות בסרטוני הפתיחה וההיכרות עם התוכנית."}
+                      {lockMsg === "recipes" && "המתכונים ייפתחו ביום ג'. בימים הראשונים אנחנו מתמקדות בסרטוני הפתיחה וההיכרות עם התוכנית."}
+                      {lockMsg === "plus" && "רישום ביומן ייפתח ביום ג'. בימים הראשונים אנחנו מתמקדות בסרטוני הפתיחה וההיכרות עם התוכנית."}
+                    </>)}
                   </div>
                   <Btn onClick={() => setLockMsg(null)}>הבנתי</Btn>
                 </div>
