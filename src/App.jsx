@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.60";
+const VERSION = "3.61";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4534,7 +4534,9 @@ function FaqModal({ onClose, onStartTour }) {
       <div style={{ maxHeight: "62vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
         <div style={{ fontSize: 14, color: C.sub, marginBottom: 10, lineHeight: 1.6 }}>כל מה שכדאי לדעת על השימוש באפליקציה, במקום אחד. הקישי על שאלה כדי לפתוח.</div>
         <div style={{ background: C.infoBg, borderRadius: 12, padding: "11px 13px", marginBottom: 12, fontSize: 13.5, color: C.ink, lineHeight: 1.55 }}>יש לך שאלה נוספת שלא מופיעה כאן? אפשר לשלוח אותה בקבוצה ולקבל מענה.</div>
-        {onStartTour && <button onClick={onStartTour} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: "none", borderRadius: 12, padding: "13px", marginBottom: 14, background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={17} /> סיור באפליקציה <span style={{ fontWeight: 400, fontSize: 13, opacity: 0.9 }}>(מעבר לשבוע ראשון, יום שלישי)</span></button>}
+        {onStartTour
+          ? <button onClick={onStartTour} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: "none", borderRadius: 12, padding: "13px", marginBottom: 14, background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={17} /> סיור באפליקציה <span style={{ fontWeight: 400, fontSize: 13, opacity: 0.9 }}>(מעבר לשבוע ראשון, יום שלישי)</span></button>
+          : <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 13px", marginBottom: 14, fontSize: 14, color: C.brandD, lineHeight: 1.6, textAlign: "center" }}>הסיור המודרך באפליקציה ייפתח כשהתוכנית שלך מתחילה 💜</div>}
         {FAQ_ITEMS.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} guide={f.guide} i={i} />)}
         <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: "16px 0 8px" }}>מסכים באפליקציה</div>
         {topics.map((t, j) => <Item key={`t${j}`} q={t.title} a={t.text} i={100 + j} />)}
@@ -5326,7 +5328,7 @@ export default function App() {
               </div>
             )}
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
-            {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} onStartTour={() => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
+            {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} onStartTour={preStart ? null : () => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
             {sheet === "backup" && <BackupModal backup={profile.backup} gateEmail={gateEmail} busy={bkBusy} onEnable={enableBackup} onBackupNow={backupNow} onResetCode={resetBackupCode} onClose={() => setSheet(null)} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} autoFocusInput={!tour} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
