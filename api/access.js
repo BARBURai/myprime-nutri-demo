@@ -39,6 +39,40 @@ function parseDateToSunday(s) {
 
 function ymd(dt) { return dt.toISOString().slice(0, 10); }
 
+// Parse one CSV line into cells, respecting double-quoted fields (which may contain commas).
+function parseCsvLine(line) {
+  const out = []; let cur = ""; let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += ch;
+    } else {
+      if (ch === '"') q = true;
+      else if (ch === ",") { out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out.map((c) => c.trim());
+}
+
+// Normalize a header cell for matching: lowercase, collapse whitespace, strip quotes.
+function normHeader(s) { return String(s || "").replace(/^["']|["']$/g, "").replace(/\s+/g, " ").trim().toLowerCase(); }
+
+// Find a column index whose header matches any of the given names (whitespace/quote tolerant).
+function findCol(headerCells, names) {
+  const norm = headerCells.map(normHeader);
+  for (const name of names) {
+    const target = normHeader(name);
+    const idx = norm.indexOf(target);
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+function isTrue(v) { return /^\s*true\s*$/i.test(String(v || "")); }
+
 // Access window ends 70 days + 3 months after the (Sunday) start date, inclusive of the last day.
 function isExpired(startSunday) {
   const exp = new Date(startSunday.getTime());
@@ -71,15 +105,48 @@ export default async function handler(req, res) {
 
   let startStr = null, found = false, cancelled = false;
   try {
-    const r = await fetch(sheetUrl, { redirect: "follow" });
+    // Cache-busting: Google's published CSV can serve a stale copy for a few minutes.
+    // Appending a timestamp helps fetch a fresher version, and we ask fetch not to cache.
+    const bust = (sheetUrl.indexOf("?") === -1 ? "?" : "&") + "_cb=" + Date.now();
+    const r = await fetch(sheetUrl + bust, { redirect: "follow", cache: "no-store", headers: { "cache-control": "no-cache" } });
     const text = await r.text();
-    text.split(/\r?\n/).forEach((line) => {
+    const lines = text.split(/\r?\n/);
+
+    // Locate the "ביטלה" (cancellation) and start-date columns by header name.
+    // If headers are found, we read those exact columns; otherwise we fall back
+    // to the old permissive scan so the gate keeps working on an unexpected sheet.
+    let cancelCol = -1, startCol = -1, headerFound = false;
+    if (lines.length) {
+      const header = parseCsvLine(lines[0]);
+      cancelCol = findCol(header, ["ביטלה"]);
+      startCol = findCol(header, ["360 - FINAL PERSONAL START", "FINAL PERSONAL START", "PERSONAL START"]);
+      headerFound = cancelCol !== -1 || startCol !== -1;
+    }
+
+    lines.forEach((line, idx) => {
+      if (idx === 0 && headerFound) return; // skip header row
       const em = (line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0];
       if (!em || em.toLowerCase() !== email) return;
       found = true;
-      const dm = (line.match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0];
-      if (dm) startStr = dm;
-      if (/(^|,)\s*TRUE\s*(,|$)/i.test(line)) cancelled = true; // cancellation column = TRUE
+      const cells = parseCsvLine(line);
+
+      // Start date: prefer the exact column; else first date-looking token in the row.
+      if (startCol !== -1 && cells[startCol]) {
+        const dm = (cells[startCol].match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0];
+        if (dm) startStr = dm;
+      }
+      if (!startStr) {
+        const dm = (line.match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0];
+        if (dm) startStr = dm;
+      }
+
+      // Cancellation: read ONLY the "ביטלה" column when known. This fixes the bug where
+      // a TRUE in any other boolean column (e.g. "הורידה אפליקציה") wrongly blocked a user.
+      if (cancelCol !== -1) {
+        if (isTrue(cells[cancelCol])) cancelled = true;
+      } else if (/(^|,)\s*TRUE\s*(,|$)/i.test(line)) {
+        cancelled = true; // fallback only when the header wasn't found
+      }
     });
   } catch (e) {
     return res.status(200).json({ allowed: false, reason: "fetch_failed", configured: true });
