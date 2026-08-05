@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.53";
+const VERSION = "3.54";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -702,6 +702,79 @@ function OnboardNotify({ email }) {
   );
 }
 
+function InstallGuideModal({ onClose }) {
+  const waHref = "https://wa.me/972547304177?text=" + encodeURIComponent("היי, אני צריכה עזרה בהתקנת האפליקציה של מיי פריים");
+  return (
+    <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 360, width: "100%", maxHeight: "85%", overflowY: "auto", textAlign: "right", fontFamily: fontStack }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 4 }}>התקנה כאפליקציה במסך הבית</div>
+        <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>אפשר להוסיף את מיי פריים למסך הבית כדי לפתוח אותה כמו אפליקציה רגילה, עם אייקון משלה.</p>
+        <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אנדרואיד (Chrome)</div>
+        <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
+          <li>פתחי את האפליקציה בדפדפן Chrome.</li>
+          <li>הקישי על תפריט שלוש הנקודות (⋮) בפינה העליונה.</li>
+          <li>בחרי "הוספה למסך הבית" (או "התקנת אפליקציה").</li>
+          <li>אשרי - והאייקון יופיע במסך הבית.</li>
+        </ol>
+        <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
+        <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 16px", paddingInlineStart: 20 }}>
+          <li>פתחי את האפליקציה בדפדפן Safari.</li>
+          <li>הקישי על כפתור השיתוף (ריבוע עם חץ כלפי מעלה).</li>
+          <li>גללי ובחרי "הוספה למסך הבית".</li>
+          <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
+        </ol>
+        <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>לרענון האפליקציה באייפון</div>
+        <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.7, margin: "0 0 16px" }}>באייפון משיכה למטה לא מרעננת את האפליקציה. כדי לרענן: סגרי אותה לגמרי (החליקי מלמטה למעלה ועצרי באמצע, ואז החליקי את הכרטיס של האפליקציה כלפי מעלה), ופתחי שוב מהאייקון.</p>
+        <a href={waHref} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "12px", fontSize: 15, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}><MessageCircle size={18} /> צריכה עזרה? וואטסאפ</a>
+        <Btn onClick={onClose}>סגירה</Btn>
+      </div>
+    </div>
+  );
+}
+
+function InstallGate({ onSkip }) {
+  const isIOS = /iphone|ipad|ipod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
+  const waHref = "https://wa.me/972547304177?text=" + encodeURIComponent("היי, אני צריכה עזרה בהתקנת האפליקציה של מיי פריים");
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", fontFamily: fontStack }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "24px 22px 16px", textAlign: "right" }}>
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>📲</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>כדי להתחיל, מומלצת התקנה על הטלפון</div>
+          <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>ההתקנה נותנת לך אייקון משלה במסך הבית ופתיחה מהירה כמו אפליקציה רגילה. אחרי ההתקנה, פתחי את האפליקציה מהאייקון החדש - ומשם נמשיך יחד 💜</p>
+        </div>
+        {isIOS ? (
+          <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אייפון (Safari)</div>
+            <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
+              <li>ודאי שאת בדפדפן Safari.</li>
+              <li>הקישי על כפתור השיתוף (ריבוע עם חץ כלפי מעלה).</li>
+              <li>גללי ובחרי "הוספה למסך הבית".</li>
+              <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
+            </ol>
+          </div>
+        ) : (
+          <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אנדרואיד (Chrome)</div>
+            <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
+              <li>ודאי שאת בדפדפן Chrome.</li>
+              <li>הקישי על תפריט שלוש הנקודות (⋮) בפינה העליונה.</li>
+              <li>בחרי "הוספה למסך הבית" (או "התקנת אפליקציה").</li>
+              <li>אשרי - והאייקון יופיע במסך הבית.</li>
+            </ol>
+          </div>
+        )}
+        <a href={waHref} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "13px", fontSize: 15.5, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>
+          <MessageCircle size={19} /> צריכה עזרה? דברי איתנו בוואטסאפ
+        </a>
+      </div>
+      <div style={{ padding: "10px 20px max(16px, env(safe-area-inset-bottom))", borderTop: `1px solid ${C.line}` }}>
+        <button onClick={onSkip} style={{ width: "100%", border: `1.5px solid ${C.line}`, background: C.panel, color: C.sub, borderRadius: 12, padding: "13px", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>אמשיך בדפדפן בינתיים</button>
+      </div>
+    </div>
+  );
+}
+
 function Onboarding({ onFinish, name, email, fixedStart }) {
   const [step, setStep] = useState(0);
   const [age, setAge] = useState("");
@@ -762,15 +835,6 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           {[0, 1, 2, 3, 4, 5].map((i) => (<div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.brand : C.line, transition: "background .3s" }} />))}
         </div>
         <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginBottom: 8 }}>v{VERSION}</div>
-        <div onClick={() => setShowInstall(true)} style={{ background: C.brandBg, border: `1.5px solid ${C.brand}`, borderRadius: 14, padding: "12px 14px", marginBottom: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 24 }}>📲</span>
-          <div style={{ flex: 1, textAlign: "right" }}>
-            <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>מומלץ מאוד להתקין את האפליקציה בטלפון</div>
-            <div style={{ fontSize: 13.5, color: C.brandD, textDecoration: "underline", marginTop: 2 }}>תרצי הנחיות? הקישי כאן</div>
-            {!obStandalone && <div style={{ fontSize: 12.5, color: C.brandD, fontWeight: 500, marginTop: 6, lineHeight: 1.5 }}>כדאי למלא את הפרטים רק אחרי ההתקנה, מתוך האפליקציה{obIsIOS ? " - אחרת תצטרכי למלא אותם שוב" : ""}.</div>}
-          </div>
-          <ChevronLeft size={20} color={C.brand} style={{ flexShrink: 0 }} />
-        </div>
         {DEV && (
           <div style={{ textAlign: "center", marginBottom: 12 }}>
             <button onClick={() => onFinish(draft, { enabled: false })} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 15, textDecoration: "underline", cursor: "pointer" }}>דלג ישר לדמו ←</button>
@@ -1588,7 +1652,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, maxStart, gateEmail }) {
+function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const [confirmReset, setConfirmReset] = useState(false);
@@ -1728,6 +1792,11 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
 
       <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, cursor: "pointer" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות, תשובות ועזרה</span>
+        <ChevronLeft size={18} color={C.faint} />
+      </div>
+
+      <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 18 }}>📲</span> התקנת האפליקציה על הטלפון</span>
         <ChevronLeft size={18} color={C.faint} />
       </div>
 
@@ -4644,6 +4713,11 @@ export default function App() {
   const [gateAgree, setGateAgree] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   useEffect(() => { const t = setTimeout(() => setShowSplash(false), 2000); return () => clearTimeout(t); }, []);
+  const [installSkipped, setInstallSkipped] = useState(() => { try { return localStorage.getItem("myprime_install_ack") === "1"; } catch (e) { return false; } });
+  const appIsPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
+  const appStandalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true);
+  const showInstallGate = appIsPhone && !appStandalone && !installSkipped && !showSplash;
+  const skipInstall = () => { try { localStorage.setItem("myprime_install_ack", "1"); } catch (e) {} setInstallSkipped(true); };
 
   // Android/Samsung hardware "back": intercept so the app doesn't close instantly.
   // Back first closes an open sheet/modal; otherwise it asks whether to leave.
@@ -5071,7 +5145,9 @@ export default function App() {
       <div className="phone-frame">
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
-        {gate !== "ok" ? (
+        {showInstallGate ? (
+          <InstallGate onSkip={skipInstall} />
+        ) : gate !== "ok" ? (
           <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} attempts={gateAttempts} agree={gateAgree} setAgree={setGateAgree} />
         ) : !onboarded ? (
           bkRestore === "offer" ? (
@@ -5087,7 +5163,7 @@ export default function App() {
               {tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
             </div>
             <div style={{ position: "relative", flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)" }}>
@@ -5141,6 +5217,7 @@ export default function App() {
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
             {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} C={C} font={fontStack} onClose={() => setSheet(null)} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
+            {sheet === "install" && <InstallGuideModal onClose={() => setSheet(null)} />}
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
               : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} recents={recents} onDeleteFavorite={deleteFavorite} onDeleteRecent={deleteRecent} onUndoEntry={deleteEntry} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
