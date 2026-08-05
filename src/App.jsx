@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.61";
+const VERSION = "3.62";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1717,8 +1717,17 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
   const [confirmLogout, setConfirmLogout] = useState(false);
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   const [baseOpen, setBaseOpen] = useState(false);
+  const [dietOpen, setDietOpen] = useState(false);
+  // Already installed to the home screen (or on desktop) - the install guide is redundant there.
+  const isStandalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true) || !(typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || ""));
   const [newSens, setNewSens] = useState("");
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
+  // One-line summary of what she picked, shown while the section is collapsed.
+  const dietSummary = (() => {
+    const parts = [...(profile.diet || []), ...(profile.allergies || []), ...customSens];
+    if (!parts.length) return "לא הוגדרו עדיין - אפשר להוסיף";
+    return parts.length <= 3 ? parts.join(" · ") : `${parts.slice(0, 3).join(" · ")} ועוד ${parts.length - 3}`;
+  })();
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
@@ -1818,7 +1827,14 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
       </div>
 
       <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 4 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: C.ink, marginBottom: 10 }}>העדפות תזונה</div>
+        <div onClick={() => setDietOpen(!dietOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>העדפות תזונה</div>
+            {!dietOpen && <div style={{ fontSize: 13.5, color: C.sub, marginTop: 3, lineHeight: 1.5 }}>{dietSummary}</div>}
+          </div>
+          <ChevronDown size={20} color={C.sub} style={{ flexShrink: 0, transform: dietOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+        </div>
+        {dietOpen && (<div style={{ marginTop: 12 }}>
         <div style={{ fontSize: 14, color: C.sub, marginBottom: 8 }}>סגנון תזונה (משמש להמלצות)</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
           {DIET_OPTIONS.map((d) => {
@@ -1849,6 +1865,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
             ))}
           </div>
         )}
+        </div>)}
       </div>
 
       <ReminderRow email={gateEmail} />
@@ -1866,10 +1883,12 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
         <ChevronLeft size={18} color={C.faint} />
       </div>
 
-      <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 18 }}>📲</span> התקנת האפליקציה על הטלפון</span>
-        <ChevronLeft size={18} color={C.faint} />
-      </div>
+      {!isStandalone && (
+        <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 18 }}>📲</span> התקנת האפליקציה על הטלפון</span>
+          <ChevronLeft size={18} color={C.faint} />
+        </div>
+      )}
 
       <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={() => setConfirmReset(true)} style={{ color: C.sub }}>מחיקת כל הנתונים והתחלה מחדש</Btn></div>
       <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmLogout(true)} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
