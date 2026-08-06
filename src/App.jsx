@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.86";
+const VERSION = "3.87";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2922,7 +2922,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px 18px" : "14px 16px 18px", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px 18px" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
           <button onClick={close} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
@@ -3302,7 +3302,7 @@ function EntryMenu({ onClose, onPick, mode }) {
   ];
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 26 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>מה תרצי להזין?</span>
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
@@ -3322,7 +3322,7 @@ function EntryMenu({ onClose, onPick, mode }) {
 function SheetShell({ title, onClose, children, className = "" }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 27 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className={className} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
+      <div onClick={(e) => e.stopPropagation()} className={className} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexShrink: 0 }}>
           <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{title}</span>
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
