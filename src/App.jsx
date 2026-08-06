@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.67";
+const VERSION = "3.69";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1220,7 +1220,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
     <div style={{ padding: "8px 0 24px" }}>
       {tipIdx >= 0 && tipIdx < tipQueue.length && <TutorialOverlay steps={tipQueue} idx={tipIdx} onNext={tipAdvance} onChoice={tipChoose} />}
       <div style={{ position: "relative" }}>
-      <div data-tut="daystrip" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
+      <div data-tut="daystrip" className="no-textscale" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
           const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = parseDay(d); const isRest = profile.keepShabbat && dd.getUTCDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
           return (
@@ -3298,10 +3298,10 @@ function EntryMenu({ onClose, onPick, mode }) {
   );
 }
 
-function SheetShell({ title, onClose, children }) {
+function SheetShell({ title, onClose, children, className = "" }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 27 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
+      <div onClick={(e) => e.stopPropagation()} className={className} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexShrink: 0 }}>
           <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{title}</span>
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
@@ -3823,7 +3823,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   const rel = relLabel(date);
   const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · שבוע ${week}${dn >= 1 ? `, יום ${dn}` : ""}`;
   return (
-    <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
+    <div className="no-textscale" style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
       <div data-tut="tracker" onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={16} color={C.brand} /> יומן המעקב שלי</div>
         <div style={{ fontSize: 13.5, fontWeight: 500, color: C.sub, marginTop: 3 }}>{dateLine}</div>
@@ -3858,7 +3858,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
         )}
       </div>
       {!hideRewards && (
-      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} data-tut="cabinet" role="button" aria-label="ארון הגביעים" style={{ width: 84, minWidth: 58, flexShrink: 1, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
+      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} data-tut="cabinet" role="button" aria-label="ארון הגביעים" style={{ width: 84, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
         <img src="/medals/trophy-icon.webp" alt="" width={72} height={58} style={{ display: "block", maxWidth: "100%", height: "auto", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
         <div style={{ fontSize: 13.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
         <ChevronLeft size={16} color="#fff" />
@@ -4394,7 +4394,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
     </div>
   );
   return (
-    <SheetShell title={`סיכום שבוע ${week}`} onClose={onClose}>
+    <SheetShell title={`סיכום שבוע ${week}`} onClose={onClose} className="no-textscale">
       {wk1 ? (
         !wk1HasData ? emptyState : (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
@@ -5343,8 +5343,10 @@ export default function App() {
         /* Accessible text scaling. Uses zoom (not pinch) so the browser reflows the
            layout properly instead of stretching the fixed frame out of shape. */
         .txt-large{zoom:1.12}
+        /* Blocks whose layout is too tight to scale - kept at their normal size. */
+        .txt-large .no-textscale{zoom:0.893}
         @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;height:var(--vvh,100dvh);border-radius:0;box-shadow:none;border:none}}`}</style>
-      <div className={`phone-frame${profile.textSize === "large" ? " txt-large" : ""}`}>
+      <div className="phone-frame">
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
         {showInstallGate ? (
@@ -5361,7 +5363,7 @@ export default function App() {
           )
         ) : (
           <>
-            <div style={{ flex: 1, overflowY: "auto" }}>
+            <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
