@@ -347,12 +347,12 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     return (
       <div>
         {items.map((it, i) => (
-          <a key={i} href={PDF_BASE + it.file} target="_blank" rel="noreferrer"
+          <a key={i} href={PDF_BASE + it.file} download={it.file} rel="noreferrer"
             style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", border: `1.5px solid ${C.brand}`, background: C.brandBg, borderRadius: 14, padding: "13px 14px", marginTop: i === 0 ? 4 : 10 }}>
             <div style={{ width: 42, height: 42, borderRadius: 11, background: C.brand, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><FileText size={20} color="#fff" /></div>
             <div style={{ flex: 1, textAlign: "right" }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD }}>{it.label}</div>
-              <div style={{ fontSize: 15, color: C.brandD }}>נפתח בלחיצה</div>
+              <div style={{ fontSize: 15, color: C.brandD }}>לחצי להורדה</div>
             </div>
             <Download size={20} color={C.brand} style={{ flexShrink: 0 }} />
           </a>
