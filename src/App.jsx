@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.95";
+const VERSION = "3.98";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4656,9 +4656,22 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
     if (!cur.sel) return;
     const el = document.querySelector(`[data-tut="${cur.sel}"]`);
     if (!el) return;
-    try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {}
-    const t = setTimeout(() => { if (!cancelled) { try { setRect(el.getBoundingClientRect()); } catch (e) {} } }, 380);
-    return () => { cancelled = true; clearTimeout(t); };
+    // Smooth scrolling used to still be in motion when we measured, so the cut-out
+    // landed where the element *had* been. Jump instantly, then measure after paint
+    // and keep the highlight in sync if anything moves afterwards.
+    try { el.scrollIntoView({ block: "center", behavior: "auto" }); } catch (e) {}
+    const measure = () => { if (!cancelled) { try { setRect(el.getBoundingClientRect()); } catch (e) {} } };
+    const raf = requestAnimationFrame(() => requestAnimationFrame(measure));
+    const t1 = setTimeout(measure, 180);
+    const t2 = setTimeout(measure, 420);
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf); clearTimeout(t1); clearTimeout(t2);
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
   }, [idx, cur.sel]);
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const tap = !!cur.tap;
