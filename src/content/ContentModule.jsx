@@ -342,46 +342,67 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   }
 
   function DeviceGuide({ g }) {
+    // Three collapsible cards: her own phone opens first, the others are one tap away.
     const iosFirst = /iphone|ipad|ipod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
-    const [plat, setPlat] = useState(iosFirst ? "ios" : "android");
-    const cur = g[plat] || {};
-    const other = plat === "ios" ? "android" : "ios";
-    const otherLabel = (g[other] && g[other].label) || (other === "ios" ? "אייפון" : "סמסונג / אנדרואיד");
-    return (
-      <div style={{ marginBottom: 18 }}>
-        {g.title && <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, marginBottom: 4 }}>{g.title}</div>}
-        {g.intro && g.intro.map((t, i) => (<div key={i} style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, marginBottom: 8 }}>{t}</div>))}
+    const [open, setOpen] = useState(iosFirst ? "ios" : "android");
+    const toggle = (k) => setOpen(open === k ? null : k);
+    const rich = (t) => (typeof t === "string" ? t : (<><b style={{ color: C.brandD }}>{t.b}</b>{t.t}</>));
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.brandBg, borderRadius: 12, padding: "10px 12px", margin: "12px 0" }}>
-          {cur.icon && <img src={PDF_BASE + cur.icon} alt="" width={30} height={30} style={{ borderRadius: 8, display: "block", flexShrink: 0 }} />}
-          <div style={{ flex: 1, fontSize: 15.5, fontWeight: 700, color: C.brandD }}>{cur.label}</div>
-        </div>
-
-        {(cur.steps || []).map((st, i) => (
-          <div key={i} style={{ display: "flex", gap: 11, alignItems: "flex-start", marginBottom: 13 }}>
-            <div style={{ width: 26, height: 26, borderRadius: 999, background: C.brand, color: "#fff", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>{i + 1}</div>
+    const Steps = ({ d }) => (
+      <div style={{ paddingTop: 4 }}>
+        {(d.steps || []).map((st, i) => (
+          <div key={i} style={{ display: "flex", gap: 11, alignItems: "flex-start", marginBottom: 16 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 999, background: C.brand, color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>{i + 1}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.7 }}>{st.text}</div>
-              {st.img && <img src={PDF_BASE + st.img} alt="" style={{ width: "100%", maxWidth: 250, display: "block", borderRadius: 10, marginTop: 8, border: `1px solid ${C.line}` }} />}
+              <div style={{ fontSize: 18, color: C.ink, lineHeight: 1.8, display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                {st.appIcon && <img src={PDF_BASE + st.appIcon} alt="" width={42} height={42} style={{ borderRadius: 10, display: "block", flexShrink: 0, boxShadow: "0 1px 4px rgba(0,0,0,0.16)" }} />}
+                <span>{rich(st.text)}</span>
+              </div>
+              {st.tip && <div style={{ fontSize: 16, color: C.sub, lineHeight: 1.7, marginTop: 5 }}>{st.tip}</div>}
+              {st.img && <img src={PDF_BASE + st.img} alt="" style={{ width: "100%", display: "block", borderRadius: 12, marginTop: 10, border: `1px solid ${C.line}`, background: "#fff" }} />}
             </div>
           </div>
         ))}
+      </div>
+    );
 
-        <button onClick={() => setPlat(other)} style={{ width: "100%", border: `1.5px solid ${C.brand}`, background: C.panel, color: C.brandD, borderRadius: 12, padding: "11px", fontSize: 15, fontWeight: 700, fontFamily: font, cursor: "pointer", marginTop: 4 }}>
-          יש לי {otherLabel} - הצגת ההנחיות
-        </button>
+    const Card = ({ id, label, children }) => (
+      <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 10 }}>
+        <div onClick={() => toggle(id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", gap: 10 }}>
+          <span style={{ fontSize: 17.5, fontWeight: 700, color: C.brandD }}>{label}</span>
+          <ChevronDown size={21} color={C.sub} style={{ flexShrink: 0, transform: open === id ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+        </div>
+        {open === id && <div style={{ marginTop: 8 }}>{children}</div>}
+      </div>
+    );
 
-        {cur.apps && cur.apps.length > 0 && (
-          <div style={{ marginTop: 18 }}>
-            <div style={{ fontSize: 16.5, fontWeight: 700, color: C.ink, marginBottom: 4 }}>אפליקציות מומלצות</div>
-            <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginBottom: 9 }}>אם תרצי, אפשר להוריד אפליקציה ייעודית למדידת צעדים:</div>
-            {cur.apps.map((a, i) => (
-              <a key={i} href={a.url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, padding: "12px 13px", marginBottom: 8 }}>
-                <div style={{ flex: 1, fontSize: 15.5, fontWeight: 600, color: C.brandD, textAlign: "right" }}>{a.label}</div>
-                <ExternalLink size={17} color={C.brand} style={{ flexShrink: 0 }} />
-              </a>
-            ))}
-          </div>
+    const AppList = ({ items, heading }) => (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 16.5, fontWeight: 700, color: C.ink, marginBottom: 7 }}>{heading}</div>
+        {(items || []).map((a, i) => (
+          <a key={i} href={a.url} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, padding: "12px 13px", marginBottom: 8 }}>
+            <div style={{ flex: 1, fontSize: 17, fontWeight: 600, color: C.brandD, textAlign: "right" }}>{a.label}</div>
+            <ExternalLink size={17} color={C.brand} style={{ flexShrink: 0 }} />
+          </a>
+        ))}
+      </div>
+    );
+
+    return (
+      <div style={{ marginBottom: 18 }}>
+        {g.title && <div style={{ fontSize: 21, fontWeight: 700, color: C.brandD, marginBottom: 8 }}>{g.title}</div>}
+        {g.intro && g.intro.map((t, i) => (<div key={i} style={{ fontSize: 18, color: C.ink, lineHeight: 1.85, marginBottom: 10 }}>{rich(t)}</div>))}
+        <div style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.7, margin: "12px 0 10px" }}>בחרי את ההנחיות המתאימות לטלפון שלך:</div>
+
+        {g.android && <Card id="android" label={g.android.label || "הנחיות לסמסונג / אנדרואיד"}><Steps d={g.android} /></Card>}
+        {g.ios && <Card id="ios" label={g.ios.label || "הנחיות לאייפון"}><Steps d={g.ios} /></Card>}
+
+        {((g.android && g.android.apps) || (g.ios && g.ios.apps)) && (
+          <Card id="apps" label="אפליקציות חיצוניות מומלצות">
+            <div style={{ fontSize: 17, color: C.ink, lineHeight: 1.8, marginBottom: 12 }}>אם תרצי, אפשר להוריד אפליקציה ייעודית למדידת צעדים:</div>
+            {g.android && g.android.apps && <AppList items={g.android.apps} heading="למכשירי אנדרואיד" />}
+            {g.ios && g.ios.apps && <AppList items={g.ios.apps} heading="לאייפון" />}
+          </Card>
         )}
       </div>
     );
@@ -458,11 +479,26 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
             )}
 
             {l.videoId && <div data-tut="lessonplayer"><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => markDone(openL.week, openL.day, openL.i) : undefined} /></div>}
-            {l.text2 && l.text2.length > 0 && (
-              <div style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.85, marginBottom: 16 }}>
-                {l.text2.map((t, i) => (<div key={i} style={{ marginBottom: 10 }}>{t}</div>))}
+            {l.sections && l.sections.map((sec, si) => (
+              <div key={si} style={{ marginBottom: 20 }}>
+                {sec.h && <div style={{ fontSize: 21, fontWeight: 700, color: C.brandD, marginBottom: 8 }}>{sec.h}</div>}
+                {(sec.p || []).map((t, i) => (
+                  <div key={i} style={{ fontSize: 18, color: C.ink, lineHeight: 1.85, marginBottom: 10 }}>
+                    {typeof t === "string" ? t : (<><b style={{ color: C.brandD }}>{t.b}</b>{t.t}</>)}
+                  </div>
+                ))}
+                {(sec.list || []).length > 0 && (
+                  <div style={{ marginTop: 2 }}>
+                    {sec.list.map((li, i) => (
+                      <div key={i} style={{ display: "flex", gap: 9, alignItems: "flex-start", marginBottom: 8 }}>
+                        <span style={{ color: C.brand, fontSize: 20, lineHeight: 1.4, flexShrink: 0 }}>•</span>
+                        <span style={{ fontSize: 18, color: C.ink, lineHeight: 1.8 }}>{typeof li === "string" ? li : (<><b style={{ color: C.brandD }}>{li.b}</b> {li.t}</>)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            ))}
             {l.guide && <DeviceGuide g={l.guide} />}
             {l.image && (<div style={{ borderRadius: 14, overflow: "hidden", marginBottom: 16 }}><img src={l.image} alt={l.title} style={{ width: "100%", display: "block", borderRadius: 14 }} /></div>)}
             <PageImages l={l} />
