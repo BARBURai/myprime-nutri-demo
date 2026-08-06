@@ -346,6 +346,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               <PageImages l={l} />
               <DownloadBtn l={l} />
             </div>
+            {zoomPage && <ZoomViewer src={zoomPage} onClose={() => setZoomPage(null)} />}
           </div>
         );
       }
@@ -398,6 +399,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               </div>
             )}
           </div>
+          {zoomPage && <ZoomViewer src={zoomPage} onClose={() => setZoomPage(null)} />}
         </div>
       );
     }
