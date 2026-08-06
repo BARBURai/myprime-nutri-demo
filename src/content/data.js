@@ -67,11 +67,9 @@ export const CONTENT_DAYS = [
         "type": "task",
         "text": [
           "זו המשימה הראשונה שלך בתוכנית שמטרתה לטפל בחלק מהתסמינים שמפריעים לנו עקב השינויים ההורמונליים. ההסבר המפורט וההנחיות בסרטון שכאן, וכמו כל המשימות היא תתחיל באופן מאוד הדרגתי כדי להקל עליך.",
-          "שימי לב - מצורף לך כאן דף הנחיות שיסייע לך בביצוע המשימה. את מוזמנת להוריד אותו לנייד או למחשב.",
-          "אני איתך 🌸",
+          "אני איתך \ud83c\udf38",
           "ענת"
         ],
-        "videoId": "2978141e-ed8b-47d6-aec1-7739aa0e62b9",
         "sections": [
           {
             "h": "מטרת המשימה",
@@ -101,12 +99,58 @@ export const CONTENT_DAYS = [
             ]
           }
         ],
+        "videoId": "2978141e-ed8b-47d6-aec1-7739aa0e62b9"
+      },
+      {
+        "title": "הנחיות לשימוש באפליקציות צעדים",
+        "type": "info",
+        "text": [
+          "כאן תמצאי את ההנחיות המלאות למציאת מספר הצעדים היומי הממוצע שלך, לפי סוג הטלפון שיש לך."
+        ],
+        "guide": {
+          "title": "נקודת הפתיחה",
+          "intro": [
+            "מציאת מספר הצעדים היומי הממוצע שלך. כדי לבצע את משימת הצעדים תידרשי לאפליקציה למדידת צעדים.",
+            { "b": "אופציונלי: ", "t": "אם יש לך שעון חכם, שעון ריצה או צמיד כושר - בכל אחד מהם יש מד צעדים מובנה." },
+            { "b": "הכי פשוט: ", "t": "מדידה באמצעות הטלפון. השתמשי באפליקציה המובנית כדי למדוד את צעדייך. כדי שהמדידה תהיה טובה, חשוב שהטלפון יהיה עלייך בזמן ההליכה." }
+          ],
+          "ios": {
+            "label": "הנחיות לאייפון",
+            "steps": [
+              { "text": { "b": "פתחי את האפליקציה 'בריאות' ", "t": "והקישי על כפתור 'סיכום'." }, "appIcon": "steps-iphone-1.jpg", "tip": "לא מוצאת אותה? אפשר לחפש 'בריאות' בחיפוש של הטלפון. כדאי לשמור אותה במסך הבית לגישה מהירה." },
+              { "text": "לחצי על 'הצגת כל נתוני הבריאות'.", "img": "steps-iphone-2.jpg" },
+              { "text": "גללי לכרטיסיית 'צעדים' ולחצי עליה.", "img": "steps-iphone-3.jpg" },
+              { "text": "לחצי בסרגל העליון על 'שבועות' (שב') וצפי בממוצע הצעדים שמופיע לשבוע הנוכחי. באמצעות משיכה לצדדים תוכלי לצפות בשבועות אחרים שנמדדו.", "img": "steps-iphone-4.jpg" },
+              { "text": "אם תרצי לשמור את הצעדים במועדפים לגישה מהירה מחלון הסיכום - גללי למטה בכרטיסיה ולחצי 'הצמדה לסיכום'." }
+            ],
+            "apps": [
+              { "label": "מד צעדים - מונה צעד", "url": "https://apps.apple.com/il/app/%D7%9E%D7%93-%D7%A6%D7%A2%D7%93%D7%99%D7%9D-%D7%9E%D7%95%D7%A0%D7%94-%D7%A6%D7%A2%D7%93/id1514710792?l=iw" },
+              { "label": "Pedometer - Step Counter", "url": "https://apps.apple.com/il/app/pedometer-%CE%B1-step-counter-app/id1027151285?l=iw" },
+              { "label": "StepsApp - מד צעדים", "url": "https://apps.apple.com/il/app/stepsapp-%D7%9E%D7%93-%D7%A6%D7%A2%D7%93%D7%99%D7%9D/id1037595083?l=iw" }
+            ]
+          },
+          "android": {
+            "label": "הנחיות לסמסונג / אנדרואיד",
+            "steps": [
+              { "text": { "b": "פתחי את האפליקציה 'Samsung Health'", "t": "." }, "appIcon": "steps-samsung-1.jpg", "tip": "לא מוצאת אותה? אפשר לחפש 'Samsung Health' בחיפוש של הטלפון. כדאי לשמור אותה במסך הבית לגישה מהירה." },
+              { "text": "גללי למטה עד שתגיעי לכרטיסיה 'צעדים'.", "img": "steps-samsung-2.jpg" },
+              { "text": "לחצי על סימן הגרף בפינה העליונה.", "img": "steps-samsung-3.jpg" },
+              { "text": "בחרי בסרגל העליון 'ימים' וצפי בממוצע הצעדים שמופיע לשבוע הנוכחי. באמצעות משיכה לצדדים תוכלי לצפות בשבועות אחרים שנמדדו.", "img": "steps-samsung-4.jpg" }
+            ],
+            "apps": [
+              { "label": "Pedometer - Step Counter", "url": "https://play.google.com/store/apps/details?id=pedometer.steptracker.calorieburner.stepcounter" },
+              { "label": "Step Tracker - Pedometer", "url": "https://play.google.com/store/apps/details?id=steptracker.healthandfitness.walkingtracker.pedometer" },
+              { "label": "Pedometer by Tayutau", "url": "https://play.google.com/store/apps/details?id=com.tayu.tau.pedometer" }
+            ]
+          }
+        },
         "downloads": [
           { "label": "הורדת דף ההנחיות המעוצב", "file": "W01D02-task-2.pdf" }
         ]
       }
     ]
   },
+
   {
     "week": 1,
     "day": 3,

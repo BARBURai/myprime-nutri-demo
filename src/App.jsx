@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.88";
+const VERSION = "3.91";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1166,6 +1166,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   // Day 2 introduces the steps task and nothing else - calories, the tracker and
   // the plus button all belong to day 3.
   const stepsOnlyDay = progDay === 2;
+  const diaryStartDay = progDay === 3;
   const baseline = stepBaseline(stepsByDate, profile.startDate);
   // Running goal: stored value if set, else baseline + cumulative offset; null in week 1 (still measuring).
   const dayStepGoal = effectiveStepGoal(profile.stepGoal, week);
@@ -1243,7 +1244,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       </div>
       {week === 1 && progDay >= 3 && (
       <div style={{ display: "flex", justifyContent: "center", padding: "6px 16px 0" }}>
-        <button data-tut="tourbtn" onClick={onStartTour} className={(tipsSeen || []).includes("appTour") ? "" : "tour-pulse"} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${(tipsSeen || []).includes("appTour") ? C.line : C.brand}`, background: C.panel, color: C.brandD, borderRadius: 999, padding: "5px 14px", fontSize: 13, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={15} /> סיור באפליקציה</button>
+        <span data-tut="tourbtn" />
       </div>
       )}
 
@@ -1296,6 +1297,12 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
               <div style={{ fontSize: 14, color: "rgba(255,255,255,0.92)", marginTop: 2 }}>מה שכבר פתוח לך באפליקציה 💜</div>
             </div>
             <ChevronLeft size={19} color="#fff" style={{ flexShrink: 0 }} />
+          </div>
+        )}
+        {diaryStartDay && (
+          <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 14, padding: "12px 14px", marginBottom: 12 }}>
+            <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginBottom: 10 }}>היום מתחילה משימת יומן התזונה. כדאי לצפות בהנחיות המשימה בסרטונים של היום לפני שממלאים, ואז להתחיל לתעד כאן את הארוחות שלך.</div>
+            <button onClick={onStartTour} style={{ width: "100%", border: "none", borderRadius: 11, padding: "11px", background: C.amber, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הסבר: איך למלא את יומן התזונה ולהשתמש באפליקציה</button>
           </div>
         )}
         {stepsOnlyDay && (
@@ -3301,6 +3308,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
 function EntryMenu({ onClose, onPick, mode }) {
   const FOOD = { bg: C.brandBg, fg: C.brand };
   const ACT = { bg: C.infoBg, fg: C.info };
+  const STEP = { bg: C.amberBg, fg: C.amber };
   const items = mode === "calorie" ? [
     { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת", tint: FOOD },
     { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי", tint: ACT },
@@ -3308,6 +3316,7 @@ function EntryMenu({ onClose, onPick, mode }) {
     { id: "food", ic: Search, t: "הוספת מזון", s: "חיפוש, ברקוד, צילום או ספרי לי מה אכלת", tint: FOOD },
     { id: "recommend", ic: Sparkles, t: "מה כדאי לאכול?", s: "הצעות חכמות לפי היעדים שלך", tint: FOOD },
     { id: "activity", ic: Dumbbell, t: "פעילות גופנית", s: "מתווסף לתקציב הקלורי", tint: ACT },
+    { id: "steps", ic: Footprints, t: "עדכון צעדים", s: "הזנת מספר הצעדים של היום", tint: STEP },
   ];
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 26 }} onClick={onClose}>
@@ -3435,7 +3444,7 @@ function StepGuideLink({ style, linkOnly }) {
     <div style={style}>
       {!linkOnly && (
         <div style={{ fontSize: 13, color: C.sub, textAlign: "center", lineHeight: 1.55, marginBottom: 8 }}>
-          כדי לראות כמה צעדים עשית היום: פתחי את אפליקציית הבריאות בטלפון, מצאי את מספר הצעדים של היום, והזיני אותו כאן.
+          כדי לראות כמה צעדים עשית היום: פתחי את אפליקציית הבריאות בטלפון, מצאי את מספר הצעדים של היום, והזיני אותו כאן. להנחיות מלאות על השימוש באפליקציית הצעדים - עברי למשימת הצעדים (שבוע 1, יום שני).
         </div>
       )}
       <button onClick={() => setView("menu")} style={box}><Info size={16} /> זקוקה להנחיות שימוש באפליקציית הצעדים? לחצי</button>
@@ -3497,10 +3506,9 @@ function StepsModal({ current, goal, weightKg, onClose, onAdd, autoFocusInput = 
       <div style={{ height: 10, borderRadius: 6, background: C.amberBg, overflow: "hidden", marginBottom: 8 }}>
         <div style={{ width: `${frac * 100}%`, height: "100%", background: C.amber, borderRadius: 6 }} />
       </div>
-      <div style={{ textAlign: "center", fontSize: 14, color: C.sub, marginBottom: 16 }}>{steps.toLocaleString()} מתוך יעד {goal.toLocaleString()} · מוסיף ~{kcal} קק״ל לתקציב</div>
+      <div style={{ textAlign: "center", fontSize: 14, color: C.sub, marginBottom: 16 }}>{steps.toLocaleString()} צעדים · {goal > 0 ? `מתוך יעד ${goal.toLocaleString()}` : "היעד עדיין לא הוגדר"} · מוסיף ~{kcal} קק״ל לתקציב</div>
       <Btn onClick={() => onAdd(steps)}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> שמור</Btn>
       <div style={{ fontSize: 13, color: C.faint, textAlign: "center", marginTop: 10, lineHeight: 1.5 }}>לשינוי יעד הצעדים - אפשר בפרופיל. הזנה חוזרת היום מעדכנת את הערך.</div>
-      <StepGuideLink style={{ marginTop: 10 }} />
     </SheetShell>
   );
 }
@@ -4570,9 +4578,9 @@ const TOUR_NO = [
 // Day 2 gets its own short walkthrough of the steps ring, opened from the button
 // on that day. It used to sit inside the day-3 tour and made it long.
 const TOUR_STEPS_ONLY = [
-  { view: "day", open: "day", sel: "steps", tap: true, event: "opensteps", text: "זו טבעת הצעדים שלך 👟 לחצי על הפלוס שבתוכה." },
-  { view: "steps", open: "steps", sel: "steps-input", text: <>כאן מזינים את מספר הצעדים. פותחים את אפליקציית הבריאות בטלפון, רואים כמה צעדים נצברו היום, ומזינים את המספר כאן. <b>אפשר לעדכן את הצעדים כמה פעמים שתרצי במהלך היום (וגם לימים קודמים) - אל דאגה.</b></> },
-  { view: "day", open: "day", sel: "steps", last: true, btn: "סיימנו", text: "זהו 💜 בימים הקרובים היעד שלך ייקבע לפי הממוצע שתמצאי, ומשם נתקדם יחד בהדרגה." },
+  { view: "day", open: "day", noEnd: true, sel: "steps", tap: true, event: "opensteps", text: "זו טבעת הצעדים שלך 👟 לחצי על הפלוס שבתוכה." },
+  { view: "steps", open: "steps", noEnd: true, sel: "steps-input", text: <>כאן מזינים את מספר הצעדים. פותחים את אפליקציית הבריאות בטלפון, רואים כמה צעדים נצברו היום, ומזינים את המספר כאן. <b>אפשר לעדכן את הצעדים כמה פעמים שתרצי במהלך היום (וגם לימים קודמים) - אל דאגה.</b></> },
+  { view: "day", open: "day", noEnd: true, sel: "steps", last: true, btn: "סיימנו", text: "זהו 💜 בימים הקרובים היעד שלך ייקבע לפי הממוצע שתמצאי, ומשם נתקדם יחד בהדרגה." },
 ];
 
 const TOUR_TAIL = [
@@ -4584,7 +4592,7 @@ const TOUR_TAIL = [
   { view: "day", open: "day", sel: "nav-profile", text: "ב'פרופיל' נמצאות ההעדפות התזונתיות שלך ונתונים נוספים, כמו היעד הקלורי המומלץ ויעד הצעדים היומי. ניתן לעדכן את נתוני הפרופיל בכל זמן שתרצי :)" },
   { view: "day", open: "day", sel: "notesfab", text: "יש לך הערה? נשמח מאוד לשמוע כדי לשפר 💜 כפתור הבועה כאן בצד שמאל זמין לך בכל מסך - אפשר להשאיר לנו הערה מכל מקום באפליקציה." },
   { view: "day", open: "day", sel: "daystrip", text: "את יכולה תמיד לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך (סוויפ)." },
-  { view: "day", open: "day", sel: "tourbtn", btn: "סיימנו", last: true, text: "ואם לא הספקת לקלוט הכל - אל דאגה 💜 תמיד אפשר להתחיל את הסיור מחדש דרך כפתור 'סיור באפליקציה' כאן במסך, או למצוא תשובות ב'שאלות ותשובות' שבפרופיל." },
+  { view: "day", open: "day", sel: "tourbtn", btn: "סיימנו", last: true, text: "ואם לא הספקת לקלוט הכל - אל דאגה 💜 תמיד אפשר להתחיל את ההסבר מחדש מהכרטיס הצהוב שכאן במסך, או למצוא תשובות ב'שאלות ותשובות' שבפרופיל." },
 ];
 const TOUR_GATE = { view: "day", open: "day", gate: true, prompt: "תרצי הדרכה קצרה על מה שהתחדש היום באפליקציה?", choice: { yes: "כן, בבקשה", no: "אין צורך" }, text: "" };
 function buildTour(path, hideRewards) {
@@ -4688,9 +4696,9 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
               <button onClick={() => onChoice && onChoice(true)} style={{ flex: 1, border: "none", borderRadius: 10, padding: "11px", background: C.brand, color: "#fff", fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.choice.yes}</button>
               <button onClick={() => onChoice && onChoice(false)} style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px", background: "transparent", color: C.sub, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.choice.no}</button>
             </div>
-            {!cur.gate && (
+            {!cur.gate && !cur.noEnd && (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
-                {onEnd ? <button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button> : <span />}
+                {onEnd && !cur.noEnd ? <button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button> : <span />}
                 {steps.length > 1 && <span style={{ fontSize: 12.5, color: C.faint }}>{idx + 1}/{steps.length}</span>}
               </div>
             )}
