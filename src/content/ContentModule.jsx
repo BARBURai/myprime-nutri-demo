@@ -66,12 +66,14 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
   const [err, setErr] = useState(false);
   const liveRef = useRef(true);
   const iframeRef = useRef(null);
+  const boxRef = useRef(null);
   // watch-tracking refs (do not trigger re-render)
   const durationRef = useRef(0);
   const watchedRef = useRef(0);     // cumulative real seconds watched
   const lastTimeRef = useRef(null); // previous currentTime seen
   const firedRef = useRef(false);   // 80% already reported
   const reachCbRef = useRef(onReach80);
+  const playerRef = useRef(null);
   useEffect(() => { reachCbRef.current = onReach80; }, [onReach80]);
 
   useEffect(() => {
@@ -97,6 +99,7 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
       if (cancelled || !iframeRef.current) return;
       try {
         player = new playerjs.Player(iframeRef.current);
+        playerRef.current = player;
         player.on("ready", () => {
           try { player.getDuration((dur) => { if (dur && dur > 0) durationRef.current = dur; }); } catch (e) {}
         });
@@ -125,7 +128,25 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
   const box = { position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", background: "#000", marginBottom: 16 };
   if (err) return (<div style={{ ...box, paddingTop: 0, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "22px 16px", textAlign: "center" }}><span style={{ fontSize: 14.5, color: C.sub, fontFamily: font, lineHeight: 1.6 }}>לא הצלחנו לטעון את הסרטון כרגע. נסי לרענן את האפליקציה בעוד רגע.</span></div>);
   if (!url) return (<div style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}><Loader size={26} className="spin" /></span></div>);
-  return (<div style={box}><iframe ref={iframeRef} src={url} loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }} title="סרטון" /></div>);
+  return (<>
+    <button onClick={() => playFullScreen(boxRef, iframeRef, playerRef)}
+      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", border: "none", borderRadius: 12, padding: "11px", marginBottom: 8, background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: font, cursor: "pointer" }}>
+      <Play size={17} /> לחצי לצפייה במסך מלא
+    </button>
+    <div ref={boxRef} style={box}><iframe ref={iframeRef} src={url} loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }} title="סרטון" /></div>
+  </>);
+}
+
+// Starts playback and asks for full screen in one tap. Full screen is best-effort:
+// some browsers (notably iOS Safari) only allow it from the player's own control,
+// so there we at least start playing and the viewer can expand from the player.
+function playFullScreen(boxRef, iframeRef, playerRef) {
+  const el = (boxRef && boxRef.current) || (iframeRef && iframeRef.current);
+  try {
+    const req = el && (el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen || el.msRequestFullscreen);
+    if (req) { const r = req.call(el); if (r && r.catch) r.catch(() => {}); }
+  } catch (e) {}
+  try { if (playerRef && playerRef.current && playerRef.current.play) playerRef.current.play(); } catch (e) {}
 }
 
 export function ContentDayCard({ week, dow, C, font, onOpen }) {
@@ -399,7 +420,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               </div>
             )}
 
-            {l.videoId && <div data-tut="lessonplayer"><div style={{ fontSize: 14, fontWeight: 700, color: C.brandD, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Play size={15} /> לחצי לצפייה</div><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => markDone(openL.week, openL.day, openL.i) : undefined} /></div>}
+            {l.videoId && <div data-tut="lessonplayer"><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => markDone(openL.week, openL.day, openL.i) : undefined} /></div>}
             {l.image && (<div style={{ borderRadius: 14, overflow: "hidden", marginBottom: 16 }}><img src={l.image} alt={l.title} style={{ width: "100%", display: "block", borderRadius: 14 }} /></div>)}
             <PageImages l={l} />
 
