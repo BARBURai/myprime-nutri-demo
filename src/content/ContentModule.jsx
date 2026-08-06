@@ -169,16 +169,8 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   const [done, setDone] = useState({});
   const [fav, setFav] = useState({});
   const [zoomPage, setZoomPage] = useState(null); // page image opened full-screen
-  // Pinch is blocked app-wide (it distorts the fixed frame). Re-allow it only while
-  // a page is open full-screen, then lock it again on close.
-  useEffect(() => {
-    const m = typeof document !== "undefined" && document.querySelector('meta[name="viewport"]');
-    if (!m) return;
-    const locked = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content";
-    const free = "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, interactive-widget=resizes-content";
-    m.setAttribute("content", zoomPage ? free : locked);
-    return () => { try { m.setAttribute("content", locked); } catch (e) {} };
-  }, [zoomPage]);
+  // Zoom happens inside ZoomViewer (transform on the image), so the app-wide
+  // pinch lock can stay on and the top/bottom bars are never scaled.
   useEffect(() => { setDone(loadStore(DONE_KEY)); setFav(loadStore(FAV_KEY)); }, []);
 
   const [view, setView] = useState("today");
@@ -290,14 +282,50 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   }
 
   function ZoomViewer({ src, onClose }) {
+    const [z, setZ] = useState(1);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
+    const st = useRef(null);
+    const clamp = (v) => Math.min(4, Math.max(1, v));
+    const onStart = (e) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        st.current = { kind: "pinch", d: Math.hypot(dx, dy), z };
+      } else if (e.touches.length === 1 && z > 1) {
+        st.current = { kind: "pan", x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y };
+      }
+    };
+    const onMove = (e) => {
+      const c = st.current;
+      if (!c) return;
+      if (c.kind === "pinch" && e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const nz = clamp(c.z * (Math.hypot(dx, dy) / (c.d || 1)));
+        setZ(nz);
+        if (nz === 1) setPan({ x: 0, y: 0 });
+      } else if (c.kind === "pan" && e.touches.length === 1) {
+        setPan({ x: e.touches[0].clientX - c.x, y: e.touches[0].clientY - c.y });
+      }
+    };
+    const onEnd = () => { st.current = null; };
+    const reset = () => { setZ(1); setPan({ x: 0, y: 0 }); };
     return (
-      <div style={{ position: "fixed", inset: 0, background: "#1E1518", zIndex: 90, display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", color: "#fff", flexShrink: 0 }}>
-          <span style={{ fontSize: 13.5, opacity: 0.85 }}>אפשר להגדיל בשתי אצבעות</span>
-          <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><X size={20} /></button>
+      <div style={{ position: "fixed", inset: 0, background: "#1E1518", zIndex: 90, display: "flex", flexDirection: "column", touchAction: "none" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", color: "#fff", flexShrink: 0, gap: 10 }}>
+          <span style={{ fontSize: 13.5, opacity: 0.85 }}>{z > 1 ? "אפשר לגרור כדי לנוע על הדף" : "אפשר להגדיל בשתי אצבעות"}</span>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            {z > 1 && <button onClick={reset} style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, padding: "7px 14px", fontSize: 13.5, fontWeight: 600, fontFamily: font, cursor: "pointer" }}>חזרה לגודל רגיל</button>}
+            <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><X size={20} /></button>
+          </div>
         </div>
-        <div style={{ flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch", touchAction: "pinch-zoom", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 8 }}>
-          <img src={src} alt="" style={{ width: "100%", maxWidth: 1400, display: "block" }} />
+        <div onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} onTouchCancel={onEnd}
+          style={{ flex: 1, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: 8 }}>
+          <img src={src} alt="" draggable={false} style={{ width: "100%", display: "block", transform: `translate(${pan.x}px, ${pan.y}px) scale(${z})`, transformOrigin: "center center", transition: st.current ? "none" : "transform .18s ease-out", willChange: "transform" }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, padding: "8px 14px max(12px, env(safe-area-inset-bottom, 0px))", flexShrink: 0 }}>
+          <button onClick={() => setZ((v) => clamp(v - 0.5))} aria-label="הקטנה" style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, width: 46, height: 40, fontSize: 22, fontFamily: font, cursor: "pointer" }}>-</button>
+          <button onClick={() => setZ((v) => clamp(v + 0.5))} aria-label="הגדלה" style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, width: 46, height: 40, fontSize: 22, fontFamily: font, cursor: "pointer" }}>+</button>
         </div>
       </div>
     );

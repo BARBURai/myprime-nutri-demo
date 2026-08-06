@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.72";
+const VERSION = "3.73";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1718,6 +1718,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   const [baseOpen, setBaseOpen] = useState(false);
   const [dietOpen, setDietOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   // Already installed to the home screen (or on desktop) - the install guide is redundant there.
   const isStandalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true) || !(typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || ""));
   const [newSens, setNewSens] = useState("");
@@ -1758,8 +1760,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
         <div><div style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 14, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
       </div>
 
-      <div style={{ borderTop: `1px solid ${C.line}` }}>
-        <div onClick={() => setBaseOpen(!baseOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", cursor: "pointer" }}>
+      <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
+        <div onClick={() => setBaseOpen(!baseOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
           <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>נתוני בסיס</span>
           <ChevronDown size={20} color={C.sub} style={{ transform: baseOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
         </div>
@@ -1868,44 +1870,63 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
         </div>)}
       </div>
 
-      <ReminderRow email={gateEmail} />
+      {/* App preferences - reminder, text size and rewards in one collapsible card. */}
+      <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
+        <div onClick={() => setPrefsOpen(!prefsOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 18 }}>⚙️</span> העדפות אפליקציה</span>
+          <ChevronDown size={20} color={C.sub} style={{ transform: prefsOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+        </div>
+        {prefsOpen && (<div style={{ marginTop: 6 }}>
+          <ReminderRow email={gateEmail} />
 
-      <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 18 }}>🔠</span> גודל הטקסט</span>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            {[{ id: "normal", t: "רגיל" }, { id: "large", t: "גדול" }].map((o) => {
-              const on = (profile.textSize || "normal") === o.id;
-              return (<button key={o.id} onClick={() => setProfile({ ...profile, textSize: o.id })} style={{ border: on ? "none" : `1px solid ${C.line}`, background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, borderRadius: 10, padding: "8px 14px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{o.t}</button>);
-            })}
+          <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 18 }}>🔠</span> גודל הטקסט</span>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                {[{ id: "normal", t: "רגיל" }, { id: "large", t: "גדול" }].map((o) => {
+                  const on = (profile.textSize || "normal") === o.id;
+                  return (<button key={o.id} onClick={() => setProfile({ ...profile, textSize: o.id })} style={{ border: on ? "none" : `1px solid ${C.line}`, background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, borderRadius: 10, padding: "8px 14px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{o.t}</button>);
+                })}
+              </div>
+            </div>
+            <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>מגדיל את הטקסטים באפליקציה, כדי שיהיה נוח יותר לקרוא. אפשר לשנות בכל רגע.</div>
           </div>
-        </div>
-        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>מגדיל את הטקסטים באפליקציה, כדי שיהיה נוח יותר לקרוא. אפשר לשנות בכל רגע.</div>
+
+          <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><img src="/medals/trophy-icon.webp" alt="" width={22} height={18} style={{ display: "block" }} /> גביעים ומדליות</span>
+              <button onClick={() => setProfile({ ...profile, hideRewards: !profile.hideRewards })} style={{ flexShrink: 0, border: profile.hideRewards ? `1px solid ${C.line}` : "none", background: profile.hideRewards ? "transparent" : C.brand, color: profile.hideRewards ? C.sub : "#fff", borderRadius: 10, padding: "8px 18px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{profile.hideRewards ? "מוסתרים" : "מוצגים"}</button>
+            </div>
+            <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>{profile.hideRewards ? "המדליות, הגביעים וחלונות החגיגה מוסתרים. אפשר להחזיר בכל רגע." : "אם הגביעים והמדליות לא בשבילך - אפשר להסתיר אותם לגמרי (גם את חלונות החגיגה). מעקב המשימות היומי נשאר כרגיל."}</div>
+          </div>
+        </div>)}
       </div>
 
-      <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><img src="/medals/trophy-icon.webp" alt="" width={22} height={18} style={{ display: "block" }} /> גביעים ומדליות</span>
-          <button onClick={() => setProfile({ ...profile, hideRewards: !profile.hideRewards })} style={{ flexShrink: 0, border: profile.hideRewards ? `1px solid ${C.line}` : "none", background: profile.hideRewards ? "transparent" : C.brand, color: profile.hideRewards ? C.sub : "#fff", borderRadius: 10, padding: "8px 18px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{profile.hideRewards ? "מוסתרים" : "מוצגים"}</button>
+      {/* Help - questions, install guide and the account actions together. */}
+      <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
+        <div onClick={() => setHelpOpen(!helpOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות, תשובות ועזרה</span>
+          <ChevronDown size={20} color={C.sub} style={{ transform: helpOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
         </div>
-        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>{profile.hideRewards ? "המדליות, הגביעים וחלונות החגיגה מוסתרים. אפשר להחזיר בכל רגע." : "אם הגביעים והמדליות לא בשבילך - אפשר להסתיר אותם לגמרי (גם את חלונות החגיגה). מעקב המשימות היומי נשאר כרגיל."}</div>
+        {helpOpen && (<div style={{ marginTop: 6 }}>
+          <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+            <span style={{ fontSize: 15.5, fontWeight: 600, color: C.ink }}>שאלות ותשובות נפוצות</span>
+            <ChevronLeft size={18} color={C.faint} />
+          </div>
+          {!isStandalone && (
+            <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15.5, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 17 }}>📲</span> התקנת האפליקציה על הטלפון</span>
+              <ChevronLeft size={18} color={C.faint} />
+            </div>
+          )}
+          <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 2 }}>
+            <Btn variant="ghost" onClick={() => setConfirmReset(true)} style={{ color: C.sub }}>מחיקת כל הנתונים והתחלה מחדש</Btn>
+          </div>
+          <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmLogout(true)} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
+          <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>משחרר את המכשיר הזה ומחזיר למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב עם המייל.</div>
+        </div>)}
       </div>
 
-      <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, cursor: "pointer" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות, תשובות ועזרה</span>
-        <ChevronLeft size={18} color={C.faint} />
-      </div>
-
-      {!isStandalone && (
-        <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 18 }}>📲</span> התקנת האפליקציה על הטלפון</span>
-          <ChevronLeft size={18} color={C.faint} />
-        </div>
-      )}
-
-      <div style={{ marginTop: 16 }}><Btn variant="ghost" onClick={() => setConfirmReset(true)} style={{ color: C.sub }}>מחיקת כל הנתונים והתחלה מחדש</Btn></div>
-      <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmLogout(true)} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
-      <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>משחרר את המכשיר הזה ומחזיר למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב עם המייל.</div>
       <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
 
       {edit && (
