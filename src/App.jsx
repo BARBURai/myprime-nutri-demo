@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.65";
+const VERSION = "3.67";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1874,9 +1874,9 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 18 }}>🔠</span> גודל הטקסט</span>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-            {[{ id: "normal", t: "רגיל" }, { id: "large", t: "גדול" }, { id: "xlarge", t: "גדול מאוד" }].map((o) => {
+            {[{ id: "normal", t: "רגיל" }, { id: "large", t: "גדול" }].map((o) => {
               const on = (profile.textSize || "normal") === o.id;
-              return (<button key={o.id} onClick={() => setProfile({ ...profile, textSize: o.id })} style={{ border: on ? "none" : `1px solid ${C.line}`, background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, borderRadius: 10, padding: "8px 11px", fontSize: 13.5, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{o.t}</button>);
+              return (<button key={o.id} onClick={() => setProfile({ ...profile, textSize: o.id })} style={{ border: on ? "none" : `1px solid ${C.line}`, background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, borderRadius: 10, padding: "8px 14px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{o.t}</button>);
             })}
           </div>
         </div>
@@ -3858,8 +3858,8 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
         )}
       </div>
       {!hideRewards && (
-      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} data-tut="cabinet" role="button" aria-label="ארון הגביעים" style={{ width: 84, flexShrink: 0, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
-        <img src="/medals/trophy-icon.webp" alt="" width={72} height={58} style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
+      <div onClick={(e) => { e.stopPropagation(); onOpenCollection && onOpenCollection(); }} data-tut="cabinet" role="button" aria-label="ארון הגביעים" style={{ width: 84, minWidth: 58, flexShrink: 1, background: C.brand, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, cursor: "pointer", color: "#fff", padding: "8px 4px" }}>
+        <img src="/medals/trophy-icon.webp" alt="" width={72} height={58} style={{ display: "block", maxWidth: "100%", height: "auto", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))" }} />
         <div style={{ fontSize: 13.5, fontWeight: 700, textAlign: "center", lineHeight: 1.25 }}>ארון<br />הגביעים</div>
         <ChevronLeft size={16} color="#fff" />
       </div>
@@ -5290,8 +5290,12 @@ export default function App() {
     if (!vv) return;
     const apply = () => {
       try {
+        // Pinch-zoom also shrinks visualViewport.height, which used to be mistaken for
+        // the keyboard opening - the frame collapsed and the bottom bar crept upward.
+        // Only treat it as a keyboard when the page is not zoomed in.
+        const zoomed = (vv.scale || 1) > 1.02;
         const kb = Math.max(0, window.innerHeight - vv.height);
-        if (kb > 80) { // keyboard (or similar) is up
+        if (!zoomed && kb > 80) { // keyboard (or similar) is up
           document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
           window.scrollTo(0, 0);
         } else {
@@ -5338,10 +5342,9 @@ export default function App() {
         .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
         /* Accessible text scaling. Uses zoom (not pinch) so the browser reflows the
            layout properly instead of stretching the fixed frame out of shape. */
-        .txt-large{zoom:1.15}
-        .txt-xlarge{zoom:1.3}
+        .txt-large{zoom:1.12}
         @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;height:var(--vvh,100dvh);border-radius:0;box-shadow:none;border:none}}`}</style>
-      <div className={`phone-frame${profile.textSize === "large" ? " txt-large" : profile.textSize === "xlarge" ? " txt-xlarge" : ""}`}>
+      <div className={`phone-frame${profile.textSize === "large" ? " txt-large" : ""}`}>
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
         {showInstallGate ? (
