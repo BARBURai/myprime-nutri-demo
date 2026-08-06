@@ -137,16 +137,21 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
   </>);
 }
 
-// Starts playback and asks for full screen in one tap. Full screen is best-effort:
-// some browsers (notably iOS Safari) only allow it from the player's own control,
-// so there we at least start playing and the viewer can expand from the player.
+// One tap: start playing, then hand full screen to the player's own iframe so its
+// built-in controls (including exit full screen) keep working.
 function playFullScreen(boxRef, iframeRef, playerRef) {
-  const el = (boxRef && boxRef.current) || (iframeRef && iframeRef.current);
-  try {
-    const req = el && (el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen || el.msRequestFullscreen);
-    if (req) { const r = req.call(el); if (r && r.catch) r.catch(() => {}); }
-  } catch (e) {}
-  try { if (playerRef && playerRef.current && playerRef.current.play) playerRef.current.play(); } catch (e) {}
+  const start = () => { try { if (playerRef.current && playerRef.current.play) playerRef.current.play(); } catch (e) {} };
+  start();
+  // The player may still be initialising on first tap - try again shortly.
+  setTimeout(start, 350);
+  setTimeout(() => {
+    const el = iframeRef && iframeRef.current;
+    if (!el) return;
+    try {
+      const req = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen || el.msRequestFullscreen;
+      if (req) { const r = req.call(el); if (r && r.catch) r.catch(() => {}); }
+    } catch (e) {}
+  }, 120);
 }
 
 export function ContentDayCard({ week, dow, C, font, onOpen }) {
