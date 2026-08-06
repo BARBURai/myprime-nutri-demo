@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.69";
+const VERSION = "3.71";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5369,13 +5369,13 @@ export default function App() {
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
             </div>
-            <div style={{ position: "relative", flexShrink: 0 }}>
+            <div style={{ position: "relative", flexShrink: 0, zIndex: 38 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)" }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
                 const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
-                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet === "content") setSheet(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
               {(introLock || preStart)
                 ? <button data-tut="nav-fab" onClick={() => setLockMsg("plus")} aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: C.faint, opacity: 0.55, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
@@ -5384,7 +5384,7 @@ export default function App() {
                 const active = tab === t.id;
                 const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
-                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setTab(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet === "content") setSheet(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
             </div>
             </div>

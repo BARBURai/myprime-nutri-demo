@@ -168,6 +168,17 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
 
   const [done, setDone] = useState({});
   const [fav, setFav] = useState({});
+  const [zoomPage, setZoomPage] = useState(null); // page image opened full-screen
+  // Pinch is blocked app-wide (it distorts the fixed frame). Re-allow it only while
+  // a page is open full-screen, then lock it again on close.
+  useEffect(() => {
+    const m = typeof document !== "undefined" && document.querySelector('meta[name="viewport"]');
+    if (!m) return;
+    const locked = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content";
+    const free = "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, interactive-widget=resizes-content";
+    m.setAttribute("content", zoomPage ? free : locked);
+    return () => { try { m.setAttribute("content", locked); } catch (e) {} };
+  }, [zoomPage]);
   useEffect(() => { setDone(loadStore(DONE_KEY)); setFav(loadStore(FAV_KEY)); }, []);
 
   const [view, setView] = useState("today");
@@ -218,7 +229,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   const head = { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", paddingTop: "max(14px, env(safe-area-inset-top, 0px) + 48px)", borderBottom: `1px solid ${C.line}`, flexShrink: 0 };
   const backBtn = { display: "flex", alignItems: "center", gap: 4, border: `1px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 999, padding: "7px 14px", fontSize: 15, fontWeight: 600, fontFamily: font, cursor: "pointer" };
   const closeBtn = { border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 };
-  const scroll = { flex: 1, overflowY: "auto", padding: "14px 16px 28px" };
+  const scroll = { flex: 1, overflowY: "auto", padding: "14px 16px calc(96px + env(safe-area-inset-bottom, 0px))" };
   const rowStyle = { display: "flex", alignItems: "center", gap: 10, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13, marginBottom: 10, cursor: "pointer", background: C.panel };
   const iconWrap = { width: 44, height: 44, borderRadius: 12, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
 
@@ -267,9 +278,27 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     if (!hasPages(l)) return null;
     return (
       <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13, color: C.faint, textAlign: "center", marginBottom: 7 }}>הקישי על הדף כדי להגדיל ולקרוא בנוחות</div>
         {l.pageImages.map((img, i) => (
-          <img key={i} src={PDF_BASE + img} alt={`עמוד ${i + 1}`} style={{ width: "100%", display: "block", borderRadius: 12, marginBottom: 10 }} />
+          <div key={i} onClick={() => setZoomPage(PDF_BASE + img)} role="button" aria-label={`הגדלת עמוד ${i + 1}`} style={{ position: "relative", cursor: "pointer", marginBottom: 10 }}>
+            <img src={PDF_BASE + img} alt={`עמוד ${i + 1}`} style={{ width: "100%", display: "block", borderRadius: 12 }} />
+            <div style={{ position: "absolute", insetInlineEnd: 8, bottom: 8, background: "rgba(58,43,48,0.72)", color: "#fff", borderRadius: 999, padding: "5px 11px", fontSize: 12.5, fontWeight: 600, pointerEvents: "none" }}>להגדלה</div>
+          </div>
         ))}
+      </div>
+    );
+  }
+
+  function ZoomViewer({ src, onClose }) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "#1E1518", zIndex: 90, display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", color: "#fff", flexShrink: 0 }}>
+          <span style={{ fontSize: 13.5, opacity: 0.85 }}>אפשר להגדיל בשתי אצבעות</span>
+          <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><X size={20} /></button>
+        </div>
+        <div style={{ flex: 1, overflow: "auto", WebkitOverflowScrolling: "touch", touchAction: "pinch-zoom", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 8 }}>
+          <img src={src} alt="" style={{ width: "100%", maxWidth: 1400, display: "block" }} />
+        </div>
       </div>
     );
   }
@@ -415,7 +444,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     const visibleDays = isPdf ? [] : weekDays.filter((dd) => dd.lessons.some((l) => matchesChip(l, typeF)));
     return (
       <div style={overlay}>
-        <div style={head}><button onClick={onClose} style={backBtn}><ChevronRight size={18} /> חזרה ליומן</button><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
+        <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
         <div style={scroll}>
           <Segmented />
           <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
@@ -470,7 +499,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   const doneCount = todayDay ? todayDay.lessons.reduce((s, _l, i) => s + (isDone(todayDay.week, todayDay.day, i) ? 1 : 0), 0) : 0;
   return (
     <div style={overlay}>
-      <div style={head}><button onClick={onClose} style={backBtn}><ChevronRight size={18} /> חזרה ליומן</button><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
+      <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
       <div style={scroll}>
         <Segmented />
         {!todayDay ? (
@@ -491,6 +520,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
           </>
         )}
       </div>
+      {zoomPage && <ZoomViewer src={zoomPage} onClose={() => setZoomPage(null)} />}
     </div>
   );
 }
