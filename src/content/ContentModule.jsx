@@ -67,7 +67,6 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
   const liveRef = useRef(true);
   const iframeRef = useRef(null);
   const boxRef = useRef(null);
-  const [big, setBig] = useState(false);
   // watch-tracking refs (do not trigger re-render)
   const durationRef = useRef(0);
   const watchedRef = useRef(0);     // cumulative real seconds watched
@@ -130,30 +129,12 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
   if (err) return (<div style={{ ...box, paddingTop: 0, background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "22px 16px", textAlign: "center" }}><span style={{ fontSize: 14.5, color: C.sub, fontFamily: font, lineHeight: 1.6 }}>לא הצלחנו לטעון את הסרטון כרגע. נסי לרענן את האפליקציה בעוד רגע.</span></div>);
   if (!url) return (<div style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}><Loader size={26} className="spin" /></span></div>);
   return (<>
-    <button onClick={() => { setBig(true); startPlay(playerRef); }}
-      style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", border: "none", borderRadius: 12, padding: "11px", marginBottom: 8, background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: font, cursor: "pointer" }}>
-      <Play size={17} /> לחצי לצפייה במסך מלא
-    </button>
-    {big && (
-      <div style={{ position: "fixed", inset: 0, background: "#000", zIndex: 88, display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "flex-start", padding: "10px 14px", paddingTop: "max(12px, env(safe-area-inset-top, 0px) + 52px)", flexShrink: 0 }}>
-          <button onClick={() => setBig(false)} style={{ border: "none", background: "#fff", color: "#1E1518", borderRadius: 999, padding: "9px 18px", fontSize: 15, fontWeight: 700, fontFamily: font, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}><X size={18} /> סגירה</button>
-        </div>
-        <div style={{ flex: 1, minHeight: 0 }} />
-      </div>
-    )}
-    <div ref={boxRef} style={big ? { position: "fixed", insetInlineStart: 0, insetInlineEnd: 0, top: "50%", transform: "translateY(-50%)", width: "100%", paddingTop: "56.25%", zIndex: 89, background: "#000", borderRadius: 0, overflow: "hidden", marginBottom: 0 } : box}><iframe ref={iframeRef} src={url} loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }} title="סרטון" /></div>
+    <div style={{ fontSize: 14, fontWeight: 700, color: C.brandD, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Play size={15} /> לחצי לצפייה</div>
+    <div ref={boxRef} style={box}><iframe ref={iframeRef} src={url} loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }} title="סרטון" /></div>
   </>);
 }
 
-// Expanding is done in-app: the same iframe is restyled to fill the screen. The
-// browser's own full-screen fought the player (frozen frame, double taps), and it
-// also reloads nothing this way - playback simply continues.
-function startPlay(playerRef) {
-  const go = () => { try { if (playerRef.current && playerRef.current.play) playerRef.current.play(); } catch (e) {} };
-  go();
-  setTimeout(go, 350); // the player may still be initialising on the first tap
-}
+
 
 
 
