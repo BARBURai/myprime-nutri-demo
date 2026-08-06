@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.63";
+const VERSION = "3.65";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1240,7 +1240,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       </div>
       {week === 1 && progDay >= 3 && (
       <div style={{ display: "flex", justifyContent: "center", padding: "6px 16px 0" }}>
-        <button data-tut="tourbtn" onClick={onStartTour} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 999, padding: "5px 14px", fontSize: 13, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={15} /> סיור באפליקציה</button>
+        <button data-tut="tourbtn" onClick={onStartTour} className={(tipsSeen || []).includes("appTour") ? "" : "tour-pulse"} style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${(tipsSeen || []).includes("appTour") ? C.line : C.brand}`, background: C.panel, color: C.brandD, borderRadius: 999, padding: "5px 14px", fontSize: 13, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={15} /> סיור באפליקציה</button>
       </div>
       )}
 
@@ -1870,6 +1870,19 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
 
       <ReminderRow email={gateEmail} />
 
+      <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 18 }}>🔠</span> גודל הטקסט</span>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            {[{ id: "normal", t: "רגיל" }, { id: "large", t: "גדול" }, { id: "xlarge", t: "גדול מאוד" }].map((o) => {
+              const on = (profile.textSize || "normal") === o.id;
+              return (<button key={o.id} onClick={() => setProfile({ ...profile, textSize: o.id })} style={{ border: on ? "none" : `1px solid ${C.line}`, background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, borderRadius: 10, padding: "8px 11px", fontSize: 13.5, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{o.t}</button>);
+            })}
+          </div>
+        </div>
+        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>מגדיל את הטקסטים באפליקציה, כדי שיהיה נוח יותר לקרוא. אפשר לשנות בכל רגע.</div>
+      </div>
+
       <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><img src="/medals/trophy-icon.webp" alt="" width={22} height={18} style={{ display: "block" }} /> גביעים ומדליות</span>
@@ -2441,6 +2454,17 @@ const CATCHUP_SLIDES = [
   { key: "protein", when: "שבוע 3, יום 4", day: 18, title: "טבעת החלבון", text: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן - אותה את לא ממלאת. כך תמיד רואות כמה חלבון אכלת מול היעד." },
 ];
 
+// A screenshot framed like a phone, so guide slides read as "this is your screen".
+function PhoneShot({ src, max = 270 }) {
+  return (
+    <div style={{ width: "100%", maxWidth: max, margin: "0 auto 15px", background: "#2C2226", borderRadius: 22, padding: "9px 7px", boxShadow: "0 8px 22px rgba(60,30,40,0.26)" }}>
+      <div style={{ height: 4, width: 42, background: "#4A3B40", borderRadius: 99, margin: "0 auto 6px" }} />
+      <img src={src} alt="" style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 14, display: "block", background: C.bg }} />
+      <div style={{ height: 4, width: 66, background: "#4A3B40", borderRadius: 99, margin: "7px auto 1px" }} />
+    </div>
+  );
+}
+
 function CatchupModal({ progDay, onClose }) {
   // Part 1: how the app works (with images). Part 2: which features are already open for her.
   const slides = [
@@ -2460,7 +2484,7 @@ function CatchupModal({ progDay, onClose }) {
           <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={22} /></button>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 22px 18px", textAlign: s.guide ? "center" : "right" }}>
-          {s.guide && s.img && <img src={s.img} alt="" style={{ width: "100%", maxWidth: 260, aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 16, display: "block", margin: "0 auto 14px", background: C.bg }} />}
+          {s.guide && s.img && <PhoneShot src={s.img} max={260} />}
           {!s.guide && <div style={{ fontSize: 13, fontWeight: 700, color: C.brand, marginBottom: 6 }}>{s.when}</div>}
           <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.4, marginBottom: 10 }}>{s.title}</div>
           <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>{s.text}</p>
@@ -2500,7 +2524,7 @@ function OnboardingModal({ onClose }) {
           <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={22} /></button>
         </div>
         <div onTouchStart={onTS} onTouchEnd={onTE} style={{ flex: 1, overflowY: "auto", padding: "6px 20px 16px", textAlign: "center" }}>
-          <img src={s.img} alt="" style={{ width: "100%", maxWidth: 300, aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 16, display: "block", margin: "0 auto 16px", background: C.bg }} />
+          <PhoneShot src={s.img} max={280} />
           <p style={{ fontSize: 16.5, color: C.ink, lineHeight: 1.75, margin: 0, whiteSpace: "pre-line" }}>{s.text}</p>
         </div>
         <div style={{ display: "flex", justifyContent: "center", gap: 7, padding: "4px 0 2px" }}>
@@ -4943,7 +4967,7 @@ export default function App() {
   const preStart = programDayNumber(profile.startDate, TODAY) < 1;
   const tourView = sheet === "caloriemenu" ? "caloriemenu" : sheet === "steps" ? "steps" : (modal && modal.kind && modal.kind !== "recipe") ? "addfood" : "day";
   const markTourSeen = () => setProfile((p) => (p.tipsSeen || []).includes("appTour") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "appTour"] });
-  const startTour = () => setTour({ steps: buildTour(null, profile.hideRewards), i: 0 });
+  const startTour = () => { markTourSeen(); setTour({ steps: buildTour(null, profile.hideRewards), i: 0 }); };
   const tourChoice = (yes) => {
     const cur = tour && tour.steps[tour.i];
     if (cur && cur.gate) {
@@ -4984,10 +5008,9 @@ export default function App() {
     if (gate !== "ok" || !onboarded || showIntro || tab !== "day" || tour) return;
     const pd = programDayNumber(profile.startDate, TODAY);
     const wk = programWeekFor(profile.startDate, TODAY);
-    if (wk === 1 && pd >= 3 && !(profile.tipsSeen || []).includes("appTour")) {
-      const t = setTimeout(() => setTour({ steps: buildTour("gate", profile.hideRewards), i: 0, gate: true }), 700);
-      return () => clearTimeout(t);
-    }
+    // The tour is no longer pushed automatically on day 3 - it interrupted whatever
+    // she was doing. Instead the "סיור באפליקציה" button pulses until she taps it once.
+    return;
   }, [gate, onboarded, showIntro, tab, tour, profile.tipsSeen, profile.startDate]);
   // ===== Daily 19:00 reminder (web push) =====
   const [notifyPrompt, setNotifyPrompt] = useState(false);
@@ -5253,8 +5276,14 @@ export default function App() {
   useEffect(() => {
     try {
       const m = document.querySelector('meta[name="viewport"]');
-      if (m && !/interactive-widget/.test(m.getAttribute("content") || "")) {
-        m.setAttribute("content", (m.getAttribute("content") || "width=device-width, initial-scale=1") + ", interactive-widget=resizes-content");
+      if (m) {
+        let c = m.getAttribute("content") || "width=device-width, initial-scale=1";
+        if (!/interactive-widget/.test(c)) c += ", interactive-widget=resizes-content";
+        // Pinch-zoom fights the fixed app frame: the layout stretches, the bars
+        // distort and the white background creeps over the content. Text can be
+        // enlarged instead with the font-size setting in the profile.
+        if (!/maximum-scale/.test(c)) c += ", maximum-scale=1, user-scalable=no";
+        m.setAttribute("content", c);
       }
     } catch (e) {}
     const vv = window.visualViewport;
@@ -5297,14 +5326,22 @@ export default function App() {
         @keyframes fabGlow{0%,100%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 0 rgba(212,93,121,0.45)}50%{box-shadow:0 8px 22px rgba(168,66,92,0.45),0 0 0 12px rgba(212,93,121,0)}}
         .fab-center{animation:fabFloat 3.2s ease-in-out infinite, fabGlow 2.2s ease-in-out infinite}
         .streak-pill:active{transform:scale(0.96)}
+        /* Draws the eye to the app tour until she has opened it once. */
+        @keyframes tourPulse{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(212,93,121,.45)}55%{transform:scale(1.07);box-shadow:0 0 0 7px rgba(212,93,121,0)}100%{transform:scale(1);box-shadow:0 0 0 0 rgba(212,93,121,0)}}
+        .tour-pulse{animation:tourPulse 1.9s ease-in-out infinite}
+        @media (prefers-reduced-motion:reduce){.tour-pulse{animation:none}}
         @keyframes cheerPop{0%{transform:scale(0.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
         @keyframes medalIn{0%{transform:scale(0) rotate(-25deg);opacity:0}55%{transform:scale(1.2) rotate(8deg)}75%{transform:scale(0.95) rotate(-3deg)}100%{transform:scale(1) rotate(0);opacity:1}}
         @keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(150px) rotate(360deg);opacity:0}}
         @keyframes splashFade{0%{opacity:0}12%{opacity:1}82%{opacity:1}100%{opacity:0}}
         .app-outer{min-height:100vh;min-height:100dvh;background:${C.bg};display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;font-family:${fontStack}}
         .phone-frame{width:390px;max-width:100%;height:800px;background:${C.panel};border-radius:30px;box-shadow:0 12px 40px rgba(168,66,92,0.14);border:1px solid ${C.line};overflow:hidden;display:flex;flex-direction:column;position:relative}
+        /* Accessible text scaling. Uses zoom (not pinch) so the browser reflows the
+           layout properly instead of stretching the fixed frame out of shape. */
+        .txt-large{zoom:1.15}
+        .txt-xlarge{zoom:1.3}
         @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;height:var(--vvh,100dvh);border-radius:0;box-shadow:none;border:none}}`}</style>
-      <div className="phone-frame">
+      <div className={`phone-frame${profile.textSize === "large" ? " txt-large" : profile.textSize === "xlarge" ? " txt-xlarge" : ""}`}>
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
         {showInstallGate ? (
