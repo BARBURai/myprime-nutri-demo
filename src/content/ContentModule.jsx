@@ -312,12 +312,9 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     const reset = () => { setZ(1); setPan({ x: 0, y: 0 }); };
     return (
       <div style={{ position: "fixed", inset: 0, background: "#1E1518", zIndex: 90, display: "flex", flexDirection: "column", touchAction: "none" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", color: "#fff", flexShrink: 0, gap: 10 }}>
-          <span style={{ fontSize: 13.5, opacity: 0.85 }}>{z > 1 ? "אפשר לגרור כדי לנוע על הדף" : "אפשר להגדיל בשתי אצבעות"}</span>
-          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-            {z > 1 && <button onClick={reset} style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, padding: "7px 14px", fontSize: 13.5, fontWeight: 600, fontFamily: font, cursor: "pointer" }}>חזרה לגודל רגיל</button>}
-            <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><X size={20} /></button>
-          </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", paddingTop: "max(12px, env(safe-area-inset-top, 0px) + 52px)", color: "#fff", flexShrink: 0, gap: 10 }}>
+          <button onClick={onClose} style={{ border: "none", background: "#fff", color: "#1E1518", borderRadius: 999, padding: "9px 18px", fontSize: 15, fontWeight: 700, fontFamily: font, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}><X size={18} /> סגירה</button>
+          {z > 1 && <button onClick={reset} style={{ border: "1px solid rgba(255,255,255,0.5)", background: "transparent", color: "#fff", borderRadius: 999, padding: "8px 14px", fontSize: 13.5, fontWeight: 600, fontFamily: font, cursor: "pointer", flexShrink: 0 }}>גודל רגיל</button>}
         </div>
         <div onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} onTouchCancel={onEnd}
           style={{ flex: 1, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: 8 }}>
@@ -326,6 +323,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
         <div style={{ display: "flex", justifyContent: "center", gap: 10, padding: "8px 14px max(12px, env(safe-area-inset-bottom, 0px))", flexShrink: 0 }}>
           <button onClick={() => setZ((v) => clamp(v - 0.5))} aria-label="הקטנה" style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, width: 46, height: 40, fontSize: 22, fontFamily: font, cursor: "pointer" }}>-</button>
           <button onClick={() => setZ((v) => clamp(v + 0.5))} aria-label="הגדלה" style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, width: 46, height: 40, fontSize: 22, fontFamily: font, cursor: "pointer" }}>+</button>
+          <button onClick={onClose} style={{ border: "none", background: "rgba(255,255,255,0.16)", color: "#fff", borderRadius: 999, padding: "0 18px", height: 40, fontSize: 14.5, fontWeight: 600, fontFamily: font, cursor: "pointer" }}>חזרה לדף</button>
         </div>
       </div>
     );
