@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.03";
+const VERSION = "4.04";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1772,16 +1772,13 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
     <div style={{ padding: "8px 16px 16px" }}>
       <Header title="פרופיל" />
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <div style={{ width: 44, height: 44, borderRadius: "50%", background: C.brandBg, color: C.brandD, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>{((profile.name || userName || "").trim().charAt(0)) || "♥"}</div>
-        <div><div style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div><div style={{ fontSize: 14, color: C.faint }}>{rateLabel(profile.weeklyRateG)}</div></div>
+        <img src="/icon-192.png" alt="" width={46} height={46} style={{ borderRadius: "50%", display: "block", flexShrink: 0, boxShadow: "0 1px 4px rgba(0,0,0,0.12)" }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{profile.name || userName || "משתמשת"}</div>
+          {gateEmail && <div style={{ fontSize: 13.5, color: C.faint, direction: "ltr", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{gateEmail}</div>}
+        </div>
       </div>
 
-      {gateEmail && (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, background: C.bg, borderRadius: 14, padding: "12px 14px", marginBottom: 8 }}>
-          <span style={{ fontSize: 15, color: C.sub, flexShrink: 0 }}>המייל שלי</span>
-          <span style={{ fontSize: 15, fontWeight: 600, color: C.brandD, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", direction: "ltr" }}>{gateEmail}</span>
-        </div>
-      )}
       <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
         <div onClick={() => setBaseOpen(!baseOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
           <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>נתוני בסיס</span>
