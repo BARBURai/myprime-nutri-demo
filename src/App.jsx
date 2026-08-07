@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.10";
+const VERSION = "4.12";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5495,7 +5495,7 @@ export default function App() {
                 const active = tab === t.id;
                 const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
-                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet === "content") setSheet(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
               {(introLock || preStart)
                 ? <button data-tut="nav-fab" onClick={() => setLockMsg("plus")} aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: C.faint, opacity: 0.55, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
@@ -5504,7 +5504,7 @@ export default function App() {
                 const active = tab === t.id;
                 const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
-                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet === "content") setSheet(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
             </div>
             </div>
@@ -5544,6 +5544,8 @@ export default function App() {
             {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} C={C} font={fontStack} onClose={() => setSheet(null)} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
+
+            {tour && tour.steps[tour.i] && tour.steps[tour.i].view === tourView && <TutorialOverlay steps={tour.steps} idx={tour.i} onNext={tourAdvance} onChoice={tourChoice} onEnd={tourEnd} onBack={tourBack} />}
 
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={(payload) => { commit(payload); setModal(null); }} onClose={() => setModal(null)} onDelete={modal.editEntry ? () => { deleteEntry(modal.editEntry.id); setModal(null); } : null} />
