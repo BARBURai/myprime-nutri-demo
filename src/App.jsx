@@ -231,7 +231,7 @@ function prettyDate(dateStr) {
 const DEV = (() => { try { return new URLSearchParams(window.location.search).has("dev"); } catch (e) { return false; } })();
 // Course content module ("הסרטונים שלך היום"). Dev-only for now so the pilot
 // women never see it; flip to `true` when it is ready to ship to users.
-const CONTENT_ENABLED = DEV;
+const CONTENT_ENABLED = true;
 const TODAY = (() => {
   try {
     if (DEV) {
@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "3.98";
+const VERSION = "4.02";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4660,7 +4660,15 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
     // landed where the element *had* been. Jump instantly, then measure after paint
     // and keep the highlight in sync if anything moves afterwards.
     try { el.scrollIntoView({ block: "center", behavior: "auto" }); } catch (e) {}
-    const measure = () => { if (!cancelled) { try { setRect(el.getBoundingClientRect()); } catch (e) {} } };
+    const measure = () => {
+      if (cancelled) return;
+      try {
+        const r = el.getBoundingClientRect();
+        const host = el.closest(".phone-frame");
+        const h = host ? host.getBoundingClientRect() : { top: 0, left: 0 };
+        setRect({ top: r.top - h.top, left: r.left - h.left, right: r.right - h.left, bottom: r.bottom - h.top, width: r.width, height: r.height });
+      } catch (e) {}
+    };
     const raf = requestAnimationFrame(() => requestAnimationFrame(measure));
     const t1 = setTimeout(measure, 180);
     const t2 = setTimeout(measure, 420);
@@ -4673,7 +4681,8 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
       window.removeEventListener("resize", measure);
     };
   }, [idx, cur.sel]);
-  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const frameEl = typeof document !== "undefined" ? document.querySelector(".phone-frame") : null;
+  const vh = frameEl ? frameEl.getBoundingClientRect().height : (typeof window !== "undefined" ? window.innerHeight : 800);
   const tap = !!cur.tap;
   const stop = (e) => e.stopPropagation();
   // Bubble position: nav-bar steps sit just above the bottom bar; element high -> below it; element low -> pinned to top.
@@ -4686,20 +4695,20 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
       {tap && rect ? (
         // Tap steps: dim everything EXCEPT the highlighted element (4 strips), so only that element (and the bubble) are tappable.
         <>
-          <div onClick={stop} style={{ position: "fixed", top: 0, left: 0, right: 0, height: hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
-          <div onClick={stop} style={{ position: "fixed", top: hB, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
-          <div onClick={stop} style={{ position: "fixed", top: hT, left: 0, width: hL, height: hB - hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
-          <div onClick={stop} style={{ position: "fixed", top: hT, left: hR, right: 0, height: hB - hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
-          <div style={{ position: "fixed", top: hT, left: hL, width: hR - hL, height: hB - hT, borderRadius: 16, border: "2px solid #fff", zIndex: 99997, pointerEvents: "none" }} />
+          <div onClick={stop} style={{ position: "absolute", top: 0, left: 0, right: 0, height: hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div onClick={stop} style={{ position: "absolute", top: hB, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div onClick={stop} style={{ position: "absolute", top: hT, left: 0, width: hL, height: hB - hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div onClick={stop} style={{ position: "absolute", top: hT, left: hR, right: 0, height: hB - hT, background: "rgba(0,0,0,0.6)", zIndex: 99996 }} />
+          <div style={{ position: "absolute", top: hT, left: hL, width: hR - hL, height: hB - hT, borderRadius: 16, border: "2px solid #fff", zIndex: 99997, pointerEvents: "none" }} />
         </>
       ) : (
         <>
-          {!tap && <div onClick={stop} style={{ position: "fixed", inset: 0, zIndex: 99996 }} />}
-          {rect && <div style={{ position: "fixed", top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 16, boxShadow: "0 0 0 9999px rgba(0,0,0,0.62)", border: "2px solid #fff", zIndex: 99997, pointerEvents: "none", transition: "all .2s" }} />}
-          {!rect && !tap && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
+          {!tap && <div onClick={stop} style={{ position: "absolute", inset: 0, zIndex: 99996 }} />}
+          {rect && <div style={{ position: "absolute", top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, borderRadius: 16, boxShadow: "0 0 0 9999px rgba(0,0,0,0.62)", border: "2px solid #fff", zIndex: 99997, pointerEvents: "none", transition: "all .2s" }} />}
+          {!rect && !tap && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
         </>
       )}
-      <div style={{ position: "fixed", left: 16, right: 16, ...bubblePos, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
+      <div style={{ position: "absolute", left: 16, right: 16, ...bubblePos, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
         {cur.text && <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>{cur.text}</div>}
         {cur.guide && <StepGuideLink linkOnly style={{ marginBottom: 12 }} />}
         {cur.prompt && <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 12 }}>{cur.prompt}</div>}
@@ -4725,7 +4734,7 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
                 {!tap && <button onClick={onNext} style={{ border: "none", borderRadius: 10, padding: "9px 22px", background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{cur.btn || "המשך"}</button>}
               </div>
             </div>
-            {onEnd && !cur.last && <div style={{ marginTop: 10, textAlign: "center" }}><button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button></div>}
+            {onEnd && !cur.last && !cur.noEnd && <div style={{ marginTop: 10, textAlign: "center" }}><button onClick={onEnd} style={{ border: "none", background: "transparent", color: C.faint, fontSize: 13, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>סיים את הסיור</button></div>}
           </>
         )}
       </div>
@@ -5351,18 +5360,31 @@ export default function App() {
         // the keyboard opening - the frame collapsed and the bottom bar crept upward.
         // Only treat it as a keyboard when the page is not zoomed in.
         const zoomed = (vv.scale || 1) > 1.02;
+        if (zoomed) return; // pinch shrinks the visual viewport - not a real height change
+        // Always size the frame to the height that is actually visible. Relying on
+        // 100dvh let the bottom bar slip under the phone's own navigation bar.
+        document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
         const kb = Math.max(0, window.innerHeight - vv.height);
-        if (!zoomed && kb > 80) { // keyboard (or similar) is up
-          document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
-          window.scrollTo(0, 0);
-        } else {
-          document.documentElement.style.removeProperty("--vvh");
-        }
+        if (kb > 80) window.scrollTo(0, 0); // keyboard is up
       } catch (e) {}
     };
     vv.addEventListener("resize", apply);
     vv.addEventListener("scroll", apply);
-    return () => { vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply); };
+    // After a reload the browser chrome is still settling, so the first measurement
+    // can come out too tall and push the bottom bar off screen. Re-measure for a
+    // couple of seconds, and again whenever the tab becomes visible.
+    const timers = [80, 250, 600, 1200, 2500].map((ms) => setTimeout(apply, ms));
+    const onShow = () => apply();
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("orientationchange", onShow);
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply);
+      timers.forEach(clearTimeout);
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("orientationchange", onShow);
+      window.removeEventListener("pageshow", onShow);
+    };
   }, []);
 
   const tabs = [
@@ -5427,7 +5449,7 @@ export default function App() {
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
             </div>
             <div style={{ position: "relative", flexShrink: 0, zIndex: 38 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(9px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(12px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)" }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
                 const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
