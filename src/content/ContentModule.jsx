@@ -21,6 +21,18 @@ function loadStore(key) { try { return JSON.parse(localStorage.getItem(key) || "
 function saveStore(key, obj) { try { localStorage.setItem(key, JSON.stringify(obj)); } catch (e) {} }
 function lessonKey(week, day, i) { return `W${week}D${day}-${i}`; }
 function tracksProgress(day) { return !!day; }
+// iPhone/iPad: Safari ignores the download attribute, so a plain link NAVIGATES to the PDF.
+// Inside an installed PWA there is no toolbar and no back button, so the woman gets stuck on the
+// PDF with no way out and no share button. On iOS we open the native share sheet instead
+// (Save to Files / WhatsApp / print), which is a system sheet, not a navigation, so the app stays put.
+// Android and desktop keep the plain download link, which already works there.
+function isIOS() {
+  if (typeof navigator === "undefined") return false;
+  const ua = (navigator.userAgent || "").toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return true;
+  return /macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1; // iPadOS reports as Mac
+}
+const DL_HINT = isIOS() ? "לחצי לפתיחה ושמירה" : "לחצי להורדה";
 function hasTaskWord(l) { return /משימ/.test((l && l.title) || ""); }
 function hasPages(l) { return !!(l && l.pageImages && l.pageImages.length); }
 function matchesChip(l, chip) {
@@ -410,20 +422,45 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
 
   function DownloadBtn({ l }) {
     const items = (l.downloads && l.downloads.length) ? l.downloads : (l.pdf ? [{ label: "הורדת הדף", file: l.pdf }] : []);
+    const [busy, setBusy] = useState("");
+    const [dlErr, setDlErr] = useState("");
     if (!items.length) return null;
+    const rowStyle = (i) => ({ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", border: `1.5px solid ${C.brand}`, background: C.brandBg, borderRadius: 14, padding: "13px 14px", marginTop: i === 0 ? 4 : 10, cursor: "pointer", width: "100%", boxSizing: "border-box", fontFamily: "inherit", textAlign: "right" });
+    const rowInner = (it) => (
+      <>
+        <div style={{ width: 42, height: 42, borderRadius: 11, background: C.brand, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><FileText size={20} color="#fff" /></div>
+        <div style={{ flex: 1, textAlign: "right", minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD }}>{it.label}</div>
+          <div style={{ fontSize: 15, color: C.brandD }}>{busy === it.file ? "רגע, מכינה את הקובץ..." : DL_HINT}</div>
+        </div>
+        <Download size={20} color={C.brand} style={{ flexShrink: 0 }} />
+      </>
+    );
+    // iOS: fetch the PDF and hand it to the native share sheet. Only the files array is passed,
+    // because on iOS adding title/text makes file sharing fail.
+    async function iosShare(it) {
+      setDlErr(""); setBusy(it.file);
+      try {
+        const res = await fetch(PDF_BASE + it.file);
+        if (!res.ok) throw new Error("fetch");
+        const blob = await res.blob();
+        const file = new File([blob], it.file, { type: "application/pdf" });
+        if (!(navigator.canShare && navigator.canShare({ files: [file] }))) throw new Error("unsupported");
+        await navigator.share({ files: [file] });
+      } catch (e) {
+        if (!(e && e.name === "AbortError")) setDlErr("לא הצלחנו לשמור את הקובץ. אפשר לצפות בדף כאן באפליקציה.");
+      } finally { setBusy(""); }
+    }
     return (
       <div>
         {items.map((it, i) => (
-          <a key={i} href={PDF_BASE + it.file} download={it.file} rel="noreferrer"
-            style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", border: `1.5px solid ${C.brand}`, background: C.brandBg, borderRadius: 14, padding: "13px 14px", marginTop: i === 0 ? 4 : 10 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 11, background: C.brand, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><FileText size={20} color="#fff" /></div>
-            <div style={{ flex: 1, textAlign: "right" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD }}>{it.label}</div>
-              <div style={{ fontSize: 15, color: C.brandD }}>לחצי להורדה</div>
-            </div>
-            <Download size={20} color={C.brand} style={{ flexShrink: 0 }} />
-          </a>
+          isIOS() ? (
+            <button key={i} type="button" onClick={() => iosShare(it)} disabled={!!busy} style={rowStyle(i)}>{rowInner(it)}</button>
+          ) : (
+            <a key={i} href={PDF_BASE + it.file} download={it.file} rel="noreferrer" style={rowStyle(i)}>{rowInner(it)}</a>
+          )
         ))}
+        {dlErr && <div style={{ fontSize: 14, color: C.brandD, background: C.brandBg, borderRadius: 12, padding: "10px 12px", marginTop: 8 }}>{dlErr}</div>}
       </div>
     );
   }

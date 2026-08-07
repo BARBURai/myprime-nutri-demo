@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.12";
+const VERSION = "4.13";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4161,7 +4161,7 @@ function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, w
       if (t.type === "number") {
         let v = null;
         if (t.auto === "steps") v = stepsByDate[d];
-        else if (t.auto === "water") v = waterByDate[d];
+        else if (t.auto === "water") v = waterMlOf(waterByDate[d]); // millilitres, NOT cups - the summary text formats it as litres
         else v = ans[t.id];
         if (v != null && v > 0) { sums[t.id] = (sums[t.id] || 0) + v; ns[t.id] = (ns[t.id] || 0) + 1; }
       } else if (taskDone(t, ans, au)) {
@@ -4231,6 +4231,13 @@ const WK_TASKS = {
 function sumDays(n) { return n === 1 ? "יום אחד" : n === 2 ? "יומיים" : `${n} ימים`; }
 function sumBDays(n) { return n === 1 ? "ביום אחד" : n === 2 ? "ביומיים" : `ב-${n} ימים`; }
 function sumTimes(n) { return n === 1 ? "פעם אחת" : n === 2 ? "פעמיים" : `${n} פעמים`; }
+// Water is stored in millilitres. The summary shows litres, because the goal itself is defined in
+// litres (2 litres a day) while a "cup" changes with each woman's personal cup size.
+// One decimal, with no trailing zero: 0.8 / 1.2 / 2 (not 2.0).
+function litersTxt(ml) {
+  const l = Math.round((ml || 0) / 100) / 10;
+  return `${l} ליטר`;
+}
 
 function summaryTaskLine(key, week, data, fasting) {
   const A = data.avgs || {}, K = data.counts || {};
@@ -4274,16 +4281,20 @@ function summaryTaskLine(key, week, data, fasting) {
       return { e: "🥦", t: "משימות תזונה - שילוב ירקות וסדר אכילה", d };
     }
     case "water_full": {
-      const db = cnt("drinkbefore"), cups = avg("water");
-      const cupsTxt = `בממוצע שתית ${amt(cups, "כוס אחת", "כוסות")} מים`;
-      const d = db === 0 ? `בשבוע האחרון עדיין לא דיווחת על מים לפני הארוחה. ${cupsTxt}.`
-        : db === 1 ? `בשבוע האחרון, ביום אחד שתית מים לפני הארוחה, ובסך הכל ${cupsTxt}.`
-        : `בשבוע האחרון, ${sumBDays(db)} שתית מים לפני הארוחה, ובסך הכל ${cupsTxt}.`;
+      const db = cnt("drinkbefore"), ml = avg("water"), n = navg("water");
+      // The average is over the days she reported, not over the whole week - say so, otherwise it reads as a daily average.
+      const amtTxt = n === 0 ? "עדיין לא דיווחת על שתיית מים"
+        : n === 1 ? `דיווחת על שתייה ביום אחד, ושתית ${litersTxt(ml)}`
+        : `דיווחת על שתייה ${sumBDays(n)}, ובהם שתית בממוצע ${litersTxt(ml)} ביום, מתוך יעד של 2 ליטר`;
+      const d = db === 0 ? `בשבוע האחרון עדיין לא דיווחת על מים לפני הארוחה. ${amtTxt}.`
+        : `בשבוע האחרון, ${sumBDays(db)} שתית מים לפני הארוחה. ${amtTxt}.`;
       return { e: "🥛", t: "משימת שתיית מים", d };
     }
     case "water_simple": {
-      const cups = avg("water");
-      const d = cups === 0 ? "השבוע עוד לא דיווחת על שתיית מים." : `בממוצע שתית ${amt(cups, "כוס אחת", "כוסות")} מים.`;
+      const ml = avg("water"), n = navg("water");
+      const d = n === 0 ? "השבוע עוד לא דיווחת על שתיית מים."
+        : n === 1 ? `השבוע דיווחת על שתיית מים ביום אחד, ושתית ${litersTxt(ml)}. היעד הוא 2 ליטר ביום.`
+        : `השבוע דיווחת על שתיית מים ${sumBDays(n)}. בימים שדיווחת שתית בממוצע ${litersTxt(ml)} ביום, מתוך יעד של 2 ליטר.`;
       return { e: "🥛", t: "משימת שתיית מים", d };
     }
     case "protein": {
