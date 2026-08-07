@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.04";
+const VERSION = "4.08";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1726,7 +1726,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail }) {
+function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, hasFutureEntries, onClearFuture }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const [confirmReset, setConfirmReset] = useState(false);
@@ -1936,6 +1936,12 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
             <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15.5, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 17 }}>📲</span> התקנת האפליקציה על הטלפון</span>
               <ChevronLeft size={18} color={C.faint} />
+            </div>
+          )}
+          {hasFutureEntries && (
+            <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 2 }}>
+              <Btn variant="ghost" onClick={() => onClearFuture && onClearFuture()} style={{ color: C.sub }}>ניקוי נתונים בתאריכים עתידיים</Btn>
+              <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>מוחק יומן, צעדים ומים בתאריכים שאחרי היום בלבד. המועדפים, המשקלים וההישגים נשמרים.</div>
             </div>
           )}
           <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 2 }}>
@@ -2941,7 +2947,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px 18px" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px calc(84px + env(safe-area-inset-bottom, 0px))" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
           <button onClick={close} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
@@ -4955,6 +4961,8 @@ export default function App() {
   const [gateEmail, setGateEmail] = useState("");
   const [gateName, setGateName] = useState("");
   const [gateMsg, setGateMsg] = useState("");
+  const [futureData, setFutureData] = useState(false); // one-time notice about entries dated ahead
+  const [futureConfirm, setFutureConfirm] = useState(false);
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
   const [gateAttempts, setGateAttempts] = useState(0);
   const [gateAgree, setGateAgree] = useState(false);
@@ -5015,7 +5023,33 @@ export default function App() {
     if (DEV) return; // in DEV the start date is simulated for testing - never cap it to the sheet date
     if (gate !== "ok" || !onboarded || !gateStartDate) return;
     if (profile.startDate === gateStartDate) return;
-    setProfile((p) => ({ ...p, startDate: gateStartDate }));
+    // Moving the start date can jump her several days forward. Everything the
+    // drip-fed tips would have shown on the way then fires at once, stacking
+    // pop-ups on top of each other - so mark what is already behind her as seen
+    // and offer the same material through the calm catch-up read instead.
+    const dayNow = programDayNumber(gateStartDate, TODAY);
+    const dayBefore = programDayNumber(profile.startDate, TODAY);
+    const jumped = dayNow >= 3 && dayNow > dayBefore;
+    // Moved back a week or more: the drip-fed tips should run again from scratch.
+    const movedBack = dayNow < dayBefore - 7;
+    // Only offer to clear if she actually has entries dated after today.
+    const hasFuture = log.some((e) => e.date > TODAY)
+      || Object.keys(stepsByDate).some((d) => d > TODAY && stepsByDate[d])
+      || Object.keys(waterByDate).some((d) => d > TODAY && waterByDate[d]);
+    if (movedBack && hasFuture && !profile.futureNoticeSeen) setFutureData(true);
+    setProfile((p) => {
+      const next = { ...p, startDate: gateStartDate };
+      if (jumped) {
+        next.tipsSeen = [...new Set([...(p.tipsSeen || []), ...TIPS.map((t) => t.key)])];
+        if (p.catchup !== "done") next.catchup = "due";
+      }
+      if (movedBack) {
+        const keys = new Set(TIPS.map((t) => t.key));
+        next.tipsSeen = (p.tipsSeen || []).filter((k) => !keys.has(k));
+        next.catchup = null;
+      }
+      return next;
+    });
   }, [gate, onboarded, gateStartDate]);
   const submitGate = () => {
     const e = gateEmail.trim().toLowerCase(); const n = gateName.trim();
@@ -5390,6 +5424,10 @@ export default function App() {
     };
   }, []);
 
+  const hasFutureEntries = log.some((e) => e.date > TODAY)
+    || Object.keys(stepsByDate).some((d) => d > TODAY && stepsByDate[d])
+    || Object.keys(waterByDate).some((d) => d > TODAY && waterByDate[d]);
+
   const tabs = [
     { id: "day", ic: Home, label: "יומן" },
     { id: "report", ic: BarChart3, label: "דוח" },
@@ -5449,7 +5487,7 @@ export default function App() {
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
             </div>
             <div style={{ position: "relative", flexShrink: 0, zIndex: 38 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(12px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)" }}>
@@ -5507,24 +5545,34 @@ export default function App() {
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
             {sheet === "install" && <InstallGuideModal onClose={() => setSheet(null)} />}
-            {modal && (modal.kind === "recipe"
-              ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={saveRecipe} onClose={() => setModal(null)} onDelete={() => { deleteEntry(modal.editEntry.id); setModal(null); }} />
-              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} recents={recents} onDeleteFavorite={deleteFavorite} onDeleteRecent={deleteRecent} onUndoEntry={deleteEntry} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
-            {tour && tour.steps[tour.i] && tour.steps[tour.i].view === tourView && <TutorialOverlay steps={tour.steps} idx={tour.i} onNext={tourAdvance} onChoice={tourChoice} onEnd={tourEnd} onBack={tourBack} />}
+
+            {futureConfirm && (
+              <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 63, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+                <div style={{ background: C.panel, borderRadius: 16, padding: 22, maxWidth: 360, width: "100%", textAlign: "right", fontFamily: fontStack }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>ניקוי נתונים עתידיים</div>
+                  <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.75, marginBottom: 8 }}>יימחקו יומן האוכל, הצעדים והמים - בתאריכים שאחרי היום בלבד. הפעולה אינה ניתנת לביטול.</div>
+                  <div style={{ fontSize: 15, color: C.brandD, lineHeight: 1.7, marginBottom: 18 }}>המועדפים והאחרונים שלך, המשקלים, המדליות והגביעים - כולם יישמרו.</div>
+                  <Btn onClick={() => {
+                    setLog((l) => l.filter((e) => e.date <= TODAY));
+                    setStepsByDate((m) => { const n = {}; for (const d in m) if (d <= TODAY) n[d] = m[d]; return n; });
+                    setWaterByDate((m) => { const n = {}; for (const d in m) if (d <= TODAY) n[d] = m[d]; return n; });
+                    setFutureConfirm(false);
+                  }}>כן, נקי</Btn>
+                  <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setFutureConfirm(false)} style={{ color: C.sub }}>ביטול</Btn></div>
+                </div>
+              </div>
+            )}
+
+            {futureData && (
+              <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 62, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+                <div style={{ background: C.panel, borderRadius: 16, padding: 22, maxWidth: 360, width: "100%", textAlign: "right", fontFamily: fontStack }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>תאריך ההתחלה שלך עודכן 💜</div>
+                  <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.75, marginBottom: 18 }}>יש לך נתונים שמילאת בתאריכים שעדיין לפנייך. אם תרצי לנקות אותם ולהתחיל דף חדש, אפשר לעשות זאת בכל רגע דרך הפרופיל, תחת "שאלות, תשובות ועזרה".</div>
+                  <Btn onClick={() => { setFutureData(false); setProfile((p) => ({ ...p, futureNoticeSeen: true })); }}>הבנתי</Btn>
+                </div>
+              </div>
+            )}
           </>
-        )}
-        {gate === "ok" && !showIntro && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
-        {gate === "ok" && showIntro && <IntroOverlay name={profile.name || gateName} onClose={() => setShowIntro(false)} />}
-        {favPrompt && (
-          <div onClick={() => setFavPrompt(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
-              <div style={{ fontSize: 30, marginBottom: 4 }}>💜</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 6 }}>לשמור למועדפים?</div>
-              <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>{favPrompt.name}<br />כדי שתוכלי להוסיף אותו שוב בהקשה אחת.</div>
-              <Btn onClick={saveFavorite}>כן, שמרי</Btn>
-              <Btn variant="ghost" onClick={() => setFavPrompt(null)} style={{ marginTop: 8 }}>לא תודה</Btn>
-            </div>
-          </div>
         )}
         {gate === "ok" && notifyPrompt && (
           <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 55 }}>
