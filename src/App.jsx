@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.08";
+const VERSION = "4.09";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5544,6 +5544,10 @@ export default function App() {
             {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} C={C} font={fontStack} onClose={() => setSheet(null)} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
+
+            {modal && (modal.kind === "recipe"
+              ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={(payload) => { commit(payload); setModal(null); }} onClose={() => setModal(null)} onDelete={modal.editEntry ? () => { deleteEntry(modal.editEntry.id); setModal(null); } : null} />
+              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} recents={recents} onDeleteFavorite={deleteFavorite} onDeleteRecent={deleteRecent} onUndoEntry={deleteEntry} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
             {sheet === "install" && <InstallGuideModal onClose={() => setSheet(null)} />}
 
             {futureConfirm && (
