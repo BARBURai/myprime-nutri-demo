@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.14";
+const VERSION = "4.15";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1119,6 +1119,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
 // Shown when a participant has finished signing up but her programme starts on a
 // later Sunday. Day 1 (and everything with it) unlocks at midnight on that date.
 function PreStartScreen({ name, startDate }) {
+  // Phone only: on a desktop there is no home screen to put the icon on.
+  const isPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
   const start = new Date(startDate);
   const daysLeft = Math.max(0, Math.ceil((start - new Date(TODAY)) / 86400000));
   const dateStr = start.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" });
@@ -1132,8 +1134,19 @@ function PreStartScreen({ name, startDate }) {
         <div style={{ fontSize: 22, fontWeight: 700, color: C.brandD, margin: "6px 0 10px" }}>{dateStr}</div>
         <div style={{ fontSize: 17, fontWeight: 600, color: C.brand }}>{daysLeft === 0 ? "מתחילות מחר!" : daysLeft === 1 ? "נשאר יום אחד" : `נשארו ${daysLeft} ימים`}</div>
       </div>
-      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: "0 0 8px" }}>בינתיים אין מה למלא - נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
+      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: "0 0 8px" }}>בינתיים אפשר לסגור את האפליקציה - נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
       <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
+      {isPhone && (
+        <div style={{ border: `1px solid ${C.line}`, borderRadius: 16, padding: "16px 14px", margin: "22px 0 0", textAlign: "right" }}>
+          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>כדי לחזור לאפליקציה, פשוט לוחצים על האייקון:</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "12px 0" }}>
+            <img src="/icon-192.png" alt="" width={56} height={56} style={{ borderRadius: 13, flexShrink: 0 }} />
+            <div style={{ fontSize: 16.5, fontWeight: 700, color: C.ink }}>מיי פריים 360</div>
+          </div>
+          <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7 }}>לא מוצאת את האפליקציה? אפשר לחפש "מיי פריים" בחיפוש של אפליקציות הטלפון.</div>
+          <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.7, marginTop: 10 }}>הכי קל: הוסיפי את האפליקציה למסך הבית של הטלפון.</div>
+        </div>
+      )}
       <div style={{ fontSize: 14, color: C.faint, lineHeight: 1.6, marginTop: 22 }}>אם תרצי, אפשר לעדכן את הפרטים שלך בכל רגע דרך הפרופיל.</div>
       <div style={{ textAlign: "center", fontSize: 12.5, color: C.faint, marginTop: 26 }}>MyPrime · v{VERSION}</div>
     </div>
