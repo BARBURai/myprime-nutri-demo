@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.13";
+const VERSION = "4.14";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5402,6 +5402,14 @@ export default function App() {
     } catch (e) {}
     const vv = window.visualViewport;
     if (!vv) return;
+    // Is a text field focused? A real keyboard shrink always has one; a system sheet
+    // (iOS share sheet, file picker, camera) never does.
+    const editing = () => {
+      const el = document.activeElement;
+      if (!el) return false;
+      const tag = (el.tagName || "").toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable === true;
+    };
     const apply = () => {
       try {
         // Pinch-zoom also shrinks visualViewport.height, which used to be mistaken for
@@ -5409,10 +5417,16 @@ export default function App() {
         // Only treat it as a keyboard when the page is not zoomed in.
         const zoomed = (vv.scale || 1) > 1.02;
         if (zoomed) return; // pinch shrinks the visual viewport - not a real height change
+        const winH = window.innerHeight || 0;
+        const kb = Math.max(0, winH - vv.height);
+        // A big shrink with NO text field focused is a system sheet sitting over the app,
+        // not the keyboard. iOS does not reliably fire a resize when that sheet closes, so
+        // writing the shrunken height here used to leave --vvh stuck at half the screen -
+        // blank space with the bottom bar stranded in the middle. Keep the last good height.
+        if (winH > 0 && kb > winH * 0.25 && !editing()) return;
         // Always size the frame to the height that is actually visible. Relying on
         // 100dvh let the bottom bar slip under the phone's own navigation bar.
         document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
-        const kb = Math.max(0, window.innerHeight - vv.height);
         if (kb > 80) window.scrollTo(0, 0); // keyboard is up
       } catch (e) {}
     };
@@ -5422,16 +5436,32 @@ export default function App() {
     // can come out too tall and push the bottom bar off screen. Re-measure for a
     // couple of seconds, and again whenever the tab becomes visible.
     const timers = [80, 250, 600, 1200, 2500].map((ms) => setTimeout(apply, ms));
-    const onShow = () => apply();
+    // Coming back from a system sheet the screen is still animating, so one measurement
+    // catches it mid-way. Measure repeatedly instead. The timers are scheduled AFTER the
+    // return, because while the sheet is up iOS freezes the app's timers.
+    let burst = [];
+    const remeasure = () => {
+      burst.forEach(clearTimeout);
+      burst = [0, 120, 400, 900, 1600].map((ms) => setTimeout(apply, ms));
+    };
+    const onShow = () => remeasure();
     document.addEventListener("visibilitychange", onShow);
     window.addEventListener("orientationchange", onShow);
     window.addEventListener("pageshow", onShow);
+    // A share sheet is an overlay inside the same app, so visibilitychange does not always
+    // fire when it closes. focus does.
+    window.addEventListener("focus", onShow);
+    // Let the PDF share button ask for a re-measure directly, as a third safety net.
+    try { window.__mpRemeasure = remeasure; } catch (e) {}
     return () => {
       vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply);
       timers.forEach(clearTimeout);
+      burst.forEach(clearTimeout);
       document.removeEventListener("visibilitychange", onShow);
       window.removeEventListener("orientationchange", onShow);
       window.removeEventListener("pageshow", onShow);
+      window.removeEventListener("focus", onShow);
+      try { if (window.__mpRemeasure === remeasure) delete window.__mpRemeasure; } catch (e) {}
     };
   }, []);
 
