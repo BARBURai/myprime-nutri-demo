@@ -1126,8 +1126,8 @@ function PreStartScreen({ name, startDate }) {
   const dateStr = start.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" });
   const dayName = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"][start.getDay()];
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "40px 24px 40px", textAlign: "center", fontFamily: fontStack }}>
-      <img src={MEDAL_SRC} alt="" width={96} height={96} style={{ display: "block", margin: "0 auto 18px" }} />
+    <div style={{ flex: 1, overflowY: "auto", padding: "24px 24px 40px", textAlign: "center", fontFamily: fontStack }}>
+      <img src={MEDAL_SRC} alt="" width={64} height={64} style={{ display: "block", margin: "0 auto 12px" }} />
       <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>הכל מוכן{name && name.trim() ? `, ${name.trim()}` : ""} 💜</div>
       <div style={{ background: C.brandBg, borderRadius: 16, padding: "18px 16px", margin: "20px 0 18px" }}>
         <div style={{ fontSize: 16, color: C.brandD, lineHeight: 1.6 }}>התוכנית שלך מתחילה ביום {dayName}</div>
@@ -1135,9 +1135,8 @@ function PreStartScreen({ name, startDate }) {
         <div style={{ fontSize: 17, fontWeight: 600, color: C.brand }}>{daysLeft === 0 ? "מתחילות מחר!" : daysLeft === 1 ? "נשאר יום אחד" : `נשארו ${daysLeft} ימים`}</div>
       </div>
       <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: "0 0 8px" }}>בינתיים אפשר לסגור את האפליקציה - נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
-      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
       {isPhone && (
-        <div style={{ border: `1px solid ${C.line}`, borderRadius: 16, padding: "16px 14px", margin: "22px 0 0", textAlign: "right" }}>
+        <div style={{ background: C.brandBg, borderRadius: 16, padding: "16px 14px", margin: "16px 0 14px", textAlign: "right" }}>
           <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>כדי לחזור לאפליקציה, פשוט לוחצים על האייקון:</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "12px 0" }}>
             <img src="/icon-192.png" alt="" width={56} height={56} style={{ borderRadius: 13, flexShrink: 0 }} />
@@ -1147,6 +1146,7 @@ function PreStartScreen({ name, startDate }) {
           <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.7, marginTop: 10 }}>הכי קל: הוסיפי את האפליקציה למסך הבית של הטלפון.</div>
         </div>
       )}
+      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
       <div style={{ fontSize: 14, color: C.faint, lineHeight: 1.6, marginTop: 22 }}>אם תרצי, אפשר לעדכן את הפרטים שלך בכל רגע דרך הפרופיל.</div>
       <div style={{ textAlign: "center", fontSize: 12.5, color: C.faint, marginTop: 26 }}>MyPrime · v{VERSION}</div>
     </div>
