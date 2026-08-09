@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.25";
+const VERSION = "4.26";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1147,20 +1147,21 @@ function PreStartScreen({ name, startDate }) {
         <div style={{ fontSize: 22, fontWeight: 700, color: C.brandD, margin: "6px 0 10px" }}>{dateStr}</div>
         <div style={{ fontSize: 17, fontWeight: 600, color: C.brand }}>{daysLeft === 0 ? "מתחילות מחר!" : daysLeft === 1 ? "נשאר יום אחד" : `נשארו ${daysLeft} ימים`}</div>
       </div>
-      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: "0 0 8px" }}>בינתיים אפשר לסגור את האפליקציה - נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
+      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: "0 0 8px" }}>נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
+      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
       {isPhone && (
-        <div style={{ background: C.brandBg, borderRadius: 16, padding: "16px 14px", margin: "16px 0 14px", textAlign: "right" }}>
-          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>כדי לחזור לאפליקציה, פשוט לוחצים על האייקון:</div>
+        <div style={{ background: C.brandBg, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
+          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>אפשר לסגור את האפליקציה.</div>
+          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginTop: 10 }}><b>כדי לחזור לאפליקציה</b>, פשוט לוחצים על האייקון:</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "12px 0" }}>
             <img src="/icon-192.png" alt="" width={56} height={56} style={{ borderRadius: 13, flexShrink: 0 }} />
             <div style={{ fontSize: 16.5, fontWeight: 700, color: C.ink }}>מיי פריים 360</div>
           </div>
-          <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7 }}>לא מוצאת את האפליקציה? אפשר לחפש "מיי פריים" בחיפוש של אפליקציות הטלפון.</div>
+          <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7 }}><b>לא מוצאת את האפליקציה?</b> אפשר לחפש "מיי פריים" בחיפוש של אפליקציות הטלפון.</div>
           <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.7, marginTop: 10 }}>הכי קל: הוסיפי את האפליקציה למסך הבית של הטלפון.</div>
         </div>
       )}
-      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
-      <div style={{ fontSize: 14, color: C.faint, lineHeight: 1.6, marginTop: 22 }}>אם תרצי, אפשר לעדכן את הפרטים שלך בכל רגע דרך הפרופיל.</div>
+      <div style={{ fontSize: 14, color: C.faint, lineHeight: 1.6, marginTop: 22 }}>הערה: אם תרצי, אפשר לעדכן את הפרטים שלך בכל רגע דרך הפרופיל.</div>
       <div style={{ textAlign: "center", fontSize: 12.5, color: C.faint, marginTop: 26 }}>MyPrime · v{VERSION}</div>
     </div>
   );
