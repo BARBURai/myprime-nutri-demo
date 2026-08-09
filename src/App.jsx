@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.16";
+const VERSION = "4.17";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5444,6 +5444,23 @@ export default function App() {
       kbTimers.forEach(clearTimeout);
       kbTimers = [0, 60, 150, 300, 600].map((ms) => setTimeout(() => { try { window.scrollTo(0, 0); } catch (e) {} }, ms));
     };
+    // Pinning after the fact still lost the race sometimes. While the keyboard is up, take
+    // the document out of the scroll flow entirely so iOS has nothing left to push. The
+    // frame is already exactly one viewport tall, so this is visually identical; only the
+    // ability to scroll the document away disappears. The chat list keeps its own scroll.
+    let docLocked = false;
+    const lockDoc = (on) => {
+      if (on === docLocked) return;
+      docLocked = on;
+      try {
+        const b = document.body;
+        b.style.position = on ? "fixed" : "";
+        b.style.top = on ? "0" : "";
+        b.style.left = on ? "0" : "";
+        b.style.right = on ? "0" : "";
+        b.style.width = on ? "100%" : "";
+      } catch (e) {}
+    };
     const apply = () => {
       try {
         // Pinch-zoom also shrinks visualViewport.height, which used to be mistaken for
@@ -5461,7 +5478,9 @@ export default function App() {
         // Always size the frame to the height that is actually visible. Relying on
         // 100dvh let the bottom bar slip under the phone's own navigation bar.
         document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
-        if (kb > 80) pinTop(); // keyboard is up
+        const kbUp = kb > 80;
+        lockDoc(kbUp);
+        if (kbUp) pinTop(); // keyboard is up
       } catch (e) {}
     };
     vv.addEventListener("resize", apply);
@@ -5492,6 +5511,7 @@ export default function App() {
       timers.forEach(clearTimeout);
       burst.forEach(clearTimeout);
       kbTimers.forEach(clearTimeout);
+      lockDoc(false);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
       document.removeEventListener("visibilitychange", onShow);
