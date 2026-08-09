@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.27";
+const VERSION = "4.31";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3608,7 +3608,7 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
   );
 }
 
-function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg, attempts = 0, agree, setAgree }) {
+function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg, notice, attempts = 0, agree, setAgree }) {
   const deniedText = reason === "fetch_failed"
     ? "תקלה טכנית זמנית, נסי שוב בעוד רגע."
     : reason === "device_limit"
@@ -3623,6 +3623,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center", fontFamily: fontStack }}>
       <div style={{ width: 64, height: 64, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><Sparkles size={28} color={C.brand} /></div>
       <div style={{ fontSize: 23, fontWeight: 600, color: C.ink, marginBottom: 6 }}>{name.trim() ? `היי ${name.trim()}!` : "ברוכה הבאה ל-MyPrime"}</div>
+      {notice && <div style={{ fontSize: 15, lineHeight: 1.6, background: C.brandBg, color: C.brandD, padding: "10px 12px", borderRadius: 12, margin: "4px 0 10px" }}>{notice}</div>}
       {status === "checking" && (
         <><Loader size={26} color={C.brand} className="spin" style={{ marginTop: 18 }} /><div style={{ fontSize: 15, color: C.sub, marginTop: 12 }}>מאמתת את ההרשמה לתוכנית…</div></>
       )}
@@ -5073,6 +5074,7 @@ export default function App() {
   const [gateEmail, setGateEmail] = useState("");
   const [gateName, setGateName] = useState("");
   const [gateMsg, setGateMsg] = useState("");
+  const [gateNotice, setGateNotice] = useState(""); // shown under the greeting, not by the button
   const [futureData, setFutureData] = useState(false); // one-time notice about entries dated ahead
   const [futureConfirm, setFutureConfirm] = useState(false);
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
@@ -5108,10 +5110,10 @@ export default function App() {
   }, []);
   const confirmExit = () => { leavingRef.current = true; setShowExit(false); try { window.history.go(-2); } catch (e) {} };
 
-  const checkAccess = async (em, nm) => {
+  const checkAccess = async (em, nm, isLogin) => {
     setGate("checking"); setGateMsg("");
     try {
-      const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
+      const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}${isLogin ? "&login=1" : ""}`);
       const d = await r.json();
       if (d.allowed) {
         try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
@@ -5119,6 +5121,13 @@ export default function App() {
         setGateReason(""); setGate("ok");
       } else {
         const rsn = d.reason || "not_registered";
+        // Pushed out by a newer device. Not a refusal: she goes back to the form, and
+        // typing her email signs her straight back in. Never the denied dead-end screen.
+        if (rsn === "signed_out") {
+          try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
+          setGateReason(""); setGateNotice("נכנסת לאפליקציה ממכשיר אחר. אפשר להיכנס כאן שוב עם המייל שלך 💜"); setGate("form");
+          return;
+        }
         if (rsn === "not_registered") setGateAttempts((n) => n + 1);
         setGateReason(rsn); setGate("denied");
       }
@@ -5168,7 +5177,8 @@ export default function App() {
     if (!n) { setGateMsg("נא להזין שם פרטי."); return; }
     if (!e || !e.includes("@")) { setGateMsg("נא להזין כתובת מייל תקינה."); return; }
     if (!gateAgree) { setGateMsg("יש לאשר את מדיניות הפרטיות כדי להמשיך."); return; }
-    checkAccess(e, n);
+    setGateNotice("");
+    checkAccess(e, n, true); // she typed it: always let her in, push the oldest device out
   };
   const retryGate = () => { try { localStorage.removeItem("myprime_access_email"); localStorage.removeItem("myprime_start_date"); } catch (e) {} setGateEmail(""); setGateMsg(""); setGateReason(""); setGateStartDate(""); setGate("form"); };
 
@@ -5672,7 +5682,7 @@ export default function App() {
         {showInstallGate ? (
           <InstallGate onSkip={skipInstall} />
         ) : gate !== "ok" ? (
-          <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} attempts={gateAttempts} agree={gateAgree} setAgree={setGateAgree} />
+          <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} notice={gateNotice} attempts={gateAttempts} agree={gateAgree} setAgree={setGateAgree} />
         ) : !onboarded ? (
           bkRestore === "offer" ? (
             <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={() => setBkRestore("none")} />
@@ -5779,6 +5789,17 @@ export default function App() {
               </div>
             )}
           </>
+        )}
+        {favPrompt && (
+          <div onClick={() => setFavPrompt(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+              <div style={{ fontSize: 30, marginBottom: 4 }}>💜</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 6 }}>לשמור למועדפים?</div>
+              <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>{favPrompt.name}<br />כדי שתוכלי להוסיף אותו שוב בהקשה אחת.</div>
+              <Btn onClick={saveFavorite}>כן, שמרי</Btn>
+              <Btn variant="ghost" onClick={() => setFavPrompt(null)} style={{ marginTop: 8 }}>לא תודה</Btn>
+            </div>
+          </div>
         )}
         {gate === "ok" && notifyPrompt && (
           <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 55 }}>
