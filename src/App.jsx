@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.15";
+const VERSION = "4.16";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5417,11 +5417,32 @@ export default function App() {
     if (!vv) return;
     // Is a text field focused? A real keyboard shrink always has one; a system sheet
     // (iOS share sheet, file picker, camera) never does.
-    const editing = () => {
-      const el = document.activeElement;
+    // document.activeElement alone is not enough: inside an installed iOS app it can come
+    // back as the body mid-animation even while the keyboard is up, which made the frame
+    // stay full height and let the keyboard push the bars off screen. focusin/focusout do
+    // fire reliably, so track the state from them and keep a short grace window for the
+    // moment between blur and the keyboard actually closing.
+    const isEditable = (el) => {
       if (!el) return false;
       const tag = (el.tagName || "").toLowerCase();
       return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable === true;
+    };
+    let focusedField = false, blurredAt = 0;
+    const onFocusIn = (e) => { if (isEditable(e.target)) { focusedField = true; blurredAt = 0; } };
+    const onFocusOut = () => { focusedField = false; blurredAt = Date.now(); };
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    const editing = () => focusedField || isEditable(document.activeElement) || (blurredAt > 0 && Date.now() - blurredAt < 1500);
+    // iOS scrolls the document itself to reveal the focused field, which pushes the whole
+    // fixed app frame up: pink background at the bottom, bars and input off the top, and
+    // she has to scroll back down. A single scrollTo raced with that and lost about half
+    // the time, which is why the jump was intermittent. Pin the document to the top a few
+    // times while the keyboard settles instead. Only the document scrolls here; the chat
+    // list scrolls inside its own element and is untouched.
+    let kbTimers = [];
+    const pinTop = () => {
+      kbTimers.forEach(clearTimeout);
+      kbTimers = [0, 60, 150, 300, 600].map((ms) => setTimeout(() => { try { window.scrollTo(0, 0); } catch (e) {} }, ms));
     };
     const apply = () => {
       try {
@@ -5440,7 +5461,7 @@ export default function App() {
         // Always size the frame to the height that is actually visible. Relying on
         // 100dvh let the bottom bar slip under the phone's own navigation bar.
         document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
-        if (kb > 80) window.scrollTo(0, 0); // keyboard is up
+        if (kb > 80) pinTop(); // keyboard is up
       } catch (e) {}
     };
     vv.addEventListener("resize", apply);
@@ -5470,6 +5491,9 @@ export default function App() {
       vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply);
       timers.forEach(clearTimeout);
       burst.forEach(clearTimeout);
+      kbTimers.forEach(clearTimeout);
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
       document.removeEventListener("visibilitychange", onShow);
       window.removeEventListener("orientationchange", onShow);
       window.removeEventListener("pageshow", onShow);
