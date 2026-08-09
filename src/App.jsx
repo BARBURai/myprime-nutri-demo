@@ -228,7 +228,20 @@ function prettyDate(dateStr) {
   const d = parseDay(dateStr);
   return `${HE_DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ב${HE_MONTHS[d.getUTCMonth()]}`;
 }
-const DEV = (() => { try { return new URLSearchParams(window.location.search).has("dev"); } catch (e) { return false; } })();
+// ?dev=1 also sticks in localStorage, because an installed app always launches at the
+// manifest start_url and drops the query string, so the test bar could never be used in
+// the installed app where the iOS bugs actually live. ?dev=0 clears it again.
+const DEV = (() => {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    if (p.has("dev")) {
+      const on = p.get("dev") !== "0";
+      try { on ? localStorage.setItem("myprime_dev", "1") : localStorage.removeItem("myprime_dev"); } catch (e) {}
+      return on;
+    }
+    return localStorage.getItem("myprime_dev") === "1";
+  } catch (e) { return false; }
+})();
 // Course content module ("הסרטונים שלך היום"). Dev-only for now so the pilot
 // women never see it; flip to `true` when it is ready to ship to users.
 const CONTENT_ENABLED = true;
@@ -443,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.20";
+const VERSION = "4.21";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4570,24 +4583,37 @@ function GoalBumpModal({ info, name, onClose }) {
 // screen looks right and once while it is jumped, and the difference names the cause.
 function DevViewportBar() {
   const [s, setS] = useState({});
+  const [bad, setBad] = useState(null);
   useEffect(() => {
-    const read = () => {
+    const snap = () => {
       const vv = window.visualViewport;
       const fr = typeof document !== "undefined" ? document.querySelector(".phone-frame") : null;
       const r = fr ? fr.getBoundingClientRect() : null;
-      setS({
+      const cssRaw = (document.documentElement.style.getPropertyValue("--vvh") || "").trim();
+      return {
         win: Math.round(window.innerHeight || 0),
         vvh: vv ? Math.round(vv.height) : 0,
         off: vv ? Math.round(vv.offsetTop || 0) : 0,
         pgY: Math.round(window.scrollY || 0),
-        css: (document.documentElement.style.getPropertyValue("--vvh") || "-").trim() || "-",
+        css: cssRaw || "-",
+        cssN: parseInt(cssRaw, 10) || 0,
         fh: r ? Math.round(r.height) : 0,
         ft: r ? Math.round(r.top) : 0,
+        w: Math.round(window.innerWidth || 0),
         lock: document.body.style.position === "fixed" ? "Y" : "N",
-      });
+      };
+    };
+    const read = () => {
+      const n = snap();
+      setS(n);
+      // Latch the first bad reading and keep showing it. Reaching the strip to photograph
+      // it takes long enough that the app has already recovered, so a live-only readout
+      // never captures the moment that matters.
+      const mismatch = Math.abs(n.cssN - n.vvh) > 2 || n.pgY !== 0 || n.off !== 0 || Math.abs(n.fh - n.vvh) > 4;
+      if (mismatch) setBad((prev) => prev || n);
     };
     read();
-    const id = setInterval(read, 200);
+    const id = setInterval(read, 120);
     const vv = window.visualViewport;
     if (vv) { vv.addEventListener("resize", read); vv.addEventListener("scroll", read); }
     return () => {
@@ -4595,11 +4621,11 @@ function DevViewportBar() {
       if (vv) { vv.removeEventListener("resize", read); vv.removeEventListener("scroll", read); }
     };
   }, []);
+  const line = (x) => `win ${x.win}x${x.w} vv ${x.vvh} off ${x.off} sY ${x.pgY} | vvh ${x.css} fH ${x.fh} fT ${x.ft} lk ${x.lock}`;
   return (
-    <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", color: "#0f0", fontFamily: "monospace", fontSize: 12, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", pointerEvents: "none", whiteSpace: "nowrap" }}>
-      win {s.win} vv {s.vvh} off {s.off} scrollY {s.pgY}
-      <br />
-      --vvh {s.css} frameH {s.fh} frameTop {s.ft} lock {s.lock}
+    <div onClick={() => setBad(null)} style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden" }}>
+      <div style={{ color: "#0f0" }}>NOW {line(s)}</div>
+      <div style={{ color: bad ? "#f66" : "#666" }}>BAD {bad ? line(bad) : "none yet - tap strip to reset"}</div>
     </div>
   );
 }
