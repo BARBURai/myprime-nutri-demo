@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.33";
+const VERSION = "4.34";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3777,7 +3777,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
             </div>
             <button onClick={() => setPrefsHint(true)} style={{ marginTop: 8, border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>רוצה לשנות?</button>
           </div>
-          <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, marginBottom: 4, lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>
+          <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, marginBottom: 4, lineHeight: 1.5 }}>שימי לב: אני מנוע AI ואני עלולה לטעות. גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>
           <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
           {prefsHint && (
             <div onClick={() => setPrefsHint(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 60 }}>
