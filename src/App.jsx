@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.22";
+const VERSION = "4.23";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4600,6 +4600,7 @@ function DevViewportBar() {
         fh: r ? Math.round(r.height) : 0,
         ft: r ? Math.round(r.top) : 0,
         w: Math.round(window.innerWidth || 0),
+        sc: vv ? Math.round((vv.scale || 1) * 100) / 100 : 1,
         lock: document.body.style.position === "fixed" ? "Y" : "N",
       };
     };
@@ -4629,7 +4630,7 @@ function DevViewportBar() {
       if (vv) { vv.removeEventListener("resize", read); vv.removeEventListener("scroll", read); }
     };
   }, []);
-  const line = (x) => `win ${x.win}x${x.w} vv ${x.vvh} off ${x.off} sY ${x.pgY} | vvh ${x.css} fH ${x.fh} fT ${x.ft} lk ${x.lock}`;
+  const line = (x) => `win ${x.win}x${x.w} vv ${x.vvh} sc ${x.sc} off ${x.off} sY ${x.pgY} | vvh ${x.css} fH ${x.fh} lk ${x.lock}`;
   return (
     <div onClick={() => setBad(null)} style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden" }}>
       <div style={{ color: "#0f0" }}>NOW {line(s)}</div>
@@ -5521,6 +5522,7 @@ export default function App() {
     // the document out of the scroll flow entirely so iOS has nothing left to push. The
     // frame is already exactly one viewport tall, so this is visually identical; only the
     // ability to scroll the document away disappears. The chat list keeps its own scroll.
+    let wasKbUp = false;
     let docLocked = false;
     const lockDoc = (on) => {
       if (on === docLocked) return;
@@ -5555,9 +5557,19 @@ export default function App() {
         document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
         const kbUp = kb > 80;
         lockDoc(kbUp);
-        if (kbUp) pinTop(); // keyboard is up
+        // Only on the transition, not on every pass: the watchdog below calls this four
+        // times a second, and re-pinning that often would fight her own scrolling.
+        if (kbUp && !wasKbUp) pinTop();
+        wasKbUp = kbUp;
       } catch (e) {}
     };
+    // Watchdog. The diagnostic caught the failure directly: visualViewport.height at 352
+    // with the keyboard open while --vvh still held 669, the full height, so the frame
+    // stayed tall inside a short viewport and pushed everything off screen. Whatever the
+    // missed signal is - an event iOS never fired, or one of the early returns above -
+    // waiting for a signal is what keeps failing. Check the invariant instead: --vvh must
+    // equal the visible height, and correct it when it does not.
+    const watchdog = setInterval(apply, 250);
     vv.addEventListener("resize", apply);
     vv.addEventListener("scroll", apply);
     // After a reload the browser chrome is still settling, so the first measurement
@@ -5583,6 +5595,7 @@ export default function App() {
     try { window.__mpRemeasure = remeasure; } catch (e) {}
     return () => {
       vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply);
+      clearInterval(watchdog);
       timers.forEach(clearTimeout);
       burst.forEach(clearTimeout);
       kbTimers.forEach(clearTimeout);
