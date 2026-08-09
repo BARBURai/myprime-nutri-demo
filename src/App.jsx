@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.23";
+const VERSION = "4.24";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5569,7 +5569,7 @@ export default function App() {
     // missed signal is - an event iOS never fired, or one of the early returns above -
     // waiting for a signal is what keeps failing. Check the invariant instead: --vvh must
     // equal the visible height, and correct it when it does not.
-    const watchdog = setInterval(apply, 250);
+    const watchdog = setInterval(apply, 100);
     vv.addEventListener("resize", apply);
     vv.addEventListener("scroll", apply);
     // After a reload the browser chrome is still settling, so the first measurement
@@ -5582,7 +5582,7 @@ export default function App() {
     let burst = [];
     const remeasure = () => {
       burst.forEach(clearTimeout);
-      burst = [0, 120, 400, 900, 1600].map((ms) => setTimeout(apply, ms));
+      burst = [0, 50, 110, 180, 260, 400, 600, 900, 1400, 2000].map((ms) => setTimeout(apply, ms));
     };
     const onShow = () => remeasure();
     document.addEventListener("visibilitychange", onShow);
