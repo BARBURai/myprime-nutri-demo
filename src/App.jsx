@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.32";
+const VERSION = "4.33";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3654,7 +3654,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
   );
 }
 
-function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose }) {
+function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose, onGoProfile }) {
   const [stage, setStage] = useState("confirm");
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
@@ -3677,21 +3677,13 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const diet = profile.diet || [];
   const allergies = profile.allergies || [];
   const dislikes = (profile.dislikes || "").trim();
-  const toggle = (key, val) => setProfile({ ...profile, [key]: (profile[key] || []).includes(val) ? (profile[key] || []).filter((x) => x !== val) : [...(profile[key] || []), val] });
-  const chip = (on) => ({ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
-  const [newSens, setNewSens] = useState("");
-  const [want, setWant] = useState(null);
-  // What she has at home right now. Deliberately local state, so it clears every time the
-  // sheet is opened: a fridge from last week produces worse ideas than no fridge at all.
-  const [atHome, setAtHome] = useState("");
-  // The diet and sensitivity chips already live in her profile, so they only repeated what
-  // she had set once. Collapsed behind one summary line, opened only if she wants to change
-  // something today.
-  const [showPrefs, setShowPrefs] = useState(false);
+  // One free-text ask covering both what she feels like and what she actually has, instead
+  // of a row of chips plus two more fields. Local state, so it clears every time the sheet
+  // opens: a fridge from last week produces worse ideas than no fridge at all.
+  const [ask, setAsk] = useState("");
+  const [prefsHint, setPrefsHint] = useState(false); // popup pointing her at the profile
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
-  const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
-  const prefList = [...diet, ...allergies, ...customSens].filter(Boolean);
+  const avoidAll = [...allergies, ...customSens].filter(Boolean);
 
   const run = async (history) => {
     setLoading(true); setErr(false);
@@ -3707,8 +3699,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       + (diet.length ? `. סגנון תזונה: ${diet.join(", ")}` : "")
       + (avoidList.length ? `. חשוב מאוד - יש לי רגישות/אלרגיה, ואסור בשום אופן להציע לי מאכלים שמכילים: ${avoidList.join(", ")}. אם רעיון כולל אחד מהם, אל תציעי אותו בכלל, ותמיד הזכירי לי בעדינות לבדוק את רשימת הרכיבים המלאה לפני האכילה - כי לפעמים גם AI טועה.` : "")
       + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
-      + (want ? `. אני מחפשת עכשיו: ${want}` : "")
-      + (atHome.trim() ? `. הרכיבים שיש לי בבית עכשיו: ${atHome.trim()}. העדיפי רעיונות שאפשר להכין מהם, ואם חסר משהו קטן צייני את זה.` : "")
+      + (ask.trim() ? `. מה שאני מחפשת ומה שיש לי בבית: ${ask.trim()}. העדיפי רעיונות שאפשר להכין ממה שיש לי, ואם חסר משהו קטן צייני את זה.` : "")
       + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
     const h = [{ role: "user", content: seed }];
     setMsgs(h); setStage("chat"); run(h);
@@ -3776,52 +3767,27 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
       {stage === "confirm" ? (
         <div>
-          <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ - בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
-          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>מה את מחפשת עכשיו?</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
-            {WANT_OPTIONS.map((w) => (<span key={w.id} onClick={() => setWant(want === w.id ? null : w.id)} style={chip(want === w.id)}>{w.emoji} {w.id}</span>))}
-          </div>
-          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>עם אילו רכיבים תרצי להרכיב את הארוחה?</div>
-          <input value={atHome} onChange={(e) => setAtHome(e.target.value)} placeholder="למשל: ביצים, קוטג', עגבניות, טונה" style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, marginBottom: 14 }} />
-          <div style={{ background: C.bg, borderRadius: 12, padding: "11px 12px", marginBottom: 4 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ flex: 1, fontSize: 14, color: C.sub, lineHeight: 1.6 }}>
-                {prefList.length
-                  ? <>לפי הפרופיל שלך: <span style={{ color: C.ink, fontWeight: 600 }}>{prefList.join(" · ")}</span></>
-                  : "עוד לא רשמת העדפות או רגישויות בפרופיל."}
-              </div>
-              <button onClick={() => setShowPrefs((v) => !v)} style={{ flexShrink: 0, border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>{showPrefs ? "סגירה" : "עריכה"}</button>
+          <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>ספרי לי מה את רוצה לאכול, מנה עיקרית / ראשונה / קינוח, ומה המצרכים שזמינים לך?</div>
+          <textarea value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder="רשמי כאן" style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, resize: "none", lineHeight: 1.5, marginBottom: 14 }} />
+          <div style={{ background: C.bg, borderRadius: 12, padding: "12px 13px", marginBottom: 12 }}>
+            <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.7 }}>
+              <div style={{ fontWeight: 600, color: C.ink, marginBottom: 4 }}>לפי הפרופיל שלך</div>
+              <div>סגנון תזונה: <span style={{ color: C.ink }}>{diet.length ? diet.join(", ") : "אין עדיפות תזונה"}</span></div>
+              <div>רגישויות: <span style={{ color: C.ink }}>{avoidAll.length ? avoidAll.join(", ") : "אין רגישויות"}</span></div>
             </div>
+            <button onClick={() => setPrefsHint(true)} style={{ marginTop: 8, border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>רוצה לשנות?</button>
           </div>
-          {showPrefs && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
-                {DIET_OPTIONS.map((d) => (<span key={d.id} onClick={() => toggle("diet", d.id)} style={chip(diet.includes(d.id))}>{d.emoji} {d.id}</span>))}
+          <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, marginBottom: 4, lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>
+          <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
+          {prefsHint && (
+            <div onClick={() => setPrefsHint(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 60 }}>
+              <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+                <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, marginBottom: 16 }}>לשינוי סגנון תזונה או רגישויות יש לעבור לפרופיל.</div>
+                <Btn onClick={() => { setPrefsHint(false); onGoProfile && onGoProfile(); }}>מעבר לפרופיל</Btn>
+                <Btn variant="ghost" onClick={() => setPrefsHint(false)} style={{ marginTop: 8 }}>סגירה</Btn>
               </div>
-              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות / אלרגיות</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
-                {SENSITIVITY_OPTIONS.map((s) => (<span key={s} onClick={() => toggle("allergies", s)} style={chip(allergies.includes(s))}>{s}</span>))}
-              </div>
-              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
-              <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
-                <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
-                <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
-              </div>
-              {customSens.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {customSens.map((s) => (
-                    <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      {s}
-                      <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           )}
-          {hasAvoid && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
-          <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
         </div>
       ) : stage === "log" ? (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
@@ -5767,7 +5733,7 @@ export default function App() {
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
-            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
