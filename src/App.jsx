@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.30";
+const VERSION = "4.31";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5789,6 +5789,17 @@ export default function App() {
               </div>
             )}
           </>
+        )}
+        {favPrompt && (
+          <div onClick={() => setFavPrompt(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+              <div style={{ fontSize: 30, marginBottom: 4 }}>💜</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 6 }}>לשמור למועדפים?</div>
+              <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>{favPrompt.name}<br />כדי שתוכלי להוסיף אותו שוב בהקשה אחת.</div>
+              <Btn onClick={saveFavorite}>כן, שמרי</Btn>
+              <Btn variant="ghost" onClick={() => setFavPrompt(null)} style={{ marginTop: 8 }}>לא תודה</Btn>
+            </div>
+          </div>
         )}
         {gate === "ok" && notifyPrompt && (
           <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 55 }}>
