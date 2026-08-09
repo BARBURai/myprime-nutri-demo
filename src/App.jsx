@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.21";
+const VERSION = "4.22";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4603,14 +4603,22 @@ function DevViewportBar() {
         lock: document.body.style.position === "fixed" ? "Y" : "N",
       };
     };
+    const startedAt = Date.now();
     const read = () => {
       const n = snap();
       setS(n);
       // Latch the first bad reading and keep showing it. Reaching the strip to photograph
       // it takes long enough that the app has already recovered, so a live-only readout
       // never captures the moment that matters.
-      const mismatch = Math.abs(n.cssN - n.vvh) > 2 || n.pgY !== 0 || n.off !== 0 || Math.abs(n.fh - n.vvh) > 4;
-      if (mismatch) setBad((prev) => prev || n);
+      // Skip the first two seconds and any reading taken before --vvh has ever been
+      // written: the very first frame has no variable set yet, which the first version of
+      // this check reported as a failure and latched onto instead of the real one.
+      const why = [];
+      if (n.cssN > 0 && Math.abs(n.cssN - n.vvh) > 2) why.push("vvh");
+      if (n.cssN > 0 && Math.abs(n.fh - n.vvh) > 4) why.push("frame");
+      if (n.pgY !== 0) why.push("scroll");
+      if (n.off !== 0) why.push("offset");
+      if (why.length && Date.now() - startedAt > 2000) setBad((prev) => prev || { ...n, why: why.join("+") });
     };
     read();
     const id = setInterval(read, 120);
@@ -4625,7 +4633,7 @@ function DevViewportBar() {
   return (
     <div onClick={() => setBad(null)} style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden" }}>
       <div style={{ color: "#0f0" }}>NOW {line(s)}</div>
-      <div style={{ color: bad ? "#f66" : "#666" }}>BAD {bad ? line(bad) : "none yet - tap strip to reset"}</div>
+      <div style={{ color: bad ? "#f66" : "#666" }}>BAD {bad ? `[${bad.why}] ${line(bad)}` : "none yet - tap strip to reset"}</div>
     </div>
   );
 }
