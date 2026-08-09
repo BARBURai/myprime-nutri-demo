@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.26";
+const VERSION = "4.27";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1147,7 +1147,7 @@ function PreStartScreen({ name, startDate }) {
         <div style={{ fontSize: 22, fontWeight: 700, color: C.brandD, margin: "6px 0 10px" }}>{dateStr}</div>
         <div style={{ fontSize: 17, fontWeight: 600, color: C.brand }}>{daysLeft === 0 ? "מתחילות מחר!" : daysLeft === 1 ? "נשאר יום אחד" : `נשארו ${daysLeft} ימים`}</div>
       </div>
-      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: "0 0 8px" }}>נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
+      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
       <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
       {isPhone && (
         <div style={{ background: C.brandBg, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
