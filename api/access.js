@@ -92,6 +92,10 @@ const MAX_DEVICES = 2;
 export default async function handler(req, res) {
   const email = String((req.query && req.query.email) || "").trim().toLowerCase();
   const device = String((req.query && req.query.device) || "").trim();
+  // Set when she actually typed her email, as opposed to the silent check every time the
+  // app loads. An explicit sign-in always wins and pushes someone else out; a silent check
+  // from a device that has already been pushed out is what sends her back to the form.
+  const isLogin = !!(req.query && (req.query.login === "1" || req.query.login === "true"));
   const sheetUrl = process.env.ACCESS_SHEET_CSV_URL;
 
   // Logout: free this device's slot. No sheet lookup needed.
@@ -191,6 +195,14 @@ export default async function handler(req, res) {
         const known = await redis(RU, RT, "ZSCORE", key, device);
         if (known === null || known === undefined) {
           const count = Number(await redis(RU, RT, "ZCARD", key)) || 0;
+          // Already at capacity and this device is not on the list, so it is the one that
+          // was pushed out. On a silent check send it back to the sign-in form; typing the
+          // email arrives here with login=1 and is always let in. Without this half the
+          // eviction was invisible: the dropped device never noticed and simply re-added
+          // itself on its next load.
+          if (!isLogin && count >= MAX_DEVICES) {
+            return res.status(200).json({ allowed: false, reason: "signed_out", configured: true, startDate });
+          }
           const excess = count - MAX_DEVICES + 1; // room for the one about to be added
           if (excess > 0) await redis(RU, RT, "ZREMRANGEBYRANK", key, 0, excess - 1);
         }

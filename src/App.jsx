@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.28";
+const VERSION = "4.29";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5108,10 +5108,10 @@ export default function App() {
   }, []);
   const confirmExit = () => { leavingRef.current = true; setShowExit(false); try { window.history.go(-2); } catch (e) {} };
 
-  const checkAccess = async (em, nm) => {
+  const checkAccess = async (em, nm, isLogin) => {
     setGate("checking"); setGateMsg("");
     try {
-      const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
+      const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}${isLogin ? "&login=1" : ""}`);
       const d = await r.json();
       if (d.allowed) {
         try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
@@ -5119,6 +5119,13 @@ export default function App() {
         setGateReason(""); setGate("ok");
       } else {
         const rsn = d.reason || "not_registered";
+        // Pushed out by a newer device. Not a refusal: she goes back to the form, and
+        // typing her email signs her straight back in. Never the denied dead-end screen.
+        if (rsn === "signed_out") {
+          try { localStorage.removeItem("myprime_access_email"); } catch (e) {}
+          setGateReason(""); setGateMsg("נכנסת לאפליקציה ממכשיר אחר. אפשר להיכנס כאן שוב עם המייל שלך 💜"); setGate("form");
+          return;
+        }
         if (rsn === "not_registered") setGateAttempts((n) => n + 1);
         setGateReason(rsn); setGate("denied");
       }
@@ -5168,7 +5175,7 @@ export default function App() {
     if (!n) { setGateMsg("נא להזין שם פרטי."); return; }
     if (!e || !e.includes("@")) { setGateMsg("נא להזין כתובת מייל תקינה."); return; }
     if (!gateAgree) { setGateMsg("יש לאשר את מדיניות הפרטיות כדי להמשיך."); return; }
-    checkAccess(e, n);
+    checkAccess(e, n, true); // she typed it: always let her in, push the oldest device out
   };
   const retryGate = () => { try { localStorage.removeItem("myprime_access_email"); localStorage.removeItem("myprime_start_date"); } catch (e) {} setGateEmail(""); setGateMsg(""); setGateReason(""); setGateStartDate(""); setGate("form"); };
 
