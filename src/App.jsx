@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.19";
+const VERSION = "4.20";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4564,6 +4564,46 @@ function GoalBumpModal({ info, name, onClose }) {
   );
 }
 
+// Diagnostic strip for the iOS keyboard jump. Behind ?dev=1 only, so no participant sees
+// it. Reads the real numbers on an interval as well as on viewport events, because the
+// whole problem is that iOS sometimes fires no event at all. Screenshot it once while the
+// screen looks right and once while it is jumped, and the difference names the cause.
+function DevViewportBar() {
+  const [s, setS] = useState({});
+  useEffect(() => {
+    const read = () => {
+      const vv = window.visualViewport;
+      const fr = typeof document !== "undefined" ? document.querySelector(".phone-frame") : null;
+      const r = fr ? fr.getBoundingClientRect() : null;
+      setS({
+        win: Math.round(window.innerHeight || 0),
+        vvh: vv ? Math.round(vv.height) : 0,
+        off: vv ? Math.round(vv.offsetTop || 0) : 0,
+        pgY: Math.round(window.scrollY || 0),
+        css: (document.documentElement.style.getPropertyValue("--vvh") || "-").trim() || "-",
+        fh: r ? Math.round(r.height) : 0,
+        ft: r ? Math.round(r.top) : 0,
+        lock: document.body.style.position === "fixed" ? "Y" : "N",
+      });
+    };
+    read();
+    const id = setInterval(read, 200);
+    const vv = window.visualViewport;
+    if (vv) { vv.addEventListener("resize", read); vv.addEventListener("scroll", read); }
+    return () => {
+      clearInterval(id);
+      if (vv) { vv.removeEventListener("resize", read); vv.removeEventListener("scroll", read); }
+    };
+  }, []);
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", color: "#0f0", fontFamily: "monospace", fontSize: 12, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", pointerEvents: "none", whiteSpace: "nowrap" }}>
+      win {s.win} vv {s.vvh} off {s.off} scrollY {s.pgY}
+      <br />
+      --vvh {s.css} frameH {s.fh} frameTop {s.ft} lock {s.lock}
+    </div>
+  );
+}
+
 function DevDateBar({ onAnchor }) {
   const setDay = (d) => { try { window.localStorage.setItem("myprime_dev_today", d); } catch (e) {} window.location.reload(); };
   const reset = () => { try { window.localStorage.removeItem("myprime_dev_today"); } catch (e) {} window.location.reload(); };
@@ -5568,6 +5608,7 @@ export default function App() {
       <div className="phone-frame">
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
+        {DEV && <DevViewportBar />}
         {showInstallGate ? (
           <InstallGate onSkip={skipInstall} />
         ) : gate !== "ok" ? (
