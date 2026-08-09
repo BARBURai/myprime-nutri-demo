@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.34";
+const VERSION = "4.35";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3671,7 +3671,19 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const endRef = useRef(null);
   const inputRef = useRef(null);
   useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading, logMsgs, logLoading, logItems, logged]);
+  const lastAnswerRef = useRef(null);
+  // A long answer used to be scrolled past: jumping to the bottom of the list left its last
+  // line on screen, so she had to scroll up to find where it started. Land on the top of a
+  // new answer instead, and fall back to the bottom only for her own messages, the typing
+  // indicator and the logging flow.
+  useEffect(() => {
+    const last = msgs.length ? msgs[msgs.length - 1] : null;
+    if (!loading && last && last.role === "assistant" && lastAnswerRef.current) {
+      lastAnswerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, loading, logMsgs, logLoading, logItems, logged]);
   const ctx = { proteinFocus };
 
   const diet = profile.diet || [];
@@ -3836,7 +3848,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
           {visible.map((m, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+            <div key={i} ref={i === visible.length - 1 && m.role === "assistant" ? lastAnswerRef : null} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
               <div style={{ maxWidth: "84%", fontSize: 16, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
             </div>
           ))}
