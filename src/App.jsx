@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.17";
+const VERSION = "4.18";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5429,7 +5429,11 @@ export default function App() {
     };
     let focusedField = false, blurredAt = 0;
     const onFocusIn = (e) => { if (isEditable(e.target)) { focusedField = true; blurredAt = 0; } };
-    const onFocusOut = () => { focusedField = false; blurredAt = Date.now(); };
+    // Closing the keyboard is the dangerous direction: iOS often fires no resize at all,
+    // so --vvh stayed pinned to the shrunken height and the frame kept a gap of background
+    // below it. Nothing else asks for a re-measure here, which is why quitting and
+    // reopening the app was the only way back. Ask for one explicitly.
+    const onFocusOut = () => { focusedField = false; blurredAt = Date.now(); remeasure(); };
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
     const editing = () => focusedField || isEditable(document.activeElement) || (blurredAt > 0 && Date.now() - blurredAt < 1500);
