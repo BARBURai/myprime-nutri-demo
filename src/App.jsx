@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.36";
+const VERSION = "4.37";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3376,7 +3376,7 @@ function EntryMenu({ onClose, onPick, mode }) {
 function SheetShell({ title, onClose, children, className = "" }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 27 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className={className} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
+      <div onClick={(e) => e.stopPropagation()} className={className} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px calc(16px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexShrink: 0 }}>
           <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{title}</span>
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
@@ -3808,7 +3808,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
         <div>
           <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>ספרי לי מה את רוצה לאכול, מנה עיקרית / ראשונה / קינוח, ומה המצרכים שזמינים לך?</div>
           <textarea value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder="רשמי כאן" style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, resize: "none", lineHeight: 1.5, marginBottom: 14 }} />
-          <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
+          <div style={{ marginTop: 16, position: "sticky", bottom: 0, background: C.panel, paddingBottom: 4 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
           {prefsHint && (
             <div onClick={() => setPrefsHint(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 60 }}>
               <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
