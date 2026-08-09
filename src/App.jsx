@@ -443,7 +443,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.18";
+const VERSION = "4.19";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5415,28 +5415,23 @@ export default function App() {
     } catch (e) {}
     const vv = window.visualViewport;
     if (!vv) return;
-    // Is a text field focused? A real keyboard shrink always has one; a system sheet
-    // (iOS share sheet, file picker, camera) never does.
-    // document.activeElement alone is not enough: inside an installed iOS app it can come
-    // back as the body mid-animation even while the keyboard is up, which made the frame
-    // stay full height and let the keyboard push the bars off screen. focusin/focusout do
-    // fire reliably, so track the state from them and keep a short grace window for the
-    // moment between blur and the keyboard actually closing.
+    // Entering and leaving a text field are the two moments iOS is least reliable about
+    // firing a resize, so ask for a re-measure at both. No attempt is made to decide from
+    // this whether the shrink is a keyboard or a system sheet; that guess is what kept
+    // breaking the keyboard between v4.14 and v4.18.
     const isEditable = (el) => {
       if (!el) return false;
       const tag = (el.tagName || "").toLowerCase();
       return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable === true;
     };
-    let focusedField = false, blurredAt = 0;
-    const onFocusIn = (e) => { if (isEditable(e.target)) { focusedField = true; blurredAt = 0; } };
+    const onFocusIn = (e) => { if (isEditable(e.target)) remeasure(); };
     // Closing the keyboard is the dangerous direction: iOS often fires no resize at all,
     // so --vvh stayed pinned to the shrunken height and the frame kept a gap of background
     // below it. Nothing else asks for a re-measure here, which is why quitting and
     // reopening the app was the only way back. Ask for one explicitly.
-    const onFocusOut = () => { focusedField = false; blurredAt = Date.now(); remeasure(); };
+    const onFocusOut = () => remeasure();
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
-    const editing = () => focusedField || isEditable(document.activeElement) || (blurredAt > 0 && Date.now() - blurredAt < 1500);
     // iOS scrolls the document itself to reveal the focused field, which pushes the whole
     // fixed app frame up: pink background at the bottom, bars and input off the top, and
     // she has to scroll back down. A single scrollTo raced with that and lost about half
@@ -5474,11 +5469,13 @@ export default function App() {
         if (zoomed) return; // pinch shrinks the visual viewport - not a real height change
         const winH = window.innerHeight || 0;
         const kb = Math.max(0, winH - vv.height);
-        // A big shrink with NO text field focused is a system sheet sitting over the app,
-        // not the keyboard. iOS does not reliably fire a resize when that sheet closes, so
-        // writing the shrunken height here used to leave --vvh stuck at half the screen -
-        // blank space with the bottom bar stranded in the middle. Keep the last good height.
-        if (winH > 0 && kb > winH * 0.25 && !editing()) return;
+        // v4.14 skipped the height write on a big shrink with no text field focused, to
+        // tell a system sheet from the keyboard. That guess is gone: on iOS the focus
+        // answer flickers mid-animation, the keyboard got mistaken for a sheet, the write
+        // was skipped and the frame stayed full height while the keyboard pushed the bars
+        // off screen. That is what made the jump intermittent across v4.14 to v4.18.
+        // The sheet case is covered without guessing, by remeasure() on focusout, on window
+        // focus, and by the __mpRemeasure hook the share button calls.
         // Always size the frame to the height that is actually visible. Relying on
         // 100dvh let the bottom bar slip under the phone's own navigation bar.
         document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
