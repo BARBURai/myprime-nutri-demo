@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.35";
+const VERSION = "4.36";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3654,8 +3654,13 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
   );
 }
 
+// Shown once per session, not once ever: the disclaimer is a safety notice, and module
+// scope means it comes back when the app is reloaded. Asking her the same thing before
+// every single question was the complaint.
+let recIntroSeen = false;
+
 function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose, onGoProfile }) {
-  const [stage, setStage] = useState("confirm");
+  const [stage, setStage] = useState(recIntroSeen ? "confirm" : "intro");
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -3777,10 +3782,8 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
 
   return (
     <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
-      {stage === "confirm" ? (
+      {stage === "intro" ? (
         <div>
-          <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>ספרי לי מה את רוצה לאכול, מנה עיקרית / ראשונה / קינוח, ומה המצרכים שזמינים לך?</div>
-          <textarea value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder="רשמי כאן" style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, resize: "none", lineHeight: 1.5, marginBottom: 14 }} />
           <div style={{ background: C.bg, borderRadius: 12, padding: "12px 13px", marginBottom: 12 }}>
             <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.7 }}>
               <div style={{ fontWeight: 600, color: C.ink, marginBottom: 4 }}>לפי הפרופיל שלך</div>
@@ -3789,7 +3792,22 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
             </div>
             <button onClick={() => setPrefsHint(true)} style={{ marginTop: 8, border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>רוצה לשנות?</button>
           </div>
-          <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, marginBottom: 4, lineHeight: 1.5 }}>שימי לב: אני מנוע AI ואני עלולה לטעות. גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>
+          <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, marginBottom: 16, lineHeight: 1.5 }}>שימי לב: אני מנוע AI ואני עלולה לטעות. גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>
+          <Btn onClick={() => { recIntroSeen = true; setStage("confirm"); }}>הבנתי, בואי נתחיל</Btn>
+          {prefsHint && (
+            <div onClick={() => setPrefsHint(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 60 }}>
+              <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+                <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, marginBottom: 16 }}>לשינוי סגנון תזונה או רגישויות יש לעבור לפרופיל.</div>
+                <Btn onClick={() => { setPrefsHint(false); onGoProfile && onGoProfile(); }}>מעבר לפרופיל</Btn>
+                <Btn variant="ghost" onClick={() => setPrefsHint(false)} style={{ marginTop: 8 }}>סגירה</Btn>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : stage === "confirm" ? (
+        <div>
+          <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>ספרי לי מה את רוצה לאכול, מנה עיקרית / ראשונה / קינוח, ומה המצרכים שזמינים לך?</div>
+          <textarea value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder="רשמי כאן" style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, resize: "none", lineHeight: 1.5, marginBottom: 14 }} />
           <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
           {prefsHint && (
             <div onClick={() => setPrefsHint(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 60 }}>
@@ -5701,7 +5719,11 @@ export default function App() {
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
             </div>
-            <div style={{ position: "relative", flexShrink: 0, zIndex: 38 }}>
+            {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
+                stayed tappable, rode up with the keyboard eating the space above it, and
+                the centre + kept getting hit by accident, throwing her out of what she was
+                doing. Hide it while a sheet or modal is open. */}
+            <div hidden={!!(sheet || modal)} style={{ position: "relative", flexShrink: 0, zIndex: 38 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(12px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)" }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
