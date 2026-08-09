@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.31";
+const VERSION = "4.32";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3681,9 +3681,17 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const chip = (on) => ({ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
   const [newSens, setNewSens] = useState("");
   const [want, setWant] = useState(null);
+  // What she has at home right now. Deliberately local state, so it clears every time the
+  // sheet is opened: a fridge from last week produces worse ideas than no fridge at all.
+  const [atHome, setAtHome] = useState("");
+  // The diet and sensitivity chips already live in her profile, so they only repeated what
+  // she had set once. Collapsed behind one summary line, opened only if she wants to change
+  // something today.
+  const [showPrefs, setShowPrefs] = useState(false);
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
+  const prefList = [...diet, ...allergies, ...customSens].filter(Boolean);
 
   const run = async (history) => {
     setLoading(true); setErr(false);
@@ -3700,6 +3708,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       + (avoidList.length ? `. חשוב מאוד - יש לי רגישות/אלרגיה, ואסור בשום אופן להציע לי מאכלים שמכילים: ${avoidList.join(", ")}. אם רעיון כולל אחד מהם, אל תציעי אותו בכלל, ותמיד הזכירי לי בעדינות לבדוק את רשימת הרכיבים המלאה לפני האכילה - כי לפעמים גם AI טועה.` : "")
       + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
       + (want ? `. אני מחפשת עכשיו: ${want}` : "")
+      + (atHome.trim() ? `. הרכיבים שיש לי בבית עכשיו: ${atHome.trim()}. העדיפי רעיונות שאפשר להכין מהם, ואם חסר משהו קטן צייני את זה.` : "")
       + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
     const h = [{ role: "user", content: seed }];
     setMsgs(h); setStage("chat"); run(h);
@@ -3772,30 +3781,45 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
             {WANT_OPTIONS.map((w) => (<span key={w.id} onClick={() => setWant(want === w.id ? null : w.id)} style={chip(want === w.id)}>{w.emoji} {w.id}</span>))}
           </div>
-          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
-            {DIET_OPTIONS.map((d) => (<span key={d.id} onClick={() => toggle("diet", d.id)} style={chip(diet.includes(d.id))}>{d.emoji} {d.id}</span>))}
+          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>עם אילו רכיבים תרצי להרכיב את הארוחה?</div>
+          <input value={atHome} onChange={(e) => setAtHome(e.target.value)} placeholder="למשל: ביצים, קוטג', עגבניות, טונה" style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, marginBottom: 14 }} />
+          <div style={{ background: C.bg, borderRadius: 12, padding: "11px 12px", marginBottom: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ flex: 1, fontSize: 14, color: C.sub, lineHeight: 1.6 }}>
+                {prefList.length
+                  ? <>לפי הפרופיל שלך: <span style={{ color: C.ink, fontWeight: 600 }}>{prefList.join(" · ")}</span></>
+                  : "עוד לא רשמת העדפות או רגישויות בפרופיל."}
+              </div>
+              <button onClick={() => setShowPrefs((v) => !v)} style={{ flexShrink: 0, border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>{showPrefs ? "סגירה" : "עריכה"}</button>
+            </div>
           </div>
-          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות / אלרגיות</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
-            {SENSITIVITY_OPTIONS.map((s) => (<span key={s} onClick={() => toggle("allergies", s)} style={chip(allergies.includes(s))}>{s}</span>))}
-          </div>
-          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
-          <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
-            <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
-            <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
-          </div>
-          {customSens.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {customSens.map((s) => (
-                <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  {s}
-                  <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
-                </span>
-              ))}
+          {showPrefs && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+                {DIET_OPTIONS.map((d) => (<span key={d.id} onClick={() => toggle("diet", d.id)} style={chip(diet.includes(d.id))}>{d.emoji} {d.id}</span>))}
+              </div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות / אלרגיות</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
+                {SENSITIVITY_OPTIONS.map((s) => (<span key={s} onClick={() => toggle("allergies", s)} style={chip(allergies.includes(s))}>{s}</span>))}
+              </div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
+                <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
+                <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
+              </div>
+              {customSens.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {customSens.map((s) => (
+                    <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {s}
+                      <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          {!diet.length && !hasAvoid && <div style={{ fontSize: 14, color: C.faint, margin: "10px 0 0" }}>לא רשמת עדיין העדפות או רגישויות. אפשר לבחור עכשיו, או פשוט להמשיך.</div>}
           {hasAvoid && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
           <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
         </div>
