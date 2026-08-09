@@ -85,9 +85,9 @@ function isExpired(startSunday, extraMonths) {
   return today.getTime() > exp.getTime();
 }
 
-// Max concurrent devices per email. 0 (or less) = no limit (disabled for beta).
-// Set to 2 to re-enable a 2-device cap later. Device tracking in Redis stays on either way.
-const MAX_DEVICES = 0;
+// Max concurrent devices per email: a phone and a computer. 0 (or less) = no limit.
+// The cap EVICTS rather than blocks - see the device section below for why.
+const MAX_DEVICES = 2;
 
 export default async function handler(req, res) {
   const email = String((req.query && req.query.email) || "").trim().toLowerCase();
@@ -179,11 +179,20 @@ export default async function handler(req, res) {
     const key = `devices:${email}`;
     try {
       await redis(RU, RT, "ZREMRANGEBYSCORE", key, "-inf", now - TTL * 1000);
+      // Evict, never block. Refusing the third device is what drove the support load:
+      // on iPhone, Safari and the installed app hold separate storage, so one woman with
+      // one phone already spent both slots, and any reinstall after that hit a screen
+      // telling her to log out on a device she could not reach. Dropping the
+      // least-recently-used device instead means the phone in her hand always works,
+      // while three active devices keep knocking each other out - annoying enough to
+      // make a shared email impractical, invisible to a woman using her own phone and
+      // computer, and it turns "I am locked out" into "I typed my email again".
       if (MAX_DEVICES > 0) {
         const known = await redis(RU, RT, "ZSCORE", key, device);
         if (known === null || known === undefined) {
           const count = Number(await redis(RU, RT, "ZCARD", key)) || 0;
-          if (count >= MAX_DEVICES) return res.status(200).json({ allowed: false, reason: "device_limit", configured: true, startDate });
+          const excess = count - MAX_DEVICES + 1; // room for the one about to be added
+          if (excess > 0) await redis(RU, RT, "ZREMRANGEBYRANK", key, 0, excess - 1);
         }
       }
       await redis(RU, RT, "ZADD", key, now, device);

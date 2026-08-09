@@ -85,6 +85,23 @@ export default async function handler(req, res) {
   const limit = Number(process.env.AI_DAILY_LIMIT || 30);
   const hitLimit = counts.filter((v) => v >= limit).length;
 
+  // How many emails are signed in on 3+ devices right now. api/access.js writes every
+  // device to devices:<email> unconditionally, so this number already exists and nobody
+  // was looking at it. It answers whether participants actually share their email, which
+  // decides whether the device cap and the OTP login are worth building at all.
+  // Counted by score so only devices seen in the last 24h are included; ZCARD would also
+  // count stale members that have not been pruned yet.
+  let sharedEmails = 0, trackedEmails = 0;
+  try {
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    const keys = (await redisCmd(base, token, ["KEYS", "devices:*"])) || [];
+    trackedEmails = keys.length;
+    for (const k of keys.slice(0, 2000)) {
+      const n = toInt(await redisCmd(base, token, ["ZCOUNT", k, String(dayAgo), "+inf"]));
+      if (n >= 3) sharedEmails++;
+    }
+  } catch (e) { /* a Redis hiccup must not cost Ron the whole report */ }
+
   // Cost estimate.
   const priceIn = Number(process.env.AI_PRICE_IN || 3);   // USD / 1M input tokens
   const priceOut = Number(process.env.AI_PRICE_OUT || 15); // USD / 1M output tokens
@@ -114,12 +131,14 @@ export default async function handler(req, res) {
       ${row("עלות מוערכת", `₪${f2(nis)} <span style="color:#8a8a90;font-weight:400">($${f2(usd)})</span>`)}
       ${row("עלות מוערכת לאישה", `₪${f2(nisPerUser)}`)}
       ${row("נחסך מה-cache (קריאות)", `${cacheHits.toLocaleString()} ≈ ₪${f2(savedNis)}`)}
+      <tr><td colspan="2" style="border-top:1px solid #eee;padding-top:6px"></td></tr>
+      ${row("מיילים עם 3 מכשירים או יותר", `${sharedEmails.toLocaleString()} <span style="color:#8a8a90;font-weight:400">מתוך ${trackedEmails.toLocaleString()}</span>`)}
     </table>
     <div style="color:#a0a0a6;font-size:12px;margin-top:14px;line-height:1.6">העלות מחושבת מהטוקנים בפועל לפי מחירי Sonnet ($${priceIn}/$${priceOut} למיליון, שער ${usdNis}). הערכה - לנתון הרשמי ראה את עמוד ה-Usage בקונסול.</div>
   </div>`;
 
   const RESEND = process.env.RESEND_API_KEY;
-  const summary = { ok: true, day, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis) };
+  const summary = { ok: true, day, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis), sharedEmails, trackedEmails };
   if (!RESEND) return res.status(200).json({ ...summary, emailed: false, reason: "no RESEND_API_KEY (preview only)" });
 
   const to = process.env.REPORT_TO || "Ron@myprime.co.il";
