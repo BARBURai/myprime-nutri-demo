@@ -32,7 +32,7 @@ function isIOS() {
   if (/iphone|ipad|ipod/.test(ua)) return true;
   return /macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1; // iPadOS reports as Mac
 }
-const DL_HINT = isIOS() ? "לחצי לפתיחה ושמירה" : "לחצי להורדה";
+const DL_HINT = isIOS() ? "לחצי לשמירה או שליחה" : "לחצי להורדה";
 function hasTaskWord(l) { return /משימ/.test((l && l.title) || ""); }
 function hasPages(l) { return !!(l && l.pageImages && l.pageImages.length); }
 function matchesChip(l, chip) {
@@ -449,7 +449,13 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
         await navigator.share({ files: [file] });
       } catch (e) {
         if (!(e && e.name === "AbortError")) setDlErr("לא הצלחנו לשמור את הקובץ. אפשר לצפות בדף כאן באפליקציה.");
-      } finally { setBusy(""); }
+      } finally {
+        setBusy("");
+        // The iOS share sheet shrinks the visual viewport like a keyboard, and iOS does not
+        // reliably fire a resize when it closes - the app frame stayed at half height with the
+        // bottom bar stranded in the middle. Ask App.jsx to measure the screen again.
+        try { if (typeof window !== "undefined" && typeof window.__mpRemeasure === "function") window.__mpRemeasure(); } catch (e2) {}
+      }
     }
     return (
       <div>

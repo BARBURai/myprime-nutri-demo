@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="he" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>פרוטוטייפ - מודול התוכן MyPrime</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#FAF3F4;--panel:#FFFFFF;--ink:#3A2B30;--sub:#8B737A;--faint:#BBA7AC;--line:#F1E4E7;--brand:#D45D79;--brandD:#A8425C;--brandBg:#FBE9EE;--macroP:#7E4FB5;--proteinTrack:#EBE1F7;--amber:#C77A3C;--amberBg:#FBEEDF;--water:#7E8DD6;--waterBg:#EBEDF8;--info:#9C6BA6;--infoBg:#F2E7F3;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Rubik',system-ui,sans-serif;background:#ECE1E4;color:var(--ink);-webkit-font-smoothing:antialiased;}
+.phone{max-width:412px;margin:0 auto;background:var(--bg);min-height:100vh;}
+.screen{display:none;} .screen.active{display:block;}
+.strip{display:flex;gap:6px;padding:14px 16px 8px;overflow:hidden;}
+.chip{flex:0 0 auto;width:50px;border-radius:12px;text-align:center;overflow:hidden;border:2px solid transparent;background:var(--bg);}
+.chip .dow{font-size:13px;opacity:.85;padding-top:7px;}.chip .dt{font-size:16px;font-weight:700;}
+.chip .bar{height:4px;margin:5px 6px 7px;border-radius:3px;background:var(--line);position:relative;overflow:hidden;}
+.chip .bar>i{position:absolute;top:0;right:0;bottom:0;border-radius:3px;background:#D81B7A;}
+.chip.today{background:var(--brandBg);border-color:var(--brand);}.chip.sel{background:var(--brand);color:#fff;}
+.chip.sel .bar{background:rgba(255,255,255,.35);}.chip.sel .bar>i{background:#fff;}
+.chip .tag{background:var(--brand);color:#fff;font-size:10px;font-weight:700;padding:2px 0;}.chip.sel .tag{background:var(--brandD);}
+.chip .pad{padding:6px 0;}
+.contentBtnWrap{margin:1px 16px 7px;display:flex;}
+.contentBtn{margin-inline-start:auto;display:inline-flex;align-items:center;gap:6px;background:var(--brandBg);border:1px solid var(--brand);color:var(--brandD);border-radius:999px;padding:6px 14px;font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;}
+.rings{display:grid;grid-template-columns:1fr 1fr;justify-items:center;row-gap:10px;column-gap:6px;padding:0 16px;}
+.ringBox{position:relative;width:124px;height:124px;}
+.plus{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:30px;height:30px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.18);color:#fff;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:600;}
+.hint{text-align:center;color:var(--faint);font-size:12px;padding:14px;}
+.topbar{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:11px 12px;z-index:10;}
+.topbar h1{font-size:17px;font-weight:700;margin:0;flex:1;}
+.backbtn{display:inline-flex;align-items:center;gap:4px;background:var(--brandBg);border:1px solid var(--brand);color:var(--brandD);border-radius:999px;padding:6px 13px 6px 11px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;flex:0 0 auto;}
+.backbtn svg{width:17px;height:17px;}
+#searchInput{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:9px 13px;font-size:15px;font-family:inherit;outline:none;color:var(--ink);}
+.content{padding:14px 14px 92px;}
+.todayHero{background:linear-gradient(135deg,#D45D79,#A8425C);color:#fff;border-radius:18px;padding:14px 17px;margin-bottom:8px;box-shadow:0 6px 16px rgba(168,66,92,.25);}
+.heroTitle{font-size:18px;font-weight:700;margin:0 0 3px;}
+.heroTheme{font-size:12.5px;opacity:.9;margin-bottom:8px;}
+.todayHero .prog{font-size:12.5px;opacity:.95;display:flex;align-items:center;gap:8px;}
+.todayHero .pbar{flex:1;height:6px;background:rgba(255,255,255,.3);border-radius:4px;overflow:hidden;}
+.todayHero .pbar>i{display:block;height:6px;background:#fff;border-radius:4px;}
+.todayList{background:var(--panel);border:1px solid var(--line);border-radius:0 0 16px 16px;margin:-12px 6px 18px;padding:8px 10px 4px;box-shadow:0 4px 12px rgba(0,0,0,.04);}
+.listcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px 10px;}
+.progHeader{display:flex;align-items:center;gap:8px;margin:12px 2px 12px;}
+.progTitle{font-size:20px;font-weight:700;color:var(--ink);margin:0;flex:1;}
+.progActs{display:flex;gap:7px;flex:0 0 auto;}
+.progAct{display:inline-flex;align-items:center;gap:4px;background:var(--brandBg);border:1px solid var(--line);color:var(--brandD);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.progAct svg{width:15px;height:15px;}
+.filterchips,.weekpills{display:flex;gap:7px;overflow-x:auto;padding:2px 0 12px;}
+.filterchips button{flex:0 0 auto;border:1.5px solid var(--line);background:var(--panel);color:var(--sub);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;}
+.filterchips button.on{background:var(--ink);border-color:var(--ink);color:#fff;}
+.weekpills button{flex:0 0 auto;border:1.5px solid var(--line);background:var(--panel);color:var(--sub);border-radius:999px;padding:6px 15px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;}
+.weekpills button.on{background:var(--brand);border-color:var(--brand);color:#fff;}
+.daycard{border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden;background:var(--panel);}
+.dayhead{display:flex;align-items:center;gap:11px;padding:13px 13px;cursor:pointer;}
+.dayhead .num{width:36px;height:36px;border-radius:11px;background:var(--brandBg);color:var(--brandD);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12.5px;flex:0 0 auto;text-align:center;line-height:1.1;}
+.dayhead .tt{flex:1;}.dayhead .tt b{display:block;font-size:14.5px;color:var(--ink);line-height:1.3;}.dayhead .tt span{font-size:12px;color:var(--sub);}
+.dayhead .badge{font-size:11px;font-weight:700;background:var(--brand);color:#fff;border-radius:999px;padding:2px 9px;flex:0 0 auto;}
+.daychev{width:19px;height:19px;color:var(--faint);flex:0 0 auto;transition:transform .2s;}
+.daycard.open .daychev{transform:rotate(180deg);}
+.daybody{border-top:1px solid var(--line);padding:4px 10px 8px;}
+.lessonrow{display:flex;align-items:center;gap:11px;padding:11px 6px;border-bottom:1px solid #F6EEF0;cursor:pointer;}
+.lessonrow:last-child{border-bottom:none;}
+.lessonrow .ic{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}.lessonrow .ic svg{width:20px;height:20px;}
+.lessonrow .body{flex:1;min-width:0;}.lessonrow .body b{font-size:14px;font-weight:600;color:var(--ink);display:block;line-height:1.35;}.lessonrow .body span{font-size:11.5px;color:var(--sub);}
+.lessonrow .st{flex:0 0 auto;display:flex;align-items:center;gap:2px;}
+.check{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;color:#fff;}.check.on{background:var(--brand);border-color:var(--brand);}
+.heartbtn{background:none;border:none;cursor:pointer;padding:3px;color:var(--faint);display:flex;}.heartbtn.on{color:var(--brand);}
+.empty{text-align:center;color:var(--faint);padding:54px 24px;font-size:14px;line-height:1.7;}
+.lesson{padding:16px 16px 92px;}
+.lmeta{font-size:13px;color:var(--sub);margin-bottom:12px;}
+.lactions{display:flex;gap:10px;margin-bottom:18px;}
+.lactions button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:12px;padding:11px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;border:1.5px solid var(--line);background:var(--panel);color:var(--ink);}
+.lactions .complete.on{background:var(--brand);border-color:var(--brand);color:#fff;}.lactions .fav.on{color:var(--brand);border-color:var(--brand);}
+.introtext{background:var(--bg);border-radius:14px;padding:15px 16px;font-size:15px;line-height:1.7;color:var(--ink);margin-bottom:18px;}
+.introtext .tag{display:inline-block;font-size:10px;font-weight:700;color:var(--brandD);background:var(--brandBg);border-radius:6px;padding:2px 7px;margin-bottom:9px;}
+.videobox{position:relative;width:240px;max-width:78%;margin:0 auto 10px;aspect-ratio:9/16;background:#1a1416;border-radius:16px;overflow:hidden;box-shadow:0 8px 20px rgba(0,0,0,.22);}
+.vtop{position:absolute;top:0;left:0;right:0;display:flex;gap:16px;padding:11px 13px;z-index:2;}
+.vtop button{background:none;border:none;color:#fff;cursor:pointer;padding:0;display:flex;}
+.vtop svg{width:18px;height:18px;}
+.vcenter{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:20px;}
+.vcenter .sk{position:relative;color:#fff;cursor:pointer;display:flex;}
+.vcenter .sk svg{width:30px;height:30px;}
+.vcenter .sk span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;}
+.vcenter .pp{width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.95);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1a1416;}
+.vcenter .pp svg{width:24px;height:24px;}
+.vbottom{position:absolute;left:0;right:0;bottom:0;padding:9px 13px 11px;z-index:2;}
+.vprog{height:3px;background:rgba(255,255,255,.3);border-radius:2px;position:relative;margin-bottom:6px;}
+.vprog>i{position:absolute;top:0;bottom:0;right:0;width:6%;background:#fff;border-radius:2px;}
+.vprog>b{position:absolute;top:50%;right:6%;width:11px;height:11px;border-radius:50%;background:#fff;transform:translate(50%,-50%);}
+.vtime{font-size:10.5px;color:rgba(255,255,255,.9);text-align:right;}
+.vcaps{font-size:11.5px;color:var(--sub);background:var(--bg);border-radius:10px;padding:9px 12px;margin:0 auto 18px;line-height:1.55;text-align:center;}
+.dl{display:flex;align-items:center;gap:11px;border:1.5px solid var(--line);border-radius:13px;padding:12px 14px;margin-bottom:18px;cursor:pointer;}
+.dl .ic{width:38px;height:38px;border-radius:10px;background:var(--waterBg);color:var(--water);display:flex;align-items:center;justify-content:center;}.dl .ic svg{width:20px;height:20px;}.dl b{font-size:14px;color:var(--ink);display:block;}.dl span{font-size:11.5px;color:var(--sub);}
+.upnext .lbl{font-size:13px;font-weight:700;color:var(--sub);margin:6px 0 9px;}
+.upnextcard{display:flex;align-items:center;gap:11px;background:var(--bg);border-radius:13px;padding:12px 14px;cursor:pointer;}
+.upnextcard .ic{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}.upnextcard .ic svg{width:18px;height:18px;}.upnextcard b{font-size:13.5px;color:var(--ink);display:block;}.upnextcard span{font-size:11.5px;color:var(--sub);}
+.note{background:var(--infoBg);color:var(--info);font-size:12.5px;border-radius:10px;padding:9px 12px;margin-top:14px;text-align:center;}
+#screen-day{padding-bottom:92px;}
+.bottomnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:412px;display:flex;align-items:center;justify-content:space-around;border-top:1px solid var(--line);background:var(--brandBg);box-shadow:0 -2px 12px rgba(168,66,92,.10);padding:9px 4px;z-index:50;}
+.navtab{display:flex;flex-direction:column;align-items:center;gap:3px;border:none;background:transparent;color:var(--sub);cursor:pointer;padding:5px 12px;border-radius:14px;font-family:inherit;font-weight:400;font-size:13px;}
+.navtab svg{width:20px;height:20px;}.navtab.on{background:var(--brand);color:#fff;font-weight:600;box-shadow:0 2px 8px rgba(168,66,92,.35);}
+.navfab{flex-shrink:0;margin-top:-30px;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brandD));color:#fff;border:3px solid #fff;cursor:pointer;display:flex;align-items:center;justify-content:center;}.navfab svg{width:28px;height:28px;}
+.devnote{background:var(--amberBg);color:var(--amber);font-size:12px;border-radius:10px;padding:9px 12px;margin:2px 2px 14px;line-height:1.55;}
+</style></head>
+<body>
+<div id="nojs" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#FAF3F4;color:#3A2B30;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px;font-family:'Rubik',system-ui,sans-serif;line-height:1.7;">
+  <div style="font-size:40px;margin-bottom:14px;">🌸</div>
+  <div style="font-size:18px;font-weight:700;margin-bottom:10px;">כדי לראות את הפרוטוטייפ צריך לפתוח אותו בדפדפן</div>
+  <div style="font-size:15px;color:#8B737A;max-width:300px;">נראה שנפתח בתצוגה המקדימה של האייפון, והיא לא מריצה את התצוגה. לחצי על אייקון השיתוף, גללי ובחרי "פתח ב-Safari" (Open in Safari). או פתחי קודם את ספארי ואז את הקובץ.</div>
+</div>
+<div class="phone">
+
+<div id="screen-day" class="screen active">
+  <div class="strip" id="dayStrip"></div>
+  <div class="contentBtnWrap"><button class="contentBtn" onclick="show('content')"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> התוכן של היום</button></div>
+  <div class="rings" id="dayRings"></div>
+  <div class="hint">↑ גרסה ג': הכפתור מעל העיגולים. לחצי עליו ↑</div>
+</div>
+
+<div id="screen-content" class="screen">
+  <div class="topbar"><h1>התוכן שלי</h1><button class="backbtn" onclick="show('day')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20z"/></svg> חזרה</button></div>
+  <div class="content" id="contentBody"></div>
+</div>
+<div id="screen-fav" class="screen">
+  <div class="topbar"><h1>המועדפים שלי</h1><button class="backbtn" onclick="show('content')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20z"/></svg> חזרה</button></div>
+  <div class="content" id="favBody"></div>
+</div>
+<div id="screen-search" class="screen">
+  <div class="topbar"><input id="searchInput" placeholder="חיפוש שיעור..." oninput="renderSearch()"><button class="backbtn" onclick="show('content')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20z"/></svg> חזרה</button></div>
+  <div class="content" id="searchBody"></div>
+</div>
+<div id="screen-lesson" class="screen">
+  <div class="topbar"><h1 id="lessonTitle"></h1><button class="backbtn" onclick="show('content')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20z"/></svg> חזרה</button></div>
+  <div class="lesson" id="lessonBody"></div>
+</div>
+
+<div class="bottomnav">
+  <button class="navtab" id="nav-day" onclick="show('day')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>יומן</button>
+  <button class="navtab" onclick="show('day')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9.2h3V19H5zM10.5 5h3v14h-3zM16 11h3v8h-3z"/></svg>דוח</button>
+  <button class="navfab" onclick="show('day')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg></button>
+  <button class="navtab" onclick="show('day')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 21h10v-2H7v2zm12-9a4 4 0 00-3-3.9 4 4 0 00-8 0A4 4 0 005 12a3.5 3.5 0 003 3.46V17h8v-1.54A3.5 3.5 0 0019 12z"/></svg>מתכונים</button>
+  <button class="navtab" onclick="show('day')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 10-5-5 5 5 0 005 5zm0 2c-3.3 0-10 1.7-10 5v3h20v-3c0-3.3-6.7-5-10-5z"/></svg>פרופיל</button>
+</div>
+</div>
+<script>
+(function(){var n=document.getElementById('nojs');if(n)n.parentNode.removeChild(n);})();
+const DATA=[{"week": 1, "days": [{"day": 1, "drip": 0, "theme": "יוצאות לדרך", "lessons": [{"title": "פתיחת השבוע", "type": "video", "hasPdf": false}, {"title": "כדאי שתדעי - גיל המעבר", "type": "video", "hasPdf": false}, {"title": "צידה לדרך - חובה לצפות 🎞️", "type": "video", "hasPdf": false}, {"title": "מה מחכה לך בתוכנית?", "type": "info", "hasPdf": false}]}, {"day": 2, "drip": 1, "theme": "משימת צבירת צעדים", "lessons": [{"title": "משימת תנועה - צבירת צעדים", "type": "task", "hasPdf": true}, {"title": "דפי משימה - צבירת צעדים", "type": "pdf", "hasPdf": true}]}, {"day": 3, "drip": 2, "theme": "משימת יומן תזונה וחוברת מתכונים", "lessons": [{"title": "משימת תזונה : מעקב", "type": "task", "hasPdf": true}, {"title": "חוברת מתכונים מתנה 🎁 [ לינק להורדה בסוף ]", "type": "pdf", "hasPdf": true}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 4, "drip": 3, "theme": "ד\"ר חובב [מפגש 1]", "lessons": [{"title": "מפגש 1 עם ד\"ר נועה חובב", "type": "video", "hasPdf": false}, {"title": "המוטיבציה השבועית", "type": "video", "hasPdf": false}]}, {"day": 5, "drip": 4, "theme": "הכנה לאימוני הכוח", "lessons": [{"title": "מוטיבצייה למשימת הצעדים", "type": "video", "hasPdf": false}, {"title": "מה להכין לקראת אימוני הכח שלנו - שמתחילים בשבוע הבא ?", "type": "video", "hasPdf": false}]}, {"day": 6, "drip": 5, "theme": "סיכום שבועי", "lessons": [{"title": "סיכום שבועי", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום!", "type": "video", "hasPdf": false}]}]}, {"week": 2, "days": [{"day": 1, "drip": 7, "theme": "המשך משימת הצעדים + \"כדאי שתדעי\"", "lessons": [{"title": "סרטון פתיחת שבוע", "type": "video", "hasPdf": false}, {"title": "כדאי שתדעי : כושר בגיל המעבר", "type": "video", "hasPdf": false}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 2, "drip": 8, "theme": "ד\"ר חובב [מפגש 2]", "lessons": [{"title": "מסר אישי ממני", "type": "video", "hasPdf": false}, {"title": "מפגש 2 עם ד\"ר נועה חובב", "type": "video", "hasPdf": false}]}, {"day": 3, "drip": 9, "theme": "אימון 1 + הדרכת הכנה + סרטון הסבר לאימונים על וויסות דרגת הקושי", "lessons": [{"title": "משימת תנועה - מבוא לאימוני הכוח שלך", "type": "task", "hasPdf": true}, {"title": "אימון מס' 1", "type": "workout", "hasPdf": false}, {"title": "משימת תנועה: איך תתאימי את דרגת הקושי באימונים?", "type": "task", "hasPdf": true}]}, {"day": 4, "drip": 10, "theme": "משימת תזונה - ירקות", "lessons": [{"title": "משימת תזונה: ירקות וסדר אכילה", "type": "task", "hasPdf": true}]}, {"day": 5, "drip": 11, "theme": "אימון 2 + מוטיבציה שבועית", "lessons": [{"title": "אימון 2", "type": "workout", "hasPdf": false}, {"title": "מוטיבציה שבועית", "type": "video", "hasPdf": false}]}, {"day": 6, "drip": 12, "theme": "סיכום שבועי", "lessons": [{"title": "סיכום שבועי", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום !", "type": "video", "hasPdf": false}]}]}, {"week": 3, "days": [{"day": 1, "drip": 14, "theme": "פתיחת שבוע + אימון + שיחת הרגעה 🤗🌱", "lessons": [{"title": "סרטון פתיחת שבוע", "type": "video", "hasPdf": false}, {"title": "שיחת הרגעה 🤗🌱", "type": "video", "hasPdf": false}, {"title": "אימון מס' 3", "type": "workout", "hasPdf": false}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 2, "drip": 15, "theme": "משימת תגבור שתיית מים", "lessons": [{"title": "משימת תזונה - תגבור שתיית מים", "type": "task", "hasPdf": true}]}, {"day": 3, "drip": 16, "theme": "אימון 4 + ד\"ר חובב [ מפגש 3]", "lessons": [{"title": "מפגש 3 עם ד\"ר נועה חובב", "type": "video", "hasPdf": false}, {"title": "אימון מס' 4", "type": "workout", "hasPdf": false}]}, {"day": 4, "drip": 17, "theme": "משימת תזונה: שינוי בצריכת חלבון ופחמימות", "lessons": [{"title": "משימת תזונה: שינוי בצריכת חלבון ופחמימות", "type": "task", "hasPdf": true}, {"title": "הנחיות באפליקציית קלוריה: עידכון חלבונים", "type": "video", "hasPdf": false}, {"title": "דפי מידע למשימה", "type": "pdf", "hasPdf": true}]}, {"day": 5, "drip": 18, "theme": "אימון 5+ חוברת מתכונים מתוקים", "lessons": [{"title": "אימון מס' 5", "type": "workout", "hasPdf": false}, {"title": "הפינה המתוקה של מיי פריים", "type": "video", "hasPdf": false}, {"title": "הפינה המתוקה - בקובץ להורדה", "type": "video", "hasPdf": false}]}, {"day": 6, "drip": 19, "theme": "סיכום שבועי", "lessons": [{"title": "סיכום שבועי", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום !", "type": "video", "hasPdf": false}]}]}, {"week": 4, "days": [{"day": 1, "drip": 21, "theme": "אימון 6+ משימת שיפור שינה", "lessons": [{"title": "סרטון פתיחת שבוע", "type": "video", "hasPdf": false}, {"title": "משימת מיינדפולנס - שיפור השינה", "type": "task", "hasPdf": true}, {"title": "דפי מידע למשימה", "type": "pdf", "hasPdf": true}, {"title": "אימון מס' 6", "type": "workout", "hasPdf": false}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 2, "drip": 22, "theme": "\"כדאי שתדעי\" - גירעון קלורי", "lessons": [{"title": "כדאי שתדעי - גירעון קלורי", "type": "video", "hasPdf": false}]}, {"day": 3, "drip": 23, "theme": "אימון 7", "lessons": [{"title": "אימון מס' 7", "type": "workout", "hasPdf": false}]}, {"day": 4, "drip": 24, "theme": "משימת ניהול סטרס", "lessons": [{"title": "משימת מיינדפולנס - נשימה מודעת", "type": "task", "hasPdf": true}]}, {"day": 5, "drip": 25, "theme": "אימון 8", "lessons": [{"title": "אימון מס' 8", "type": "workout", "hasPdf": false}]}, {"day": 6, "drip": 26, "theme": "סיכום שבועי", "lessons": [{"title": "סיכום שבועי", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום!", "type": "video", "hasPdf": false}]}]}, {"week": 5, "days": [{"day": 1, "drip": 28, "theme": "אימון 9+ \"כדאי שתדעי\" על מצבי הרוח", "lessons": [{"title": "סרטון פתיחת שבוע", "type": "video", "hasPdf": false}, {"title": "אימון מס' 9", "type": "workout", "hasPdf": false}, {"title": "חשוב שתדעי: על התנודות במצבי הרוח", "type": "video", "hasPdf": false}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 2, "drip": 29, "theme": "משימה מנטלית / הכרת תודה", "lessons": [{"title": "משימת מיינדפולנס - הכרת תודה ככלי להשפעה על המוח", "type": "task", "hasPdf": true}, {"title": "דפי מידע למשימה", "type": "pdf", "hasPdf": true}]}, {"day": 3, "drip": 30, "theme": "אימון 10", "lessons": [{"title": "אימון מס' 10", "type": "workout", "hasPdf": false}]}, {"day": 4, "drip": 31, "theme": "דר חובב [מפגש 4] + המוטבציה השבועית", "lessons": [{"title": "המוטיבציה השבועית שלך", "type": "video", "hasPdf": false}, {"title": "מפגש 4 עם ד\"ר נועה חובב", "type": "video", "hasPdf": false}]}, {"day": 5, "drip": 32, "theme": "אימון 11", "lessons": [{"title": "אימון מס' 11", "type": "workout", "hasPdf": false}]}, {"day": 6, "drip": 33, "theme": "סיכום שבועי", "lessons": [{"title": "סיכום שבועי", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום!", "type": "video", "hasPdf": false}]}]}, {"week": 6, "days": [{"day": 1, "drip": 35, "theme": "פתיחת שבוע + אימון 12", "lessons": [{"title": "סרטון פתיחת שבוע", "type": "video", "hasPdf": false}, {"title": "אימון מס' 12", "type": "workout", "hasPdf": false}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 2, "drip": 36, "theme": "משימת תזונה- דגנים מלאים ושומן בריא", "lessons": [{"title": "משימת תזונה - שילוב דגנים מלאים ושומנים בריאים", "type": "task", "hasPdf": true}]}, {"day": 3, "drip": 37, "theme": "אימון 13", "lessons": [{"title": "אימון מס' 13", "type": "workout", "hasPdf": false}]}, {"day": 4, "drip": 38, "theme": "\"כדאי שתדעי\": התאמת האימונים לגיל המעבר", "lessons": [{"title": "כדאי שתדעי: התאמת האימונים שלך לגיל המעבר", "type": "video", "hasPdf": false}]}, {"day": 5, "drip": 39, "theme": "אימון 14", "lessons": [{"title": "אימון מס' 14", "type": "workout", "hasPdf": false}]}, {"day": 6, "drip": 40, "theme": "סיכום שבועי", "lessons": [{"title": "סיכום שבועי", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום!", "type": "video", "hasPdf": false}]}]}, {"week": 7, "days": [{"day": 1, "drip": 42, "theme": "פתיחת שבוע + אימון 15", "lessons": [{"title": "סרטון פתיחת שבוע", "type": "video", "hasPdf": false}, {"title": "אימון מס' 15", "type": "workout", "hasPdf": false}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 2, "drip": 43, "theme": "משימת תנועה: חיזוק רצפת האגן", "lessons": [{"title": "משימת תנועה: חיזוק רצפת האגן", "type": "task", "hasPdf": true}, {"title": "דפי הנחיות למשימה", "type": "pdf", "hasPdf": true}]}, {"day": 3, "drip": 44, "theme": "ד\"ר חובב [מפגש 5] + אימון 16", "lessons": [{"title": "אימון מס' 16", "type": "workout", "hasPdf": false}, {"title": "מפגש 5 עם ד\"ר נועה חובב", "type": "video", "hasPdf": false}]}, {"day": 4, "drip": 45, "theme": "משימת פרוביוטיקה", "lessons": [{"title": "כדאי שתדעי - פרוביוטיקה", "type": "video", "hasPdf": false}]}, {"day": 5, "drip": 46, "theme": "אימון 17", "lessons": [{"title": "אימון מס' 17", "type": "workout", "hasPdf": false}]}, {"day": 6, "drip": 47, "theme": "סיכום שבועי", "lessons": [{"title": "סיכום שבועי", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום!", "type": "video", "hasPdf": false}]}]}, {"week": 8, "days": [{"day": 1, "drip": 49, "theme": "פתיחת שבוע +אימון 18", "lessons": [{"title": "סרטון פתיחת שבוע", "type": "video", "hasPdf": false}, {"title": "אימון מס' 18", "type": "workout", "hasPdf": false}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 2, "drip": 50, "theme": "משימת אנטי אייג'ינג", "lessons": [{"title": "משימת תזונה - אנטי אייג'ינג לעור", "type": "task", "hasPdf": true}, {"title": "דפי הנחיות למשימה", "type": "pdf", "hasPdf": true}]}, {"day": 3, "drip": 51, "theme": "אימון 19 + \"כדאי שתדעי\" על שרירי הבטן", "lessons": [{"title": "חשוב שתדעי: על שרירי הבטן", "type": "video", "hasPdf": false}, {"title": "אימון מס' 19", "type": "workout", "hasPdf": false}]}, {"day": 4, "drip": 52, "theme": "משימת צום לסרוגין", "lessons": [{"title": "משימת תזונה - צום לסירוגין", "type": "task", "hasPdf": true}]}, {"day": 5, "drip": 53, "theme": "אימון 20", "lessons": [{"title": "אימון מס' 20", "type": "workout", "hasPdf": false}]}, {"day": 6, "drip": 54, "theme": "סיכום שבועי", "lessons": [{"title": "סיכום שבועי", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום!", "type": "video", "hasPdf": false}]}]}, {"week": 9, "days": [{"day": 1, "drip": 56, "theme": "פתיחת שבוע + משימת מוביליטי", "lessons": [{"title": "סרטון פתיחת שבוע", "type": "video", "hasPdf": false}, {"title": "משימת תנועה - אימוני מוביליטי", "type": "task", "hasPdf": true}, {"title": "אימון מוביליטי מס' 1", "type": "workout", "hasPdf": false}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 2, "drip": 57, "theme": "\"כדאי שתדעי\" על צפיפות העצם", "lessons": [{"title": "חשוב שתדעי: על צפיפות העצם", "type": "video", "hasPdf": false}]}, {"day": 3, "drip": 58, "theme": "ד\"ר חובב [מפגש 6] + אימון 21", "lessons": [{"title": "מפגש 6 עם ד\"ר נועה חובב", "type": "video", "hasPdf": false}, {"title": "אימון מס' 21", "type": "workout", "hasPdf": false}]}, {"day": 4, "drip": 59, "theme": "משימת תזונה לצפיפות העצם", "lessons": [{"title": "משימת תזונה - שיפור צפיפות העצם", "type": "task", "hasPdf": true}]}, {"day": 5, "drip": 60, "theme": "אימון 22", "lessons": [{"title": "אימון מס' 22", "type": "workout", "hasPdf": false}]}, {"day": 6, "drip": 61, "theme": "סיכום שבועי", "lessons": [{"title": "סיכום שבועי", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום!", "type": "video", "hasPdf": false}]}]}, {"week": 10, "days": [{"day": 1, "drip": 63, "theme": "\"כדאי שתדעי\" על פיטו-אסטרוגנים + מוביליטי 2", "lessons": [{"title": "סרטון פתיחת השבוע", "type": "video", "hasPdf": false}, {"title": "כדאי שתדעי - גיל המעבר והפיטואסטרוגנים", "type": "video", "hasPdf": false}, {"title": "אימון מוביליטי מס' 2", "type": "workout", "hasPdf": false}, {"title": "יומן התקדמות אישי", "type": "pdf", "hasPdf": true}]}, {"day": 2, "drip": 64, "theme": "ד\"ר חובב [ מפגש 7]", "lessons": [{"title": "מפגש 7 עם ד\"ר נועה חובב", "type": "video", "hasPdf": false}]}, {"day": 3, "drip": 65, "theme": "אימון 23", "lessons": [{"title": "אימון מס' 23", "type": "workout", "hasPdf": false}]}, {"day": 4, "drip": 66, "theme": "סרטון מוטיבציה", "lessons": [{"title": "ה\"פוש\" שאת צריכה לאימונים", "type": "video", "hasPdf": false}]}, {"day": 5, "drip": 67, "theme": "שבוע 10 יום 5 -אימון 24+ מוביליטי 3", "lessons": [{"title": "אימון מס' 24", "type": "workout", "hasPdf": false}, {"title": "אימון מוביליטי מס' 3", "type": "workout", "hasPdf": false}]}, {"day": 6, "drip": 68, "theme": "סוף זה תמיד גם התחלה !", "lessons": [{"title": "סרטון סיכום", "type": "video", "hasPdf": false}, {"title": "המשימות שלך עד היום!", "type": "video", "hasPdf": false}]}]}]; const CURRENT_DRIP=9;
+const ICON={video:'M8 5v14l11-7z',workout:'M2 8h2.5v8H2zM4.5 6h3v12h-3zM7.5 10h9v4h-9zM16.5 6h3v12h-3zM19.5 8h2.5v8h-2.5z',pdf:'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',task:'M19 3h-4.2A3 3 0 0012 1a3 3 0 00-2.8 2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zm-7 0a1 1 0 110 2 1 1 0 010-2zm-2 14l-4-4 1.4-1.4L10 14.2l6.6-6.6L18 9l-8 8z',info:'M18 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2zM6 4h5v8l-2.5-1.5L6 12V4z',links:'M3.9 12c0-1.7 1.4-3.1 3.1-3.1h4V7H7a5 5 0 000 10h4v-1.9H7A3.1 3.1 0 013.9 12zM8 13h8v-2H8v2zm9-6h-4v1.9h4a3.1 3.1 0 010 6.2h-4V17h4a5 5 0 000-10z'};
+const HEART='M12 21l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.18L12 21z';
+const SEARCH='M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.28.28v.79l5 5 1.49-1.5-5-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z';
+const TYPE={video:{l:'סרטון',c:'--brand',b:'--brandBg'},workout:{l:'אימון',c:'--amber',b:'--amberBg'},pdf:{l:'דף להורדה',c:'--water',b:'--waterBg'},task:{l:'משימה',c:'--macroP',b:'--proteinTrack'},info:{l:'מידע',c:'--info',b:'--infoBg'},links:{l:'קישורים',c:'--sub',b:'--bg'}};
+const completed=new Set(), fav=new Set(); let filter='all';
+function cv(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function svg(p,sz){return '<svg width="'+(sz||20)+'" height="'+(sz||20)+'" viewBox="0 0 24 24" fill="currentColor"><path d="'+p+'"/></svg>';}
+let curWeek=DATA[0].week, curDi=0;
+DATA.forEach(w=>w.days.forEach((d,di)=>{if(d.drip===CURRENT_DRIP){curWeek=w.week;curDi=di;}}));
+let selWeek=curWeek;
+function wk(n){return DATA.find(w=>w.week===n);}
+function key(wn,di,li){return wn+'-'+di+'-'+li;}
+function dayProg(wn,di){const ls=wk(wn).days[di].lessons;let c=0;ls.forEach((_,li)=>{if(completed.has(key(wn,di,li)))c++;});return{c,t:ls.length};}
+function flatAll(){const out=[];DATA.forEach(w=>w.days.forEach((d,di)=>{d.lessons.forEach((l,li)=>out.push({wn:w.week,di,li,l}));}));return out;}
+function show(s){document.querySelectorAll('.screen').forEach(e=>e.classList.remove('active'));document.getElementById('screen-'+s).classList.add('active');window.scrollTo(0,0);document.getElementById('nav-day').classList.toggle('on',s==='day');if(s==='content')renderContent();if(s==='fav')renderFav();if(s==='search'){renderSearch();setTimeout(()=>document.getElementById('searchInput').focus(),50);}}
+
+function buildDay(){
+ const R=[{v:'צרכת',b:'850',l:'קלוריות',s:'מתוך 1,432',c:'--brand',t:'--line',f:.59,p:'--brand'},{v:'צעדת',b:'6,200',l:'צעדים',s:'מתוך 8,000',c:'--amber',t:'--amberBg',f:.78,p:'--amber'},{v:'צרכת',b:'45',u:'ג׳',l:'חלבון',s:'מתוך 90',c:'--macroP',t:'--proteinTrack',f:.5},{v:'שתית',b:'5',l:'כוסות מים',s:'1,250 מ"ל מתוך 8',c:'--water',t:'--waterBg',f:.6,p:'--water'}];
+ const pos=[[1,1],[2,1],[1,2],[2,2]];
+ document.getElementById('dayRings').innerHTML=R.map((d,i)=>{const r=54,circ=2*Math.PI*r,off=circ*(1-d.f);return '<div class="ringBox" style="grid-column:'+pos[i][0]+';grid-row:'+pos[i][1]+'"><svg width="124" height="124" viewBox="0 0 132 132"><circle cx="66" cy="66" r="54" fill="none" stroke="'+cv(d.t)+'" stroke-width="10"/><circle cx="66" cy="66" r="54" fill="none" stroke="'+cv(d.c)+'" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+circ+'" stroke-dashoffset="'+off+'" transform="rotate(-90 66 66)"/><text x="66" y="40" text-anchor="middle" font-size="12.5" font-weight="600" fill="'+cv('--sub')+'">'+d.v+'</text><text x="66" y="64" text-anchor="middle" font-size="26" font-weight="700" fill="'+cv('--ink')+'">'+d.b+(d.u?'<tspan font-size="14" fill="'+cv('--sub')+'"> '+d.u+'</tspan>':'')+'</text><text x="66" y="83" text-anchor="middle" font-size="14.5" font-weight="700" fill="'+cv(d.c)+'">'+d.l+'</text><text x="66" y="97" text-anchor="middle" font-size="11" fill="'+cv('--sub')+'">'+d.s+'</text></svg>'+(d.p?'<div class="plus" style="background:'+cv(d.p)+'">+</div>':'')+'</div>';}).join('');
+ const chips=[{dow:'שבת',dt:'6/6',pct:1},{dow:'ראשון',dt:'7/6',pct:.7},{dow:'שני',dt:'8/6',today:true,sel:true,pct:.4},{dow:'שלישי',dt:'9/6',pct:0},{dow:'רביעי',dt:'10/6',pct:0}];
+ document.getElementById('dayStrip').innerHTML=chips.map(c=>'<div class="chip'+(c.today?' today':'')+(c.sel?' sel':'')+'">'+(c.today?'<div class="tag">היום</div>':'')+'<div class="pad"><div class="dow">'+c.dow+'</div><div class="dt">'+c.dt+'</div><div class="bar">'+(c.pct>0?'<i style="width:'+Math.round(c.pct*100)+'%"></i>':'')+'</div></div></div>').join('');
+}
+function row(wn,di,li,l,loc){const tp=TYPE[l.type]||TYPE.video;const done=completed.has(key(wn,di,li));const isf=fav.has(key(wn,di,li));const meta=loc?('שבוע '+wn+' יום '+wk(wn).days[di].day+' · '+tp.l):(tp.l+(l.hasPdf&&l.type!=='pdf'?' · כולל דף להורדה':''));
+ return '<div class="lessonrow" onclick="openLesson('+wn+','+di+','+li+')"><div class="ic" style="background:'+cv(tp.b)+';color:'+cv(tp.c)+'">'+svg(ICON[l.type]||ICON.video)+'</div><div class="body"><b>'+l.title+'</b><span>'+meta+'</span></div><div class="st"><button class="heartbtn'+(isf?' on':'')+'" onclick="event.stopPropagation();togFav('+wn+','+di+','+li+')">'+svg(HEART,19)+'</button><div class="check'+(done?' on':'')+'">'+(done?svg('M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z',14):'')+'</div></div></div>';}
+
+function renderContent(){
+ const td=wk(curWeek).days[curDi];const tp=dayProg(curWeek,curDi);
+ let h='<div class="todayHero"><div class="heroTitle">התוכן של היום · שבוע '+curWeek+' יום '+td.day+'</div><div class="heroTheme">'+td.theme+'</div><div class="prog"><span>'+tp.c+'/'+tp.t+' הושלמו</span><div class="pbar"><i style="width:'+(tp.t?Math.round(tp.c/tp.t*100):0)+'%"></i></div></div></div>';
+ h+='<div class="todayList">'+td.lessons.map((l,li)=>row(curWeek,curDi,li,l)).join('')+'</div>';
+ h+='<div class="devnote">\ud83d\udd27 גרסת פיתוח - כל הימים פתוחים לבנייה ובדיקה. באפליקציה בפועל התוכן נפתח יום אחרי יום (דריפ).</div>'+'<div class="progHeader"><h2 class="progTitle">כל התוכנית</h2><div class="progActs"><button class="progAct" onclick="show(\'search\')">'+svg(SEARCH,15)+' חיפוש</button><button class="progAct" onclick="show(\'fav\')">'+svg(HEART,15)+' המועדפים שלי</button></div></div>';
+ const FILTERS=[['all','הכל'],['workout','אימונים'],['task','משימות'],['video','סרטונים'],['pdf','דפים']];
+ h+='<div class="filterchips">'+FILTERS.map(f=>'<button class="'+(filter===f[0]?'on':'')+'" onclick="filter=\''+f[0]+'\';renderContent()">'+f[1]+'</button>').join('')+'</div>';
+ if(filter==='all'){
+   h+='<div class="weekpills">'+DATA.map(w=>'<button class="'+(w.week===selWeek?'on':'')+'" onclick="selWeek='+w.week+';renderContent()">שבוע '+w.week+'</button>').join('')+'</div>';
+   const days=wk(selWeek).days.map((d,di)=>({d,di}));
+   const chev='<svg class="daychev" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+   h+=days.map(o=>{const d=o.d,di=o.di;const isToday=(selWeek===curWeek&&di===curDi);const pr=dayProg(selWeek,di);
+     return '<div class="daycard'+(isToday?' open':'')+'"><div class="dayhead" onclick="toggleDay(this)"><div class="num">יום<br>'+d.day+'</div><div class="tt"><b>'+d.theme+'</b><span>'+pr.c+'/'+pr.t+' הושלמו</span></div>'+(isToday?'<div class="badge">היום</div>':'')+chev+'</div><div class="daybody" style="display:'+(isToday?'block':'none')+'">'+d.lessons.map((l,li)=>row(selWeek,di,li,l)).join('')+'</div></div>';}).join('');
+ } else {
+   const fl=flatAll().filter(x=>x.l.type===filter);
+   h+= fl.length? '<div class="listcard">'+fl.map(x=>row(x.wn,x.di,x.li,x.l,true)).join('')+'</div>' : '<div class="empty">אין פריטים בקטגוריה זו עד היום.</div>';
+ }
+ document.getElementById('contentBody').innerHTML=h;
+}
+function toggleDay(el){const card=el.parentElement;const b=card.querySelector('.daybody');const open=b.style.display==='none';b.style.display=open?'block':'none';card.classList.toggle('open',open);}
+function togFav(wn,di,li){const k=key(wn,di,li);fav.has(k)?fav.delete(k):fav.add(k);const a=document.querySelector('.screen.active').id;if(a==='screen-content')renderContent();else if(a==='screen-fav')renderFav();else if(a==='screen-search')renderSearch();}
+function renderFav(){const fl=flatAll().filter(x=>fav.has(key(x.wn,x.di,x.li)));document.getElementById('favBody').innerHTML=fl.length?'<div class="listcard">'+fl.map(x=>row(x.wn,x.di,x.li,x.l,true)).join('')+'</div>':'<div class="empty">עדיין אין מועדפים.<br>סמני ❤ על שיעורים והם יופיעו כאן.</div>';}
+function renderSearch(){const q=(document.getElementById('searchInput').value||'').trim();let fl=flatAll();if(q)fl=fl.filter(x=>x.l.title.indexOf(q)>=0);document.getElementById('searchBody').innerHTML=!q?'<div class="empty">הקלידי כדי לחפש בכל התוכן.</div>':(fl.length?'<div class="listcard">'+fl.map(x=>row(x.wn,x.di,x.li,x.l,true)).join('')+'</div>':'<div class="empty">לא נמצאו תוצאות.</div>');}
+let curL={wn:0,di:0,li:0};
+function openLesson(wn,di,li){curL={wn,di,li};renderLesson();show('lesson');}
+function renderLesson(){var wn=curL.wn,di=curL.di,li=curL.li;const day=wk(wn).days[di];const l=day.lessons[li];const tp=TYPE[l.type]||TYPE.video;const k=key(wn,di,li);const done=completed.has(k);const isf=fav.has(k);
+ document.getElementById('lessonTitle').textContent=l.title;
+ let h='<div class="lmeta">שיעור '+(li+1)+' מתוך '+day.lessons.length+' · '+tp.l+'</div>';
+ h+='<div class="lactions"><button class="fav'+(isf?' on':'')+'" onclick="togFav2()">'+svg(HEART,18)+' מועדף</button><button class="complete'+(done?' on':'')+'" onclick="togDone()">'+svg('M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z',18)+(done?' הושלם':' סמני כהושלם')+'</button></div>';
+ h+='<div class="introtext"><span class="tag">טקסט מקדים · דמו</span>כאן יופיע הטקסט המקדים של ענת לשיעור זה - היא ממסגרת, מסבירה ומכינה אותך לקראת הסרטון שמתחת. הטקסט האמיתי יוזן בשלב מילוי התוכן. 🌸</div>';
+ if(l.type!=='pdf'&&l.type!=='links'&&l.type!=='info')h+=videoPlayer();
+ if(l.hasPdf||l.type==='pdf')h+='<div class="dl" onclick="alert(\'כאן יורד ה-PDF\')"><div class="ic">'+svg(ICON.pdf)+'</div><div><b>דף משימה</b><span>PDF · להורדה</span></div></div>';
+ if(l.type==='links')h+='<div class="dl"><div class="ic">'+svg(ICON.links)+'</div><div><b>קישורים</b><span>ייפתחו בלחיצה</span></div></div>';
+ let nxt=null;if(li+1<day.lessons.length)nxt={wn,di,li:li+1,l:day.lessons[li+1]};else{const nd=wk(wn).days[di+1];if(nd&&nd.lessons.length)nxt={wn,di:di+1,li:0,l:nd.lessons[0]};}
+ if(nxt){const ntp=TYPE[nxt.l.type]||TYPE.video;h+='<div class="upnext"><div class="lbl">הבא בתור</div><div class="upnextcard" onclick="openLesson('+nxt.wn+','+nxt.di+','+nxt.li+')"><div class="ic" style="background:'+cv(ntp.b)+';color:'+cv(ntp.c)+'">'+svg(ICON[nxt.l.type]||ICON.video,18)+'</div><div><b>'+nxt.l.title+'</b><span>'+ntp.l+'</span></div></div></div>';}
+ h+='<div class="note">סימון "הושלם" נספר בהתקדמות היומית שלך ובמדליה 💜</div>';
+ document.getElementById('lessonBody').innerHTML=h;
+}
+const FS_SVG=svg('M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z',18);
+const GEAR_SVG=svg('M19.14 12.94a7.07 7.07 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.61-.22l-2.39.96a7 7 0 00-1.62-.94l-.36-2.54a.5.5 0 00-.5-.42h-3.84a.5.5 0 00-.5.42l-.36 2.54a7 7 0 00-1.62.94l-2.39-.96a.5.5 0 00-.61.22L2.7 8.84a.5.5 0 00.12.64l2.03 1.58a7.07 7.07 0 000 1.88L2.82 14.5a.5.5 0 00-.12.64l1.92 3.32a.5.5 0 00.61.22l2.39-.96a7 7 0 001.62.94l.36 2.54a.5.5 0 00.5.42h3.84a.5.5 0 00.5-.42l.36-2.54a7 7 0 001.62-.94l2.39.96a.5.5 0 00.61-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z',18);
+const CAST_SVG=svg('M21 3H3a2 2 0 00-2 2v3h2V5h18v14h-7v2h7a2 2 0 002-2V5a2 2 0 00-2-2zM1 18v3h3a3 3 0 00-3-3zm0-4v2a5 5 0 015 5h2a7 7 0 00-7-7zm0-4v2a9 9 0 019 9h2A11 11 0 001 10z',18);
+const REPLAY_SVG=svg('M12 5V1L7 6l5 5V7a6 6 0 11-6 6H4a8 8 0 108-8z',30);
+const FWD_SVG=svg('M12 5V1l5 5-5 5V7a6 6 0 106 6h2a8 8 0 11-8-8z',30);
+const PLAY_SVG=svg('M8 5v14l11-7z',24);const PAUSE_SVG=svg('M6 5h4v14H6zM14 5h4v14h-4z',24);
+function vGear(){alert('בחירת איכות: Auto · 1080p · 720p · 224p\n(אפשר להוריד איכות אם הרשת בבית חלשה ויש קפיצות)\n\nמהירות נגינה: 0.5x · 1x · 1.5x · 2x');}
+function togglePlay(el){const p=el.getAttribute('data-p')==='1';el.innerHTML=p?PLAY_SVG:PAUSE_SVG;el.setAttribute('data-p',p?'0':'1');}
+function videoPlayer(){return '<div class="videobox"><div class="vtop"><button onclick="alert(\'מסך מלא\')">'+FS_SVG+'</button><button onclick="vGear()">'+GEAR_SVG+'</button><button onclick="alert(\'שיתוף לטלוויזיה (Chromecast / AirPlay)\')">'+CAST_SVG+'</button></div><div class="vcenter"><div class="sk" onclick="alert(\'אחורה 5 שניות\')">'+REPLAY_SVG+'<span>5</span></div><div class="pp" data-p="0" onclick="togglePlay(this)">'+PLAY_SVG+'</div><div class="sk" onclick="alert(\'קדימה 15 שניות\')">'+FWD_SVG+'<span>15</span></div></div><div class="vbottom"><div class="vprog"><i></i><b></b></div><div class="vtime">0:00 · 2:23</div></div></div><div class="vcaps">נגן Bunny - מסך מלא · שיתוף לטלוויזיה · בחירת איכות (להורדה ברשת חלשה) · שינוי מהירות</div>';}
+function togDone(){const k=key(curL.wn,curL.di,curL.li);completed.has(k)?completed.delete(k):completed.add(k);renderLesson();}
+function togFav2(){const k=key(curL.wn,curL.di,curL.li);fav.has(k)?fav.delete(k):fav.add(k);renderLesson();}
+buildDay();
+</script></body></html>

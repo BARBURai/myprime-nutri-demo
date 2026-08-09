@@ -1,0 +1,21 @@
+# Dependencies. Downloaded by npm install, never committed.
+node_modules/
+
+# Build output. Vercel builds this itself on every deploy.
+dist/
+.vercel/
+
+# Local environment files. Real values live in the Vercel dashboard.
+.env
+.env.local
+.env.*.local
+
+# The lockfile has never been committed here, and adding it now would switch
+# Vercel from npm install to npm ci with pinned versions. Worth doing, but as
+# its own change, not as a side effect of a build.
+package-lock.json
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.log

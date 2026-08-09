@@ -228,7 +228,20 @@ function prettyDate(dateStr) {
   const d = parseDay(dateStr);
   return `${HE_DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ב${HE_MONTHS[d.getUTCMonth()]}`;
 }
-const DEV = (() => { try { return new URLSearchParams(window.location.search).has("dev"); } catch (e) { return false; } })();
+// ?dev=1 also sticks in localStorage, because an installed app always launches at the
+// manifest start_url and drops the query string, so the test bar could never be used in
+// the installed app where the iOS bugs actually live. ?dev=0 clears it again.
+const DEV = (() => {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    if (p.has("dev")) {
+      const on = p.get("dev") !== "0";
+      try { on ? localStorage.setItem("myprime_dev", "1") : localStorage.removeItem("myprime_dev"); } catch (e) {}
+      return on;
+    }
+    return localStorage.getItem("myprime_dev") === "1";
+  } catch (e) { return false; }
+})();
 // Course content module ("הסרטונים שלך היום"). Dev-only for now so the pilot
 // women never see it; flip to `true` when it is ready to ship to users.
 const CONTENT_ENABLED = true;
@@ -443,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.13";
+const VERSION = "4.27";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1119,22 +1132,36 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
 // Shown when a participant has finished signing up but her programme starts on a
 // later Sunday. Day 1 (and everything with it) unlocks at midnight on that date.
 function PreStartScreen({ name, startDate }) {
+  // Phone only: on a desktop there is no home screen to put the icon on.
+  const isPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
   const start = new Date(startDate);
   const daysLeft = Math.max(0, Math.ceil((start - new Date(TODAY)) / 86400000));
   const dateStr = start.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" });
   const dayName = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"][start.getDay()];
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "40px 24px 40px", textAlign: "center", fontFamily: fontStack }}>
-      <img src={MEDAL_SRC} alt="" width={96} height={96} style={{ display: "block", margin: "0 auto 18px" }} />
+    <div style={{ flex: 1, overflowY: "auto", padding: "24px 24px 40px", textAlign: "center", fontFamily: fontStack }}>
+      <img src={MEDAL_SRC} alt="" width={64} height={64} style={{ display: "block", margin: "0 auto 12px" }} />
       <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>הכל מוכן{name && name.trim() ? `, ${name.trim()}` : ""} 💜</div>
       <div style={{ background: C.brandBg, borderRadius: 16, padding: "18px 16px", margin: "20px 0 18px" }}>
         <div style={{ fontSize: 16, color: C.brandD, lineHeight: 1.6 }}>התוכנית שלך מתחילה ביום {dayName}</div>
         <div style={{ fontSize: 22, fontWeight: 700, color: C.brandD, margin: "6px 0 10px" }}>{dateStr}</div>
         <div style={{ fontSize: 17, fontWeight: 600, color: C.brand }}>{daysLeft === 0 ? "מתחילות מחר!" : daysLeft === 1 ? "נשאר יום אחד" : `נשארו ${daysLeft} ימים`}</div>
       </div>
-      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: "0 0 8px" }}>בינתיים אין מה למלא - נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
+      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
       <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
-      <div style={{ fontSize: 14, color: C.faint, lineHeight: 1.6, marginTop: 22 }}>אם תרצי, אפשר לעדכן את הפרטים שלך בכל רגע דרך הפרופיל.</div>
+      {isPhone && (
+        <div style={{ background: C.brandBg, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
+          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>אפשר לסגור את האפליקציה.</div>
+          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginTop: 10 }}><b>כדי לחזור לאפליקציה</b>, פשוט לוחצים על האייקון:</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "12px 0" }}>
+            <img src="/icon-192.png" alt="" width={56} height={56} style={{ borderRadius: 13, flexShrink: 0 }} />
+            <div style={{ fontSize: 16.5, fontWeight: 700, color: C.ink }}>מיי פריים 360</div>
+          </div>
+          <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7 }}><b>לא מוצאת את האפליקציה?</b> אפשר לחפש "מיי פריים" בחיפוש של אפליקציות הטלפון.</div>
+          <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.7, marginTop: 10 }}>הכי קל: הוסיפי את האפליקציה למסך הבית של הטלפון.</div>
+        </div>
+      )}
+      <div style={{ fontSize: 14, color: C.faint, lineHeight: 1.6, marginTop: 22 }}>הערה: אם תרצי, אפשר לעדכן את הפרטים שלך בכל רגע דרך הפרופיל.</div>
       <div style={{ textAlign: "center", fontSize: 12.5, color: C.faint, marginTop: 26 }}>MyPrime · v{VERSION}</div>
     </div>
   );
@@ -4551,6 +4578,80 @@ function GoalBumpModal({ info, name, onClose }) {
   );
 }
 
+// Diagnostic strip for the iOS keyboard jump. Behind ?dev=1 only, so no participant sees
+// it. Reads the real numbers on an interval as well as on viewport events, because the
+// whole problem is that iOS sometimes fires no event at all. Screenshot it once while the
+// screen looks right and once while it is jumped, and the difference names the cause.
+function DevViewportBar() {
+  const [s, setS] = useState({});
+  const [bad, setBad] = useState(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const snap = () => {
+      const vv = window.visualViewport;
+      const fr = typeof document !== "undefined" ? document.querySelector(".phone-frame") : null;
+      const r = fr ? fr.getBoundingClientRect() : null;
+      const cssRaw = (document.documentElement.style.getPropertyValue("--vvh") || "").trim();
+      return {
+        win: Math.round(window.innerHeight || 0),
+        vvh: vv ? Math.round(vv.height) : 0,
+        off: vv ? Math.round(vv.offsetTop || 0) : 0,
+        pgY: Math.round(window.scrollY || 0),
+        css: cssRaw || "-",
+        cssN: parseInt(cssRaw, 10) || 0,
+        fh: r ? Math.round(r.height) : 0,
+        ft: r ? Math.round(r.top) : 0,
+        w: Math.round(window.innerWidth || 0),
+        sc: vv ? Math.round((vv.scale || 1) * 100) / 100 : 1,
+        lock: document.body.style.position === "fixed" ? "Y" : "N",
+      };
+    };
+    const startedAt = Date.now();
+    const read = () => {
+      const n = snap();
+      setS(n);
+      // Latch the first bad reading and keep showing it. Reaching the strip to photograph
+      // it takes long enough that the app has already recovered, so a live-only readout
+      // never captures the moment that matters.
+      // Skip the first two seconds and any reading taken before --vvh has ever been
+      // written: the very first frame has no variable set yet, which the first version of
+      // this check reported as a failure and latched onto instead of the real one.
+      const why = [];
+      if (n.cssN > 0 && Math.abs(n.cssN - n.vvh) > 2) why.push("vvh");
+      if (n.cssN > 0 && Math.abs(n.fh - n.vvh) > 4) why.push("frame");
+      if (n.pgY !== 0) why.push("scroll");
+      if (n.off !== 0) why.push("offset");
+      if (why.length && Date.now() - startedAt > 2000) setBad((prev) => prev || { ...n, why: why.join("+") });
+    };
+    read();
+    const id = setInterval(read, 120);
+    const vv = window.visualViewport;
+    if (vv) { vv.addEventListener("resize", read); vv.addEventListener("scroll", read); }
+    return () => {
+      clearInterval(id);
+      if (vv) { vv.removeEventListener("resize", read); vv.removeEventListener("scroll", read); }
+    };
+  }, []);
+  const line = (x) => `win ${x.win}x${x.w} vv ${x.vvh} sc ${x.sc} off ${x.off} sY ${x.pgY} | vvh ${x.css} fH ${x.fh} lk ${x.lock}`;
+  // Collapsed by default: expanded it covers the top of the screen and swallows taps meant
+  // for the app. Only the small dot is tappable; the readout itself ignores pointers.
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} aria-label="אבחון מסך" style={{ position: "fixed", top: 2, left: 2, zIndex: 2147483647, width: 22, height: 22, borderRadius: "50%", border: "none", background: bad ? "#f66" : "#0a0", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "monospace", cursor: "pointer", opacity: 0.75, padding: 0 }}>vp</button>
+    );
+  }
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "none" }}>
+      <div style={{ color: "#0f0" }}>NOW {line(s)}</div>
+      <div style={{ color: bad ? "#f66" : "#666" }}>BAD {bad ? `[${bad.why}] ${line(bad)}` : "none yet"}</div>
+      <div style={{ pointerEvents: "auto", display: "flex", gap: 8, marginTop: 2 }}>
+        <button onClick={() => setBad(null)} style={{ background: "#333", color: "#fff", border: "none", borderRadius: 4, fontSize: 10, fontFamily: "monospace", padding: "2px 8px" }}>reset</button>
+        <button onClick={() => setOpen(false)} style={{ background: "#333", color: "#fff", border: "none", borderRadius: 4, fontSize: 10, fontFamily: "monospace", padding: "2px 8px" }}>hide</button>
+      </div>
+    </div>
+  );
+}
+
 function DevDateBar({ onAnchor }) {
   const setDay = (d) => { try { window.localStorage.setItem("myprime_dev_today", d); } catch (e) {} window.location.reload(); };
   const reset = () => { try { window.localStorage.removeItem("myprime_dev_today"); } catch (e) {} window.location.reload(); };
@@ -5402,6 +5503,52 @@ export default function App() {
     } catch (e) {}
     const vv = window.visualViewport;
     if (!vv) return;
+    // Entering and leaving a text field are the two moments iOS is least reliable about
+    // firing a resize, so ask for a re-measure at both. No attempt is made to decide from
+    // this whether the shrink is a keyboard or a system sheet; that guess is what kept
+    // breaking the keyboard between v4.14 and v4.18.
+    const isEditable = (el) => {
+      if (!el) return false;
+      const tag = (el.tagName || "").toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable === true;
+    };
+    const onFocusIn = (e) => { if (isEditable(e.target)) remeasure(); };
+    // Closing the keyboard is the dangerous direction: iOS often fires no resize at all,
+    // so --vvh stayed pinned to the shrunken height and the frame kept a gap of background
+    // below it. Nothing else asks for a re-measure here, which is why quitting and
+    // reopening the app was the only way back. Ask for one explicitly.
+    const onFocusOut = () => remeasure();
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    // iOS scrolls the document itself to reveal the focused field, which pushes the whole
+    // fixed app frame up: pink background at the bottom, bars and input off the top, and
+    // she has to scroll back down. A single scrollTo raced with that and lost about half
+    // the time, which is why the jump was intermittent. Pin the document to the top a few
+    // times while the keyboard settles instead. Only the document scrolls here; the chat
+    // list scrolls inside its own element and is untouched.
+    let kbTimers = [];
+    const pinTop = () => {
+      kbTimers.forEach(clearTimeout);
+      kbTimers = [0, 60, 150, 300, 600].map((ms) => setTimeout(() => { try { window.scrollTo(0, 0); } catch (e) {} }, ms));
+    };
+    // Pinning after the fact still lost the race sometimes. While the keyboard is up, take
+    // the document out of the scroll flow entirely so iOS has nothing left to push. The
+    // frame is already exactly one viewport tall, so this is visually identical; only the
+    // ability to scroll the document away disappears. The chat list keeps its own scroll.
+    let wasKbUp = false;
+    let docLocked = false;
+    const lockDoc = (on) => {
+      if (on === docLocked) return;
+      docLocked = on;
+      try {
+        const b = document.body;
+        b.style.position = on ? "fixed" : "";
+        b.style.top = on ? "0" : "";
+        b.style.left = on ? "0" : "";
+        b.style.right = on ? "0" : "";
+        b.style.width = on ? "100%" : "";
+      } catch (e) {}
+    };
     const apply = () => {
       try {
         // Pinch-zoom also shrinks visualViewport.height, which used to be mistaken for
@@ -5409,29 +5556,70 @@ export default function App() {
         // Only treat it as a keyboard when the page is not zoomed in.
         const zoomed = (vv.scale || 1) > 1.02;
         if (zoomed) return; // pinch shrinks the visual viewport - not a real height change
+        const winH = window.innerHeight || 0;
+        const kb = Math.max(0, winH - vv.height);
+        // v4.14 skipped the height write on a big shrink with no text field focused, to
+        // tell a system sheet from the keyboard. That guess is gone: on iOS the focus
+        // answer flickers mid-animation, the keyboard got mistaken for a sheet, the write
+        // was skipped and the frame stayed full height while the keyboard pushed the bars
+        // off screen. That is what made the jump intermittent across v4.14 to v4.18.
+        // The sheet case is covered without guessing, by remeasure() on focusout, on window
+        // focus, and by the __mpRemeasure hook the share button calls.
         // Always size the frame to the height that is actually visible. Relying on
         // 100dvh let the bottom bar slip under the phone's own navigation bar.
         document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
-        const kb = Math.max(0, window.innerHeight - vv.height);
-        if (kb > 80) window.scrollTo(0, 0); // keyboard is up
+        const kbUp = kb > 80;
+        lockDoc(kbUp);
+        // Only on the transition, not on every pass: the watchdog below calls this four
+        // times a second, and re-pinning that often would fight her own scrolling.
+        if (kbUp && !wasKbUp) pinTop();
+        wasKbUp = kbUp;
       } catch (e) {}
     };
+    // Watchdog. The diagnostic caught the failure directly: visualViewport.height at 352
+    // with the keyboard open while --vvh still held 669, the full height, so the frame
+    // stayed tall inside a short viewport and pushed everything off screen. Whatever the
+    // missed signal is - an event iOS never fired, or one of the early returns above -
+    // waiting for a signal is what keeps failing. Check the invariant instead: --vvh must
+    // equal the visible height, and correct it when it does not.
+    const watchdog = setInterval(apply, 100);
     vv.addEventListener("resize", apply);
     vv.addEventListener("scroll", apply);
     // After a reload the browser chrome is still settling, so the first measurement
     // can come out too tall and push the bottom bar off screen. Re-measure for a
     // couple of seconds, and again whenever the tab becomes visible.
     const timers = [80, 250, 600, 1200, 2500].map((ms) => setTimeout(apply, ms));
-    const onShow = () => apply();
+    // Coming back from a system sheet the screen is still animating, so one measurement
+    // catches it mid-way. Measure repeatedly instead. The timers are scheduled AFTER the
+    // return, because while the sheet is up iOS freezes the app's timers.
+    let burst = [];
+    const remeasure = () => {
+      burst.forEach(clearTimeout);
+      burst = [0, 50, 110, 180, 260, 400, 600, 900, 1400, 2000].map((ms) => setTimeout(apply, ms));
+    };
+    const onShow = () => remeasure();
     document.addEventListener("visibilitychange", onShow);
     window.addEventListener("orientationchange", onShow);
     window.addEventListener("pageshow", onShow);
+    // A share sheet is an overlay inside the same app, so visibilitychange does not always
+    // fire when it closes. focus does.
+    window.addEventListener("focus", onShow);
+    // Let the PDF share button ask for a re-measure directly, as a third safety net.
+    try { window.__mpRemeasure = remeasure; } catch (e) {}
     return () => {
       vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply);
+      clearInterval(watchdog);
       timers.forEach(clearTimeout);
+      burst.forEach(clearTimeout);
+      kbTimers.forEach(clearTimeout);
+      lockDoc(false);
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
       document.removeEventListener("visibilitychange", onShow);
       window.removeEventListener("orientationchange", onShow);
       window.removeEventListener("pageshow", onShow);
+      window.removeEventListener("focus", onShow);
+      try { if (window.__mpRemeasure === remeasure) delete window.__mpRemeasure; } catch (e) {}
     };
   }, []);
 
@@ -5480,6 +5668,7 @@ export default function App() {
       <div className="phone-frame">
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
+        {DEV && <DevViewportBar />}
         {showInstallGate ? (
           <InstallGate onSkip={skipInstall} />
         ) : gate !== "ok" ? (
