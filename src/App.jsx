@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.24";
+const VERSION = "4.25";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4584,6 +4584,7 @@ function GoalBumpModal({ info, name, onClose }) {
 function DevViewportBar() {
   const [s, setS] = useState({});
   const [bad, setBad] = useState(null);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
     const snap = () => {
       const vv = window.visualViewport;
@@ -4631,10 +4632,21 @@ function DevViewportBar() {
     };
   }, []);
   const line = (x) => `win ${x.win}x${x.w} vv ${x.vvh} sc ${x.sc} off ${x.off} sY ${x.pgY} | vvh ${x.css} fH ${x.fh} lk ${x.lock}`;
+  // Collapsed by default: expanded it covers the top of the screen and swallows taps meant
+  // for the app. Only the small dot is tappable; the readout itself ignores pointers.
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} aria-label="אבחון מסך" style={{ position: "fixed", top: 2, left: 2, zIndex: 2147483647, width: 22, height: 22, borderRadius: "50%", border: "none", background: bad ? "#f66" : "#0a0", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "monospace", cursor: "pointer", opacity: 0.75, padding: 0 }}>vp</button>
+    );
+  }
   return (
-    <div onClick={() => setBad(null)} style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden" }}>
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "none" }}>
       <div style={{ color: "#0f0" }}>NOW {line(s)}</div>
-      <div style={{ color: bad ? "#f66" : "#666" }}>BAD {bad ? `[${bad.why}] ${line(bad)}` : "none yet - tap strip to reset"}</div>
+      <div style={{ color: bad ? "#f66" : "#666" }}>BAD {bad ? `[${bad.why}] ${line(bad)}` : "none yet"}</div>
+      <div style={{ pointerEvents: "auto", display: "flex", gap: 8, marginTop: 2 }}>
+        <button onClick={() => setBad(null)} style={{ background: "#333", color: "#fff", border: "none", borderRadius: 4, fontSize: 10, fontFamily: "monospace", padding: "2px 8px" }}>reset</button>
+        <button onClick={() => setOpen(false)} style={{ background: "#333", color: "#fff", border: "none", borderRadius: 4, fontSize: 10, fontFamily: "monospace", padding: "2px 8px" }}>hide</button>
+      </div>
     </div>
   );
 }
