@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>מיי פריים 360 - מצגת</title>
+<meta name="theme-color" content="#221A1D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#3A2B30; --sub:#8B737A; --faint:#BBA7AC; --line:#F1E4E7;
+  --brand:#D45D79; --brandD:#A8425C; --brandBg:#FBE9EE; --appBg:#FAF3F4; --panel:#fff;
+  --macroP:#7E4FB5; --proteinTrack:#EBE1F7; --water:#7E8DD6; --waterBg:#EBEDF8;
+  --amber:#C77A3C; --amberBg:#FBEEDF; --info:#9C6BA6; --infoBg:#F2E7F3;
+  --deck:#221A1D; --deck2:#2E2328; --deckLine:#41333A;
+  --cream:#F7EFF1; --creamSub:#C3AEB5; --gold:#E0B36A;
+  --font:'Rubik',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--font); background:var(--deck); color:var(--cream);
+  -webkit-font-smoothing:antialiased; overflow:hidden; height:100vh;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(60vw 60vw at 88% 8%, rgba(212,93,121,.20), transparent 62%),
+    radial-gradient(52vw 52vw at 8% 92%, rgba(126,79,181,.16), transparent 62%);
+}
+
+/* ============ מסגרת המצגת ============ */
+.deck{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column}
+.topbar{
+  flex:0 0 auto;display:flex;align-items:center;gap:14px;
+  padding:12px 22px;border-bottom:1px solid var(--deckLine);
+  background:rgba(34,26,29,.72);backdrop-filter:blur(10px)
+}
+.brandmark{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15.5px;letter-spacing:.2px}
+.brandmark img{width:30px;height:30px;border-radius:9px;display:block}
+.brandmark .ver{font-size:11px;font-weight:500;color:var(--creamSub);background:#3A2C32;border:1px solid var(--deckLine);padding:2px 8px;border-radius:999px}
+.topbar .spacer{flex:1}
+.navdots{display:flex;gap:5px;align-items:center;overflow-x:auto;max-width:62vw;scrollbar-width:none}
+.navdots::-webkit-scrollbar{display:none}
+.navdots button{
+  flex:0 0 auto;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;
+  background:transparent;border:1px solid transparent;color:var(--creamSub);
+  padding:6px 12px;border-radius:999px;white-space:nowrap;transition:.18s
+}
+.navdots button:hover{color:var(--cream);background:#33262C}
+.navdots button.on{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.arrows{display:flex;gap:8px}
+.arrows button{
+  width:36px;height:36px;border-radius:11px;cursor:pointer;font-family:inherit;font-size:17px;
+  background:#33262C;border:1px solid var(--deckLine);color:var(--cream);
+  display:flex;align-items:center;justify-content:center;transition:.18s
+}
+.arrows button:hover{background:var(--brand);border-color:var(--brand)}
+.progline{flex:0 0 auto;height:3px;background:#33262C}
+.progline>i{display:block;height:3px;background:linear-gradient(90deg,var(--brand),var(--gold));transition:width .35s ease}
+
+.stage{flex:1;min-height:0;position:relative}
+.slide{
+  position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;
+  padding:30px 34px 40px;
+  display:none;
+}
+.slide.on{display:block;animation:fade .38s ease}
+@keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.wrap{max-width:1240px;margin:0 auto}
+.split{display:grid;grid-template-columns:1fr 400px;gap:44px;align-items:start}
+
+.eyebrow{
+  display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:.5px;
+  color:var(--brand);background:rgba(212,93,121,.12);border:1px solid rgba(212,93,121,.32);
+  padding:5px 13px;border-radius:999px;margin-bottom:16px
+}
+.eyebrow.gold{color:var(--gold);background:rgba(224,179,106,.12);border-color:rgba(224,179,106,.34)}
+h1.big{font-size:clamp(30px,4.4vw,52px);line-height:1.12;margin:0 0 16px;font-weight:700;letter-spacing:-.4px}
+h2.t{font-size:clamp(24px,3vw,36px);line-height:1.18;margin:0 0 12px;font-weight:700;letter-spacing:-.3px}
+p.lead{font-size:17px;line-height:1.65;color:var(--creamSub);margin:0 0 20px;max-width:60ch}
+p.lead b{color:var(--cream);font-weight:600}
+
+.bullets{list-style:none;margin:0;padding:0;display:grid;gap:11px}
+.bullets li{
+  display:flex;gap:12px;align-items:flex-start;font-size:15.5px;line-height:1.55;
+  background:var(--deck2);border:1px solid var(--deckLine);border-radius:14px;padding:13px 15px
+}
+.bullets li b{color:#fff;font-weight:600}
+.bullets .ic{
+  flex:0 0 auto;width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  background:rgba(212,93,121,.16);color:var(--brand);font-size:14px;font-weight:700
+}
+.bullets li span.txt{color:var(--creamSub)}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:8px}
+.stat{background:var(--deck2);border:1px solid var(--deckLine);border-radius:16px;padding:16px 15px}
+.stat .n{font-size:30px;font-weight:700;color:#fff;line-height:1.05;letter-spacing:-.5px}
+.stat .n small{font-size:15px;font-weight:600;color:var(--creamSub)}
+.stat .l{font-size:12.5px;color:var(--creamSub);margin-top:5px;line-height:1.4}
+.stat.hi .n{color:var(--gold)}
+
+.note{
+  margin-top:18px;font-size:13px;color:var(--creamSub);line-height:1.6;
+  border-inline-start:2px solid var(--brand);padding-inline-start:12px
+}
+.tagrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.tag{font-size:12.5px;color:var(--creamSub);background:#33262C;border:1px solid var(--deckLine);padding:6px 12px;border-radius:999px}
+.tag.b{color:var(--brand);border-color:rgba(212,93,121,.4);background:rgba(212,93,121,.1)}
+
+/* ============ הטלפון ============ */
+.phonewrap{position:sticky;top:0;display:flex;flex-direction:column;align-items:center;gap:12px}
+.phone{
+  width:360px;height:730px;max-height:calc(100vh - 190px);
+  background:#0F0B0D;border-radius:44px;padding:11px;
+  box-shadow:0 26px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.07);
+  flex:0 0 auto
+}
+.screen{
+  width:100%;height:100%;background:var(--appBg);border-radius:34px;overflow:hidden;
+  position:relative;color:var(--ink);display:flex;flex-direction:column
+}
+.notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:24px;background:#0F0B0D;border-radius:0 0 16px 16px;z-index:30}
+.sbar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:8px 20px 2px;font-size:11.5px;color:var(--sub);font-weight:600}
+.app{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding-bottom:74px;scrollbar-width:none}
+.app::-webkit-scrollbar{display:none}
+.tabbar{
+  position:absolute;bottom:0;right:0;left:0;height:62px;background:#fff;border-top:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-around;padding:0 6px 4px;z-index:20;border-radius:0 0 34px 34px
+}
+.tabbar .tb{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;color:var(--faint);font-weight:600}
+.tabbar .tb.on{color:var(--brand)}
+.tabbar .tb .d{width:20px;height:20px;border-radius:7px;background:currentColor;opacity:.9}
+.tabbar .plusbtn{width:46px;height:46px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:400;box-shadow:0 6px 16px rgba(212,93,121,.45);margin-top:-14px}
+
+.phonectl{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:400px}
+.phonectl button{
+  font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:7px 13px;border-radius:999px;
+  background:#33262C;border:1px solid var(--deckLine);color:var(--creamSub);transition:.18s
+}
+.phonectl button:hover{color:#fff;border-color:var(--brand)}
+.phonectl button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+
+/* ---- רכיבי מסך פנימיים ---- */
+.pv{display:none}.pv.on{display:block;animation:fade .3s ease}
+.ptop{background:#fff;border-bottom:1px solid var(--line);padding:11px 15px;display:flex;align-items:center;gap:9px;position:sticky;top:0;z-index:10}
+.ptop h3{margin:0;font-size:15.5px;font-weight:700;flex:1}
+.ptop .back{font-size:13px;color:var(--brandD);background:var(--brandBg);border:1px solid var(--brand);border-radius:999px;padding:4px 11px;font-weight:600}
+.pad{padding:13px 15px}
+.hi{font-size:19px;font-weight:700;margin:2px 0 2px}
+.daystrip{display:flex;gap:6px;padding:11px 13px 4px;overflow:hidden}
+.daystrip .c{flex:0 0 auto;width:46px;border-radius:12px;text-align:center;background:transparent;border:2px solid transparent;padding-bottom:5px}
+.daystrip .c .dow{font-size:12px;color:var(--sub);padding-top:6px}
+.daystrip .c .dt{font-size:15.5px;font-weight:700}
+.daystrip .c .bar{height:4px;margin:4px 6px 0;border-radius:3px;background:var(--line);overflow:hidden;position:relative}
+.daystrip .c .bar>i{position:absolute;inset:0 auto 0 0;right:0;border-radius:3px;background:#D81B7A}
+.daystrip .c.sel{background:var(--brand);color:#fff}
+.daystrip .c.sel .dow{color:rgba(255,255,255,.85)}
+.daystrip .c.sel .bar{background:rgba(255,255,255,.35)}
+.daystrip .c.sel .bar>i{background:#fff}
+.daystrip .c.today{background:var(--brandBg);border-color:var(--brand)}
+
+.rings{display:grid;grid-template-columns:1fr 1fr;justify-items:center;gap:8px;padding:6px 14px 2px}
+.ringbox{position:relative;width:118px;height:118px}
+.ringbox svg{transform:rotate(-90deg);display:block}
+.ringtxt{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;line-height:1.1}
+.ringtxt .v{font-size:23px;font-weight:700}
+.ringtxt .u{font-size:10.5px;color:var(--sub);margin-top:2px}
+.ringtxt .lab{font-size:11.5px;font-weight:600;color:var(--sub);margin-top:3px}
+.ringplus{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:27px;height:27px;border-radius:50%;border:2px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px 14px;margin:10px 14px}
+.card h4{margin:0 0 3px;font-size:14.5px;font-weight:700}
+.card p{margin:0;font-size:12.5px;color:var(--sub);line-height:1.5}
+.card.brandy{background:linear-gradient(135deg,#D45D79,#A8425C);border:0;color:#fff;box-shadow:0 6px 16px rgba(168,66,92,.28)}
+.card.brandy p{color:rgba(255,255,255,.92)}
+.pbar{height:6px;background:rgba(255,255,255,.3);border-radius:4px;overflow:hidden;margin-top:9px}
+.pbar>i{display:block;height:6px;background:#fff;border-radius:4px}
+.pbar.lite{background:var(--line)}.pbar.lite>i{background:var(--brand)}
+
+.task{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid #F6EEF0;font-size:13.5px}
+.task:last-child{border-bottom:0}
+.task .box{width:21px;height:21px;border-radius:7px;border:2px solid var(--line);flex:0 0 auto}
+.task.done .box{background:var(--brand);border-color:var(--brand);position:relative}
+.task.done .box::after{content:"";position:absolute;inset:0;background:no-repeat center/11px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>")}
+.task .g{margin-inline-start:auto;font-size:11px;color:var(--faint);background:var(--appBg);border-radius:999px;padding:2px 9px}
+.task.auto .g{color:var(--brandD);background:var(--brandBg)}
+
+.bub{max-width:82%;padding:10px 13px;border-radius:16px;font-size:13.5px;line-height:1.55;margin-bottom:9px}
+.bub.me{background:var(--brand);color:#fff;margin-inline-start:auto;border-bottom-right-radius:5px}
+.bub.ai{background:#fff;border:1px solid var(--line);border-bottom-left-radius:5px}
+.foodline{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--line)}
+.foodline:last-child{border-bottom:0}
+.foodline .k{margin-inline-start:auto;font-weight:700;color:var(--brandD);white-space:nowrap}
+.warn{background:var(--amberBg);border:1px solid rgba(199,122,60,.3);color:#7A4A1E;border-radius:12px;padding:9px 11px;font-size:11.5px;line-height:1.5;margin:10px 14px}
+
+.opt{background:#fff;border:1px solid var(--line);border-radius:15px;padding:12px 13px;margin-bottom:9px}
+.opt .num{font-size:11px;font-weight:700;color:var(--brandD);background:var(--brandBg);border-radius:999px;padding:2px 10px;display:inline-block;margin-bottom:6px}
+.opt h5{margin:0 0 4px;font-size:14px;font-weight:700}
+.opt p{margin:0 0 8px;font-size:12.5px;color:var(--sub);line-height:1.5}
+.opt .meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
+.opt .meta span{font-size:11px;background:var(--appBg);border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--sub)}
+.btn{display:block;width:100%;text-align:center;background:var(--brand);color:#fff;border-radius:11px;padding:9px;font-size:13px;font-weight:700}
+.btn.ghost{background:var(--brandBg);color:var(--brandD);border:1px solid var(--brand)}
+
+.lessonrow{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #F6EEF0}
+.lessonrow:last-child{border-bottom:0}
+.lessonrow .th{width:40px;height:40px;border-radius:11px;background:var(--brandBg);color:var(--brandD);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.lessonrow .tt b{display:block;font-size:13.5px;line-height:1.35}
+.lessonrow .tt span{font-size:11.5px;color:var(--sub)}
+.weekpills{display:flex;gap:6px;overflow:hidden;padding:2px 14px 8px}
+.weekpills span{flex:0 0 auto;font-size:12.5px;font-weight:600;color:var(--sub);border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:5px 13px}
+.weekpills span.on{background:var(--brand);border-color:var(--brand);color:#fff}
+
+.medal{width:78px;height:78px;margin:4px auto 8px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:34px;
+  background:radial-gradient(circle at 35% 30%,#F6DCA6,#D9A44E 60%,#B5822F);box-shadow:0 6px 16px rgba(181,130,47,.35)}
+.sumrow{display:flex;align-items:center;gap:9px;font-size:13px;padding:8px 0;border-bottom:1px solid #F6EEF0}
+.sumrow:last-child{border-bottom:0}
+.sumrow .val{margin-inline-start:auto;font-weight:700}
+
+.friend{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid #F6EEF0}
+.friend:last-child{border-bottom:0}
+.av{width:40px;height:40px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px}
+.friend .tt b{display:block;font-size:14px}
+.friend .tt span{font-size:11.5px;color:var(--sub)}
+.friend .act{margin-inline-start:auto;font-size:11.5px;font-weight:700;color:var(--brandD);background:var(--brandBg);border:1px solid var(--brand);border-radius:999px;padding:5px 11px;white-space:nowrap}
+.friend .act.wait{color:var(--sub);background:var(--appBg);border-color:var(--line)}
+.goalbox{background:linear-gradient(135deg,#7E8DD6,#5C6BB8);color:#fff;border-radius:16px;padding:14px;margin:10px 14px;box-shadow:0 6px 16px rgba(92,107,184,.3)}
+.goalbox .n{font-size:26px;font-weight:700;letter-spacing:-.5px}
+.goalbox .s{font-size:12px;opacity:.92;line-height:1.5}
+
+.soon{order:-1;font-size:11.5px;font-weight:700;color:#fff;background:var(--macroP);border-radius:999px;padding:5px 14px;box-shadow:0 3px 10px rgba(126,79,181,.4)}
+
+/* ============ סקירת מפת דרכים ============ */
+.road{display:grid;gap:12px}
+.road .item{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;background:var(--deck2);border:1px solid var(--deckLine);border-radius:16px;padding:15px 16px}
+.road .ph{font-size:11.5px;font-weight:700;color:#fff;background:var(--brand);border-radius:999px;padding:4px 12px;white-space:nowrap}
+.road .ph.n2{background:var(--macroP)}.road .ph.n3{background:#5C6BB8}
+.road .item b{display:block;font-size:15px;margin-bottom:3px}
+.road .item span{font-size:13.5px;color:var(--creamSub);line-height:1.55}
+
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:13px}
+.tile{background:var(--deck2);border:1px solid var(--deckLine);border-radius:16px;padding:16px}
+.tile .h{font-size:14.5px;font-weight:700;margin-bottom:6px;color:#fff;display:flex;align-items:center;gap:8px}
+.tile .h i{width:9px;height:9px;border-radius:50%;background:var(--brand);display:block;flex:0 0 auto}
+.tile p{margin:0;font-size:13px;line-height:1.55;color:var(--creamSub)}
+
+.cover{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:calc(100vh - 190px);gap:6px}
+.cover img.logo{width:96px;height:96px;border-radius:26px;box-shadow:0 16px 40px rgba(0,0,0,.5);margin-bottom:18px}
+.covername{font-size:clamp(26px,3.4vw,40px);font-weight:700;letter-spacing:-.3px;margin-bottom:14px;color:#fff}
+.cover h1.big{font-size:clamp(22px,2.6vw,33px);max-width:33ch;margin-inline:auto;line-height:1.3;text-wrap:balance}
+.cover .sub{font-size:19px;color:var(--creamSub);max-width:56ch;line-height:1.6;margin:0 0 26px}
+.cover .stats{max-width:840px;width:100%}
+.hint{margin-top:26px;font-size:12.5px;color:#8A757C}
+
+@media (max-width:1000px){
+  .split{grid-template-columns:1fr;gap:26px}
+  .phonewrap{position:static;order:-1}
+  .phone{width:328px;height:660px;max-height:none}
+  .slide{padding:22px 18px 40px}
+  .navdots{max-width:100%}
+}
+@media (max-width:760px){
+  .topbar{flex-wrap:wrap;padding:10px 14px;gap:9px}
+  .navdots{order:3;width:100%;max-width:100%}
+  h1.big{font-size:29px}
+  .phone{width:300px;height:620px;padding:9px}
+  .screen{border-radius:28px}
+  .tabbar{border-radius:0 0 28px 28px}
+  .cover{min-height:auto;padding:20px 0}
+}
+</style>
+</head>
+<body>
+
+<div class="deck">
+  <div class="topbar">
+    <div class="brandmark">
+      <img src="icon-192.png" alt="" onerror="this.style.display='none'">
+      <span>מיי פריים 360</span>
+      <span class="ver">v4.53</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="navdots" id="navdots"></div>
+    <div class="arrows">
+      <button id="prev" title="הקודם">›</button>
+      <button id="next" title="הבא">‹</button>
+    </div>
+  </div>
+  <div class="progline"><i id="progline" style="width:9%"></i></div>
+
+  <div class="stage" id="stage">
+
+    <!-- ========== 1 ========== -->
+    <section class="slide on" data-title="פתיחה">
+      <div class="wrap cover">
+        <img class="logo" src="icon-192.png" alt="" onerror="this.style.display='none'">
+        <div class="covername">מיי פריים 360</div>
+        <h1 class="big">האפליקציה שהופכת תוכנית ליווי של 10 שבועות להרגלים יומיומיים ולשינוי אמיתי באיכות החיים של נשים בגיל המעבר.</h1>
+        <p class="sub">תוכן, מעקב יומי ובינה מלאכותית במקום אחד.</p>
+        <div class="stats">
+          <div class="stat"><div class="n">60</div><div class="l">ימי תוכן מובנים</div></div>
+          <div class="stat"><div class="n">94</div><div class="l">שיעורים</div></div>
+          <div class="stat"><div class="n">88</div><div class="l">סרטוני וידאו</div></div>
+          <div class="stat hi"><div class="n">22</div><div class="l">משימות מעקב שנפתחות בהדרגה</div></div>
+        </div>
+        <div class="hint">חצים במקלדת או לחיצה על התפריט למעלה כדי לעבור בין שקפים</div>
+      </div>
+    </section>
+
+    <!-- ========== 2 ========== -->
+    <section class="slide" data-title="הבעיה">
+      <div class="wrap split">
+        <div>
+          <div class="eyebrow">למה זה קיים</div>
+          <h2 class="t">התוכן לבד לא מספיק. ההתמדה היא המוצר.</h2>
+          <p class="lead">נשים בגיל המעבר מקבלות היום חוברות PDF, קבוצות וואטסאפ וסרטונים מפוזרים. <b>אחרי שבועיים רובן נושרות</b>, לא בגלל התוכן אלא בגלל שאין דבר אחד שמחזיק אותן יום אחרי יום.</p>
+          <ul class="bullets">
+            <li><span class="ic">1</span><span class="txt">התוכן מפוזר בין וואטסאפ, מיילים וקבצים. <b>אין מקום אחד</b>.</span></li>
+            <li><span class="ic">2</span><span class="txt">מעקב תזונה קיים לא מדבר עברית ולא מבין <b>מנה ישראלית</b>.</span></li>
+            <li><span class="ic">3</span><span class="txt">אין שום דבר שמזכיר, מודד, ומראה לה <b>שהיא בעצם מתקדמת</b>.</span></li>
+            <li><span class="ic">4</span><span class="txt">הקהל הזה נרתע מכל חיכוך טכני. <b>כל מסך מיותר הוא נטישה</b>.</span></li>
+          </ul>
+          <div class="note">התובנה שהובילה לכל התכנון: מה שמחזיק את האישה בתוכנית זה לא כמות המידע, אלא כמה קל לה להופיע כל יום. כל החלטת מוצר באפליקציה נמדדת בשאלה הזאת.</div>
+        </div>
+        <div class="phonewrap">
+          <div class="phone"><div class="screen"><div class="notch"></div>
+            <div class="sbar"><span>9:41</span><span>100%</span></div>
+            <div class="app">
+              <div class="pad">
+                <div class="hi">היי מיכל 🌸</div>
+                <div style="font-size:12.5px;color:var(--sub)">שבוע 4, יום 3 · יום שלישי</div>
+              </div>
+              <div class="daystrip">
+                <div class="c"><div class="dow">א</div><div class="dt">17</div><div class="bar"><i style="width:100%"></i></div></div>
+                <div class="c"><div class="dow">ב</div><div class="dt">18</div><div class="bar"><i style="width:100%"></i></div></div>
+                <div class="c sel"><div class="dow">ג</div><div class="dt">19</div><div class="bar"><i style="width:62%"></i></div></div>
+                <div class="c"><div class="dow">ד</div><div class="dt">20</div><div class="bar"><i style="width:0"></i></div></div>
+                <div class="c"><div class="dow">ה</div><div class="dt">21</div><div class="bar"><i style="width:0"></i></div></div>
+                <div class="c"><div class="dow">ו</div><div class="dt">22</div><div class="bar"><i style="width:0"></i></div></div>
+              </div>
+              <div class="card brandy">
+                <h4>התכנים שלך היום</h4>
+                <p>שינה ואיכות חיים · 2 שיעורים</p>
+                <div class="pbar"><i style="width:50%"></i></div>
+              </div>
+              <div class="card">
+                <h4>מעקב יומי</h4>
+                <p style="margin-bottom:6px">7 מתוך 11 הושלמו</p>
+                <div class="pbar lite"><i style="width:64%"></i></div>
+              </div>
+              <div class="card" style="text-align:center">
+                <p>הכל במקום אחד. בלי לחפש כלום.</p>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tb on"><span class="d"></span>היום</div>
+              <div class="tb"><span class="d"></span>תוכן</div>
+              <div class="plusbtn">+</div>
+              <div class="tb"><span class="d"></span>מדדים</div>
+              <div class="tb"><span class="d"></span>פרופיל</div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 3 ========== -->
+    <section class="slide" data-title="מסך היום">
+      <div class="wrap split">
+        <div>
+          <div class="eyebrow">הלב של המוצר</div>
+          <h2 class="t">מסך אחד שעונה על השאלה "מה עלי לעשות היום"</h2>
+          <p class="lead">ארבע טבעות, יעדים אישיים שמחושבים מהפרופיל שלה, וכפתור פלוס אחד. <b>אין תפריטים, אין הגדרות, אין ניווט</b>.</p>
+          <ul class="bullets">
+            <li><span class="ic">◔</span><span class="txt"><b>קלוריות</b> לפי יעד אישי, שמתעדכן לפי פעילות וצעדים באותו יום.</span></li>
+            <li><span class="ic">◑</span><span class="txt"><b>חלבון</b>, המדד הקריטי לשמירת מסת שריר בגיל המעבר.</span></li>
+            <li><span class="ic">◕</span><span class="txt"><b>מים</b> בכוסות אישיות, עם המרה פנימית למיליליטרים.</span></li>
+            <li><span class="ic">●</span><span class="txt"><b>צעדים</b> עם יעד מתגלגל שעולה מעצמו בשבועות 2, 4, 6 ו-8.</span></li>
+          </ul>
+          <div class="tagrow">
+            <span class="tag b">פתיחה הדרגתית</span>
+            <span class="tag">יום 1 היכרות</span>
+            <span class="tag">יום 2 צעדים</span>
+            <span class="tag">יום 3 יומן ומעקב</span>
+            <span class="tag">שבוע 3 מים</span>
+          </div>
+          <div class="note">שום פיצ'ר לא נפתח ביום הראשון. האפליקציה נפתחת בקצב התוכנית, כדי שהאישה לא תיפגש עם 22 משימות בבת אחת ותברח.</div>
+        </div>
+        <div class="phonewrap">
+          <div class="phone"><div class="screen"><div class="notch"></div>
+            <div class="sbar"><span>9:41</span><span>100%</span></div>
+            <div class="app">
+              <div class="pad" style="padding-bottom:4px">
+                <div class="hi">היי מיכל 🌸</div>
+                <div style="font-size:12.5px;color:var(--sub)">שבוע 4, יום 3</div>
+              </div>
+              <div class="rings">
+                <div class="ringbox">
+                  <svg width="118" height="118"><circle cx="59" cy="59" r="50" fill="none" stroke="#F1E4E7" stroke-width="11"/><circle cx="59" cy="59" r="50" fill="none" stroke="#D45D79" stroke-width="11" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="104"/></svg>
+                  <div class="ringtxt"><div class="v">742</div><div class="u">נותרו קלוריות</div></div>
+                  <div class="ringplus" style="background:#D45D79">+</div>
+                </div>
+                <div class="ringbox">
+                  <svg width="118" height="118"><circle cx="59" cy="59" r="50" fill="none" stroke="#EBE1F7" stroke-width="11"/><circle cx="59" cy="59" r="50" fill="none" stroke="#7E4FB5" stroke-width="11" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="132"/></svg>
+                  <div class="ringtxt"><div class="v">68</div><div class="u">מתוך 110 ג׳</div><div class="lab">חלבון</div></div>
+                </div>
+                <div class="ringbox">
+                  <svg width="118" height="118"><circle cx="59" cy="59" r="50" fill="none" stroke="#EBEDF8" stroke-width="11"/><circle cx="59" cy="59" r="50" fill="none" stroke="#7E8DD6" stroke-width="11" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="94"/></svg>
+                  <div class="ringtxt"><div class="v">6</div><div class="u">מתוך 8 כוסות</div><div class="lab">מים</div></div>
+                  <div class="ringplus" style="background:#7E8DD6">+</div>
+                </div>
+                <div class="ringbox">
+                  <svg width="118" height="118"><circle cx="59" cy="59" r="50" fill="none" stroke="#FBEEDF" stroke-width="11"/><circle cx="59" cy="59" r="50" fill="none" stroke="#C77A3C" stroke-width="11" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="70"/></svg>
+                  <div class="ringtxt"><div class="v">6,240</div><div class="u">מתוך 8,000</div><div class="lab">צעדים</div></div>
+                  <div class="ringplus" style="background:#C77A3C">+</div>
+                </div>
+              </div>
+              <div class="card brandy" style="margin-top:14px">
+                <h4>התכנים שלך היום</h4>
+                <p>שינה ואיכות חיים · 2 שיעורים</p>
+                <div class="pbar"><i style="width:50%"></i></div>
+              </div>
+              <div class="card">
+                <h4>מעקב יומי · שבוע 4</h4>
+                <div class="task done"><span class="box"></span>צעדים היום<span class="g">אוטומטי</span></div>
+                <div class="task done"><span class="box"></span>מילאתי יומן תזונה<span class="g">אוטומטי</span></div>
+                <div class="task done"><span class="box"></span>שעות שינה</div>
+                <div class="task"><span class="box"></span>בלי מסכים לפני השינה</div>
+                <div class="task"><span class="box"></span>תרגול נשימה</div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tb on"><span class="d"></span>היום</div>
+              <div class="tb"><span class="d"></span>תוכן</div>
+              <div class="plusbtn">+</div>
+              <div class="tb"><span class="d"></span>מדדים</div>
+              <div class="tb"><span class="d"></span>פרופיל</div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 4 ========== -->
+    <section class="slide" data-title="יומן AI">
+      <div class="wrap split">
+        <div>
+          <div class="eyebrow">בינה מלאכותית</div>
+          <h2 class="t">היא כותבת מה אכלה. אנחנו עושים את השאר.</h2>
+          <p class="lead">ארבע דרכים לתעד ארוחה, וכולן מגיעות לאותו יומן: <b>טקסט חופשי בעברית, צילום של הצלחת, סריקת ברקוד, וחיפוש במאגר</b>.</p>
+          <ul class="bullets">
+            <li><span class="ic">✎</span><span class="txt"><b>שיחה בעברית טבעית</b>. "אכלתי סלט עם טונה וחצי אבוקדו" מתפרק לפריטים, כמויות וערכים.</span></li>
+            <li><span class="ic">◎</span><span class="txt"><b>צילום הצלחת</b>. התמונה מוקטנת במכשיר לפני השליחה, כדי לחסוך עלות ורוחב פס.</span></li>
+            <li><span class="ic">▥</span><span class="txt"><b>סורק ברקוד</b> עם שני מנועי סריקה, מחובר למאגר Open Food Facts.</span></li>
+            <li><span class="ic">★</span><span class="txt"><b>מועדפים</b>. כל ארוחה שחוזרת נשמרת ומתועדת בלחיצה אחת בפעם הבאה.</span></li>
+          </ul>
+          <div class="note">כל פנייה עוברת דרך שרת שלנו ולא ישירות מהמכשיר. שם יושבות תקרות השימוש, המטמון, וספירת העלויות. כך שהעלות לכל משתמשת ידועה וחסומה מלמעלה.</div>
+        </div>
+        <div class="phonewrap">
+          <div class="phone"><div class="screen"><div class="notch"></div>
+            <div class="sbar"><span>9:41</span><span>100%</span></div>
+            <div class="ptop"><span class="back">חזרה ›</span><h3>הוספת מזון</h3></div>
+            <div class="app" style="background:var(--appBg)">
+              <div class="pad">
+                <div class="bub me">אכלתי סלט עם טונה, חצי אבוקדו וכף טחינה</div>
+                <div class="bub ai">
+                  <b>מצוין, פירקתי את זה 🌸</b>
+                  <div style="margin-top:8px">
+                    <div class="foodline"><span>סלט ירקות · 150 ג׳</span><span class="k">45 קק״ל</span></div>
+                    <div class="foodline"><span>טונה במים · 80 ג׳</span><span class="k">92 קק״ל</span></div>
+                    <div class="foodline"><span>אבוקדו · חצי יחידה</span><span class="k">160 קק״ל</span></div>
+                    <div class="foodline"><span>טחינה גולמית · כף</span><span class="k">89 קק״ל</span></div>
+                  </div>
+                  <div style="margin-top:9px;font-size:12.5px;color:var(--sub)">סה״כ 386 קק״ל · חלבון 24 ג׳</div>
+                  <div class="btn" style="margin-top:10px">הוסיפי ליומן</div>
+                  <div class="btn ghost" style="margin-top:7px">לשמור למועדפים?</div>
+                </div>
+              </div>
+              <div class="warn">אני מנוע AI ואני עלולה לטעות. כדאי לבדוק את רשימת הרכיבים על האריזה.</div>
+              <div class="pad" style="padding-top:0">
+                <div style="display:flex;gap:7px">
+                  <div class="btn ghost" style="flex:1">📷 צילום</div>
+                  <div class="btn ghost" style="flex:1">▥ ברקוד</div>
+                  <div class="btn ghost" style="flex:1">🔍 חיפוש</div>
+                </div>
+              </div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 5 ========== -->
+    <section class="slide" data-title="מה כדאי לאכול">
+      <div class="wrap split">
+        <div>
+          <div class="eyebrow">בינה מלאכותית</div>
+          <h2 class="t">"מה כדאי לי לאכול עכשיו?"</h2>
+          <p class="lead">היא כותבת מה מתחשק לה ומה יש לה בבית, ומקבלת <b>אופציות ככפתורים</b>, לא פסקה של טקסט. כל אופציה כוללת כמות, קלוריות וחלבון, וכפתור אחד שמוסיף אותה ליומן.</p>
+          <ul class="bullets">
+            <li><span class="ic">◈</span><span class="txt">התשובה <b>מותאמת ליתרת הקלוריות שלה באותו רגע</b>, לא המלצה כללית.</span></li>
+            <li><span class="ic">⚠</span><span class="txt">אלרגיות, רגישויות וסגנון תזונה נשלפים מהפרופיל <b>אוטומטית בכל פנייה</b>.</span></li>
+            <li><span class="ic">↻</span><span class="txt">"אין לי את זה" ו"משהו אחר" מייצרים סבב חדש, <b>וכל האופציות הקודמות נשארות על המסך</b>.</span></li>
+            <li><span class="ic">✓</span><span class="txt">בחירה פותחת אישור עם <b>בחירת מידה מלאה</b>, מנה, כף, כוס, גרמים, והערכים מחושבים מחדש.</span></li>
+          </ul>
+          <div class="note">זה הפיצ'ר שהכי קשה לחקות במוצר מדף, כי הוא מחבר שלושה דברים שרק אנחנו מחזיקים יחד: הפרופיל הרפואי שלה, מה שכבר אכלה היום, והתוכנית שהיא נמצאת בה כרגע.</div>
+        </div>
+        <div class="phonewrap">
+          <div class="phone"><div class="screen"><div class="notch"></div>
+            <div class="sbar"><span>9:41</span><span>100%</span></div>
+            <div class="ptop"><span class="back">חזרה ›</span><h3>מה כדאי לאכול</h3></div>
+            <div class="app">
+              <div class="pad">
+                <div class="bub me">משהו לארוחת ערב, יש לי ביצים, קוטג׳ ועגבניות</div>
+                <div style="font-size:12.5px;color:var(--sub);margin:4px 0 10px">נשארו לך היום 742 קלוריות ו-42 גרם חלבון</div>
+                <div class="opt">
+                  <span class="num">אופציה 1</span>
+                  <h5>חביתת ביצים עם קוטג׳ ועגבניות</h5>
+                  <p>מהיר, עשיר בחלבון ומשביע. מתאים בדיוק ליתרה שלך.</p>
+                  <div class="meta"><span>2 ביצים + 100 ג׳ קוטג׳</span><span>310 קק״ל</span><span>28 ג׳ חלבון</span></div>
+                  <div class="btn">בחרי את זו</div>
+                </div>
+                <div class="opt">
+                  <span class="num">אופציה 2</span>
+                  <h5>סלט עגבניות עם ביצה קשה</h5>
+                  <p>קליל יותר, אם את מעדיפה לסיים את היום בקטן.</p>
+                  <div class="meta"><span>מנה בינונית</span><span>190 קק״ל</span><span>13 ג׳ חלבון</span></div>
+                  <div class="btn">בחרי את זו</div>
+                </div>
+                <div style="display:flex;gap:7px;margin-top:4px">
+                  <div class="btn ghost" style="flex:1">אין לי את זה</div>
+                  <div class="btn ghost" style="flex:1">משהו אחר</div>
+                </div>
+              </div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 6 ========== -->
+    <section class="slide" data-title="מודול התוכן">
+      <div class="wrap split">
+        <div>
+          <div class="eyebrow">התוכן</div>
+          <h2 class="t">10 שבועות, 60 ימים, והכל נפתח בקצב שלה</h2>
+          <p class="lead">מודול התוכן הוא לא ספרייה. הוא <b>מסלול</b>. כל יום מביא את מה שרלוונטי לו, וכל מה שכבר נפתח נשאר זמין לתמיד תחת "כל התוכנית".</p>
+          <div class="stats" style="margin-bottom:18px">
+            <div class="stat"><div class="n">94</div><div class="l">שיעורים</div></div>
+            <div class="stat"><div class="n">88</div><div class="l">סרטונים</div></div>
+            <div class="stat"><div class="n">10</div><div class="l">שבועות מובנים</div></div>
+          </div>
+          <ul class="bullets">
+            <li><span class="ic">▶</span><span class="txt">וידאו מאוחסן ומוגן, <b>עם קישורים חתומים לזמן קצוב</b>. אי אפשר להעביר קישור הלאה.</span></li>
+            <li><span class="ic">☰</span><span class="txt">דפי משימה שהומרו מ-PDF <b>לטקסט חי בתוך האפליקציה</b>, כי הורדת קובץ בטלפון מבריחה משתמשות.</span></li>
+            <li><span class="ic">🔍</span><span class="txt">חיפוש חופשי בכל התוכן, ומועדפים לשיעורים שהיא רוצה לחזור אליהם.</span></li>
+            <li><span class="ic">☑</span><span class="txt">סימון צפייה, אחוזי התקדמות לכל יום ולכל שבוע.</span></li>
+          </ul>
+        </div>
+        <div class="phonewrap">
+          <div class="phone"><div class="screen"><div class="notch"></div>
+            <div class="sbar"><span>9:41</span><span>100%</span></div>
+            <div class="ptop"><span class="back">חזרה ›</span><h3>התוכן שלי</h3></div>
+            <div class="app">
+              <div class="card brandy" style="margin:12px 14px 0">
+                <h4>שבוע 4, יום 3</h4>
+                <p>שינה ואיכות חיים</p>
+                <div class="pbar"><i style="width:50%"></i></div>
+              </div>
+              <div class="card" style="margin-top:10px">
+                <div class="lessonrow"><span class="th">▶</span><span class="tt"><b>למה השינה משתנה בגיל המעבר</b><span>וידאו · 8 דקות · נצפה</span></span></div>
+                <div class="lessonrow"><span class="th">☰</span><span class="tt"><b>דף משימה: שגרת ערב</b><span>שיעור · טקסט</span></span></div>
+              </div>
+              <div class="pad" style="padding-bottom:4px"><b style="font-size:16px">כל התוכנית</b></div>
+              <div class="weekpills">
+                <span>1</span><span>2</span><span>3</span><span class="on">4</span><span>5</span><span>6</span>
+              </div>
+              <div class="card" style="margin-top:0">
+                <div class="lessonrow"><span class="th">▶</span><span class="tt"><b>יום 1 · פתיחת השבוע</b><span>3 שיעורים</span></span></div>
+                <div class="lessonrow"><span class="th">▶</span><span class="tt"><b>יום 2 · תנועה שמתאימה לגוף</b><span>2 שיעורים</span></span></div>
+                <div class="lessonrow"><span class="th">☰</span><span class="tt"><b>יום 3 · שינה ואיכות חיים</b><span>2 שיעורים</span></span></div>
+                <div class="lessonrow"><span class="th">▶</span><span class="tt"><b>יום 4 · נשימה והרגעה</b><span>2 שיעורים</span></span></div>
+              </div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 7 ========== -->
+    <section class="slide" data-title="הרגלים ומדליות">
+      <div class="wrap split">
+        <div>
+          <div class="eyebrow">מנוע ההתמדה</div>
+          <h2 class="t">22 הרגלים שנבנים אחד על השני לאורך 10 שבועות</h2>
+          <p class="lead">בשבוע הראשון יש שתי משימות. בשבוע העשירי יש מעל עשר. <b>אף אישה לא רואה את הרשימה המלאה מראש</b>, ולכן היא לא נבהלת.</p>
+          <ul class="bullets">
+            <li><span class="ic">◧</span><span class="txt"><b>ארבע משימות מסומנות לבד</b>: צעדים, מים, חלבון ומילוי היומן נשלפים מהנתונים שכבר קיימים. פחות עבודה ידנית פירושו יותר התמדה.</span></li>
+            <li><span class="ic">🏅</span><span class="txt"><b>מדליות וגביעים</b>, מטבע שהנשים כבר מכירות מהתוכנית הפיזית והועבר לאפליקציה.</span></li>
+            <li><span class="ic">▤</span><span class="txt"><b>סיכום שבועי</b> שמציין במפורש בכמה ימים היא דיווחה, כדי שהממוצע לא ייקרא כשיפוט.</span></li>
+            <li><span class="ic">🔔</span><span class="txt"><b>תזכורת יומית ב-19:00</b> דרך התראות דחיפה, גם כשהאפליקציה סגורה.</span></li>
+          </ul>
+          <div class="note">הכלל שמנחה את כל הקופי: לעולם לא להניח שהיא נכשלה. אין "שכחת" ואין איקס אדום. יש הזמנה לחזור.</div>
+        </div>
+        <div class="phonewrap">
+          <div class="phone"><div class="screen"><div class="notch"></div>
+            <div class="sbar"><span>9:41</span><span>100%</span></div>
+            <div class="ptop"><span class="back">חזרה ›</span><h3>הסיכום השבועי שלך</h3></div>
+            <div class="app">
+              <div class="card" style="text-align:center;margin-top:14px">
+                <div class="medal">🏅</div>
+                <h4 style="font-size:16px">כל הכבוד, סיימת שבוע 4</h4>
+                <p>דיווחת ב-5 מתוך 6 ימים. זה מצוין 🌸</p>
+              </div>
+              <div class="card">
+                <h4 style="margin-bottom:8px">הממוצעים שלך בימים שדיווחת</h4>
+                <div class="sumrow"><span>צעדים</span><span class="val">7,840</span></div>
+                <div class="sumrow"><span>מים</span><span class="val">1.9 ליטר</span></div>
+                <div class="sumrow"><span>חלבון</span><span class="val">96 ג׳</span></div>
+                <div class="sumrow"><span>שעות שינה</span><span class="val">6.4</span></div>
+                <div class="sumrow"><span>אימוני כוח</span><span class="val">3</span></div>
+              </div>
+              <div class="card">
+                <h4 style="margin-bottom:8px">האוסף שלך</h4>
+                <div style="display:flex;gap:10px;font-size:30px;justify-content:center;padding:4px 0">
+                  <span>🏅</span><span>🏅</span><span>🏅</span><span>🏆</span>
+                </div>
+                <p style="text-align:center;margin-top:6px">3 מדליות וגביע אחד</p>
+              </div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 8 ========== -->
+    <section class="slide" data-title="שיתופיות">
+      <div class="wrap split">
+        <div>
+          <div class="eyebrow gold">הצעד הבא · בפיתוח</div>
+          <h2 class="t">שיתופיות: ההתמדה מפסיקה להיות אישית</h2>
+          <p class="lead">הנשים כבר יושבות בקבוצות וואטסאפ של 17 עד 24 משתתפות. <b>אנחנו מעבירים את הכוח הזה פנימה</b>, בשתי שכבות שמשלימות זו את זו.</p>
+          <ul class="bullets">
+            <li><span class="ic">♥</span><span class="txt"><b>שותפות אישיות.</b> היא בוחרת מרשימת הקבוצה שלה בלבד, השנייה מאשרת, ומשם שתיהן רואות את היומי אחת של השנייה ויכולות לשלוח חיזוק בלחיצה.</span></li>
+            <li><span class="ic">◈</span><span class="txt"><b>מדד קבוצתי אנונימי.</b> סכומים שאף אחת לא יכולה להגיע אליהם לבד, ולכן כל תרומה נבלעת פנימה ואף אחת לא מרגישה קטנה.</span></li>
+            <li><span class="ic">✓</span><span class="txt"><b>רק התנהגויות נחשפות</b>: צעדים, השלמת יום, מדליות. לעולם לא משקל, לא היקפים, לא יומן אוכל ולא שיחות AI.</span></li>
+            <li><span class="ic">✕</span><span class="txt"><b>אין כפתור דחייה ואין דיווח על כישלון.</b> הזמנה שלא אושרה פגה בשקט. חברה שלא מילאה מסומנת "עוד לא היום", בצבע ניטרלי.</span></li>
+          </ul>
+          <div class="note">העלות של השכבה הזאת נמוכה בהרבה ממה שהיא נראית: היא נשענת בדיוק על אותה תשתית שכבר נבנתה להתראות ולזיהוי המשתמשת, ואינה דורשת שמירת נתונים אישיים בשרת.</div>
+        </div>
+        <div class="phonewrap">
+          <div class="soon">בפיתוח</div>
+          <div class="phone">
+            <div class="screen"><div class="notch"></div>
+            <div class="sbar"><span>9:41</span><span>100%</span></div>
+            <div class="ptop"><span class="back">חזרה ›</span><h3>החברות שלי</h3></div>
+            <div class="app">
+              <div class="card">
+                <h4 style="margin-bottom:2px">השותפות שלך</h4>
+                <p style="margin-bottom:6px">רואות את היומי אחת של השנייה</p>
+                <div class="friend"><span class="av" style="background:#D45D79">ר</span><span class="tt"><b>רונית</b><span>השלימה את היום · 9,120 צעדים</span></span><span class="act">שלחי חיזוק</span></div>
+                <div class="friend"><span class="av" style="background:#7E4FB5">ש</span><span class="tt"><b>שרית</b><span>עוד לא היום · 3,400 צעדים</span></span><span class="act">שלחי חיזוק</span></div>
+                <div class="friend"><span class="av" style="background:#7E8DD6">ד</span><span class="tt"><b>דנה</b><span>ממתינה לאישור</span></span><span class="act wait">ממתינה</span></div>
+              </div>
+              <div class="card">
+                <h4 style="margin-bottom:2px">הקבוצה שלך</h4>
+                <p style="margin-bottom:4px">בחרי מי שתרצי, כל אחת מאשרת בעצמה</p>
+                <div class="friend"><span class="av" style="background:#C77A3C">מ</span><span class="tt"><b>מיכל</b><span>קבוצה 3</span></span><span class="act">הזמיני</span></div>
+                <div class="friend"><span class="av" style="background:#9C6BA6">א</span><span class="tt"><b>אורלי</b><span>קבוצה 3</span></span><span class="act">הזמיני</span></div>
+                <div class="friend"><span class="av" style="background:#5C6BB8">ט</span><span class="tt"><b>טליה</b><span>קבוצה 3</span></span><span class="act">הזמיני</span></div>
+              </div>
+              <div class="warn" style="background:var(--infoBg);border-color:rgba(156,107,166,.3);color:#5E3C66">
+                החברות שלך רואות רק אם השלמת את היום, כמה צעדים צעדת, ואילו מדליות אספת. המשקל, ההיקפים ויומן האוכל נשארים אצלך בלבד.
+              </div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 9 ========== -->
+    <section class="slide" data-title="מדד קבוצתי">
+      <div class="wrap split">
+        <div>
+          <div class="eyebrow gold">הצעד הבא · בפיתוח</div>
+          <h2 class="t">"נשארו לנו 40,000 צעדים כדי להשלים מיליון כקבוצה"</h2>
+          <p class="lead">המנגנון החזק ביותר הוא לא לדווח מה היה, אלא <b>להציב יעד משותף</b>. זה הופך את הקבוצה משופטת לשותפה, וגורם דווקא למי שמפגרת להצטרף במקום להתחבא.</p>
+          <ul class="bullets">
+            <li><span class="ic">Σ</span><span class="txt"><b>סכום, לעולם לא דירוג.</b> אסור "12 מתוך 20 השלימו". זה מייצר מפסידות.</span></li>
+            <li><span class="ic">◉</span><span class="txt"><b>מודדים השתתפות, לא הישג.</b> להופיע זה מה שבשליטתה. הירידה במשקל היא לא.</span></li>
+            <li><span class="ic">↑</span><span class="txt"><b>לעולם לא מדווחים על ירידה.</b> יום פחות טוב פשוט לא מדווח, כי זה נקרא כהאשמה.</span></li>
+            <li><span class="ic">🔒</span><span class="txt"><b>מונים בלבד, לא רשומות.</b> שום נתון אישי לא עוזב את המכשיר. זו השכבה הכי נקייה מבחינת פרטיות בכל המוצר.</span></li>
+          </ul>
+          <div class="note">משקל והיקפים לעולם לא יופיעו בהודעה קבוצתית. הם המספרים הכי טעונים בבושה בקהל הזה, והיא לא שולטת בהם ישירות. רק התנהגויות: צעדים, מים, אימונים, מילוי יומן.</div>
+        </div>
+        <div class="phonewrap">
+          <div class="soon">בפיתוח</div>
+          <div class="phone">
+            <div class="screen"><div class="notch"></div>
+            <div class="sbar"><span>9:41</span><span>100%</span></div>
+            <div class="ptop"><span class="back">חזרה ›</span><h3>הקבוצה שלי</h3></div>
+            <div class="app">
+              <div class="goalbox">
+                <div class="s">היעד הקבוצתי שלנו</div>
+                <div class="n">960,000</div>
+                <div class="s">מתוך מיליון צעדים</div>
+                <div class="pbar" style="margin-top:10px"><i style="width:96%"></i></div>
+                <div class="s" style="margin-top:8px"><b>נשארו לנו 40,000 צעדים.</b> כל צעד שלך נספר.</div>
+              </div>
+              <div class="card">
+                <h4 style="margin-bottom:8px">מה עשינו יחד השבוע</h4>
+                <div class="sumrow"><span>🚶 צעדנו יחד</span><span class="val">640,000</span></div>
+                <div class="sumrow"><span>💧 שתינו יחד</span><span class="val">84 ליטר</span></div>
+                <div class="sumrow"><span>💪 אימוני כוח</span><span class="val">38</span></div>
+                <div class="sumrow"><span>🥗 צבעים של ירקות</span><span class="val">214</span></div>
+                <div class="sumrow"><span>📓 ימי יומן</span><span class="val">96</span></div>
+              </div>
+              <div class="card brandy">
+                <h4>640,000 צעדים</h4>
+                <p>זה המרחק מאילת עד ראש הנקרה, ועוד קצת. עשינו את זה יחד השבוע 🌸</p>
+              </div>
+              <div class="warn" style="background:var(--infoBg);border-color:rgba(156,107,166,.3);color:#5E3C66">
+                כל המספרים כאן הם סכום של כל הקבוצה. אף אחת לא רואה מה מישהי אחרת עשתה.
+              </div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 10 ========== -->
+    <section class="slide" data-title="טכנולוגיה">
+      <div class="wrap">
+        <div class="eyebrow">מתחת למכסה המנוע</div>
+        <h2 class="t">בנוי לקצב של סטארטאפ, לא של פרויקט</h2>
+        <p class="lead">האפליקציה עלתה לאוויר, עודכנה עשרות פעמים תוך שבועות ספורים, ורצה היום בפיילוט. <b>אין כאן חוב טכני של שנים</b>.</p>
+        <div class="grid3" style="margin-bottom:16px">
+          <div class="tile"><div class="h"><i></i>אפליקציה מתקדמת מבוססת דפדפן</div><p>מותקנת למסך הבית ומרגישה כמו אפליקציה רגילה, בלי מעבר בחנויות. עדכון עולה לכל המשתמשות מיד, בלי לחכות לאישור.</p></div>
+          <div class="tile"><div class="h"><i></i>גיבוי מוצפן מקצה לקצה</div><p>הנתונים מוצפנים במכשיר עצמו לפי קוד אישי. השרת מחזיק טקסט מוצפן בלבד. גם אנחנו לא יכולים לקרוא אותם.</p></div>
+          <div class="tile"><div class="h"><i></i>וידאו מוגן</div><p>אחסון וידאו ייעודי עם קישורים חתומים לזמן קצוב, מוגבל גיאוגרפית. אי אפשר לשתף קישור לסרטון החוצה.</p></div>
+          <div class="tile"><div class="h"><i></i>שער גישה חכם</div><p>הגישה נבדקת מול רשימת הנרשמות, כולל חלון גישה אישי ומגבלת שני מכשירים בשיטת החלפה. אף משתמשת לא נתקלת במסך חסימה.</p></div>
+          <div class="tile"><div class="h"><i></i>עלות AI חסומה מלמעלה</div><p>תקרה יומית לכל משתמשת, תקרה לדקה, תקרת תמונות לכל התוכנית, מטמון לתשובות חוזרות והנחיות שמורות. העלות היומית מדווחת אלינו בכל בוקר.</p></div>
+          <div class="tile"><div class="h"><i></i>התראות דחיפה</div><p>תזכורת יומית שמגיעה גם כשהאפליקציה סגורה. זה המנוע שמחזיר את האישה לאפליקציה בלי שנשלם על מדיה.</p></div>
+        </div>
+        <div class="tagrow">
+          <span class="tag b">React</span><span class="tag b">Vercel</span><span class="tag b">Claude API</span>
+          <span class="tag">Upstash Redis</span><span class="tag">Bunny Stream</span><span class="tag">Open Food Facts</span>
+          <span class="tag">Web Push</span><span class="tag">AES-GCM</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 11 ========== -->
+    <section class="slide" data-title="מפת דרכים">
+      <div class="wrap">
+        <div class="eyebrow">לאן זה הולך</div>
+        <h2 class="t">מפת הדרכים</h2>
+        <p class="lead">הפיילוט רץ היום על כ-30 נשים, סביב שבוע 10 מתוך 10. <b>היעד הקרוב הוא 1,300 משתתפות</b>, והתשתית כבר נבנית לקראתו.</p>
+        <div class="road">
+          <div class="item"><span class="ph">עכשיו</span><div><b>שיתופיות, שלב א</b><span>מסך רשימת הקבוצה והזמנה לשותפות, שנפתחת ישירות בוואטסאפ שבו הנשים כבר מדברות. בודק את ההשערה בעשירית מהעבודה, בלי מצב בשרת ובלי סיכון חברתי.</span></div></div>
+          <div class="item"><span class="ph">עכשיו</span><div><b>מדדים קבוצתיים</b><span>מונים בלבד, בלי שום נתון אישי. מייצרים גם את ההודעה הקבוצתית וגם את היעד המשותף.</span></div></div>
+          <div class="item"><span class="ph n2">הבא</span><div><b>שיתופיות מלאה בתוך האפליקציה</b><span>אישור הדדי, מעקב יומי בין שותפות, וכפתור חיזוק ששולח התראה. מבוסס על התשתית של החלק הקודם.</span></div></div>
+          <div class="item"><span class="ph n2">הבא</span><div><b>סנכרון פרופיל בשרת</b><span>היום הנתונים חיים על המכשיר. הסנכרון פותח מעבר בין מכשירים, שחזור מלא, וממשק ניהול. זהו גם התנאי המקדים לעלייה לחנויות.</span></div></div>
+          <div class="item"><span class="ph n3">אחר כך</span><div><b>עלייה לחנויות האפליקציות</b><span>אנדרואיד ראשון, זול ונתמך רשמית, והמניפסט כבר מוכן. אפל אחריו, אחרי תשובה ברורה על שאלת העמלה.</span></div></div>
+          <div class="item"><span class="ph n3">אחר כך</span><div><b>סריקת חשבונית סופר</b><span>כדי שהמערכת תדע מה יש לה בבית בלי שתקליד. התמונה לא נשמרת ונשלפים ממנה שמות מצרכים בלבד.</span></div></div>
+        </div>
+        <div class="stats" style="margin-top:20px">
+          <div class="stat"><div class="n">כ-30</div><div class="l">משתתפות בפיילוט</div></div>
+          <div class="stat hi"><div class="n">1,300</div><div class="l">היעד הקרוב</div></div>
+          <div class="stat"><div class="n">53</div><div class="l">גרסאות ששוחררו</div></div>
+          <div class="stat"><div class="n">70</div><div class="l">ימי ליווי ועוד 3 חודשי גישה</div></div>
+        </div>
+        <div class="note">כל המספרים במצגת נשלפו מהקוד ומהתוכן הקיימים באפליקציה בגרסה 4.53.</div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var nav = document.getElementById('navdots');
+  var prog = document.getElementById('progline');
+  var stage = document.getElementById('stage');
+  var i = 0;
+
+  slides.forEach(function(s, n){
+    var b = document.createElement('button');
+    b.textContent = (n+1) + '. ' + s.getAttribute('data-title');
+    b.addEventListener('click', function(){ go(n); });
+    nav.appendChild(b);
+  });
+  var btns = Array.prototype.slice.call(nav.children);
+
+  function go(n){
+    if (n < 0 || n >= slides.length) return;
+    slides[i].classList.remove('on');
+    btns[i].classList.remove('on');
+    i = n;
+    slides[i].classList.add('on');
+    btns[i].classList.add('on');
+    // חשוב: תמיד מחזירים את אזור הגלילה לראש, אחרת במסך צר התוכן מתחלף מעל נקודת הצפייה
+    slides[i].scrollTop = 0;
+    if (stage.scrollTo) stage.scrollTo(0,0);
+    prog.style.width = Math.round(((i+1)/slides.length)*100) + '%';
+    var b = btns[i];
+    if (b.scrollIntoView) b.scrollIntoView({ block:'nearest', inline:'center', behavior:'smooth' });
+  }
+
+  document.getElementById('next').addEventListener('click', function(){ go(i+1); });
+  document.getElementById('prev').addEventListener('click', function(){ go(i-1); });
+
+  document.addEventListener('keydown', function(e){
+    // מסמך בכיוון ימין לשמאל: חץ שמאל מתקדם קדימה
+    if (e.key === 'ArrowLeft' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(i+1); }
+    if (e.key === 'ArrowRight' || e.key === 'PageUp') { e.preventDefault(); go(i-1); }
+    if (e.key === 'Home') go(0);
+    if (e.key === 'End') go(slides.length-1);
+  });
+
+  // החלקה באצבע בטלפון, רק כשההחלקה אופקית ברורה
+  var sx=0, sy=0, tracking=false;
+  stage.addEventListener('touchstart', function(e){
+    var t=e.touches[0]; sx=t.clientX; sy=t.clientY; tracking=true;
+  }, {passive:true});
+  stage.addEventListener('touchend', function(e){
+    if(!tracking) return; tracking=false;
+    var t=e.changedTouches[0];
+    var dx=t.clientX-sx, dy=t.clientY-sy;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy)*1.6) return;
+    go(dx < 0 ? i+1 : i-1);
+  }, {passive:true});
+
+  btns[0].classList.add('on');
+  go(0);
+})();
+</script>
+</body>
+</html>
