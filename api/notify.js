@@ -1,5 +1,6 @@
 // Daily Web Push, two jobs from one function:
-//   evening (default) - 19:00 Asia/Jerusalem, "did you fill the diary today?", same text for everyone.
+//   evening (default) - 19:00 Asia/Jerusalem, "did you fill the diary today?", same text for
+//     everyone, but silent until her tracker opens on program day 3.
 //   morning (?kind=morning) - 07:00 Asia/Jerusalem, "new content today", and for a woman who
 //     was not in the app yesterday one extra line inviting her to catch up.
 // Triggered by Vercel cron (sends Authorization: Bearer <CRON_SECRET>) OR an external cron (?secret=<NOTIFY_SECRET>).
@@ -35,6 +36,9 @@ function israelDay(offsetDays) {
 }
 
 const PROGRAM_DAYS = 70;
+// The daily tracker opens on program day 3 (CHECKIN_UNLOCK = { week: 1, day: 3 } in
+// src/App.jsx). Before that the card does not exist and there is nothing to fill in.
+const TRACKER_OPENS_ON_DAY = 3;
 
 // Day number within the program, day 1 being her start Sunday.
 function programDayNumber(startDate, onDate) {
@@ -49,6 +53,15 @@ function hasNewContent(startDate, today) {
   const day = programDayNumber(startDate, today);
   if (day < 1 || day > PROGRAM_DAYS) return false;
   return new Date(today).getUTCDay() !== 6; // 6 = Saturday
+}
+
+// Does she have a tracker to fill in tonight? Reported by a participant on week 1 day 2:
+// the evening push asked whether she had filled in her daily report while the tracker had
+// not opened yet, so the question had no answer and no screen behind it. The tracker stays
+// available after day 70, so this only ever guards the opening days.
+function hasTracker(startDate, today) {
+  if (!startDate) return true; // unknown start date: behave as before rather than go silent
+  return programDayNumber(startDate, today) >= TRACKER_OPENS_ON_DAY;
 }
 
 export default async function handler(req, res) {
@@ -134,6 +147,7 @@ export default async function handler(req, res) {
     if (only && (rec.email || "").trim().toLowerCase() !== only) continue;
 
     let payload = eveningPayload;
+    if (!morning && !hasTracker(rec.startDate, today)) { quiet++; continue; }
     if (morning) {
       if (!hasNewContent(rec.startDate, today)) { quiet++; continue; }
       const email = (rec.email || "").trim().toLowerCase();
