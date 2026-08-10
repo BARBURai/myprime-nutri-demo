@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.41";
+const VERSION = "4.42";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4699,7 +4699,7 @@ function DevViewportBar() {
   );
 }
 
-function DevDateBar({ onAnchor, info }) {
+function DevDateBar({ onAnchor }) {
   const setDay = (d) => { try { window.localStorage.setItem("myprime_dev_today", d); } catch (e) {} window.location.reload(); };
   const reset = () => { try { window.localStorage.removeItem("myprime_dev_today"); } catch (e) {} window.location.reload(); };
   const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
@@ -4711,7 +4711,6 @@ function DevDateBar({ onAnchor, info }) {
       <button onClick={() => setDay(addDays(TODAY, 1))} style={btn}>+1</button>
       <button onClick={reset} style={btn}>איפוס</button>
       <button onClick={() => onAnchor && onAnchor()} style={{ ...btn, background: "#0a7" }}>קבע יום 1</button>
-      {info && <div style={{ width: "100%", textAlign: "center", fontFamily: "monospace", fontSize: 11, color: "#8f8", direction: "ltr" }}>{info}</div>}
     </div>
   );
 }
@@ -5724,13 +5723,7 @@ export default function App() {
         @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;height:var(--vvh,100dvh);border-radius:0;box-shadow:none;border:none}}`}</style>
       <div className="phone-frame">
         {showSplash && <SplashScreen />}
-        {DEV && <DevDateBar onAnchor={devAnchorDay1} info={(() => {
-              try {
-                const w = Math.min(programWeekFor(profile.startDate, selectedDate), 10);
-                const d = dowOf(selectedDate);
-                return `start ${profile.startDate || "-"} sel ${selectedDate} wk ${programWeekFor(profile.startDate, selectedDate)}>${w} dow ${d} content ${contentForDay(w, d) ? "YES" : "NO"}`;
-              } catch (e) { return "info error"; }
-            })()} />}
+        {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
         {DEV && <DevViewportBar />}
         {showInstallGate ? (
           <InstallGate onSkip={skipInstall} />
