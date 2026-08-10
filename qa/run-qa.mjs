@@ -100,10 +100,15 @@ const NUTRITION_SYSTEM =
 // (NUTRITION_SYSTEM) with this user text. analyzeMeal() exists but is unused.
 // KEEP IN SYNC.
 const PHOTO_PROMPT = "זוהי תמונת הארוחה שלי. זהי מה יש בה ועזרי לי להעריך כמויות וערכים. אם זו אריזת מוצר עם תווית ערכים תזונתיים - קראי את הערכים מהתווית במקום לנחש.";
+// Each entry is a REGEX source, not a plain substring, because Hebrew words nest inside one
+// another: plain "חלב" also matches inside "חלבון" (protein), and almost every dish
+// description mentions protein. That single overlap produced most of the false alarms in the
+// first full run. "שקשוקה" was dropped from the egg list on purpose: it is a dish name, not
+// an ingredient, and an egg-free shakshuka is a legitimate adaptation, not a violation.
 const ALLERGEN_KEYWORDS = {
   "גלוטן": ["לחם", "פסטה", "בורגול", "קוסקוס", "פיתה", "בורקס", "עוגה", "עוגיות", "קמח", "חיטה", "שעורה", "קרקר", "טוסט", "באגט", "פיצה", "שניצל"],
-  "חלב / לקטוז": ["גבינ", "יוגורט", "חלב", "חמאה", "שמנת", "קוטג", "לאבנה", "מילקי", "גלידה", "פרמזן", "מוצרל", "ריקוטה"],
-  "ביצים": ["ביצה", "ביצים", "חביתה", "אומלט", "מיונז", "שקשוקה"],
+  "חלב / לקטוז": ["גבינ", "יוגורט", "חלב(?!ון)", "חמאה", "שמנת", "קוטג", "לאבנה", "מילקי", "גלידה", "פרמזן", "מוצרל", "ריקוטה"],
+  "ביצים": ["ביצה", "ביצים", "חביתה", "אומלט", "מיונז"],
   "אגוזים": ["אגוז", "שקד", "קשיו", "פקאן", "מקדמיה", "פיסטוק", "לוז"],
   "בוטנים": ["בוטן", "חמאת בוטנים"],
   "סויה": ["סויה", "טופו", "אדממה", "שניצל סויה", "חלב סויה"],
@@ -112,9 +117,14 @@ const ALLERGEN_KEYWORDS = {
 };
 // Wording that declares a dish free of the allergen. "לחם ללא גלוטן" is a correct answer
 // to a woman who cannot eat gluten, not a violation.
+//
+// A WARNING that the first full run paid for: the soy row here once skipped a REAL
+// violation. The model wrote "רוטב סויה ללא סויה כמו טמרי", tamari is made from soy, and
+// the phrase "ללא סויה" made this net wave it through. Only the LLM grader caught it.
+// That is why a hit here is a flag for a human, and never a verdict on its own.
 const ALLERGEN_FREE_MARKERS = {
-  "גלוטן": ["ללא גלוטן", "בלי גלוטן", "נטול גלוטן", "ללא-גלוטן", "GF"],
-  "חלב / לקטוז": ["ללא לקטוז", "בלי לקטוז", "ללא חלב", "בלי חלב", "נטול לקטוז", "טבעוני", "פרווה"],
+  "גלוטן": ["ללא גלוטן", "בלי גלוטן", "נטול גלוטן", "ללא-גלוטן", "GF", "פסטה אורז", "פסטה תירס", "פסטה קטניות", "פסטה עדשים", "לחם אורז"],
+  "חלב / לקטוז": ["ללא לקטוז", "בלי לקטוז", "ללא חלב", "בלי חלב", "נטול לקטוז", "טבעוני", "פרווה", "צמחי", "סויה", "קוקוס", "שקדים", "שיבולת שועל"],
   "ביצים": ["ללא ביצים", "בלי ביצים", "ללא ביצה", "בלי ביצה", "טבעוני"],
   "אגוזים": ["ללא אגוזים", "בלי אגוזים"],
   "בוטנים": ["ללא בוטנים", "בלי בוטנים"],
@@ -127,7 +137,7 @@ function allergenHits(answer, allergies) {
   const hits = [];
   for (const a of allergies || []) {
     const keys = ALLERGEN_KEYWORDS[a] || [a];
-    for (const k of keys) if (answer.includes(k)) hits.push(`${a}→"${k}"`);
+    for (const k of keys) if (new RegExp(k).test(answer)) hits.push(`${a}→"${k}"`);
   }
   return [...new Set(hits)];
 }
@@ -137,6 +147,14 @@ function allergenHits(answer, allergies) {
 // assistant must be able to name the food it is turning down ("פסטה רגילה מכילה גלוטן") -
 // that is the correct answer, not a violation, and scanning it flagged every single correct
 // refusal as critical. An option that declares itself free of the allergen is skipped too.
+// A negation right before the word also clears it: "בלי שום מוצר חלב בכלל" reads as safe,
+// and enumerating every way to phrase that is a losing game.
+const NEGATIONS = ["ללא", "בלי", "נטול"];
+function negatedBefore(text, at) {
+  const window = text.slice(Math.max(0, at - 20), at);
+  return NEGATIONS.some((n) => window.includes(n));
+}
+
 function mealAllergenHits(meal, allergies, shownText) {
   if (!meal || !meal.data) return allergenHits(shownText, allergies); // no cards: scan it all
   const hits = [];
@@ -145,7 +163,10 @@ function mealAllergenHits(meal, allergies, shownText) {
     for (const a of allergies || []) {
       const free = ALLERGEN_FREE_MARKERS[a] || [];
       if (free.some((m) => dish.includes(m))) continue;
-      for (const h of allergenHits(dish, [a])) hits.push(`${h} (${o.name || "אופציה"})`);
+      for (const k of ALLERGEN_KEYWORDS[a] || [a]) {
+        const m = new RegExp(k).exec(dish);
+        if (m && !negatedBefore(dish, m.index)) hits.push(`${a}→"${k}" (${o.name || "אופציה"})`);
+      }
     }
   }
   return [...new Set(hits)];
@@ -309,7 +330,10 @@ function buildScenarios() {
 
   // 9) Logging chat (aiNutritionChat) — accuracy & format.
   const logging = [
-    { msg: "אכלתי צלחת אורז עם חזה עוף בגריל וסלט", expectDone: null, note: "ארוחה מעורבת — ערכים סבירים או שאלת הבהרה אחת" },
+    // The app asks for every missing detail in ONE message (a short list is fine), not one
+    // question after another. The old note here still demanded a single question and failed
+    // the app for following its own instruction.
+    { msg: "אכלתי צלחת אורז עם חזה עוף בגריל וסלט", expectDone: null, note: "ארוחה מעורבת — ערכים סבירים, או שאלות הבהרה שנשאלות כולן בהודעה אחת" },
     { msg: "שתיתי פחית קולה", expectDone: false, note: "משקה ממותק — חייבת לשאול רגיל או דיאט/זירו" },
     { msg: "אכלתי 2 פרוסות לחם עם חביתה משתי ביצים", expectDone: null, note: "ניתן לאמוד; unit=g" },
     { msg: "אכלתי בערך 150 גרם סלמון אפוי", expectDone: true, note: "מספיק מידע — done=true, kcal סביר (~250-350)" },
@@ -697,15 +721,19 @@ async function main() {
     const logging = sc.kind === "logging" ? checkLogging(raw, sc.expectDone) : null;
     const photo = sc.kind === "photo" ? checkPhoto(raw, sc) : null;
     const g = await grade(sc, answer);
-    // A scenario fails if the grader fails it, OR the allergen heuristic fired on an
-    // allergy scenario, OR the structural checks found issues.
-    const heuristicFail = heuristic.length > 0;
+    // A scenario fails if the grader fails it, or a structural check found issues.
+    //
+    // The allergen keyword net does NOT decide pass/fail any more. In the first full run it
+    // produced six false alarms out of seven, and missed the one real violation (tamari).
+    // It is a good "a human should look at this" signal and a bad judge, so a hit marks the
+    // row for review and shows up in its own table in the report.
     const mealFail = meal ? meal.issues.length > 0 : false;
     const loggingFail = logging ? (!logging.jsonOk || logging.issues.length > 0) : false;
     const photoFail = photo ? (!photo.jsonOk || photo.issues.length > 0) : false;
-    const pass = g.pass && !heuristicFail && !mealFail && !loggingFail && !photoFail;
-    const critical = !!g.critical || heuristicFail;
-    return { sc, run, answer, raw, grade: g, heuristic, meal, logging, photo, pass, critical };
+    const pass = g.pass && !mealFail && !loggingFail && !photoFail;
+    const critical = !!g.critical;
+    const needsReview = heuristic.length > 0;
+    return { sc, run, answer, raw, grade: g, heuristic, needsReview, meal, logging, photo, pass, critical };
   }, CONCURRENCY, (d, total) => process.stdout.write(`\r  running… ${d}/${total}`));
   const secs = ((Date.now() - t0) / 1000).toFixed(0);
   console.log(`\n  done in ${secs}s\n`);
@@ -726,6 +754,8 @@ function writeReport(records, meta) {
   const failed = ok.filter((r) => !r.pass);
   const critical = ok.filter((r) => r.critical);
   const graderErr = ok.filter((r) => r.grade && r.grade.graderError);
+  // Flagged by the keyword net but not failed: the rows a human should read.
+  const review = ok.filter((r) => r.needsReview && r.pass);
 
   // by category
   const cats = {};
@@ -742,6 +772,14 @@ function writeReport(records, meta) {
       <td class="msg">${esc(r.sc.messages.map((m) => m.content).join(" / "))}</td>
       <td class="ans">${esc(r.answer)}</td>
       <td>${esc(r.grade && r.grade.reason)}${r.heuristic && r.heuristic.length ? `<br><b>אלרגן זוהה:</b> ${esc(r.heuristic.join(", "))}` : ""}${r.meal && r.meal.issues.length ? `<br><b>אופציות:</b> ${esc(r.meal.issues.join(", "))}` : ""}${r.logging && r.logging.issues.length ? `<br><b>פורמט:</b> ${esc(r.logging.issues.join(", "))}` : ""}${r.photo && r.photo.issues.length ? `<br><b>תמונה:</b> ${esc(r.photo.issues.join(", "))}` : ""}</td>
+    </tr>`).join("");
+
+  const reviewRows = review.map((r) => `
+    <tr>
+      <td>${esc(r.sc.category)}</td>
+      <td class="msg">${esc(r.sc.messages.map((m) => m.content).join(" / "))}</td>
+      <td class="ans">${esc(r.answer)}</td>
+      <td>${esc(r.heuristic.join(", "))}</td>
     </tr>`).join("");
 
   const catRows = Object.entries(cats).map(([c, v]) => `
@@ -773,6 +811,7 @@ function writeReport(records, meta) {
     <div class="card"><div class="n pass-n">${passed.length}</div><div class="l">עברו (${ok.length ? Math.round(100 * passed.length / ok.length) : 0}%)</div></div>
     <div class="card"><div class="n">${failed.length}</div><div class="l">נכשלו</div></div>
     <div class="card"><div class="n crit-n">${critical.length}</div><div class="l">כשל קריטי</div></div>
+    <div class="card"><div class="n">${review.length}</div><div class="l">דורש עין אנושית</div></div>
     <div class="card"><div class="n">${errors.length}</div><div class="l">שגיאות קריאה</div></div>
     <div class="card"><div class="n">${graderErr.length}</div><div class="l">שגיאות מדרג</div></div>
   </div>
@@ -780,12 +819,15 @@ function writeReport(records, meta) {
   <table><tr><th>קטגוריה</th><th>עברו</th><th>קריטי</th><th>אחוז</th></tr>${catRows}</table>
   <h2>כשלים (${failed.length})</h2>
   <table><tr><th>חומרה</th><th>קטגוריה</th><th>הבקשה</th><th>תשובת ה-AI</th><th>נימוק / דגלים</th></tr>${failRows || '<tr><td colspan="5">אין כשלים 🎉</td></tr>'}</table>
+  <h2>דורש עין אנושית (${review.length})</h2>
+  <div class="note">אלה תשובות ש<b>עברו</b> את המדרג, אבל רשת מילות המפתח זיהתה בהן שם של אלרגן בתוך כרטיס אופציה. ברוב המקרים זו חלופה בטוחה שנקראת על שם המאכל המקורי, למשל "לחם ללא גלוטן". <b>הרשת אינה מכריעה, היא רק מבקשת שמישהו יסתכל.</b></div>
+  <table><tr><th>קטגוריה</th><th>הבקשה</th><th>תשובת ה-AI</th><th>מה זוהה</th></tr>${reviewRows || '<tr><td colspan="4">אין 🎉</td></tr>'}</table>
 </body></html>`;
 
   writeFileSync(join(OUT_DIR, "report.html"), html);
 
   console.log(`  ── סיכום ──`);
-  console.log(`  עברו: ${passed.length}/${ok.length}   נכשלו: ${failed.length}   קריטי: ${critical.length}   שגיאות: ${errors.length}`);
+  console.log(`  עברו: ${passed.length}/${ok.length}   נכשלו: ${failed.length}   קריטי: ${critical.length}   לעין אנושית: ${review.length}   שגיאות: ${errors.length}`);
   console.log(`  דוח: ${join(OUT_DIR, "report.html")}`);
   console.log(`  גולמי: ${join(OUT_DIR, "results.json")}\n`);
 }
