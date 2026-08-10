@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.45";
+const VERSION = "4.46";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2143,6 +2143,27 @@ function extractAiJson(text) {
   return null;
 }
 
+// The recommender's answer, salvaged. A cut-off answer is still worth showing: take the
+// intro and every option object that did close, instead of dropping the whole round.
+// Returns null when nothing usable came back - never the raw text, which is how JSON
+// ended up on screen in v4.45.
+function parseMealOptions(text) {
+  const p = extractAiJson(text);
+  if (p && Array.isArray(p.options) && p.options.length) return p;
+  const t = (text || "").replace(/```json|```/g, "");
+  const str = (key) => {
+    const m = t.match(new RegExp('"' + key + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'));
+    if (!m) return "";
+    try { return JSON.parse('"' + m[1] + '"'); } catch (e) { return m[1]; }
+  };
+  const options = [];
+  const re = /\{[^{}]*"name"\s*:[^{}]*\}/g;
+  let m;
+  while ((m = re.exec(t))) { try { options.push(JSON.parse(m[0])); } catch (e) {} }
+  if (!options.length) return null;
+  return { intro: str("intro"), options, note: str("note") };
+}
+
 // Gentle photo-budget nudges (the HARD 70 cap is enforced server-side in api/ai.js).
 const PHOTO_HEADSUP_MSG = "הערה קטנה ממני אלייך 💜 שימי לב שכמות התמונות שניתן להעלות במהלך תוכנית הליווי מוגבלת ל-70 תמונות. לאחר מכן תמיד אפשר לתאר לי בטקסט מה אכלת.";
 const PHOTO_END_MSG = "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים.";
@@ -2230,10 +2251,14 @@ async function aiMealChat(messages, ctx) {
     '{"intro":"משפט פתיחה קצר בקול שלך","options":[{"name":"שם קצר של המנה","desc":"תיאור קצר: איך מכינים ומה שמים","unit":"g","grams":250,"kcal":320,"p":28,"f":10,"c":20}],"note":"שאלה עדינה או הערה קצרה בסוף"}. ' +
     "2 עד 3 אופציות. grams הוא משקל המנה כולה, ו-kcal/p/f/c הם הערכים לאותה כמות. " +
     "עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור משקאות ומרקים unit=\"ml\" ו-grams הוא הכמות במ\"ל. " +
+    "intro, desc ו-note קצרים: משפט אחד כל אחד. " +
     "אל תשתמשי בכוכביות, בקווים מפרידים או בכל סימון עיצוב בתוך הטקסט.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 700, system, messages }),
+    // JSON in Hebrew is token-hungry: at 700 the answer was cut off mid-object, the parse
+    // failed, and the raw JSON landed on her screen. The ceiling is not what we pay for,
+    // only the tokens actually produced, so there is no reason to keep it tight.
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1600, system, messages }),
   });
   const data = await res.json();
   if (res.status === 429 || data.error === "limit") return { error: true, text: "", limit: true, message: data.message || "" };
@@ -3698,6 +3723,9 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
+  // A cut-off / unreadable answer is a different failure from a dead connection, and the
+  // connection message points at Vercel, which means nothing to her.
+  const [badAnswer, setBadAnswer] = useState(false);
   const [pending, setPending] = useState(null);
   const [logMsgs, setLogMsgs] = useState([]);
   const [logInput, setLogInput] = useState("");
@@ -3743,16 +3771,14 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const avoidAll = [...allergies, ...customSens].filter(Boolean);
 
   const run = async (history) => {
-    setLoading(true); setErr(false);
+    setLoading(true); setErr(false); setBadAnswer(false);
     const r = await aiMealChat(history, ctx);
     setLoading(false);
     if (r.error || !r.text) { setErr(true); return; }
     setMsgs([...history, { role: "assistant", content: r.text }]);
-    // A malformed answer must not blank the screen: fall back to showing the raw text.
-    const parsed = extractAiJson(r.text);
-    const data = parsed && Array.isArray(parsed.options) && parsed.options.length
-      ? parsed
-      : { intro: r.text, options: [], note: "" };
+    // An unreadable answer must never be printed as-is: it is JSON, and she saw it once.
+    const data = parseMealOptions(r.text);
+    if (!data) { setBadAnswer(true); return; }
     const lastUser = [...history].reverse().find((m) => m.role === "user");
     setReplies((rs) => [...rs, { ask: rs.length ? (lastUser ? lastUser.content : "") : "", data }]);
   };
@@ -3966,6 +3992,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
           ))}
           {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
           {err && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
+          {badAnswer && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>רגע, לא הצלחתי להביא את הרעיונות במלואם 🙂 אפשר לנסות שוב.</div>}
           <div ref={endRef} />
         </div>
 
