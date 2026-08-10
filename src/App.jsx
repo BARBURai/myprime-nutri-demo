@@ -265,6 +265,15 @@ function listSundays() {
   }
   return out;
 }
+// Saturday comes back from dowOf as 0, not 7, so the day number used to be dropped from
+// the label entirely and a week looked six days long. The programme is ten weeks of seven,
+// so show it as day 7. And past week 10 there is no week 11 to speak of: the guided phase
+// is over, she keeps her metrics and her content, so say that instead of counting on.
+function phaseLabel(week, dow) {
+  if (week > 10) return "שלב הליווי הסתיים";
+  return `שבוע ${week}, יום ${dow === 0 ? 7 : dow}`;
+}
+
 function programWeekFor(startDate, onDate) {
   if (!startDate) return 1;
   const diff = Math.floor((new Date(onDate) - new Date(startDate)) / 86400000);
@@ -456,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.31";
+const VERSION = "4.43";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1177,6 +1186,11 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const stepKcal = stepsOpen ? stepsKcal(steps, profile.weightKg) : 0;
   const budget = dailyTarget + actKcal + stepKcal;
   const macros = dayLog.reduce((s, e) => ({ p: s.p + (e.p || 0), f: s.f + (e.f || 0), c: s.c + (e.c || 0), fib: s.fib + (e.fib || 0) }), { p: 0, f: 0, c: 0, fib: 0 });
+  // NOT clamped, on purpose. The programme is 70 days, ten weeks of seven, and week 11 is
+  // genuinely week 11: from there she keeps tracking through the three months of access,
+  // today's lesson card is empty, and everything she has already done stays reachable
+  // under "כל התוכנית". Clamping made the tracker claim week 10 for ever. What actually
+  // broke was the card disappearing and taking the only way in with it - handled below.
   const week = programWeekFor(profile.startDate, date);
   const macroOpen = unlockedOn(profile.startDate, date, MACRO_UNLOCK);
   const waterOpen = unlockedOn(profile.startDate, date, WATER_UNLOCK);
@@ -1314,7 +1328,19 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         </div>
       ) : (
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "0 16px" }}>
-        {CONTENT_ENABLED && <ContentDayCard week={week} dow={dow} C={C} font={fontStack} onOpen={onOpenContent} />}
+        {CONTENT_ENABLED && (contentForDay(week, dow)
+          ? <ContentDayCard week={week} dow={dow} C={C} font={fontStack} onOpen={onOpenContent} />
+          : (
+            <div onClick={onOpenContent} role="button" aria-label="כל התוכנית"
+              style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, borderRadius: 16, padding: "14px 15px", marginBottom: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,0.22)", display: "flex", alignItems: "center", justifyContent: "center" }}><Sparkles size={22} color="#fff" /></div>
+              <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", lineHeight: 1.4 }}>התכנים שלך</div>
+                <div style={{ fontSize: 15, color: "rgba(255,255,255,0.92)", marginTop: 3 }}>אין תוכן חדש היום. כל התוכנית פתוחה לך 💜</div>
+              </div>
+              <ChevronLeft size={20} color="#fff" style={{ flexShrink: 0 }} />
+            </div>
+          ))}
         {catchupDue && (
           <div onClick={onOpenCatchup} role="button" aria-label="הדרכה וסקירה קצרה"
             style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, borderRadius: 16, padding: "13px 15px", margin: "10px 0 4px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, fontFamily: fontStack, boxShadow: "0 4px 14px rgba(168,66,92,0.28)" }}>
@@ -1355,7 +1381,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </div>
         )}
 
-        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} hideRewards={!!profile.hideRewards} />}
+        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} phaseWeek={week} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} hideRewards={!!profile.hideRewards} />}
 
         {dayAct.length > 0 && (
           <>
@@ -3376,7 +3402,7 @@ function EntryMenu({ onClose, onPick, mode }) {
 function SheetShell({ title, onClose, children, className = "" }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 27 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className={className} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
+      <div onClick={(e) => e.stopPropagation()} className={className} style={{ background: C.panel, width: "100%", maxHeight: "88%", boxSizing: "border-box", borderRadius: "20px 20px 0 0", padding: "14px 16px calc(16px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexShrink: 0 }}>
           <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>{title}</span>
           <button onClick={onClose} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
@@ -3654,8 +3680,13 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
   );
 }
 
-function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose }) {
-  const [stage, setStage] = useState("confirm");
+// Shown once per session, not once ever: the disclaimer is a safety notice, and module
+// scope means it comes back when the app is reloaded. Asking her the same thing before
+// every single question was the complaint.
+let recIntroSeen = false;
+
+function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose, onGoProfile }) {
+  const [stage, setStage] = useState(recIntroSeen ? "confirm" : "intro");
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -3671,19 +3702,31 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const endRef = useRef(null);
   const inputRef = useRef(null);
   useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading, logMsgs, logLoading, logItems, logged]);
+  const lastAnswerRef = useRef(null);
+  // A long answer used to be scrolled past: jumping to the bottom of the list left its last
+  // line on screen, so she had to scroll up to find where it started. Land on the top of a
+  // new answer instead, and fall back to the bottom only for her own messages, the typing
+  // indicator and the logging flow.
+  useEffect(() => {
+    const last = msgs.length ? msgs[msgs.length - 1] : null;
+    if (!loading && last && last.role === "assistant" && lastAnswerRef.current) {
+      lastAnswerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, loading, logMsgs, logLoading, logItems, logged]);
   const ctx = { proteinFocus };
 
   const diet = profile.diet || [];
   const allergies = profile.allergies || [];
   const dislikes = (profile.dislikes || "").trim();
-  const toggle = (key, val) => setProfile({ ...profile, [key]: (profile[key] || []).includes(val) ? (profile[key] || []).filter((x) => x !== val) : [...(profile[key] || []), val] });
-  const chip = (on) => ({ fontSize: 15, padding: "6px 13px", borderRadius: 16, cursor: "pointer", background: on ? C.brand : "transparent", color: on ? "#fff" : C.sub, boxShadow: on ? "none" : `inset 0 0 0 1px ${C.line}` });
-  const [newSens, setNewSens] = useState("");
-  const [want, setWant] = useState(null);
+  // One free-text ask covering both what she feels like and what she actually has, instead
+  // of a row of chips plus two more fields. Local state, so it clears every time the sheet
+  // opens: a fridge from last week produces worse ideas than no fridge at all.
+  const [ask, setAsk] = useState("");
+  const [prefsHint, setPrefsHint] = useState(false); // popup pointing her at the profile
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
-  const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
+  const avoidAll = [...allergies, ...customSens].filter(Boolean);
 
   const run = async (history) => {
     setLoading(true); setErr(false);
@@ -3699,7 +3742,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       + (diet.length ? `. סגנון תזונה: ${diet.join(", ")}` : "")
       + (avoidList.length ? `. חשוב מאוד - יש לי רגישות/אלרגיה, ואסור בשום אופן להציע לי מאכלים שמכילים: ${avoidList.join(", ")}. אם רעיון כולל אחד מהם, אל תציעי אותו בכלל, ותמיד הזכירי לי בעדינות לבדוק את רשימת הרכיבים המלאה לפני האכילה - כי לפעמים גם AI טועה.` : "")
       + (mealsHad ? `. כבר אכלתי היום: ${mealsHad}` : "")
-      + (want ? `. אני מחפשת עכשיו: ${want}` : "")
+      + (ask.trim() ? `. מה שאני מחפשת ומה שיש לי בבית: ${ask.trim()}. העדיפי רעיונות שאפשר להכין ממה שיש לי, ואם חסר משהו קטן צייני את זה.` : "")
       + ". מה כדאי לי לאכול עכשיו? תני לי כמה רעיונות ושאלי מה דעתי.";
     const h = [{ role: "user", content: seed }];
     setMsgs(h); setStage("chat"); run(h);
@@ -3765,39 +3808,42 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
 
   return (
     <SheetShell title="מה כדאי לאכול?" onClose={onClose}>
-      {stage === "confirm" ? (
+      {stage === "intro" ? (
         <div>
-          <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>רגע לפני שאמליץ - בואי נוודא שאני עובדת עם המידע הנכון. ככה ההמלצות יהיו מדויקות ובטוחות יותר.</div>
-          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>מה את מחפשת עכשיו?</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
-            {WANT_OPTIONS.map((w) => (<span key={w.id} onClick={() => setWant(want === w.id ? null : w.id)} style={chip(want === w.id)}>{w.emoji} {w.id}</span>))}
+          <div style={{ background: C.bg, borderRadius: 12, padding: "12px 13px", marginBottom: 12 }}>
+            <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.7 }}>
+              <div style={{ fontWeight: 600, color: C.ink, marginBottom: 4 }}>לפי הפרופיל שלך</div>
+              <div>סגנון תזונה: <span style={{ color: C.ink }}>{diet.length ? diet.join(", ") : "אין עדיפות תזונה"}</span></div>
+              <div>רגישויות: <span style={{ color: C.ink }}>{avoidAll.length ? avoidAll.join(", ") : "אין רגישויות"}</span></div>
+            </div>
+            <button onClick={() => setPrefsHint(true)} style={{ marginTop: 8, border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>רוצה לשנות?</button>
           </div>
-          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>סגנון תזונה</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
-            {DIET_OPTIONS.map((d) => (<span key={d.id} onClick={() => toggle("diet", d.id)} style={chip(diet.includes(d.id))}>{d.emoji} {d.id}</span>))}
-          </div>
-          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות / אלרגיות</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
-            {SENSITIVITY_OPTIONS.map((s) => (<span key={s} onClick={() => toggle("allergies", s)} style={chip(allergies.includes(s))}>{s}</span>))}
-          </div>
-          <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>רגישויות נוספות</div>
-          <div style={{ display: "flex", gap: 6, marginBottom: customSens.length ? 10 : 0 }}>
-            <input value={newSens} onChange={(e) => setNewSens(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSens(); } }} placeholder="הקלידי והוסיפי (למשל: בלי חריף)" style={{ flex: 1, border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel }} />
-            <button onClick={addSens} aria-label="הוספה" style={{ flexShrink: 0, width: 46, borderRadius: 10, border: "none", background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={18} /></button>
-          </div>
-          {customSens.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {customSens.map((s) => (
-                <span key={s} style={{ fontSize: 15, padding: "6px 9px 6px 13px", borderRadius: 16, background: C.brand, color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  {s}
-                  <button onClick={() => removeSens(s)} aria-label="הסרה" style={{ border: "none", background: "transparent", color: "#fff", cursor: "pointer", display: "flex", padding: 0 }}><X size={14} /></button>
-                </span>
-              ))}
+          <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, marginBottom: 16, lineHeight: 1.5 }}>שימי לב: אני מנוע AI ואני עלולה לטעות. גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>
+          <Btn onClick={() => { recIntroSeen = true; setStage("confirm"); }}>הבנתי, בואי נתחיל</Btn>
+          {prefsHint && (
+            <div onClick={() => setPrefsHint(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 60 }}>
+              <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+                <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, marginBottom: 16 }}>לשינוי סגנון תזונה או רגישויות יש לעבור לפרופיל.</div>
+                <Btn onClick={() => { setPrefsHint(false); onGoProfile && onGoProfile(); }}>מעבר לפרופיל</Btn>
+                <Btn variant="ghost" onClick={() => setPrefsHint(false)} style={{ marginTop: 8 }}>סגירה</Btn>
+              </div>
             </div>
           )}
-          {!diet.length && !hasAvoid && <div style={{ fontSize: 14, color: C.faint, margin: "10px 0 0" }}>לא רשמת עדיין העדפות או רגישויות. אפשר לבחור עכשיו, או פשוט להמשיך.</div>}
-          {hasAvoid && <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, margin: "12px 0 0", lineHeight: 1.5 }}>שימי לב: גם כשאתאים לפי הרגישויות שלך, תמיד כדאי לבדוק בעצמך את רשימת הרכיבים המלאה. זה כלי עזר, לא תחליף לבדיקה.</div>}
-          <div style={{ marginTop: 16 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
+        </div>
+      ) : stage === "confirm" ? (
+        <div>
+          <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>ספרי לי מה את רוצה לאכול, מנה עיקרית / ראשונה / קינוח, ומה המצרכים שזמינים לך?</div>
+          <textarea value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder="רשמי כאן" style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "11px 12px", fontSize: 15, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, resize: "none", lineHeight: 1.5, marginBottom: 14 }} />
+          <div style={{ marginTop: 16, position: "sticky", bottom: 0, background: C.panel, paddingBottom: 4 }}><Btn onClick={startChat}>קבלי המלצות ←</Btn></div>
+          {prefsHint && (
+            <div onClick={() => setPrefsHint(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 60 }}>
+              <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
+                <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.7, marginBottom: 16 }}>לשינוי סגנון תזונה או רגישויות יש לעבור לפרופיל.</div>
+                <Btn onClick={() => { setPrefsHint(false); onGoProfile && onGoProfile(); }}>מעבר לפרופיל</Btn>
+                <Btn variant="ghost" onClick={() => setPrefsHint(false)} style={{ marginTop: 8 }}>סגירה</Btn>
+              </div>
+            </div>
+          )}
         </div>
       ) : stage === "log" ? (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
@@ -3846,7 +3892,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
           {visible.map((m, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
+            <div key={i} ref={i === visible.length - 1 && m.role === "assistant" ? lastAnswerRef : null} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
               <div style={{ maxWidth: "84%", fontSize: 16, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
             </div>
           ))}
@@ -3886,7 +3932,10 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   );
 }
 
-function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary, hideRewards }) {
+// week is clamped to 10 because that is as far as the tasks go; phaseWeek is the real one,
+// used only for the heading, which has to say the guided phase ended rather than repeat
+// week 10 for ever.
+function CheckinCard({ date, today, week, phaseWeek, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary, hideRewards }) {
   const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
   const hasManual = tasks.some((t) => !t.auto);
   const total = tasks.length;
@@ -3896,7 +3945,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   const dn = dowOf(date);
   const dd = parseDay(date);
   const rel = relLabel(date);
-  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · שבוע ${week}${dn >= 1 ? `, יום ${dn}` : ""}`;
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${phaseLabel(phaseWeek == null ? week : phaseWeek, dn)}`;
   return (
     <div className="no-textscale" style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
       <div data-tut="tracker" onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
@@ -3950,7 +3999,7 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
   const rel = relLabel(date);
   const wk = Math.min(programWeekFor(startDate, date), 10);
   const dn = dowOf(date);
-  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · שבוע ${wk}${dn >= 1 ? `, יום ${dn}` : ""}`;
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${phaseLabel(programWeekFor(startDate, date), dn)}`;
   return (
     <SheetShell title="המעקב היומי שלי" onClose={onClose}>
       <div style={{ fontSize: 14, fontWeight: 500, color: C.sub, marginBottom: 8, textAlign: "right" }}>{dateLine}</div>
@@ -5699,7 +5748,11 @@ export default function App() {
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
             </div>
-            <div style={{ position: "relative", flexShrink: 0, zIndex: 38 }}>
+            {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
+                stayed tappable, rode up with the keyboard eating the space above it, and
+                the centre + kept getting hit by accident, throwing her out of what she was
+                doing. Hide it while a sheet or modal is open. */}
+            <div hidden={!!(sheet || modal)} style={{ position: "relative", flexShrink: 0, zIndex: 38 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-around", borderTop: `1px solid ${C.line}`, padding: "9px 4px max(12px, env(safe-area-inset-bottom))", background: C.brandBg, boxShadow: "0 -2px 12px rgba(168,66,92,0.10)" }}>
               {tabs.slice(0, 2).map((t) => {
                 const active = tab === t.id;
@@ -5743,7 +5796,7 @@ export default function App() {
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
-            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
