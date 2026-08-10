@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.43";
+const VERSION = "4.49";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2143,6 +2143,27 @@ function extractAiJson(text) {
   return null;
 }
 
+// The recommender's answer, salvaged. A cut-off answer is still worth showing: take the
+// intro and every option object that did close, instead of dropping the whole round.
+// Returns null when nothing usable came back - never the raw text, which is how JSON
+// ended up on screen in v4.45.
+function parseMealOptions(text) {
+  const p = extractAiJson(text);
+  if (p && Array.isArray(p.options) && p.options.length) return p;
+  const t = (text || "").replace(/```json|```/g, "");
+  const str = (key) => {
+    const m = t.match(new RegExp('"' + key + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'));
+    if (!m) return "";
+    try { return JSON.parse('"' + m[1] + '"'); } catch (e) { return m[1]; }
+  };
+  const options = [];
+  const re = /\{[^{}]*"name"\s*:[^{}]*\}/g;
+  let m;
+  while ((m = re.exec(t))) { try { options.push(JSON.parse(m[0])); } catch (e) {} }
+  if (!options.length) return null;
+  return { intro: str("intro"), options, note: str("note") };
+}
+
 // Gentle photo-budget nudges (the HARD 70 cap is enforced server-side in api/ai.js).
 const PHOTO_HEADSUP_MSG = "הערה קטנה ממני אלייך 💜 שימי לב שכמות התמונות שניתן להעלות במהלך תוכנית הליווי מוגבלת ל-70 תמונות. לאחר מכן תמיד אפשר לתאר לי בטקסט מה אכלת.";
 const PHOTO_END_MSG = "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים.";
@@ -2223,10 +2244,23 @@ async function aiMealChat(messages, ctx) {
     "בסיס הערכים: התבססי ככל האפשר על ערכי מאגר התזונה הלאומי של משרד הבריאות (\"צמרת\") עבור מזונות ישראליים, כדי שההערכות יהיו עקביות ומדויקות. " +
     "תמיד סיימי בשאלה עדינה - מה היא חושבת, או אם יש לה את המצרכים. אם חסר לה מצרך (למשל אין סלמון) - הציעי מיד חלופה זמינה ופשוטה. " +
     "אל תפני אותה לדבר עם אדם, מאמנת או צוות, ואל תציעי ליצור קשר או להעביר פנייה לאף אחד - את כאן כדי לעזור עם האוכל והתזונה בלבד. " +
-    "אל תיתני ייעוץ רפואי. החזירי טקסט רגיל בלבד (לא JSON, בלי סימוני קוד).";
+    "אל תיתני ייעוץ רפואי. " +
+    // Structured, so the app can render each idea as its own card with a choose button.
+    // She still writes to it freely; only the shape of the answer is fixed.
+    "החזירי JSON בלבד, בלי טקסט לפני או אחרי ובלי סימוני קוד, במבנה הזה: " +
+    '{"intro":"משפט פתיחה קצר בקול שלך","options":[{"name":"שם קצר של המנה","desc":"תיאור קצר: איך מכינים ומה שמים","unit":"g","grams":250,"kcal":320,"p":28,"f":10,"c":20}],"note":"שאלה עדינה או הערה קצרה בסוף"}. ' +
+    "2 עד 3 אופציות. grams הוא משקל המנה כולה, ו-kcal/p/f/c הם הערכים לאותה כמות. " +
+    "עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור משקאות ומרקים unit=\"ml\" ו-grams הוא הכמות במ\"ל. " +
+    "intro, desc ו-note קצרים: משפט אחד כל אחד. " +
+    "המסך ממספר את האופציות ברצף אחד לאורך כל השיחה: אם כבר הצעת שלוש, הבאות יוצגו כ-4, 5 ו-6. לכן כשהיא מזכירה מספר אופציה, ספרי לפי הסדר שהצעת מתחילת השיחה, ואל תתייחסי למספר בתוך התשובה האחרונה בלבד. " +
+    "החזירי את המבנה הזה בכל תור בלי יוצא מן הכלל: גם כשהיא כותבת שאין לה את המצרכים, גם כשהיא מבקשת משהו אחר, וגם כשחסר לך מידע. אל תחזירי לעולם טקסט חופשי בלי options. אם חסר לך מידע, בכל זאת הציעי 2 עד 3 אופציות, ואת השאלה שלך שימי בשדה note. " +
+    "אל תשתמשי בכוכביות, בקווים מפרידים או בכל סימון עיצוב בתוך הטקסט.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 700, system, messages }),
+    // JSON in Hebrew is token-hungry: at 700 the answer was cut off mid-object, the parse
+    // failed, and the raw JSON landed on her screen. The ceiling is not what we pay for,
+    // only the tokens actually produced, so there is no reason to keep it tight.
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1600, system, messages }),
   });
   const data = await res.json();
   if (res.status === 429 || data.error === "limit") return { error: true, text: "", limit: true, message: data.message || "" };
@@ -3691,6 +3725,9 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
+  // A cut-off / unreadable answer is a different failure from a dead connection, and the
+  // connection message points at Vercel, which means nothing to her.
+  const [badAnswer, setBadAnswer] = useState(false);
   const [pending, setPending] = useState(null);
   const [logMsgs, setLogMsgs] = useState([]);
   const [logInput, setLogInput] = useState("");
@@ -3702,19 +3739,29 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const endRef = useRef(null);
   const inputRef = useRef(null);
   useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
+  // Every answer is kept, not just the latest: she may scroll back and take an idea from
+  // an earlier round after seeing the newer ones.
+  const [replies, setReplies] = useState([]);
   const lastAnswerRef = useRef(null);
+  const listRef = useRef(null);
+  const roundsRef = useRef(0);
   // A long answer used to be scrolled past: jumping to the bottom of the list left its last
-  // line on screen, so she had to scroll up to find where it started. Land on the top of a
-  // new answer instead, and fall back to the bottom only for her own messages, the typing
-  // indicator and the logging flow.
+  // line on screen, so she had to scroll up to find where it started. Land on the question
+  // she just asked instead, and fall back to the bottom only for her own messages, the
+  // typing indicator and the logging flow. The jump is done on the list's own scrollTop,
+  // not with scrollIntoView, which also moves every scrollable ancestor. It fires only when
+  // a round was actually added, so a failed answer never drags her back to an older one.
   useEffect(() => {
-    const last = msgs.length ? msgs[msgs.length - 1] : null;
-    if (!loading && last && last.role === "assistant" && lastAnswerRef.current) {
-      lastAnswerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
+    if (!loading && replies.length && replies.length !== roundsRef.current) {
+      roundsRef.current = replies.length;
+      const c = listRef.current, el = lastAnswerRef.current;
+      if (c && el) {
+        c.scrollTo({ top: c.scrollTop + el.getBoundingClientRect().top - c.getBoundingClientRect().top - 8, behavior: "smooth" });
+        return;
+      }
     }
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs, loading, logMsgs, logLoading, logItems, logged]);
+  }, [msgs, replies, loading, logMsgs, logLoading, logItems, logged]);
   const ctx = { proteinFocus };
 
   const diet = profile.diet || [];
@@ -3724,16 +3771,31 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   // of a row of chips plus two more fields. Local state, so it clears every time the sheet
   // opens: a fridge from last week produces worse ideas than no fridge at all.
   const [ask, setAsk] = useState("");
+  // The recommender answers as {intro, options[], note} so each idea can be its own card
+  // with a choose button. replies holds every parsed answer; chosen holds the one she picked,
+  // with an editable weight, before it goes to the diary.
+  const [chosen, setChosen] = useState(null);
   const [prefsHint, setPrefsHint] = useState(false); // popup pointing her at the profile
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   const avoidAll = [...allergies, ...customSens].filter(Boolean);
 
-  const run = async (history) => {
-    setLoading(true); setErr(false);
+  const run = async (history, isRetry) => {
+    setLoading(true); setErr(false); setBadAnswer(false);
     const r = await aiMealChat(history, ctx);
+    if (r.error || !r.text) { setLoading(false); setErr(true); return; }
+    // An unreadable answer must never be printed as-is: it is JSON, and she saw it once.
+    // It also never joins the history, so the next turn is not built on top of it. A short
+    // follow-up like "I do not have that" sometimes makes the model answer in plain prose
+    // instead of the structure, and asking again is enough - so ask again, once, silently.
+    const data = parseMealOptions(r.text);
+    if (!data) {
+      if (!isRetry) { run(history, true); return; }
+      setLoading(false); setBadAnswer(true); return;
+    }
     setLoading(false);
-    if (r.error || !r.text) { setErr(true); return; }
     setMsgs([...history, { role: "assistant", content: r.text }]);
+    const lastUser = [...history].reverse().find((m) => m.role === "user");
+    setReplies((rs) => [...rs, { ask: rs.length ? (lastUser ? lastUser.content : "") : "", data }]);
   };
   const startChat = () => {
     const avoidList = [...allergies, ...(dislikes ? [dislikes] : [])].filter(Boolean);
@@ -3796,6 +3858,33 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     if (!text || logLoading) return;
     const next = [...logMsgs, { role: "user", content: text }];
     setLogMsgs(next); setLogInput(""); setLogItems(null); runLog(next);
+  };
+  // The amount she picks is set the same way as everywhere else in the app: a measure chip
+  // (portion, cup, spoon...) plus a counter, not a raw number of grams. "מנה" is the
+  // serving the AI suggested, so the sheet opens on exactly what it offered her.
+  const pickOption = (o) => {
+    const unit = o.unit === "ml" ? "ml" : "g";
+    const serv = o.grams || 100;
+    const seen = {};
+    const units = [];
+    for (const m of [{ label: "מנה", g: serv }, ...measuresForUnit(unit)]) {
+      if (m.g > 1 && !seen[m.label]) { seen[m.label] = 1; units.push(m); }
+    }
+    setChosen({ ...o, unit, baseGrams: serv, grams: serv, units, qUnit: units[0], meal: defaultMeal() });
+  };
+  // The AI's numbers are for the weight it suggested, so rescale when she changes it.
+  const scaled = (o) => {
+    const base = o.baseGrams || o.grams || 1;
+    const f = base ? (o.grams || 0) / base : 1;
+    const r = (v) => Math.round((v || 0) * f);
+    return { kcal: r(o.kcal), p: r(o.p), f: r(o.f), c: r(o.c) };
+  };
+  const logChosen = () => {
+    if (!chosen) return;
+    const v = scaled(chosen);
+    onLog([{ meal: chosen.meal, name: chosen.name, g: chosen.grams, unit: chosen.unit || "g", source: "estimated", kcal: v.kcal, p: v.p, f: v.f, c: v.c, servingG: chosen.grams || 1 }]);
+    setChosen(null);
+    onClose();
   };
   const doLog = () => {
     if (!logItems || !logItems.length) return;
@@ -3890,31 +3979,53 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       </div>
       ) : (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
-        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
-          {visible.map((m, i) => (
-            <div key={i} ref={i === visible.length - 1 && m.role === "assistant" ? lastAnswerRef : null} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
-              <div style={{ maxWidth: "84%", fontSize: 16, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+        <div ref={listRef} style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {(() => { let optNo = 0; return replies.map((rp, ri) => { const firstNo = optNo; optNo += rp.data.options.length; return (
+            <div key={ri} ref={ri === replies.length - 1 ? lastAnswerRef : null} style={{ borderTop: ri ? `1px solid ${C.line}` : "none", paddingTop: ri ? 14 : 0 }}>
+              {rp.ask && (
+                <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 10 }}>
+                  <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.5, padding: "8px 12px", borderRadius: 14, background: C.brand, color: "#fff" }}>{rp.ask}</div>
+                </div>
+              )}
+              {rp.data.intro && <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{rp.data.intro}</div>}
+              {rp.data.options.map((o, i) => (
+                <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "12px 13px", marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.brandD, marginBottom: 3 }}>אופציה {firstNo + i + 1}</div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>{o.name}</div>
+                  {o.desc && <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginTop: 4 }}>{o.desc}</div>}
+                  <div style={{ fontSize: 13.5, color: C.faint, marginTop: 6 }}>
+                    {o.grams ? `${o.grams} ${unitLabelFor(o.unit)}` : ""}{o.grams && o.kcal ? " · " : ""}{o.kcal ? `~${o.kcal} קק״ל` : ""}
+                    {proteinFocus && o.p ? ` · ${o.p} גרם חלבון` : ""}
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <Btn onClick={() => pickOption(o)}>בחרי את זו</Btn>
+                  </div>
+                </div>
+              ))}
+              {rp.data.note && <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginTop: 4, marginBottom: 10 }}>{rp.data.note}</div>}
             </div>
-          ))}
+          ); }); })()}
           {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
           {err && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
+          {badAnswer && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>רגע, לא הצלחתי להביא את הרעיונות במלואם 🙂 אפשר לנסות שוב.</div>}
           <div ref={endRef} />
         </div>
 
-        {visible.length > 0 && !loading && (
-          <button onClick={startLog} style={{ width: "100%", marginBottom: 8, border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 12, padding: 11, fontSize: 16, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={17} /> אכלתי - הוסיפי ליומן</button>
-        )}
 
         {!loading && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-            <span onClick={() => sendText("תני לי בבקשה רעיון אחר")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>רעיון אחר</span>
+            <span onClick={() => sendText("אני רוצה משהו אחר")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אני רוצה משהו אחר</span>
             <span onClick={() => sendText("אין לי את המצרכים האלה בבית")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אין לי את זה</span>
           </div>
         )}
 
         {pending && (
           <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
-            <div style={{ fontSize: 14, color: C.ink, marginBottom: 8, lineHeight: 1.5 }}>לשמור את זה להעדפות שלך לפעמים הבאות? <b>{[...(pending.diet || []), ...(pending.avoid || [])].join(", ")}</b></div>
+            <div style={{ fontSize: 14, color: C.ink, marginBottom: 8, lineHeight: 1.5 }}>
+              <div style={{ marginBottom: 4 }}>לשמור את זה בפרופיל לפעמים הבאות?</div>
+              {(pending.avoid || []).length > 0 && <div>להימנע מ: <b>{pending.avoid.join(", ")}</b></div>}
+              {(pending.diet || []).length > 0 && <div>סגנון תזונה: <b>{pending.diet.join(", ")}</b></div>}
+            </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={savePending} style={{ border: "none", background: C.brand, color: "#fff", fontFamily: fontStack, fontSize: 14, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>שמרי</button>
               <button onClick={() => setPending(null)} style={{ border: `1px solid ${C.line}`, background: "transparent", color: C.sub, fontFamily: fontStack, fontSize: 14, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>לא עכשיו</button>
@@ -3922,6 +4033,44 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
           </div>
         )}
 
+        {chosen && (
+          <div onClick={() => setChosen(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 16px", width: "100%", maxWidth: 340, fontFamily: fontStack }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 2 }}>{chosen.name}</div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 12 }}>אפשר לתקן את הכמות לפני שנרשום</div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>כמות</div>
+              {(() => {
+                const unitLabel = unitLabelFor(chosen.unit);
+                const base = { label: unitLabel, g: 1 };
+                const au = chosen.qUnit || base;
+                const isBase = au.g <= 1;
+                const units = [base, ...(chosen.units || [])];
+                const count = isBase ? chosen.grams : Math.max(1, Math.round(chosen.grams / au.g));
+                return (
+                  <>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setChosen({ ...chosen, qUnit: null }); else setChosen({ ...chosen, qUnit: u, grams: u.g }); }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
+                      <button onClick={() => setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g) })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
+                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                        <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
+                      </div>
+                      <button onClick={() => setChosen({ ...chosen, grams: chosen.grams + au.g })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
+                    </div>
+                    <div style={{ textAlign: "center", fontSize: 14, color: C.faint, marginBottom: 12, minHeight: 18 }}>{!isBase ? `= ${chosen.grams} ${unitLabel}` : ""}</div>
+                  </>
+                );
+              })()}
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>לאיזו ארוחה?</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                {MEALS.map((m) => (<span key={m} onClick={() => setChosen({ ...chosen, meal: m })} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: chosen.meal === m ? C.brand : "transparent", color: chosen.meal === m ? "#fff" : C.sub, boxShadow: chosen.meal === m ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+              </div>
+              <div style={{ fontSize: 13.5, color: C.faint, marginBottom: 14 }}>{scaled(chosen).kcal} קק״ל{proteinFocus ? ` · ${scaled(chosen).p} גרם חלבון` : ""}</div>
+              <Btn onClick={logChosen}>הוסיפי ליומן</Btn>
+              <Btn variant="ghost" onClick={() => setChosen(null)} style={{ marginTop: 8 }}>ביטול</Btn>
+            </div>
+          </div>
+        )}
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
           <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(input); } }} disabled={loading} rows={1} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
           <button onClick={() => sendText(input)} disabled={loading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 }}><Send size={18} /></button>
