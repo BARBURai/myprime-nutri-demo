@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.44";
+const VERSION = "4.45";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2227,8 +2227,9 @@ async function aiMealChat(messages, ctx) {
     // Structured, so the app can render each idea as its own card with a choose button.
     // She still writes to it freely; only the shape of the answer is fixed.
     "החזירי JSON בלבד, בלי טקסט לפני או אחרי ובלי סימוני קוד, במבנה הזה: " +
-    '{"intro":"משפט פתיחה קצר בקול שלך","options":[{"name":"שם קצר של המנה","desc":"תיאור קצר: איך מכינים ומה שמים","grams":250,"kcal":320,"p":28,"f":10,"c":20}],"note":"שאלה עדינה או הערה קצרה בסוף"}. ' +
+    '{"intro":"משפט פתיחה קצר בקול שלך","options":[{"name":"שם קצר של המנה","desc":"תיאור קצר: איך מכינים ומה שמים","unit":"g","grams":250,"kcal":320,"p":28,"f":10,"c":20}],"note":"שאלה עדינה או הערה קצרה בסוף"}. ' +
     "2 עד 3 אופציות. grams הוא משקל המנה כולה, ו-kcal/p/f/c הם הערכים לאותה כמות. " +
+    "עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור משקאות ומרקים unit=\"ml\" ו-grams הוא הכמות במ\"ל. " +
     "אל תשתמשי בכוכביות, בקווים מפרידים או בכל סימון עיצוב בתוך הטקסט.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
@@ -3731,9 +3732,11 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   // opens: a fridge from last week produces worse ideas than no fridge at all.
   const [ask, setAsk] = useState("");
   // The recommender answers as {intro, options[], note} so each idea can be its own card
-  // with a choose button. reply holds the parsed answer; chosen holds the one she picked,
+  // with a choose button. replies holds every parsed answer; chosen holds the one she picked,
   // with an editable weight, before it goes to the diary.
-  const [reply, setReply] = useState(null);
+  // Every answer is kept, not just the latest: she may scroll back and take an idea from
+  // an earlier round after seeing the newer ones.
+  const [replies, setReplies] = useState([]);
   const [chosen, setChosen] = useState(null);
   const [prefsHint, setPrefsHint] = useState(false); // popup pointing her at the profile
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -3747,9 +3750,11 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     setMsgs([...history, { role: "assistant", content: r.text }]);
     // A malformed answer must not blank the screen: fall back to showing the raw text.
     const parsed = extractAiJson(r.text);
-    setReply(parsed && Array.isArray(parsed.options) && parsed.options.length
+    const data = parsed && Array.isArray(parsed.options) && parsed.options.length
       ? parsed
-      : { intro: r.text, options: [], note: "" });
+      : { intro: r.text, options: [], note: "" };
+    const lastUser = [...history].reverse().find((m) => m.role === "user");
+    setReplies((rs) => [...rs, { ask: rs.length ? (lastUser ? lastUser.content : "") : "", data }]);
   };
   const startChat = () => {
     const avoidList = [...allergies, ...(dislikes ? [dislikes] : [])].filter(Boolean);
@@ -3813,6 +3818,19 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     const next = [...logMsgs, { role: "user", content: text }];
     setLogMsgs(next); setLogInput(""); setLogItems(null); runLog(next);
   };
+  // The amount she picks is set the same way as everywhere else in the app: a measure chip
+  // (portion, cup, spoon...) plus a counter, not a raw number of grams. "מנה" is the
+  // serving the AI suggested, so the sheet opens on exactly what it offered her.
+  const pickOption = (o) => {
+    const unit = o.unit === "ml" ? "ml" : "g";
+    const serv = o.grams || 100;
+    const seen = {};
+    const units = [];
+    for (const m of [{ label: "מנה", g: serv }, ...measuresForUnit(unit)]) {
+      if (m.g > 1 && !seen[m.label]) { seen[m.label] = 1; units.push(m); }
+    }
+    setChosen({ ...o, unit, baseGrams: serv, grams: serv, units, qUnit: units[0], meal: defaultMeal() });
+  };
   // The AI's numbers are for the weight it suggested, so rescale when she changes it.
   const scaled = (o) => {
     const base = o.baseGrams || o.grams || 1;
@@ -3823,7 +3841,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const logChosen = () => {
     if (!chosen) return;
     const v = scaled(chosen);
-    onLog([{ meal: chosen.meal, name: chosen.name, g: chosen.grams, unit: "g", source: "estimated", kcal: v.kcal, p: v.p, f: v.f, c: v.c, servingG: chosen.grams || 1 }]);
+    onLog([{ meal: chosen.meal, name: chosen.name, g: chosen.grams, unit: chosen.unit || "g", source: "estimated", kcal: v.kcal, p: v.p, f: v.f, c: v.c, servingG: chosen.grams || 1 }]);
     setChosen(null);
     onClose();
   };
@@ -3921,35 +3939,31 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       ) : (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
-          {visible.filter((m) => m.role === "user").length > 0 && (
-            <div style={{ marginBottom: 10 }}>
-              {visible.filter((m) => m.role === "user").slice(-1).map((m, i) => (
-                <div key={"u" + i} style={{ display: "flex", justifyContent: "flex-start" }}>
-                  <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.5, padding: "8px 12px", borderRadius: 14, background: C.brand, color: "#fff" }}>{m.content}</div>
+          {replies.map((rp, ri) => (
+            <div key={ri} ref={ri === replies.length - 1 ? lastAnswerRef : null} style={{ borderTop: ri ? `1px solid ${C.line}` : "none", paddingTop: ri ? 14 : 0 }}>
+              {rp.ask && (
+                <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 10 }}>
+                  <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.5, padding: "8px 12px", borderRadius: 14, background: C.brand, color: "#fff" }}>{rp.ask}</div>
                 </div>
-              ))}
-            </div>
-          )}
-          {reply && !loading && (
-            <div ref={lastAnswerRef}>
-              {reply.intro && <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{reply.intro}</div>}
-              {reply.options.map((o, i) => (
+              )}
+              {rp.data.intro && <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{rp.data.intro}</div>}
+              {rp.data.options.map((o, i) => (
                 <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "12px 13px", marginBottom: 10 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.brandD, marginBottom: 3 }}>אופציה {i + 1}</div>
                   <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>{o.name}</div>
                   {o.desc && <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginTop: 4 }}>{o.desc}</div>}
                   <div style={{ fontSize: 13.5, color: C.faint, marginTop: 6 }}>
-                    {o.grams ? `${o.grams} גרם` : ""}{o.grams && o.kcal ? " · " : ""}{o.kcal ? `~${o.kcal} קק״ל` : ""}
+                    {o.grams ? `${o.grams} ${unitLabelFor(o.unit)}` : ""}{o.grams && o.kcal ? " · " : ""}{o.kcal ? `~${o.kcal} קק״ל` : ""}
                     {proteinFocus && o.p ? ` · ${o.p} גרם חלבון` : ""}
                   </div>
                   <div style={{ marginTop: 10 }}>
-                    <Btn onClick={() => setChosen({ ...o, baseGrams: o.grams || 100, grams: o.grams || 100, meal: defaultMeal() })}>בחרי את זו</Btn>
+                    <Btn onClick={() => pickOption(o)}>בחרי את זו</Btn>
                   </div>
                 </div>
               ))}
-              {reply.note && <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginTop: 4 }}>{reply.note}</div>}
+              {rp.data.note && <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginTop: 4, marginBottom: 10 }}>{rp.data.note}</div>}
             </div>
-          )}
+          ))}
           {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
           {err && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
           <div ref={endRef} />
@@ -3978,8 +3992,29 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 16px", width: "100%", maxWidth: 340, fontFamily: fontStack }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 2 }}>{chosen.name}</div>
               <div style={{ fontSize: 14, color: C.sub, marginBottom: 12 }}>אפשר לתקן את הכמות לפני שנרשום</div>
-              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>כמה גרם?</div>
-              <input type="number" inputMode="numeric" value={chosen.grams} onChange={(e) => setChosen({ ...chosen, grams: Math.max(0, parseInt(e.target.value, 10) || 0) })} style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, marginBottom: 12 }} />
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>כמות</div>
+              {(() => {
+                const unitLabel = unitLabelFor(chosen.unit);
+                const base = { label: unitLabel, g: 1 };
+                const au = chosen.qUnit || base;
+                const isBase = au.g <= 1;
+                const units = [base, ...(chosen.units || [])];
+                const count = isBase ? chosen.grams : Math.max(1, Math.round(chosen.grams / au.g));
+                return (
+                  <>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setChosen({ ...chosen, qUnit: null }); else setChosen({ ...chosen, qUnit: u, grams: u.g }); }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
+                      <button onClick={() => setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g) })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
+                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                        <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
+                      </div>
+                      <button onClick={() => setChosen({ ...chosen, grams: chosen.grams + au.g })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
+                    </div>
+                    <div style={{ textAlign: "center", fontSize: 14, color: C.faint, marginBottom: 12, minHeight: 18 }}>{!isBase ? `= ${chosen.grams} ${unitLabel}` : ""}</div>
+                  </>
+                );
+              })()}
               <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>לאיזו ארוחה?</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
                 {MEALS.map((m) => (<span key={m} onClick={() => setChosen({ ...chosen, meal: m })} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: chosen.meal === m ? C.brand : "transparent", color: chosen.meal === m ? "#fff" : C.sub, boxShadow: chosen.meal === m ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
