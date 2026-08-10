@@ -1,0 +1,7 @@
+{
+  "name": "myprime-qa-e2e",
+  "private": true,
+  "type": "module",
+  "description": "QA layer 3. Kept out of the root package.json on purpose: Vercel installs from the root, and a browser dependency there would slow or break the production build.",
+  "dependencies": { "playwright-core": "^1.55.0" }
+}
