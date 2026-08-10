@@ -7,7 +7,9 @@
 // Vercel runs a scheduled job somewhere INSIDE its hour, not on the hour, so demanding an
 // exact hour meant a late run sent nothing at all that day. Each job therefore accepts a
 // two-hour window and claims a once-per-day marker in Redis, so a late run still delivers
-// and two runs can never both send. ?force=1 bypasses both, for manual testing.
+// and two runs can never both send. ?force=1 bypasses both, for manual testing, and
+// ?only=<email> sends to that woman's devices alone - without it a manual run reaches
+// every registered phone.
 //   Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT, CRON_SECRET, NOTIFY_SECRET
 import webpush from "web-push";
 
@@ -57,6 +59,8 @@ export default async function handler(req, res) {
 
   const force = req.query && (req.query.force === "1" || req.query.force === "true");
   const morning = !!(req.query && req.query.kind === "morning");
+  // Manual runs are for seeing the message on your own phone. Left unset, everyone gets it.
+  const only = String((req.query && req.query.only) || "").trim().toLowerCase();
   const kind = morning ? "morning" : "evening";
   const startHour = morning ? 7 : 19;
   const h = jerusalemHour();
@@ -127,6 +131,7 @@ export default async function handler(req, res) {
     try { rec = JSON.parse(val); } catch (e) { continue; }
     const sub = rec && rec.sub;
     if (!sub) continue;
+    if (only && (rec.email || "").trim().toLowerCase() !== only) continue;
 
     let payload = eveningPayload;
     if (morning) {
