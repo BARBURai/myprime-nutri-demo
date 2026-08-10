@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.53";
+const VERSION = "4.54";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2448,6 +2448,14 @@ function nutritionPlausible(per100) {
   // Macros implying substantially MORE calories than stated = inflated/corrupt row.
   const est = p * 4 + c * 4 + f * 9;
   if (est > kcal * 1.30 + 5) return false;
+  // And the mirror case, which used to sail straight through: calories far too HIGH for
+  // the macros present. That is the shape of the commonest Open Food Facts mistake - the
+  // label's kilojoules typed into the kcal field, which is about four times too big - and
+  // it is the dangerous direction, because it silently inflates her diary. Only judged
+  // when macros were actually reported; a row with no macros at all says nothing either
+  // way. Drinks whose calories come from alcohol land here too and get blocked, which
+  // costs her a manual entry - the right trade against logging four times the calories.
+  if (p + f + c > 0 && est < kcal * 0.5 - 5) return false;
   return true;
 }
 function strongMatch(aiName, dbName) {

@@ -37,4 +37,17 @@ for (const t of cases) {
   console.log(`        רשום ${t.per100.kcal} קק״ל, מהמאקרו יוצא ${implied} | ההגנה ${got ? "מאשרת" : "חוסמת"}, ציפינו ש${t.want ? "תאשר" : "תחסום"}`);
 }
 console.log(`\n${cases.length - failed} מתוך ${cases.length} עברו.`);
+
+// Regression guard: every real food the app already ships must survive the check. A rule
+// tuned to catch corrupt rows is worthless if it also blocks tuna.
+const fi = src.indexOf("const FOODS = [");
+const fstart = src.indexOf("[", fi);
+let depth = 0, fend = fstart;
+for (let k = fstart; k < src.length; k++) {
+  if (src[k] === "[") depth++;
+  else if (src[k] === "]" && --depth === 0) { fend = k; break; }
+}
+const FOODS = new Function(`return ${src.slice(fstart, fend + 1)};`)();
+const blocked = FOODS.filter((f) => !nutritionPlausible(f.per100));
+console.log(`\nמזונות אמיתיים שנחסמו בטעות: ${blocked.length}${blocked.length ? " - " + blocked.map((f) => f.name).join(", ") : ""}`);
 process.exit(0);
