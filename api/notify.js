@@ -1,5 +1,9 @@
 // Daily Web Push, two jobs from one function:
-//   evening (default) - 19:00 Asia/Jerusalem, "did you fill the diary today?", same text for everyone.
+//   evening (default) - 19:00 Asia/Jerusalem, "did you fill the diary today?", same text for
+//     everyone, on programme days 3 to 70. On FRIDAY it aims for 18:00 instead, so it lands
+//     before Shabbat comes in; vercel.json has a Friday-only 15:00 UTC cron for that, and the
+//     regular 16:00 UTC one covers the same hour in winter.
+// Neither one ever fires on a Saturday.
 //   morning (?kind=morning) - 07:00 Asia/Jerusalem, "new content today", and for a woman who
 //     was not in the app yesterday one extra line inviting her to catch up.
 // Triggered by Vercel cron (sends Authorization: Bearer <CRON_SECRET>) OR an external cron (?secret=<NOTIFY_SECRET>).
@@ -34,21 +38,51 @@ function israelDay(offsetDays) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
-const PROGRAM_DAYS = 70;
+// The windows each push is allowed to fire in, decided by Ron on 10 August 2026.
+// The tracker opens on program day 3 (CHECKIN_UNLOCK = { week: 1, day: 3 } in src/App.jsx),
+// so before that the card does not exist and there is nothing to fill in.
+const TRACKER_DAYS = { first: 3, last: 70 };
+const CONTENT_DAYS = { first: 1, last: 69 };
+
+// Saturday silences BOTH pushes for everyone, whatever day of the programme she is on.
+// This is checked before the start date is, so a registration with no start date is quiet
+// on Saturday too.
+function isSaturday(today) {
+  return new Date(today).getUTCDay() === 6;
+}
+function isFriday(today) {
+  return new Date(today).getUTCDay() === 5;
+}
+
+// The hour the evening reminder aims for. On Friday it goes an hour earlier so it lands
+// well before Shabbat comes in, instead of arriving as everyone is sitting down.
+function eveningHour(today) {
+  return isFriday(today) ? 18 : 19;
+}
 
 // Day number within the program, day 1 being her start Sunday.
 function programDayNumber(startDate, onDate) {
   return Math.floor((new Date(onDate) - new Date(startDate)) / 86400000) + 1;
 }
 
-// Does she have new content today? Saturday is a rest day with none, and after the 70 days
-// nothing new opens - everything already unlocked simply stays available. On those days the
-// morning push says nothing at all, because a headline promising new content would be false.
+// Does she have new content today? Nothing new opens on Saturday, and from day 70 on
+// everything already unlocked simply stays available. On those days the morning push says
+// nothing at all, because a headline promising new content would be false.
 function hasNewContent(startDate, today) {
-  if (!startDate) return true; // unknown start date: behave as before rather than go silent
+  if (isSaturday(today)) return false;
+  if (!startDate) return true; // unknown start date: send rather than go silent
   const day = programDayNumber(startDate, today);
-  if (day < 1 || day > PROGRAM_DAYS) return false;
-  return new Date(today).getUTCDay() !== 6; // 6 = Saturday
+  return day >= CONTENT_DAYS.first && day <= CONTENT_DAYS.last;
+}
+
+// Does she have a tracker to fill in tonight? Reported by a participant on week 1 day 2:
+// the evening push asked whether she had filled in her daily report while the tracker had
+// not opened yet, so the question had no answer and no screen behind it.
+function hasTracker(startDate, today) {
+  if (isSaturday(today)) return false;
+  if (!startDate) return true; // unknown start date: send rather than go silent
+  const day = programDayNumber(startDate, today);
+  return day >= TRACKER_DAYS.first && day <= TRACKER_DAYS.last;
 }
 
 export default async function handler(req, res) {
@@ -62,7 +96,7 @@ export default async function handler(req, res) {
   // Manual runs are for seeing the message on your own phone. Left unset, everyone gets it.
   const only = String((req.query && req.query.only) || "").trim().toLowerCase();
   const kind = morning ? "morning" : "evening";
-  const startHour = morning ? 7 : 19;
+  const startHour = morning ? 7 : eveningHour(israelDay(0));
   const h = jerusalemHour();
   if (!force && (h < startHour || h > startHour + 1)) {
     return res.status(200).json({ ok: true, skipped: `outside ${startHour}:00-${startHour + 1}:59 Jerusalem` });
@@ -134,6 +168,7 @@ export default async function handler(req, res) {
     if (only && (rec.email || "").trim().toLowerCase() !== only) continue;
 
     let payload = eveningPayload;
+    if (!morning && !hasTracker(rec.startDate, today)) { quiet++; continue; }
     if (morning) {
       if (!hasNewContent(rec.startDate, today)) { quiet++; continue; }
       const email = (rec.email || "").trim().toLowerCase();
