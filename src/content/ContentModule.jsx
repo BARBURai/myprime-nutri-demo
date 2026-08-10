@@ -358,7 +358,13 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     const iosFirst = /iphone|ipad|ipod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
     const [open, setOpen] = useState(iosFirst ? "ios" : "android");
     const toggle = (k) => setOpen(open === k ? null : k);
-    const rich = (t) => (typeof t === "string" ? t : (<><b style={{ color: C.brandD }}>{t.b}</b>{t.t}</>));
+    // A step's text is a string, a {b,t} pair, or a list of those - the list is what lets a
+    // sentence bold something in the middle or at the end, not only its opening words.
+    const rich = (t) => {
+      if (typeof t === "string") return t;
+      if (Array.isArray(t)) return t.map((x, i) => <React.Fragment key={i}>{rich(x)}</React.Fragment>);
+      return (<>{t.b ? <b style={{ color: C.brandD }}>{t.b}</b> : null}{t.t}</>);
+    };
 
     const Steps = ({ d }) => (
       <div style={{ paddingTop: 4 }}>
