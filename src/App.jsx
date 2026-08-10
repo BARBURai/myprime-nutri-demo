@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.46";
+const VERSION = "4.47";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2252,6 +2252,7 @@ async function aiMealChat(messages, ctx) {
     "2 עד 3 אופציות. grams הוא משקל המנה כולה, ו-kcal/p/f/c הם הערכים לאותה כמות. " +
     "עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור משקאות ומרקים unit=\"ml\" ו-grams הוא הכמות במ\"ל. " +
     "intro, desc ו-note קצרים: משפט אחד כל אחד. " +
+    "החזירי את המבנה הזה בכל תור בלי יוצא מן הכלל: גם כשהיא כותבת שאין לה את המצרכים, גם כשהיא מבקשת משהו אחר, וגם כשחסר לך מידע. אל תחזירי לעולם טקסט חופשי בלי options. אם חסר לך מידע, בכל זאת הציעי 2 עד 3 אופציות, ואת השאלה שלך שימי בשדה note. " +
     "אל תשתמשי בכוכביות, בקווים מפרידים או בכל סימון עיצוב בתוך הטקסט.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
@@ -3737,19 +3738,29 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const endRef = useRef(null);
   const inputRef = useRef(null);
   useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
+  // Every answer is kept, not just the latest: she may scroll back and take an idea from
+  // an earlier round after seeing the newer ones.
+  const [replies, setReplies] = useState([]);
   const lastAnswerRef = useRef(null);
+  const listRef = useRef(null);
+  const roundsRef = useRef(0);
   // A long answer used to be scrolled past: jumping to the bottom of the list left its last
-  // line on screen, so she had to scroll up to find where it started. Land on the top of a
-  // new answer instead, and fall back to the bottom only for her own messages, the typing
-  // indicator and the logging flow.
+  // line on screen, so she had to scroll up to find where it started. Land on the question
+  // she just asked instead, and fall back to the bottom only for her own messages, the
+  // typing indicator and the logging flow. The jump is done on the list's own scrollTop,
+  // not with scrollIntoView, which also moves every scrollable ancestor. It fires only when
+  // a round was actually added, so a failed answer never drags her back to an older one.
   useEffect(() => {
-    const last = msgs.length ? msgs[msgs.length - 1] : null;
-    if (!loading && last && last.role === "assistant" && lastAnswerRef.current) {
-      lastAnswerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
+    if (!loading && replies.length && replies.length !== roundsRef.current) {
+      roundsRef.current = replies.length;
+      const c = listRef.current, el = lastAnswerRef.current;
+      if (c && el) {
+        c.scrollTo({ top: c.scrollTop + el.getBoundingClientRect().top - c.getBoundingClientRect().top - 8, behavior: "smooth" });
+        return;
+      }
     }
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs, loading, logMsgs, logLoading, logItems, logged]);
+  }, [msgs, replies, loading, logMsgs, logLoading, logItems, logged]);
   const ctx = { proteinFocus };
 
   const diet = profile.diet || [];
@@ -3762,23 +3773,26 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   // The recommender answers as {intro, options[], note} so each idea can be its own card
   // with a choose button. replies holds every parsed answer; chosen holds the one she picked,
   // with an editable weight, before it goes to the diary.
-  // Every answer is kept, not just the latest: she may scroll back and take an idea from
-  // an earlier round after seeing the newer ones.
-  const [replies, setReplies] = useState([]);
   const [chosen, setChosen] = useState(null);
   const [prefsHint, setPrefsHint] = useState(false); // popup pointing her at the profile
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   const avoidAll = [...allergies, ...customSens].filter(Boolean);
 
-  const run = async (history) => {
+  const run = async (history, isRetry) => {
     setLoading(true); setErr(false); setBadAnswer(false);
     const r = await aiMealChat(history, ctx);
-    setLoading(false);
-    if (r.error || !r.text) { setErr(true); return; }
-    setMsgs([...history, { role: "assistant", content: r.text }]);
+    if (r.error || !r.text) { setLoading(false); setErr(true); return; }
     // An unreadable answer must never be printed as-is: it is JSON, and she saw it once.
+    // It also never joins the history, so the next turn is not built on top of it. A short
+    // follow-up like "I do not have that" sometimes makes the model answer in plain prose
+    // instead of the structure, and asking again is enough - so ask again, once, silently.
     const data = parseMealOptions(r.text);
-    if (!data) { setBadAnswer(true); return; }
+    if (!data) {
+      if (!isRetry) { run(history, true); return; }
+      setLoading(false); setBadAnswer(true); return;
+    }
+    setLoading(false);
+    setMsgs([...history, { role: "assistant", content: r.text }]);
     const lastUser = [...history].reverse().find((m) => m.role === "user");
     setReplies((rs) => [...rs, { ask: rs.length ? (lastUser ? lastUser.content : "") : "", data }]);
   };
@@ -3964,7 +3978,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       </div>
       ) : (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
-        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+        <div ref={listRef} style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
           {replies.map((rp, ri) => (
             <div key={ri} ref={ri === replies.length - 1 ? lastAnswerRef : null} style={{ borderTop: ri ? `1px solid ${C.line}` : "none", paddingTop: ri ? 14 : 0 }}>
               {rp.ask && (
