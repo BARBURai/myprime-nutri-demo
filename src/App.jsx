@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.39";
+const VERSION = "4.40";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1177,12 +1177,12 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const stepKcal = stepsOpen ? stepsKcal(steps, profile.weightKg) : 0;
   const budget = dailyTarget + actKcal + stepKcal;
   const macros = dayLog.reduce((s, e) => ({ p: s.p + (e.p || 0), f: s.f + (e.f || 0), c: s.c + (e.c || 0), fib: s.fib + (e.fib || 0) }), { p: 0, f: 0, c: 0, fib: 0 });
-  // Clamped to 10 like every other caller (411, 3971, 4427). Unclamped, a participant past
-  // day 60 got week 11+, contentForDay found nothing, and the content card vanished in
-  // silence while the rest of the screen still said week 10. Access runs 70 days plus
-  // three months, so women finish the programme and keep coming back: they lost their way
-  // into the videos and lessons entirely.
-  const week = Math.min(programWeekFor(profile.startDate, date), 10);
+  // NOT clamped, on purpose. The programme is 70 days, ten weeks of seven, and week 11 is
+  // genuinely week 11: from there she keeps tracking through the three months of access,
+  // today's lesson card is empty, and everything she has already done stays reachable
+  // under "כל התוכנית". Clamping made the tracker claim week 10 for ever. What actually
+  // broke was the card disappearing and taking the only way in with it - handled below.
+  const week = programWeekFor(profile.startDate, date);
   const macroOpen = unlockedOn(profile.startDate, date, MACRO_UNLOCK);
   const waterOpen = unlockedOn(profile.startDate, date, WATER_UNLOCK);
   const cupMl = profile.cupMl || DEFAULT_CUP_ML;
@@ -1319,7 +1319,19 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         </div>
       ) : (
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "0 16px" }}>
-        {CONTENT_ENABLED && <ContentDayCard week={week} dow={dow} C={C} font={fontStack} onOpen={onOpenContent} />}
+        {CONTENT_ENABLED && (contentForDay(week, dow)
+          ? <ContentDayCard week={week} dow={dow} C={C} font={fontStack} onOpen={onOpenContent} />
+          : (
+            <div onClick={onOpenContent} role="button" aria-label="כל התוכנית"
+              style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, borderRadius: 16, padding: "14px 15px", marginBottom: 14, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,0.22)", display: "flex", alignItems: "center", justifyContent: "center" }}><Sparkles size={22} color="#fff" /></div>
+              <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#fff", lineHeight: 1.4 }}>התכנים שלך</div>
+                <div style={{ fontSize: 15, color: "rgba(255,255,255,0.92)", marginTop: 3 }}>אין תוכן חדש היום. כל התוכנית פתוחה לך 💜</div>
+              </div>
+              <ChevronLeft size={20} color="#fff" style={{ flexShrink: 0 }} />
+            </div>
+          ))}
         {catchupDue && (
           <div onClick={onOpenCatchup} role="button" aria-label="הדרכה וסקירה קצרה"
             style={{ background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, borderRadius: 16, padding: "13px 15px", margin: "10px 0 4px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, fontFamily: fontStack, boxShadow: "0 4px 14px rgba(168,66,92,0.28)" }}>
