@@ -265,6 +265,15 @@ function listSundays() {
   }
   return out;
 }
+// Saturday comes back from dowOf as 0, not 7, so the day number used to be dropped from
+// the label entirely and a week looked six days long. The programme is ten weeks of seven,
+// so show it as day 7. And past week 10 there is no week 11 to speak of: the guided phase
+// is over, she keeps her metrics and her content, so say that instead of counting on.
+function phaseLabel(week, dow) {
+  if (week > 10) return "שלב הליווי הסתיים";
+  return `שבוע ${week}, יום ${dow === 0 ? 7 : dow}`;
+}
+
 function programWeekFor(startDate, onDate) {
   if (!startDate) return 1;
   const diff = Math.floor((new Date(onDate) - new Date(startDate)) / 86400000);
@@ -456,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.40";
+const VERSION = "4.41";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3933,7 +3942,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   const dn = dowOf(date);
   const dd = parseDay(date);
   const rel = relLabel(date);
-  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · שבוע ${week}${dn >= 1 ? `, יום ${dn}` : ""}`;
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${phaseLabel(week, dn)}`;
   return (
     <div className="no-textscale" style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
       <div data-tut="tracker" onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
@@ -3987,7 +3996,7 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
   const rel = relLabel(date);
   const wk = Math.min(programWeekFor(startDate, date), 10);
   const dn = dowOf(date);
-  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · שבוע ${wk}${dn >= 1 ? `, יום ${dn}` : ""}`;
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${phaseLabel(programWeekFor(startDate, date), dn)}`;
   return (
     <SheetShell title="המעקב היומי שלי" onClose={onClose}>
       <div style={{ fontSize: 14, fontWeight: 500, color: C.sub, marginBottom: 8, textAlign: "right" }}>{dateLine}</div>
