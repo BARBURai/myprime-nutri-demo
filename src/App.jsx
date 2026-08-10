@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.47";
+const VERSION = "4.48";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4020,7 +4020,11 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
 
         {pending && (
           <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "10px 12px", marginBottom: 8 }}>
-            <div style={{ fontSize: 14, color: C.ink, marginBottom: 8, lineHeight: 1.5 }}>לשמור את זה להעדפות שלך לפעמים הבאות? <b>{[...(pending.diet || []), ...(pending.avoid || [])].join(", ")}</b></div>
+            <div style={{ fontSize: 14, color: C.ink, marginBottom: 8, lineHeight: 1.5 }}>
+              <div style={{ marginBottom: 4 }}>לשמור את זה בפרופיל לפעמים הבאות?</div>
+              {(pending.avoid || []).length > 0 && <div>להימנע מ: <b>{pending.avoid.join(", ")}</b></div>}
+              {(pending.diet || []).length > 0 && <div>סגנון תזונה: <b>{pending.diet.join(", ")}</b></div>}
+            </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={savePending} style={{ border: "none", background: C.brand, color: "#fff", fontFamily: fontStack, fontSize: 14, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>שמרי</button>
               <button onClick={() => setPending(null)} style={{ border: `1px solid ${C.line}`, background: "transparent", color: C.sub, fontFamily: fontStack, fontSize: 14, padding: "7px 16px", borderRadius: 16, cursor: "pointer" }}>לא עכשיו</button>
