@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.42";
+const VERSION = "4.43";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1381,7 +1381,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </div>
         )}
 
-        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} hideRewards={!!profile.hideRewards} />}
+        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} phaseWeek={week} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} hideRewards={!!profile.hideRewards} />}
 
         {dayAct.length > 0 && (
           <>
@@ -3932,7 +3932,10 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   );
 }
 
-function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary, hideRewards }) {
+// week is clamped to 10 because that is as far as the tasks go; phaseWeek is the real one,
+// used only for the heading, which has to say the guided phase ended rather than repeat
+// week 10 for ever.
+function CheckinCard({ date, today, week, phaseWeek, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary, hideRewards }) {
   const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
   const hasManual = tasks.some((t) => !t.auto);
   const total = tasks.length;
@@ -3942,7 +3945,7 @@ function CheckinCard({ date, today, week, tasks, answers, auto, locked, onOpen, 
   const dn = dowOf(date);
   const dd = parseDay(date);
   const rel = relLabel(date);
-  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${phaseLabel(week, dn)}`;
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${phaseLabel(phaseWeek == null ? week : phaseWeek, dn)}`;
   return (
     <div className="no-textscale" style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
       <div data-tut="tracker" onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
