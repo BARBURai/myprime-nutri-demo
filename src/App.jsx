@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.48";
+const VERSION = "4.49";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2252,6 +2252,7 @@ async function aiMealChat(messages, ctx) {
     "2 עד 3 אופציות. grams הוא משקל המנה כולה, ו-kcal/p/f/c הם הערכים לאותה כמות. " +
     "עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור משקאות ומרקים unit=\"ml\" ו-grams הוא הכמות במ\"ל. " +
     "intro, desc ו-note קצרים: משפט אחד כל אחד. " +
+    "המסך ממספר את האופציות ברצף אחד לאורך כל השיחה: אם כבר הצעת שלוש, הבאות יוצגו כ-4, 5 ו-6. לכן כשהיא מזכירה מספר אופציה, ספרי לפי הסדר שהצעת מתחילת השיחה, ואל תתייחסי למספר בתוך התשובה האחרונה בלבד. " +
     "החזירי את המבנה הזה בכל תור בלי יוצא מן הכלל: גם כשהיא כותבת שאין לה את המצרכים, גם כשהיא מבקשת משהו אחר, וגם כשחסר לך מידע. אל תחזירי לעולם טקסט חופשי בלי options. אם חסר לך מידע, בכל זאת הציעי 2 עד 3 אופציות, ואת השאלה שלך שימי בשדה note. " +
     "אל תשתמשי בכוכביות, בקווים מפרידים או בכל סימון עיצוב בתוך הטקסט.";
   const res = await fetch(AI_ENDPOINT, {
@@ -3979,7 +3980,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       ) : (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
         <div ref={listRef} style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
-          {replies.map((rp, ri) => (
+          {(() => { let optNo = 0; return replies.map((rp, ri) => { const firstNo = optNo; optNo += rp.data.options.length; return (
             <div key={ri} ref={ri === replies.length - 1 ? lastAnswerRef : null} style={{ borderTop: ri ? `1px solid ${C.line}` : "none", paddingTop: ri ? 14 : 0 }}>
               {rp.ask && (
                 <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 10 }}>
@@ -3989,7 +3990,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
               {rp.data.intro && <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{rp.data.intro}</div>}
               {rp.data.options.map((o, i) => (
                 <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "12px 13px", marginBottom: 10 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: C.brandD, marginBottom: 3 }}>אופציה {i + 1}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.brandD, marginBottom: 3 }}>אופציה {firstNo + i + 1}</div>
                   <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>{o.name}</div>
                   {o.desc && <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginTop: 4 }}>{o.desc}</div>}
                   <div style={{ fontSize: 13.5, color: C.faint, marginTop: 6 }}>
@@ -4003,7 +4004,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
               ))}
               {rp.data.note && <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginTop: 4, marginBottom: 10 }}>{rp.data.note}</div>}
             </div>
-          ))}
+          ); }); })()}
           {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
           {err && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
           {badAnswer && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>רגע, לא הצלחתי להביא את הרעיונות במלואם 🙂 אפשר לנסות שוב.</div>}
