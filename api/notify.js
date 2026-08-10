@@ -4,7 +4,10 @@
 //     was not in the app yesterday one extra line inviting her to catch up.
 // Triggered by Vercel cron (sends Authorization: Bearer <CRON_SECRET>) OR an external cron (?secret=<NOTIFY_SECRET>).
 // Reads all subscriptions from Redis HASH `push:subs`, sends a push to each, prunes dead ones (404/410).
-// Gated so it only sends during the right hour in Asia/Jerusalem (DST-safe), unless ?force=1.
+// Vercel runs a scheduled job somewhere INSIDE its hour, not on the hour, so demanding an
+// exact hour meant a late run sent nothing at all that day. Each job therefore accepts a
+// two-hour window and claims a once-per-day marker in Redis, so a late run still delivers
+// and two runs can never both send. ?force=1 bypasses both, for manual testing.
 //   Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT, CRON_SECRET, NOTIFY_SECRET
 import webpush from "web-push";
 
@@ -54,14 +57,27 @@ export default async function handler(req, res) {
 
   const force = req.query && (req.query.force === "1" || req.query.force === "true");
   const morning = !!(req.query && req.query.kind === "morning");
-  const hour = morning ? 7 : 19;
-  if (!force && jerusalemHour() !== hour) return res.status(200).json({ ok: true, skipped: `not ${hour}:00 Jerusalem` });
+  const kind = morning ? "morning" : "evening";
+  const startHour = morning ? 7 : 19;
+  const h = jerusalemHour();
+  if (!force && (h < startHour || h > startHour + 1)) {
+    return res.status(200).json({ ok: true, skipped: `outside ${startHour}:00-${startHour + 1}:59 Jerusalem` });
+  }
 
   const RU = process.env.UPSTASH_REDIS_REST_URL;
   const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
   const PUB = process.env.VAPID_PUBLIC;
   const PRIV = process.env.VAPID_PRIVATE;
   if (!RU || !RT || !PUB || !PRIV) return res.status(200).json({ ok: false, reason: "not_configured" });
+
+  // Claim the day. SET NX succeeds for exactly one run, so the second cron in the window
+  // finds the day taken and stops before sending anything.
+  if (!force) {
+    try {
+      const claimed = await redisCmd(RU, RT, ["SET", `push:sent:${kind}:${israelDay(0)}`, "1", "NX", "EX", "172800"]);
+      if (claimed !== "OK") return res.status(200).json({ ok: true, skipped: `already sent today (${kind})` });
+    } catch (e) { /* a Redis hiccup must not silence the day; better a rare duplicate */ }
+  }
 
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:hello@myprime.co.il", PUB, PRIV);
 
