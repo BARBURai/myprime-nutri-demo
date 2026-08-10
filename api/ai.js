@@ -135,10 +135,18 @@ export default async function handler(req, res) {
         const day = israelDay();
         const inTok = Number(data.usage.input_tokens) || 0;
         const outTok = Number(data.usage.output_tokens) || 0;
+        // Prompt caching: Anthropic reports the cached part of the prompt in its OWN fields
+        // and EXCLUDES it from input_tokens, so a report that reads input_tokens alone is
+        // blind to it and understates the bill. Reads are billed at about a tenth of the
+        // input price and writes at about a quarter above it, so they need separate counters.
+        const cReadTok = Number(data.usage.cache_read_input_tokens) || 0;
+        const cWriteTok = Number(data.usage.cache_creation_input_tokens) || 0;
         const c = await redis(base, token, "INCR", `usage:${day}:calls`);
         await redis(base, token, "INCRBY", `usage:${day}:in`, inTok);
         await redis(base, token, "INCRBY", `usage:${day}:out`, outTok);
-        if (c === 1) { for (const sfx of ["calls", "in", "out"]) await redis(base, token, "EXPIRE", `usage:${day}:${sfx}`, 691200); } // ~8 days
+        await redis(base, token, "INCRBY", `usage:${day}:cread`, cReadTok);
+        await redis(base, token, "INCRBY", `usage:${day}:cwrite`, cWriteTok);
+        if (c === 1) { for (const sfx of ["calls", "in", "out", "cread", "cwrite"]) await redis(base, token, "EXPIRE", `usage:${day}:${sfx}`, 691200); } // ~8 days
         if (isPhoto) { const pc = await redis(base, token, "INCR", `usage:${day}:photos`); if (pc === 1) await redis(base, token, "EXPIRE", `usage:${day}:photos`, 691200); }
       } catch (e) { console.warn("usage-log error:", String(e)); }
     }
