@@ -1,7 +1,10 @@
-// Daily 19:00 (Asia/Jerusalem) Web Push: reminds each subscribed woman the tracking diary is open.
+// Daily Web Push, two jobs from one function:
+//   evening (default) - 19:00 Asia/Jerusalem, "did you fill the diary today?", same text for everyone.
+//   morning (?kind=morning) - 07:00 Asia/Jerusalem, "new content today", and for a woman who
+//     was not in the app yesterday one extra line inviting her to catch up.
 // Triggered by Vercel cron (sends Authorization: Bearer <CRON_SECRET>) OR an external cron (?secret=<NOTIFY_SECRET>).
 // Reads all subscriptions from Redis HASH `push:subs`, sends a push to each, prunes dead ones (404/410).
-// Gated so it only actually sends during the 19:00 hour in Asia/Jerusalem (DST-safe), unless ?force=1.
+// Gated so it only sends during the right hour in Asia/Jerusalem (DST-safe), unless ?force=1.
 //   Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT, CRON_SECRET, NOTIFY_SECRET
 import webpush from "web-push";
 
@@ -20,6 +23,29 @@ function jerusalemHour() {
   return parseInt(s, 10);
 }
 
+// Israel-local date, matching the activity flag written by api/access.js.
+function israelDay(offsetDays) {
+  const d = new Date(Date.now() - (offsetDays || 0) * 86400000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+const PROGRAM_DAYS = 70;
+
+// Day number within the program, day 1 being her start Sunday.
+function programDayNumber(startDate, onDate) {
+  return Math.floor((new Date(onDate) - new Date(startDate)) / 86400000) + 1;
+}
+
+// Does she have new content today? Saturday is a rest day with none, and after the 70 days
+// nothing new opens - everything already unlocked simply stays available. On those days the
+// morning push says nothing at all, because a headline promising new content would be false.
+function hasNewContent(startDate, today) {
+  if (!startDate) return true; // unknown start date: behave as before rather than go silent
+  const day = programDayNumber(startDate, today);
+  if (day < 1 || day > PROGRAM_DAYS) return false;
+  return new Date(today).getUTCDay() !== 6; // 6 = Saturday
+}
+
 export default async function handler(req, res) {
   const auth = req.headers.authorization || "";
   const cronOk = process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`;
@@ -27,7 +53,9 @@ export default async function handler(req, res) {
   if (!cronOk && !secretOk) return res.status(401).json({ ok: false, reason: "unauthorized" });
 
   const force = req.query && (req.query.force === "1" || req.query.force === "true");
-  if (!force && jerusalemHour() !== 19) return res.status(200).json({ ok: true, skipped: "not 19:00 Jerusalem" });
+  const morning = !!(req.query && req.query.kind === "morning");
+  const hour = morning ? 7 : 19;
+  if (!force && jerusalemHour() !== hour) return res.status(200).json({ ok: true, skipped: `not ${hour}:00 Jerusalem` });
 
   const RU = process.env.UPSTASH_REDIS_REST_URL;
   const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -37,12 +65,17 @@ export default async function handler(req, res) {
 
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:hello@myprime.co.il", PUB, PRIV);
 
-  const payload = JSON.stringify({
+  const eveningPayload = JSON.stringify({
     title: "MyPrime מעקב",
     body: "תזכורת קטנה 💜 מילאת היום את דוח המעקב היומי שלך?",
     url: "/",
     tag: "daily-diary",
   });
+  const MORNING_TITLE = "תוכן יומי חדש באפליקציה 🎉";
+  const MORNING_BODY = "קחי רגע לעצמך - זה הזמן שלך! ענת 🌺";
+  // Only ever an invitation. It never claims she did nothing, so it does no harm on the
+  // day the flag is wrong for some other reason.
+  const CATCHUP_LINE = "אם לא הספקת להיכנס אתמול לאפליקציה, ממליצה לך למצוא כמה דקות ולהשלים את הימים החסרים 🙏";
 
   let raw;
   try {
@@ -56,12 +89,44 @@ export default async function handler(req, res) {
     for (let i = 0; i < raw.length; i += 2) entries.push([raw[i], raw[i + 1]]);
   }
 
-  let sent = 0, pruned = 0, failed = 0;
+  const today = israelDay(0);
+
+  // Who was NOT in the app yesterday. One MGET for everyone rather than a round trip per
+  // woman, which at 1,300 subscriptions is the difference between one call and 1,300.
+  const wasActive = new Map();
+  if (morning) {
+    const emails = [...new Set(entries.map(([, v]) => { try { return (JSON.parse(v).email || "").trim().toLowerCase(); } catch (e) { return ""; } }).filter(Boolean))];
+    if (emails.length) {
+      try {
+        const y = israelDay(1);
+        const vals = await redisCmd(RU, RT, ["MGET", ...emails.map((e) => `act:${y}:${e}`)]);
+        emails.forEach((e, i) => wasActive.set(e, !!(Array.isArray(vals) && vals[i])));
+      } catch (e) { /* unknown activity: send the plain message, never a wrong accusation */ }
+    }
+  }
+
+  let sent = 0, pruned = 0, failed = 0, quiet = 0;
   for (const [endpoint, val] of entries) {
     let rec;
     try { rec = JSON.parse(val); } catch (e) { continue; }
     const sub = rec && rec.sub;
     if (!sub) continue;
+
+    let payload = eveningPayload;
+    if (morning) {
+      if (!hasNewContent(rec.startDate, today)) { quiet++; continue; }
+      const email = (rec.email || "").trim().toLowerCase();
+      // Only add the catch-up line when we positively know she was away. An unknown email
+      // or a failed lookup gets the plain message.
+      const away = email && wasActive.has(email) && wasActive.get(email) === false;
+      payload = JSON.stringify({
+        title: MORNING_TITLE,
+        body: away ? `${MORNING_BODY}\n\n${CATCHUP_LINE}` : MORNING_BODY,
+        url: "/",
+        tag: "daily-content",
+      });
+    }
+
     try {
       await webpush.sendNotification(sub, payload);
       sent++;
@@ -75,5 +140,5 @@ export default async function handler(req, res) {
       }
     }
   }
-  return res.status(200).json({ ok: true, sent, pruned, failed, total: entries.length });
+  return res.status(200).json({ ok: true, kind: morning ? "morning" : "evening", sent, pruned, failed, quiet, total: entries.length });
 }

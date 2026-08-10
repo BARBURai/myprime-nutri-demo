@@ -39,6 +39,12 @@ function parseDateToSunday(s) {
 
 function ymd(dt) { return dt.toISOString().slice(0, 10); }
 
+// Israel-local date, so "was she in the app yesterday" flips at local midnight.
+function israelDay(offsetDays) {
+  const d = new Date(Date.now() - (offsetDays || 0) * 86400000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
 // Parse one CSV line into cells, respecting double-quoted fields (which may contain commas).
 function parseCsvLine(line) {
   const out = []; let cur = ""; let q = false;
@@ -210,6 +216,14 @@ export default async function handler(req, res) {
       await redis(RU, RT, "ZADD", key, now, device);
       await redis(RU, RT, "EXPIRE", key, TTL);
     } catch (e) { /* never lock a registered user out on a Redis hiccup */ }
+  }
+
+  // Daily activity flag. The app calls this endpoint every time it loads, so opening the
+  // app IS the signal - which is exactly what the morning push asks about ("if you did not
+  // manage to get into the app yesterday"). No new endpoint and no extra call from the
+  // phone. Two days of life is enough for a job that only ever looks at yesterday.
+  if (RU && RT) {
+    try { await redis(RU, RT, "SET", `act:${israelDay(0)}:${email}`, "1", "EX", 172800); } catch (e) { /* a flag is never worth failing a login over */ }
   }
 
   return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate });

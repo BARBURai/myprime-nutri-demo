@@ -1,7 +1,9 @@
 // Web Push subscription endpoint for the daily 19:00 diary reminder.
 //   GET  /api/subscribe                         -> { ok, publicKey }  (client needs this before subscribing)
 //   POST /api/subscribe { email, subscription } -> { ok }             (stores / refreshes the subscription)
-// Subscriptions live in a Redis HASH `push:subs`: field = endpoint, value = JSON({ email, sub, ts }).
+// Subscriptions live in a Redis HASH `push:subs`: field = endpoint, value = JSON({ email, sub, ts, startDate }).
+// startDate is stored so the morning job can work out her program day (and stay silent on
+// days that have no new content) without reading the registration sheet 1,300 times.
 // Reuses the SAME Upstash Redis as the access gate / backup.
 //   Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, VAPID_PUBLIC
 
@@ -32,7 +34,8 @@ export default async function handler(req, res) {
   const sub = body.subscription;
   if (!sub || !sub.endpoint) return res.status(200).json({ ok: false, reason: "no_sub" });
 
-  const record = JSON.stringify({ email, sub, ts: Date.now() });
+  const startDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.startDate || "")) ? String(body.startDate) : "";
+  const record = JSON.stringify({ email, sub, ts: Date.now(), startDate });
   try {
     await redisCmd(RU, RT, ["HSET", "push:subs", sub.endpoint, record]);
     return res.status(200).json({ ok: true });

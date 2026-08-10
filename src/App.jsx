@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.54";
+const VERSION = "4.55";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5165,7 +5165,11 @@ async function enableDailyReminder(email) {
     if (!sub) {
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(j.publicKey) });
     }
-    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", subscription: sub }) });
+    // Her start date rides along so the morning push can tell which program day she is on.
+    // Read here rather than passed in, so every existing caller keeps working unchanged.
+    let startDate = "";
+    try { startDate = localStorage.getItem("myprime_start_date") || ""; } catch (e) {}
+    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", subscription: sub, startDate }) });
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: "error" };

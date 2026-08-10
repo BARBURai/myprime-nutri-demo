@@ -2,6 +2,8 @@
   "crons": [
     { "path": "/api/notify", "schedule": "0 16 * * *" },
     { "path": "/api/notify", "schedule": "0 17 * * *" },
+    { "path": "/api/notify?kind=morning", "schedule": "0 4 * * *" },
+    { "path": "/api/notify?kind=morning", "schedule": "0 5 * * *" },
     { "path": "/api/usage-report", "schedule": "0 5 * * *" }
   ]
 }
