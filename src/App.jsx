@@ -481,7 +481,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.59";
+const VERSION = "4.60";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1789,7 +1789,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
         {stat("פחמ׳ (ג׳)", n.c, C.macroC)}
       </div>
 
-      <div style={{ marginBottom: editing ? 10 : 0 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> {editing ? "עדכן" : "הוסף ליומן"}</Btn></div>
+      <div style={{ marginBottom: editing ? 10 : 0 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> {editing ? "עדכני" : "הוסיפי ליומן"}</Btn></div>
       {editing && <Btn variant="ghost" onClick={onDelete}>מחק פריט</Btn>}
     </SheetShell>
   );
@@ -3458,26 +3458,26 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
+              {/* Right under the numbers she is questioning. The global barcode database
+                  often holds a generic version of a product rather than the Israeli package
+                  in her hand; the correction is filed against the barcode she scanned. */}
+              {scannedCode && String(food.id || "").startsWith("bc_") && !state.editEntry && (
+                <div style={{ borderTop: `1px solid ${C.line}`, marginTop: 10, paddingTop: 9, textAlign: "center" }}>
+                  <button onClick={() => {
+                    setMName(food.name || "");
+                    setMAmount(String(grams || 100));
+                    setMUnit(food.unit === "ml" ? "ml" : "g");
+                    setMKcal(String(food.per100.kcal || ""));
+                    setMProt(String(food.per100.p || ""));
+                    setMFat(String(food.per100.f || ""));
+                    setMCarb(String(food.per100.c || ""));
+                    setStep("manual");
+                  }} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>הערכים לא תואמים לאריזה? עדכני מהתווית</button>
+                </div>
+              )}
             </div>
-            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
+            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכני" : `הוסיפי ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
-            {/* The global barcode database often holds a generic version of a product rather
-                than the Israeli package in her hand. This is her way to put it right, and
-                the correction is filed against the barcode she already scanned. */}
-            {scannedCode && String(food.id || "").startsWith("bc_") && !state.editEntry && (
-              <div style={{ marginTop: 12, textAlign: "center" }}>
-                <button onClick={() => {
-                  setMName(food.name || "");
-                  setMAmount(String(grams || 100));
-                  setMUnit(food.unit === "ml" ? "ml" : "g");
-                  setMKcal(String(food.per100.kcal || ""));
-                  setMProt(String(food.per100.p || ""));
-                  setMFat(String(food.per100.f || ""));
-                  setMCarb(String(food.per100.c || ""));
-                  setStep("manual");
-                }} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14.5, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>הערכים לא תואמים לאריזה? עדכני מהתווית</button>
-              </div>
-            )}
           </>
         )}
       </div>
@@ -5195,7 +5195,7 @@ function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCo
           <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>בחרי קוד חדש. הנתונים שבמכשיר יגובו מחדש עם הקוד החדש.</div>
           <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="קוד חדש" style={inputS} />
           <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב" style={inputS} />
-          <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onResetCode(code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מעדכן..." : "עדכון קוד"}</Btn>
+          <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onResetCode(code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מעדכנת..." : "עדכון קוד"}</Btn>
           <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setMsg(null); setMode("view"); }} style={{ color: C.sub }}>ביטול</Btn></div>
         </>
       )}
