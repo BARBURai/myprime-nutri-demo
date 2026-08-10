@@ -83,22 +83,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, count: items.length, items });
   }
 
-  // --- search ---
-  if (req.method === "GET") {
-    const term = String(q.q || "").trim();
-    if (term.length < 2) return res.status(200).json({ ok: true, items: [] });
-    const nq = normName(term);
-    if (!nq) return res.status(200).json({ ok: true, items: [] });
-    const keys = (await redisPost(base, token, ["KEYS", "cat:*"])) || [];
-    const matched = keys.filter((k) => k.slice(4).includes(nq)).slice(0, 8);
-    const items = [];
-    for (const k of matched) {
-      const v = await redisPost(base, token, ["GET", k]);
-      if (v) { try { items.push(toFood(JSON.parse(v), k)); } catch (e) { /* skip */ } }
-    }
-    return res.status(200).json({ ok: true, items });
-  }
-
   // --- a scanned product: what WE hold for this barcode ---
   // Shared values win over the global database, because they were read off the Israeli
   // package by two different women. Otherwise her own correction, if she made one.
@@ -113,6 +97,22 @@ export default async function handler(req, res) {
       if (mine) { try { return res.status(200).json({ ok: true, scope: "mine", item: JSON.parse(mine) }); } catch (e) { /* fall through */ } }
     }
     return res.status(200).json({ ok: true, scope: "none", item: null });
+  }
+
+  // --- search ---
+  if (req.method === "GET") {
+    const term = String(q.q || "").trim();
+    if (term.length < 2) return res.status(200).json({ ok: true, items: [] });
+    const nq = normName(term);
+    if (!nq) return res.status(200).json({ ok: true, items: [] });
+    const keys = (await redisPost(base, token, ["KEYS", "cat:*"])) || [];
+    const matched = keys.filter((k) => k.slice(4).includes(nq)).slice(0, 8);
+    const items = [];
+    for (const k of matched) {
+      const v = await redisPost(base, token, ["GET", k]);
+      if (v) { try { items.push(toFood(JSON.parse(v), k)); } catch (e) { /* skip */ } }
+    }
+    return res.status(200).json({ ok: true, items });
   }
 
   // --- her correction, read off the package ---
