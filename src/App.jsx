@@ -465,7 +465,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.43";
+const VERSION = "4.44";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2223,7 +2223,13 @@ async function aiMealChat(messages, ctx) {
     "בסיס הערכים: התבססי ככל האפשר על ערכי מאגר התזונה הלאומי של משרד הבריאות (\"צמרת\") עבור מזונות ישראליים, כדי שההערכות יהיו עקביות ומדויקות. " +
     "תמיד סיימי בשאלה עדינה - מה היא חושבת, או אם יש לה את המצרכים. אם חסר לה מצרך (למשל אין סלמון) - הציעי מיד חלופה זמינה ופשוטה. " +
     "אל תפני אותה לדבר עם אדם, מאמנת או צוות, ואל תציעי ליצור קשר או להעביר פנייה לאף אחד - את כאן כדי לעזור עם האוכל והתזונה בלבד. " +
-    "אל תיתני ייעוץ רפואי. החזירי טקסט רגיל בלבד (לא JSON, בלי סימוני קוד).";
+    "אל תיתני ייעוץ רפואי. " +
+    // Structured, so the app can render each idea as its own card with a choose button.
+    // She still writes to it freely; only the shape of the answer is fixed.
+    "החזירי JSON בלבד, בלי טקסט לפני או אחרי ובלי סימוני קוד, במבנה הזה: " +
+    '{"intro":"משפט פתיחה קצר בקול שלך","options":[{"name":"שם קצר של המנה","desc":"תיאור קצר: איך מכינים ומה שמים","grams":250,"kcal":320,"p":28,"f":10,"c":20}],"note":"שאלה עדינה או הערה קצרה בסוף"}. ' +
+    "2 עד 3 אופציות. grams הוא משקל המנה כולה, ו-kcal/p/f/c הם הערכים לאותה כמות. " +
+    "אל תשתמשי בכוכביות, בקווים מפרידים או בכל סימון עיצוב בתוך הטקסט.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 700, system, messages }),
@@ -3724,6 +3730,11 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   // of a row of chips plus two more fields. Local state, so it clears every time the sheet
   // opens: a fridge from last week produces worse ideas than no fridge at all.
   const [ask, setAsk] = useState("");
+  // The recommender answers as {intro, options[], note} so each idea can be its own card
+  // with a choose button. reply holds the parsed answer; chosen holds the one she picked,
+  // with an editable weight, before it goes to the diary.
+  const [reply, setReply] = useState(null);
+  const [chosen, setChosen] = useState(null);
   const [prefsHint, setPrefsHint] = useState(false); // popup pointing her at the profile
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   const avoidAll = [...allergies, ...customSens].filter(Boolean);
@@ -3734,6 +3745,11 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     setLoading(false);
     if (r.error || !r.text) { setErr(true); return; }
     setMsgs([...history, { role: "assistant", content: r.text }]);
+    // A malformed answer must not blank the screen: fall back to showing the raw text.
+    const parsed = extractAiJson(r.text);
+    setReply(parsed && Array.isArray(parsed.options) && parsed.options.length
+      ? parsed
+      : { intro: r.text, options: [], note: "" });
   };
   const startChat = () => {
     const avoidList = [...allergies, ...(dislikes ? [dislikes] : [])].filter(Boolean);
@@ -3796,6 +3812,20 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     if (!text || logLoading) return;
     const next = [...logMsgs, { role: "user", content: text }];
     setLogMsgs(next); setLogInput(""); setLogItems(null); runLog(next);
+  };
+  // The AI's numbers are for the weight it suggested, so rescale when she changes it.
+  const scaled = (o) => {
+    const base = o.baseGrams || o.grams || 1;
+    const f = base ? (o.grams || 0) / base : 1;
+    const r = (v) => Math.round((v || 0) * f);
+    return { kcal: r(o.kcal), p: r(o.p), f: r(o.f), c: r(o.c) };
+  };
+  const logChosen = () => {
+    if (!chosen) return;
+    const v = scaled(chosen);
+    onLog([{ meal: chosen.meal, name: chosen.name, g: chosen.grams, unit: "g", source: "estimated", kcal: v.kcal, p: v.p, f: v.f, c: v.c, servingG: chosen.grams || 1 }]);
+    setChosen(null);
+    onClose();
   };
   const doLog = () => {
     if (!logItems || !logItems.length) return;
@@ -3891,23 +3921,44 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
       ) : (
       <div style={{ display: "flex", flexDirection: "column", height: 400 }}>
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
-          {visible.map((m, i) => (
-            <div key={i} ref={i === visible.length - 1 && m.role === "assistant" ? lastAnswerRef : null} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
-              <div style={{ maxWidth: "84%", fontSize: 16, lineHeight: 1.55, padding: "10px 13px", borderRadius: 14, whiteSpace: "pre-wrap", background: m.role === "user" ? C.brand : C.bg, color: m.role === "user" ? "#fff" : C.ink }}>{m.content}</div>
+          {visible.filter((m) => m.role === "user").length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              {visible.filter((m) => m.role === "user").slice(-1).map((m, i) => (
+                <div key={"u" + i} style={{ display: "flex", justifyContent: "flex-start" }}>
+                  <div style={{ maxWidth: "84%", fontSize: 15, lineHeight: 1.5, padding: "8px 12px", borderRadius: 14, background: C.brand, color: "#fff" }}>{m.content}</div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          {reply && !loading && (
+            <div ref={lastAnswerRef}>
+              {reply.intro && <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, marginBottom: 12, whiteSpace: "pre-wrap" }}>{reply.intro}</div>}
+              {reply.options.map((o, i) => (
+                <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "12px 13px", marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.brandD, marginBottom: 3 }}>אופציה {i + 1}</div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>{o.name}</div>
+                  {o.desc && <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginTop: 4 }}>{o.desc}</div>}
+                  <div style={{ fontSize: 13.5, color: C.faint, marginTop: 6 }}>
+                    {o.grams ? `${o.grams} גרם` : ""}{o.grams && o.kcal ? " · " : ""}{o.kcal ? `~${o.kcal} קק״ל` : ""}
+                    {proteinFocus && o.p ? ` · ${o.p} גרם חלבון` : ""}
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <Btn onClick={() => setChosen({ ...o, baseGrams: o.grams || 100, grams: o.grams || 100, meal: defaultMeal() })}>בחרי את זו</Btn>
+                  </div>
+                </div>
+              ))}
+              {reply.note && <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginTop: 4 }}>{reply.note}</div>}
+            </div>
+          )}
           {loading && <div style={{ display: "flex", justifyContent: "flex-end" }}><div style={{ fontSize: 16, padding: "9px 12px", borderRadius: 14, background: C.bg, color: C.faint }}>חושבת על רעיונות…</div></div>}
           {err && <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 12, borderRadius: 10, lineHeight: 1.6 }}>החיבור ל-AI לא עבד כרגע. ודאי שמפתח ה-API מוגדר ב-Vercel ושיש קרדיט בחשבון, ונסי שוב.</div>}
           <div ref={endRef} />
         </div>
 
-        {visible.length > 0 && !loading && (
-          <button onClick={startLog} style={{ width: "100%", marginBottom: 8, border: `1px solid ${C.brand}`, background: C.brandBg, color: C.brandD, borderRadius: 12, padding: 11, fontSize: 16, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}><Check size={17} /> אכלתי - הוסיפי ליומן</button>
-        )}
 
         {!loading && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-            <span onClick={() => sendText("תני לי בבקשה רעיון אחר")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>רעיון אחר</span>
+            <span onClick={() => sendText("אני רוצה משהו אחר")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אני רוצה משהו אחר</span>
             <span onClick={() => sendText("אין לי את המצרכים האלה בבית")} style={{ fontSize: 14, padding: "6px 12px", borderRadius: 16, cursor: "pointer", color: C.brandD, boxShadow: `inset 0 0 0 1px ${C.line}` }}>אין לי את זה</span>
           </div>
         )}
@@ -3922,6 +3973,23 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
           </div>
         )}
 
+        {chosen && (
+          <div onClick={() => setChosen(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 16px", width: "100%", maxWidth: 340, fontFamily: fontStack }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 2 }}>{chosen.name}</div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 12 }}>אפשר לתקן את הכמות לפני שנרשום</div>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>כמה גרם?</div>
+              <input type="number" inputMode="numeric" value={chosen.grams} onChange={(e) => setChosen({ ...chosen, grams: Math.max(0, parseInt(e.target.value, 10) || 0) })} style={{ width: "100%", border: `1.5px solid ${C.brand}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: C.panel, marginBottom: 12 }} />
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>לאיזו ארוחה?</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                {MEALS.map((m) => (<span key={m} onClick={() => setChosen({ ...chosen, meal: m })} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: chosen.meal === m ? C.brand : "transparent", color: chosen.meal === m ? "#fff" : C.sub, boxShadow: chosen.meal === m ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
+              </div>
+              <div style={{ fontSize: 13.5, color: C.faint, marginBottom: 14 }}>{scaled(chosen).kcal} קק״ל{proteinFocus ? ` · ${scaled(chosen).p} גרם חלבון` : ""}</div>
+              <Btn onClick={logChosen}>הוסיפי ליומן</Btn>
+              <Btn variant="ghost" onClick={() => setChosen(null)} style={{ marginTop: 8 }}>ביטול</Btn>
+            </div>
+          </div>
+        )}
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
           <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(input); } }} disabled={loading} rows={1} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
           <button onClick={() => sendText(input)} disabled={loading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: loading ? 0.5 : 1 }}><Send size={18} /></button>
