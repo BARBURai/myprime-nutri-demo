@@ -456,7 +456,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.37";
+const VERSION = "4.38";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1177,7 +1177,12 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const stepKcal = stepsOpen ? stepsKcal(steps, profile.weightKg) : 0;
   const budget = dailyTarget + actKcal + stepKcal;
   const macros = dayLog.reduce((s, e) => ({ p: s.p + (e.p || 0), f: s.f + (e.f || 0), c: s.c + (e.c || 0), fib: s.fib + (e.fib || 0) }), { p: 0, f: 0, c: 0, fib: 0 });
-  const week = programWeekFor(profile.startDate, date);
+  // Clamped to 10 like every other caller (411, 3971, 4427). Unclamped, a participant past
+  // day 60 got week 11+, contentForDay found nothing, and the content card vanished in
+  // silence while the rest of the screen still said week 10. Access runs 70 days plus
+  // three months, so women finish the programme and keep coming back: they lost their way
+  // into the videos and lessons entirely.
+  const week = Math.min(programWeekFor(profile.startDate, date), 10);
   const macroOpen = unlockedOn(profile.startDate, date, MACRO_UNLOCK);
   const waterOpen = unlockedOn(profile.startDate, date, WATER_UNLOCK);
   const cupMl = profile.cupMl || DEFAULT_CUP_ML;
