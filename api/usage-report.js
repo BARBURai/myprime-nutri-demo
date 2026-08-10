@@ -71,6 +71,11 @@ export default async function handler(req, res) {
   const outTok = toInt(await redisCmd(base, token, ["GET", `usage:${day}:out`]));
   const photos = toInt(await redisCmd(base, token, ["GET", `usage:${day}:photos`]));
   const cacheHits = toInt(await redisCmd(base, token, ["GET", `usage:${day}:cachehits`]));
+  // Prompt-caching tokens. Anthropic keeps these out of input_tokens, so before these two
+  // counters existed the report simply did not see them and the bill looked smaller than it
+  // was. Days from before the change return 0 and read exactly as they did.
+  const cReadTok = toInt(await redisCmd(base, token, ["GET", `usage:${day}:cread`]));
+  const cWriteTok = toInt(await redisCmd(base, token, ["GET", `usage:${day}:cwrite`]));
 
   // Per-user distribution from the rate-limit counters ai:day:<id>:<day>.
   let counts = [];
@@ -106,8 +111,18 @@ export default async function handler(req, res) {
   const priceIn = Number(process.env.AI_PRICE_IN || 3);   // USD / 1M input tokens
   const priceOut = Number(process.env.AI_PRICE_OUT || 15); // USD / 1M output tokens
   const usdNis = Number(process.env.USD_NIS || 3.7);
-  const usd = (inTok / 1e6) * priceIn + (outTok / 1e6) * priceOut;
+  // Cached prompt tokens are billed at their own rates: a read costs about a tenth of a
+  // normal input token, writing one into the cache costs about a quarter more.
+  const CACHE_READ_RATE = 0.1, CACHE_WRITE_RATE = 1.25;
+  const usd = (inTok / 1e6) * priceIn
+    + (cReadTok / 1e6) * priceIn * CACHE_READ_RATE
+    + (cWriteTok / 1e6) * priceIn * CACHE_WRITE_RATE
+    + (outTok / 1e6) * priceOut;
   const nis = usd * usdNis;
+  // What the cached instructions actually saved: the discount on every read, less the
+  // premium paid to store them. It can come out negative on a quiet day, and that is the
+  // honest answer - the cache only pays off when calls follow each other closely.
+  const cacheNis = ((cReadTok * (1 - CACHE_READ_RATE) - cWriteTok * (CACHE_WRITE_RATE - 1)) / 1e6) * priceIn * usdNis;
   const avgCallUsd = calls ? usd / calls : 0;
   const savedNis = cacheHits * avgCallUsd * usdNis;
   const nisPerUser = activeUsers ? nis / activeUsers : 0;
@@ -127,18 +142,21 @@ export default async function handler(req, res) {
       ${row(`הגיעו למכסה (${limit})`, hitLimit.toLocaleString())}
       <tr><td colspan="2" style="border-top:1px solid #eee;padding-top:6px"></td></tr>
       ${row("טוקנים (קלט)", inTok.toLocaleString())}
+      ${row("טוקנים של הנחיות, במחיר מוזל", cReadTok.toLocaleString())}
+      ${row("טוקנים של הנחיות, שמירה", cWriteTok.toLocaleString())}
       ${row("טוקנים (פלט)", outTok.toLocaleString())}
       ${row("עלות מוערכת", `₪${f2(nis)} <span style="color:#8a8a90;font-weight:400">($${f2(usd)})</span>`)}
       ${row("עלות מוערכת לאישה", `₪${f2(nisPerUser)}`)}
-      ${row("נחסך מה-cache (קריאות)", `${cacheHits.toLocaleString()} ≈ ₪${f2(savedNis)}`)}
+      ${row("נחסך מההנחיות השמורות", `₪${f2(cacheNis)}`)}
+      ${row("נחסך מתשובות חוזרות (קריאות)", `${cacheHits.toLocaleString()} ≈ ₪${f2(savedNis)}`)}
       <tr><td colspan="2" style="border-top:1px solid #eee;padding-top:6px"></td></tr>
       ${row("מיילים עם 3 מכשירים או יותר", `${sharedEmails.toLocaleString()} <span style="color:#8a8a90;font-weight:400">מתוך ${trackedEmails.toLocaleString()}</span>`)}
     </table>
-    <div style="color:#a0a0a6;font-size:12px;margin-top:14px;line-height:1.6">העלות מחושבת מהטוקנים בפועל לפי מחירי Sonnet ($${priceIn}/$${priceOut} למיליון, שער ${usdNis}). הערכה - לנתון הרשמי ראה את עמוד ה-Usage בקונסול.</div>
+    <div style="color:#a0a0a6;font-size:12px;margin-top:14px;line-height:1.6">העלות מחושבת מהטוקנים בפועל לפי מחירי Sonnet ($${priceIn}/$${priceOut} למיליון, שער ${usdNis}). טוקנים של הנחיות שמורות מחויבים ב-10% מהקלט בקריאה וב-125% בשמירה. הערכה - לנתון הרשמי ראה את עמוד ה-Usage בקונסול.</div>
   </div>`;
 
   const RESEND = process.env.RESEND_API_KEY;
-  const summary = { ok: true, day, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis), sharedEmails, trackedEmails };
+  const summary = { ok: true, day, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, cReadTok, cWriteTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis), cacheNis: f2(cacheNis), sharedEmails, trackedEmails };
   if (!RESEND) return res.status(200).json({ ...summary, emailed: false, reason: "no RESEND_API_KEY (preview only)" });
 
   const to = process.env.REPORT_TO || "Ron@myprime.co.il";
