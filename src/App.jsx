@@ -38,6 +38,22 @@ function catalogAdd(item) {
     fetch(CATALOG_ENDPOINT, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name: String(item.name).trim(), per100, unit: item.unit || "g", source: item.catSource || item.source || "estimated" }) }).catch(() => {});
   } catch (e) { /* ignore */ }
 }
+// What WE hold for a scanned barcode: values two women read off the Israeli package beat
+// the global database, which often carries a generic version of the product.
+async function catalogBarcodeGet(code) {
+  try {
+    const r = await fetch(`${CATALOG_ENDPOINT}?code=${encodeURIComponent(code)}`, { headers: aiHeaders() });
+    const d = await r.json();
+    return (d && d.item) || null;
+  } catch (e) { return null; }
+}
+// Her correction, read off the package. Private to her until a second woman types the same.
+async function catalogBarcodePut(code, name, per100, unit) {
+  try {
+    const r = await fetch(`${CATALOG_ENDPOINT}?action=bc`, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ code, name, per100, unit }) });
+    return await r.json();
+  } catch (e) { return { ok: false }; }
+}
 async function catalogSearch(term) {
   try {
     const r = await fetch(`${CATALOG_ENDPOINT}?q=${encodeURIComponent(term)}`, { headers: aiHeaders() });
@@ -465,7 +481,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.57";
+const VERSION = "4.58";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2798,11 +2814,23 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const mInput = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", background: C.panel };
   const mLbl = { display: "block", fontSize: 13, color: C.sub, marginBottom: 4 };
   const saveManual = () => {
+    if (labelSaved) return; // the thank-you is showing and the entry is already on its way
     const name = mName.trim(); const amount = Math.round(Number(mAmount) || 0);
     if (!name || amount <= 0) return;
     const k = amount / 100;
     const n = { kcal: Math.round((Number(mKcal) || 0) * k), p: Math.round((Number(mProt) || 0) * k), f: Math.round((Number(mFat) || 0) * k), c: Math.round((Number(mCarb) || 0) * k) };
-    commit({ meal, name, g: amount, unit: mUnit, source: "manual", ...n });
+    // Typed off a package she scanned: file it against the barcode too, so the next time
+    // she meets this product it is simply right, and so a second woman can confirm it.
+    const entry = { meal, name, g: amount, unit: mUnit, source: "manual", ...n };
+    if (scannedCode) {
+      catalogBarcodePut(scannedCode, name, { kcal: Number(mKcal) || 0, p: Number(mProt) || 0, f: Number(mFat) || 0, c: Number(mCarb) || 0 }, mUnit);
+      // Still one tap: show the thank-you, then let the sheet close on its own. Committing
+      // straight away closes the sheet and she would never see that it was saved.
+      setLabelSaved(true);
+      setTimeout(() => commit(entry), 1200);
+      return;
+    }
+    commit(entry);
   };
 
   // Two-stage search. Stage A (fast, cheap): our catalog + the Israeli national
@@ -2971,9 +2999,25 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const scanControlsRef = useRef(null);
   const [scanState, setScanState] = useState("idle");
   const [manualCode, setManualCode] = useState("");
+  // The barcode she just scanned. Kept so the manual screen and the correction can use it
+  // without ever asking her to type it: the phone already read it.
+  const [scannedCode, setScannedCode] = useState("");
+  const [labelSaved, setLabelSaved] = useState(false);
   const stopScan = () => { try { scanControlsRef.current && scanControlsRef.current(); } catch (e) {} scanControlsRef.current = null; };
   const lookupBarcode = async (code) => {
     setScanState("looking");
+    setScannedCode(String(code));
+    // Ours first. A product corrected off the Israeli package is more trustworthy than the
+    // global database, and it costs nothing to ask.
+    try {
+      const own = await catalogBarcodeGet(code);
+      if (own && own.per100 && own.per100.kcal > 0) {
+        const ml = own.unit === "ml";
+        const food = { id: "bc_" + code, name: own.name, per100: own.per100, unit: ml ? "ml" : "g", measures: measuresForUnit(ml ? "ml" : "g"), def: 0 };
+        pickFood(food, 100);
+        return;
+      }
+    } catch (e) { /* fall through to the global database */ }
     try {
       const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_he,generic_name,generic_name_he,brands,nutriments,serving_size,serving_quantity`);
       const d = await r.json();
@@ -3083,8 +3127,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         )}
         {step === "manual" && (
           <>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>הזנה ידנית</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>{scannedCode ? "עדכון מהתווית" : "הזנה ידנית"}</div>
             <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.5, margin: "0 0 14px" }}>הקלידי את הערכים מהתווית של המוצר. הוא יישמר אצלך ויופיע בחיפוש בפעם הבאה.</p>
+            {labelSaved && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 12, marginBottom: 14, fontSize: 15.5, fontWeight: 600, textAlign: "center" }}>תודה 💜 עדכנתי את הערכים אצלך.</div>}
             <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
               {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
             </div>
@@ -3416,6 +3461,23 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             </div>
             <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
+            {/* The global barcode database often holds a generic version of a product rather
+                than the Israeli package in her hand. This is her way to put it right, and
+                the correction is filed against the barcode she already scanned. */}
+            {scannedCode && String(food.id || "").startsWith("bc_") && !state.editEntry && (
+              <div style={{ marginTop: 12, textAlign: "center" }}>
+                <button onClick={() => {
+                  setMName(food.name || "");
+                  setMAmount(String(grams || 100));
+                  setMUnit(food.unit === "ml" ? "ml" : "g");
+                  setMKcal(String(food.per100.kcal || ""));
+                  setMProt(String(food.per100.p || ""));
+                  setMFat(String(food.per100.f || ""));
+                  setMCarb(String(food.per100.c || ""));
+                  setStep("manual");
+                }} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14.5, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>הערכים לא תואמים לאריזה? עדכני מהתווית</button>
+              </div>
+            )}
           </>
         )}
       </div>
