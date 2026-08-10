@@ -38,6 +38,22 @@ function catalogAdd(item) {
     fetch(CATALOG_ENDPOINT, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name: String(item.name).trim(), per100, unit: item.unit || "g", source: item.catSource || item.source || "estimated" }) }).catch(() => {});
   } catch (e) { /* ignore */ }
 }
+// What WE hold for a scanned barcode: values two women read off the Israeli package beat
+// the global database, which often carries a generic version of the product.
+async function catalogBarcodeGet(code) {
+  try {
+    const r = await fetch(`${CATALOG_ENDPOINT}?code=${encodeURIComponent(code)}`, { headers: aiHeaders() });
+    const d = await r.json();
+    return (d && d.item) || null;
+  } catch (e) { return null; }
+}
+// Her correction, read off the package. Private to her until a second woman types the same.
+async function catalogBarcodePut(code, name, per100, unit) {
+  try {
+    const r = await fetch(`${CATALOG_ENDPOINT}?action=bc`, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ code, name, per100, unit }) });
+    return await r.json();
+  } catch (e) { return { ok: false }; }
+}
 async function catalogSearch(term) {
   try {
     const r = await fetch(`${CATALOG_ENDPOINT}?q=${encodeURIComponent(term)}`, { headers: aiHeaders() });
@@ -465,7 +481,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.53";
+const VERSION = "4.60";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1773,7 +1789,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
         {stat("פחמ׳ (ג׳)", n.c, C.macroC)}
       </div>
 
-      <div style={{ marginBottom: editing ? 10 : 0 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> {editing ? "עדכן" : "הוסף ליומן"}</Btn></div>
+      <div style={{ marginBottom: editing ? 10 : 0 }}><Btn onClick={save}><Check size={16} style={{ verticalAlign: -3, marginLeft: 4 }} /> {editing ? "עדכני" : "הוסיפי ליומן"}</Btn></div>
       {editing && <Btn variant="ghost" onClick={onDelete}>מחק פריט</Btn>}
     </SheetShell>
   );
@@ -2143,6 +2159,23 @@ function extractAiJson(text) {
   return null;
 }
 
+// A cut-off logging answer, salvaged. Reading a nutrition label makes the model write a
+// long summary, and when the JSON stopped mid-object the whole turn was thrown away and she
+// got "I could not analyse that" even though the items were already there in the text.
+// Takes the reply line and every item object that closed.
+function salvageNutritionJson(text) {
+  const t = (text || "").replace(/```json|```/g, "");
+  const rm = t.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  let reply = "";
+  if (rm) { try { reply = JSON.parse('"' + rm[1] + '"'); } catch (e) { reply = rm[1]; } }
+  const items = [];
+  const re = /\{[^{}]*"name"\s*:[^{}]*\}/g;
+  let m;
+  while ((m = re.exec(t))) { try { items.push(JSON.parse(m[0])); } catch (e) {} }
+  if (!reply && !items.length) return null;
+  return { reply, done: items.length > 0, items };
+}
+
 // The recommender's answer, salvaged. A cut-off answer is still worth showing: take the
 // intro and every option object that did close, instead of dropping the whole round.
 // Returns null when nothing usable came back - never the raw text, which is how JSON
@@ -2184,7 +2217,7 @@ async function aiNutritionChat(messages) {
   const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) אם חסר מידע על כמה דברים - שאלי על כולם בהודעה אחת (אפשר כרשימה קצרה), לא שאלה אחרי שאלה. שאלי רק על מה שבאמת חסר וחשוב, אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות מיותרות. חשוב מאוד - קראי את כל ההודעה של המשתמשת עד הסוף לפני שאת שואלת שאלה כלשהי, וכבדי כל פרט שכבר נמסר: אם המשתמשת כבר ציינה כמות או מידה (גרם, כוס, כף, כפית, פרוסה) - אל תשאלי עליה שוב לעולם, קחי אותה כפי שהיא. אם כתבה '2 כפות אורז' - יש לך כבר את הכמות, אל תשאלי כמה גרם. אם כבר ציינה אופן הכנה (מבושל, מטוגן, אפוי, על הגריל, חי) - אל תשאלי עליו שוב; 'אורז מבושל' פירושו שכבר יש לך את אופן ההכנה. אם המשתמשת כתבה יחידת מידה מפורשת (כפות / כפיות) - אל תשאלי 'כפות או כפיות', קחי מה שכתבה. כשמצוין שם של פריט שיש לו יחידה טבעית (ביצה, תפוח, בננה, פרוסת לחם, מלפפון, עגבנייה וכו') בלי מספר - הניחי שהכוונה ליחידה אחת ואל תשאלי 'כמה'; רק אם צוין מספר מפורש (למשל '3 ביצים') השתמשי בו. 'ביצה קשה' פירושו ביצה אחת. שאלי על כמות רק כשאין שום יחידה טבעית ולא צוינה שום מידה - למשל מאכל בתפזורת (אורז, פסטה, קוסקוס, גבינה לבנה, סלט) שנכתב בלי כמות כלל. אם המשתמשת הכינה מאכל שמתחלק ליחידות (פשטידה, תבנית עוגה, סיר תבשיל, מגש וכו') - זהי זאת, והתייחסי אליו כמוצר אחד שמתחלק לחתיכות (אל תפרקי אותו לרכיבים). אם היא לא ציינה כמה חתיכות/מנות יצאו מכל המאכל וכמה חתיכות היא אכלה - שאלי את שתי השאלות בהודעה אחת. בפריט כזה החזירי את הערכים של המאכל ה**שלם** (grams ו-kcal והמאקרו של כל התבנית), והוסיפי שני שדות: pieces (מספר החתיכות הכולל) ו-ate (כמה חתיכות היא אכלה). בפריט רגיל שאינו מתחלק לחתיכות - אל תוסיפי את השדות pieces ו-ate. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. עבור מאכל שמתחלק לחתיכות הוסיפי לפריט גם \"pieces\":מספר_חתיכות_כולל ו-\"ate\":כמה_אכלה (עם ערכי המאכל השלם). הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1200, system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }], messages }),
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2200, system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }], messages }),
   });
   const data = await res.json();
   const photoCount = Number(res.headers.get("x-photo-count")) || null;
@@ -2196,7 +2229,7 @@ async function aiNutritionChat(messages) {
     return { raw: "", reply: "אופס - החיבור ל-AI לא עבד. ודאי שמפתח ה-API מוגדר ב-Vercel (Environment Variables) ושנעשה Redeploy, ושיש קרדיט בחשבון Anthropic.", done: false, items: [], limited: false, photoCount };
   }
   const text = (data.content || []).map((i) => i.text || "").join("");
-  const obj = extractAiJson(text);
+  const obj = extractAiJson(text) || salvageNutritionJson(text);
   let parsed = obj;
   if (!parsed) {
     // JSON failed (e.g. truncated/garbled). Salvage just the reply text if possible; never show raw remnants.
@@ -2448,6 +2481,14 @@ function nutritionPlausible(per100) {
   // Macros implying substantially MORE calories than stated = inflated/corrupt row.
   const est = p * 4 + c * 4 + f * 9;
   if (est > kcal * 1.30 + 5) return false;
+  // And the mirror case, which used to sail straight through: calories far too HIGH for
+  // the macros present. That is the shape of the commonest Open Food Facts mistake - the
+  // label's kilojoules typed into the kcal field, which is about four times too big - and
+  // it is the dangerous direction, because it silently inflates her diary. Only judged
+  // when macros were actually reported; a row with no macros at all says nothing either
+  // way. Drinks whose calories come from alcohol land here too and get blocked, which
+  // costs her a manual entry - the right trade against logging four times the calories.
+  if (p + f + c > 0 && est < kcal * 0.5 - 5) return false;
   return true;
 }
 function strongMatch(aiName, dbName) {
@@ -2773,11 +2814,23 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const mInput = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", background: C.panel };
   const mLbl = { display: "block", fontSize: 13, color: C.sub, marginBottom: 4 };
   const saveManual = () => {
+    if (labelSaved) return; // the thank-you is showing and the entry is already on its way
     const name = mName.trim(); const amount = Math.round(Number(mAmount) || 0);
     if (!name || amount <= 0) return;
     const k = amount / 100;
     const n = { kcal: Math.round((Number(mKcal) || 0) * k), p: Math.round((Number(mProt) || 0) * k), f: Math.round((Number(mFat) || 0) * k), c: Math.round((Number(mCarb) || 0) * k) };
-    commit({ meal, name, g: amount, unit: mUnit, source: "manual", ...n });
+    // Typed off a package she scanned: file it against the barcode too, so the next time
+    // she meets this product it is simply right, and so a second woman can confirm it.
+    const entry = { meal, name, g: amount, unit: mUnit, source: "manual", ...n };
+    if (scannedCode) {
+      catalogBarcodePut(scannedCode, name, { kcal: Number(mKcal) || 0, p: Number(mProt) || 0, f: Number(mFat) || 0, c: Number(mCarb) || 0 }, mUnit);
+      // Still one tap: show the thank-you, then let the sheet close on its own. Committing
+      // straight away closes the sheet and she would never see that it was saved.
+      setLabelSaved(true);
+      setTimeout(() => commit(entry), 1200);
+      return;
+    }
+    commit(entry);
   };
 
   // Two-stage search. Stage A (fast, cheap): our catalog + the Israeli national
@@ -2946,9 +2999,25 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const scanControlsRef = useRef(null);
   const [scanState, setScanState] = useState("idle");
   const [manualCode, setManualCode] = useState("");
+  // The barcode she just scanned. Kept so the manual screen and the correction can use it
+  // without ever asking her to type it: the phone already read it.
+  const [scannedCode, setScannedCode] = useState("");
+  const [labelSaved, setLabelSaved] = useState(false);
   const stopScan = () => { try { scanControlsRef.current && scanControlsRef.current(); } catch (e) {} scanControlsRef.current = null; };
   const lookupBarcode = async (code) => {
     setScanState("looking");
+    setScannedCode(String(code));
+    // Ours first. A product corrected off the Israeli package is more trustworthy than the
+    // global database, and it costs nothing to ask.
+    try {
+      const own = await catalogBarcodeGet(code);
+      if (own && own.per100 && own.per100.kcal > 0) {
+        const ml = own.unit === "ml";
+        const food = { id: "bc_" + code, name: own.name, per100: own.per100, unit: ml ? "ml" : "g", measures: measuresForUnit(ml ? "ml" : "g"), def: 0 };
+        pickFood(food, 100);
+        return;
+      }
+    } catch (e) { /* fall through to the global database */ }
     try {
       const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_he,generic_name,generic_name_he,brands,nutriments,serving_size,serving_quantity`);
       const d = await r.json();
@@ -3058,8 +3127,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         )}
         {step === "manual" && (
           <>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>הזנה ידנית</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>{scannedCode ? "עדכון מהתווית" : "הזנה ידנית"}</div>
             <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.5, margin: "0 0 14px" }}>הקלידי את הערכים מהתווית של המוצר. הוא יישמר אצלך ויופיע בחיפוש בפעם הבאה.</p>
+            {labelSaved && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 12, marginBottom: 14, fontSize: 15.5, fontWeight: 600, textAlign: "center" }}>תודה 💜 עדכנתי את הערכים אצלך.</div>}
             <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
               {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
             </div>
@@ -3388,8 +3458,25 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
+              {/* Right under the numbers she is questioning. The global barcode database
+                  often holds a generic version of a product rather than the Israeli package
+                  in her hand; the correction is filed against the barcode she scanned. */}
+              {scannedCode && String(food.id || "").startsWith("bc_") && !state.editEntry && (
+                <div style={{ borderTop: `1px solid ${C.line}`, marginTop: 10, paddingTop: 9, textAlign: "center" }}>
+                  <button onClick={() => {
+                    setMName(food.name || "");
+                    setMAmount(String(grams || 100));
+                    setMUnit(food.unit === "ml" ? "ml" : "g");
+                    setMKcal(String(food.per100.kcal || ""));
+                    setMProt(String(food.per100.p || ""));
+                    setMFat(String(food.per100.f || ""));
+                    setMCarb(String(food.per100.c || ""));
+                    setStep("manual");
+                  }} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>הערכים לא תואמים לאריזה? עדכני מהתווית</button>
+                </div>
+              )}
             </div>
-            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכן" : `הוסף ל${meal}`}</Btn>
+            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכני" : `הוסיפי ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
           </>
         )}
@@ -5108,7 +5195,7 @@ function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCo
           <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>בחרי קוד חדש. הנתונים שבמכשיר יגובו מחדש עם הקוד החדש.</div>
           <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="קוד חדש" style={inputS} />
           <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב" style={inputS} />
-          <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onResetCode(code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מעדכן..." : "עדכון קוד"}</Btn>
+          <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onResetCode(code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מעדכנת..." : "עדכון קוד"}</Btn>
           <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setMsg(null); setMode("view"); }} style={{ color: C.sub }}>ביטול</Btn></div>
         </>
       )}
@@ -5157,7 +5244,11 @@ async function enableDailyReminder(email) {
     if (!sub) {
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(j.publicKey) });
     }
-    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", subscription: sub }) });
+    // Her start date rides along so the morning push can tell which program day she is on.
+    // Read here rather than passed in, so every existing caller keeps working unchanged.
+    let startDate = "";
+    try { startDate = localStorage.getItem("myprime_start_date") || ""; } catch (e) {}
+    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", subscription: sub, startDate }) });
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: "error" };
