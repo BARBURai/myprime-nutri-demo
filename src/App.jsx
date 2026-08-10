@@ -481,7 +481,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.62";
+const VERSION = "4.63";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1476,7 +1476,10 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
   const metDays = loggedDays.filter((x) => calMet(x.kcal)).length;
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
   const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
-  const proteinFocus = programWeek >= MACRO_UNLOCK.week;
+  // The protein task opens on week 3 DAY 4, not on day 1 of week 3. Reading the week alone
+  // turned protein on three days early, while the tracker itself already used the exact
+  // unlock day - so for three days she could be shown a target that did not exist yet.
+  const proteinFocus = unlockedOn(startDate, today, MACRO_UNLOCK);
   const cardBox = { border: `1.5px solid ${C.brand}`, borderRadius: 16, padding: 16, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" };
   const jumpBtn = { flex: 1, border: `1.5px solid ${C.brand}`, background: C.panel, color: C.ink, borderRadius: 12, padding: "10px 6px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5 };
   const stepsRef = useRef(null), calRef = useRef(null), weightRef = useRef(null);
@@ -1905,7 +1908,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
           <span style={{ fontSize: 14, color: C.brandD }}>יעד קלורי יומי</span>
           <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{calNow.toLocaleString()} קק״ל {profile.calorieOverride ? "" : <span style={{ fontSize: 12, color: C.sub }}>(מומלץ)</span>} <Pencil size={13} color={C.faint} /></span>
         </div>
-        {programWeekFor(profile.startDate, TODAY) >= MACRO_UNLOCK.week && <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
+        {unlockedOn(profile.startDate, TODAY, MACRO_UNLOCK) && <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
       </div>
 
       <div onClick={() => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: effStepGoal != null ? effStepGoal : 2000 })} style={{ background: C.amberBg, borderRadius: 12, padding: 12, marginBottom: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -6036,7 +6039,7 @@ export default function App() {
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
-            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={programWeek >= MACRO_UNLOCK.week} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}

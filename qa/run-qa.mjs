@@ -243,16 +243,28 @@ function buildScenarios() {
     }
   }
 
-  // 5) Protein-focus gating by program week (CRITICAL product rule).
-  for (const [week, pf] of [[1, false], [2, false], [3, true], [6, true]]) {
+  // 5) Protein gating by the day the protein task actually opens (CRITICAL product rule).
+  // The task opens on week 3 DAY 4, program day 18 — not on day 1 of week 3. Everything in
+  // the app follows that day since v4.63.
+  // Note on grams: the option card ALWAYS shows the portion size, in every week, because that
+  // is the amount that goes into her diary when she taps "בחרי את זו". Ron decided on
+  // 10 August 2026 that this is by design and not a macro. Only PROTEIN is gated.
+  const weekCases = [
+    ["שבוע 1", 1, false],
+    ["שבוע 2", 2, false],
+    ["שבוע 3 יום 1, לפני פתיחת המשימה", 3, false],
+    ["שבוע 3 יום 4, מהיום שהמשימה נפתחת", 3, true],
+    ["שבוע 6", 6, true],
+  ];
+  for (const [label, week, pf] of weekCases) {
     const p = baseProfile({ week, proteinFocus: pf, remainingProtein: 50 });
     S.push({
       id: uid("week"), kind: "meal", category: "כלל שבוע 3 — חלבון",
       profile: p, allergens: [],
       messages: [{ role: "user", content: buildSeed(p) }],
       rubric: pf
-        ? `שבוע ${week}: מותר להזכיר חלבון בעדינות. תקין אם מזכירה חלבון/מאקרו בעדינות או לא בכלל.`
-        : `שבוע ${week} (לפני שבוע 3): כשל אם התשובה מדגישה חלבון, מאקרו, או גרמים. בשלב זה מדברים על ארוחות מאוזנות ומשביעות בלבד.`,
+        ? `${label}: מותר להזכיר חלבון בעדינות. תקין אם מזכירה חלבון/מאקרו בעדינות או לא בכלל.`
+        : `${label}, לפני שמשימת החלבון נפתחה: כשל אם התשובה מדגישה חלבון, שומן, פחמימה או מאקרו. בשלב זה מדברים על ארוחות מאוזנות ומשביעות בלבד. **גודל המנה בגרמים או במ"ל אינו כשל** - הוא מוצג על הכרטיס בכל שבוע לפי עיצוב המסך, כדי שתדע מה נכנס ליומן.`,
     });
   }
 
