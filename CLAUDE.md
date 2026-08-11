@@ -81,7 +81,7 @@ grep -c '{favPrompt && (' src/App.jsx                             # חייב 1
 
 | ענף | סביבה | כתובת |
 |---|---|---|
-| `main` | production - מה שהנשים רואות | `https://myprime-nutri-demo.vercel.app` |
+| `main` | production - מה שהנשים רואות | **שתי כתובות במקביל:** `https://app.myprime.co.il` (החדשה, לכל מי שמצטרפת מ-11 באוגוסט 2026) ו-`https://myprime-nutri-demo.vercel.app` (הפיילוט, 30 הנשים הראשונות). **שתיהן מגישות את אותו קוד בדיוק, והנתונים לא עוברים ביניהן. ראה סעיף 17.** |
 | `Dev` | preview (מוגן ב-login של Vercel) | `myprime-nutri-demo-git-dev-barburais-projects.vercel.app` |
 
 שם הענף הוא `Dev` עם דל"ת גדולה. גיט רגיש לאותיות גדולות וקטנות, `dev` באות קטנה לא יימצא.
