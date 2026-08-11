@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.73";
+const VERSION = "4.74";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -6164,6 +6164,16 @@ export default function App() {
             )}
           </>
         )}
+        {/* Restored in v4.74. This line was deleted in the 7 August 2026 upload, the same
+            one that took favPrompt (restored in v4.31). The component and its state stayed
+            in the file, so the build passed and every check stayed green while the notes
+            bubble was simply absent from every screen. A participant reported it.
+            The original line also carried `&& !showIntro`, to keep the bubble from sitting
+            on top of the welcome overlay. That overlay was deleted in the same upload and
+            is not rendered anywhere, so nothing can ever set showIntro back to false, and
+            keeping the condition would hide the bubble from every woman for the whole of
+            her first session. The condition is dropped until IntroOverlay comes back. */}
+        {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {favPrompt && (
           <div onClick={() => setFavPrompt(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
