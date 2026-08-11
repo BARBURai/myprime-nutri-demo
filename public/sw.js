@@ -20,7 +20,10 @@ self.addEventListener("push", (event) => {
   const body = data.body || "יומן המעקב נפתח לך, היכנסי למלא את היום";
   const options = {
     body,
-    icon: "/icon-192.png",
+    // No `icon` on purpose. Android already shows the app's own icon on the notification,
+    // and setting one here added a SECOND copy of the same logo on the other side, which
+    // ate the width the Hebrew title needs and pushed it into an ellipsis. Ron compared it
+    // against an older install that sets none, and that one reads better.
     badge: "/icon-192.png",
     dir: "rtl",
     lang: "he",
