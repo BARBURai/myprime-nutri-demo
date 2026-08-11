@@ -67,6 +67,12 @@ const cases = [
     want: (r, shown) => r.options === 1 && r.salvaged && shown.includes("סלט טונה"),
   },
   {
+    name: "חסימה מכוונת: המשפט הקבוע בלי אופציות אינה תקלה",
+    text: '{"intro":"אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור.","options":[],"note":""}',
+    proteinFocus: true,
+    want: (r, shown) => r.refusal && !r.issues.length && shown.includes("רק ברעיונות לאוכל") && !shown.includes("אופציה"),
+  },
+  {
     name: "טקסט חופשי בלי אופציות נתפס כתקלה",
     text: "אין לי מספיק מידע, מה יש לך בבית?", proteinFocus: true,
     want: (r) => r.options === 0 && r.issues.some((s) => s.includes("לא הוחזרו אופציות")),

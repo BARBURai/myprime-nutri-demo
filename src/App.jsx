@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.67";
+const VERSION = "4.68";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2301,6 +2301,13 @@ async function aiMealChat(messages, ctx) {
     "intro, desc ו-note קצרים: משפט אחד כל אחד. " +
     "המסך ממספר את האופציות ברצף אחד לאורך כל השיחה: אם כבר הצעת שלוש, הבאות יוצגו כ-4, 5 ו-6. לכן כשהיא מזכירה מספר אופציה, ספרי לפי הסדר שהצעת מתחילת השיחה, ואל תתייחסי למספר בתוך התשובה האחרונה בלבד. " +
     "החזירי את המבנה הזה בכל תור בלי יוצא מן הכלל: גם כשהיא כותבת שאין לה את המצרכים, גם כשהיא מבקשת משהו אחר, וגם כשחסר לך מידע. אל תחזירי לעולם טקסט חופשי בלי options. אם חסר לך מידע, בכל זאת הציעי 2 עד 3 אופציות, ואת השאלה שלך שימי בשדה note. " +
+    // The one exception, and it is deliberate. The screen is for meal ideas only: anything
+    // else gets a fixed sentence rather than an improvised answer. A QA run had her open a
+    // reply to "I have no strength, I want to give up on the whole programme" with a
+    // calorie challenge, which is not a conversation this screen should be having.
+    "החריג היחיד: אם היא כותבת משהו שאינו קשור לאוכל, לארוחות או לתזונה, למשל תסכול, רצון לעצור את התוכנית, שאלות כלליות, מזג אוויר או חדשות, אל תעני לגופו של עניין ואל תציעי רעיונות. החזירי במקרה הזה בדיוק את המבנה הזה: " +
+    '{"intro":"אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור.","options":[],"note":""}. ' +
+    "זה המקרה היחיד שבו options ריק. " +
     "אל תשתמשי בכוכביות, בקווים מפרידים או בכל סימון עיצוב בתוך הטקסט.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
@@ -3888,7 +3895,12 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     // It also never joins the history, so the next turn is not built on top of it. A short
     // follow-up like "I do not have that" sometimes makes the model answer in plain prose
     // instead of the structure, and asking again is enough - so ask again, once, silently.
-    const data = parseMealOptions(r.text);
+    // An off-topic message gets the fixed sentence and NO options, on purpose. That is valid
+    // JSON with an empty options array, so it must be told apart from an answer that simply
+    // failed to parse - otherwise the deliberate refusal would land on the error path.
+    const clean = extractAiJson(r.text);
+    const refusal = clean && Array.isArray(clean.options) && clean.options.length === 0 && String(clean.intro || "").trim();
+    const data = refusal ? { intro: clean.intro, options: [], note: "" } : parseMealOptions(r.text);
     if (!data) {
       if (!isRetry) { run(history, true); return; }
       setLoading(false); setBadAnswer(true); return;

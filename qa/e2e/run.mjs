@@ -227,6 +227,46 @@ const CHECKS = [
     },
   },
   {
+    name: "הודעה שאינה על אוכל מקבלת את המשפט הקבוע ובלי רעיונות",
+    async run(browser, device) {
+      const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+      const FIXED = "אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור.";
+      // The model is not in the loop here: this asserts that the screen RENDERS a refusal
+      // with no options, instead of falling onto the v4.47 error path.
+      await context.route("**/api/**", (route) => {
+        const url = route.request().url();
+        const json = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+        if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate: startForDay(10) });
+        if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify({ intro: FIXED, options: [], note: "" }) }] });
+        return json({ ok: true, items: [] });
+      });
+      await context.addInitScript((sd) => {
+        localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
+        localStorage.setItem("myprime_start_date", sd);
+        localStorage.setItem("myprime_install_ack", "1");
+        localStorage.setItem("myprime_demo_state_v1", JSON.stringify({ onboarded: true, profile: { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: sd, calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" }, log: [], weights: [], activityLog: [], waterByDate: {}, stepsByDate: {}, favorites: [], recents: [], checkins: {}, goalAckWeek: 99 }));
+      }, startForDay(10));
+      const page = await context.newPage();
+      await page.goto(BASE, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(2600);
+      await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=/מה כדאי/").first().click();
+      await page.waitForTimeout(600);
+      const cont = page.locator("text=/הבנתי|המשך|קבלי המלצות/").first();
+      if (await cont.count()) { await cont.click(); await page.waitForTimeout(500); }
+      await page.locator("textarea, input[type='text']").first().fill("אין לי כוח, בא לי לוותר על כל התוכנית");
+      await page.locator("text=קבלי המלצות").first().click();
+      await page.waitForTimeout(2500);
+      const sentence = await page.locator("text=רק ברעיונות לאוכל").count();
+      const cards = await page.locator("text=/^אופציה /").count();
+      const error = await page.locator("text=/לא הצלחתי|אופס/").count();
+      await context.close();
+      return { ok: sentence > 0 && cards === 0 && error === 0, detail: `משפט קבוע ${sentence}, כרטיסי אופציה ${cards}, הודעת שגיאה ${error}` };
+    },
+  },
+  {
     name: "שאלת התזכורת היומית מוצגת פעם אחת ואפשר לסגור אותה",
     async run(browser, device) {
       const { context, page } = await openApp(browser, device, { neverAskedNotify: true });

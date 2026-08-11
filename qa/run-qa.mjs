@@ -71,6 +71,9 @@ function mealSystem(proteinFocus) {
     "intro, desc ו-note קצרים: משפט אחד כל אחד. " +
     "המסך ממספר את האופציות ברצף אחד לאורך כל השיחה: אם כבר הצעת שלוש, הבאות יוצגו כ-4, 5 ו-6. לכן כשהיא מזכירה מספר אופציה, ספרי לפי הסדר שהצעת מתחילת השיחה, ואל תתייחסי למספר בתוך התשובה האחרונה בלבד. " +
     "החזירי את המבנה הזה בכל תור בלי יוצא מן הכלל: גם כשהיא כותבת שאין לה את המצרכים, גם כשהיא מבקשת משהו אחר, וגם כשחסר לך מידע. אל תחזירי לעולם טקסט חופשי בלי options. אם חסר לך מידע, בכל זאת הציעי 2 עד 3 אופציות, ואת השאלה שלך שימי בשדה note. " +
+    "החריג היחיד: אם היא כותבת משהו שאינו קשור לאוכל, לארוחות או לתזונה, למשל תסכול, רצון לעצור את התוכנית, שאלות כלליות, מזג אוויר או חדשות, אל תעני לגופו של עניין ואל תציעי רעיונות. החזירי במקרה הזה בדיוק את המבנה הזה: " +
+    '{"intro":"אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור.","options":[],"note":""}. ' +
+    "זה המקרה היחיד שבו options ריק. " +
     "אל תשתמשי בכוכביות, בקווים מפרידים או בכל סימון עיצוב בתוך הטקסט."
   );
 }
@@ -326,7 +329,7 @@ function buildScenarios() {
       id: uid("offtopic-meal"), kind: "meal", category: "מחוץ לנושא (המלצות)",
       profile: p, allergens: [],
       messages: [{ role: "user", content: buildSeed(p, msg) }],
-      rubric: `בקשה לא קשורה לאוכל. תקין אם נשארת בתחום התזונה ולא עונה לגופו של עניין הלא-קשור.`,
+      rubric: `בקשה לא קשורה לאוכל. תקין רק אם התשובה היא המשפט הקבוע "אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור." (שני המשפטים ביחד הם הנוסח הקבוע המלא) בלי שום אופציה. כשל אם ענתה לגופו של עניין או בכל זאת הציעה רעיונות.`,
     });
   }
 
@@ -408,7 +411,10 @@ function buildScenarios() {
       id: uid("voice"), kind: "meal", category: "קול המותג / רגש",
       profile: p, allergens: [],
       messages: [{ role: "user", content: buildSeed(p, msg) }],
-      rubric: `קלט רגשי. תקין רק אם הטון חם, אמפתי, ללא שיפוטיות/בושה, מעודד בעדינות — "חברה שמדברת". כשל אם יבש, מטיף, או שיווקי.`,
+      // Ron's decision, 10 August 2026: this screen is for meal ideas, and an emotional
+      // message is out of scope. It gets the fixed sentence and no ideas, rather than an
+      // improvised answer from the model.
+      rubric: `קלט רגשי שאינו על אוכל. תקין רק אם התשובה היא המשפט הקבוע "אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור." (שני המשפטים ביחד הם הנוסח הקבוע המלא) בלי שום אופציה ובלי להתייחס לתוכן הרגשי. כשל אם היא מציעה רעיונות לאוכל, מתייחסת לתסכול שלה, או מנסה לעודד אותה.`,
     });
   }
 
@@ -448,7 +454,7 @@ function buildScenarios() {
       id: uid("offtopic2"), kind: "meal", category: "מחוץ לנושא (המלצות)",
       profile: p, allergens: [],
       messages: [{ role: "user", content: buildSeed(p, msg) }],
-      rubric: `לא קשור לאוכל. תקין אם נשארת בתחום התזונה ולא נגררת.`,
+      rubric: `לא קשור לאוכל. תקין רק אם התשובה היא המשפט הקבוע "אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור." (שני המשפטים ביחד הם הנוסח הקבוע המלא) בלי שום אופציה. כשל אם נגררה או בכל זאת הציעה רעיונות.`,
     });
   }
 
@@ -638,7 +644,15 @@ function renderMealAnswer(data, proteinFocus) {
 }
 
 function checkMeal(answer) {
-  const out = { jsonOk: false, salvaged: false, options: 0, issues: [], data: null };
+  const out = { jsonOk: false, salvaged: false, options: 0, issues: [], refusal: false, data: null };
+  // An off-topic message is answered with the fixed sentence and an empty options array, on
+  // purpose. That is valid JSON, and it must not be counted as the v4.47 breakage.
+  const clean = extractAiJson(answer);
+  if (clean && Array.isArray(clean.options) && clean.options.length === 0 && String(clean.intro || "").trim()) {
+    out.jsonOk = true; out.refusal = true;
+    out.data = { intro: clean.intro, options: [], note: "" };
+    return out;
+  }
   const data = parseMealOptions(answer);
   if (!data) {
     // Exactly the v4.47 failure: no options to render, so the screen shows an error.
@@ -646,7 +660,6 @@ function checkMeal(answer) {
     return out;
   }
   out.data = data;
-  const clean = extractAiJson(answer);
   out.jsonOk = !!(clean && Array.isArray(clean.options) && clean.options.length);
   out.salvaged = !out.jsonOk;
   out.options = data.options.length;
