@@ -230,7 +230,7 @@ const CHECKS = [
     name: "הודעה שאינה על אוכל מקבלת את המשפט הקבוע ובלי רעיונות",
     async run(browser, device) {
       const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-      const FIXED = "אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור.";
+      const FIXED = "אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 רק רוצה להגיד לך, שתמיד את יכולה לשתף בקבוצת הוואטסאפ שלך, או את ענת בפרטי. אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור.";
       // The model is not in the loop here: this asserts that the screen RENDERS a refusal
       // with no options, instead of falling onto the v4.47 error path.
       await context.route("**/api/**", (route) => {
