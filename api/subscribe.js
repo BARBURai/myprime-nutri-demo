@@ -35,7 +35,10 @@ export default async function handler(req, res) {
   if (!sub || !sub.endpoint) return res.status(200).json({ ok: false, reason: "no_sub" });
 
   const startDate = /^\d{4}-\d{2}-\d{2}$/.test(String(body.startDate || "")) ? String(body.startDate) : "";
-  const record = JSON.stringify({ email, sub, ts: Date.now(), startDate });
+  // The hour she wants the evening reminder at. Anything outside the offered list is
+  // dropped rather than trusted, and an absent hour means 19:00, the way it always was.
+  const hour = [19, 20, 21, 22].includes(Number(body.hour)) ? Number(body.hour) : 19;
+  const record = JSON.stringify({ email, sub, ts: Date.now(), startDate, hour });
   try {
     await redisCmd(RU, RT, ["HSET", "push:subs", sub.endpoint, record]);
     return res.status(200).json({ ok: true });

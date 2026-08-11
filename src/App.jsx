@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.74";
+const VERSION = "4.75";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -636,6 +636,33 @@ function MacroRow({ p, f, c, tp, tf, tc, headline }) {
       <MacroCard label="חלבון" value={p} target={tp} color={C.macroP} emphasized headline={headline} />
       <MacroCard label="שומן" value={f} target={tf} color={C.macroF} headline={headline} />
       <MacroCard label="פחמימות" value={c} target={tc} color={C.macroC} headline={headline} />
+    </div>
+  );
+}
+// The estimate disclaimer. Measured on 11 August 2026 (qa/macro-accuracy.mjs): given exact
+// grams the engine is within ~7%, but described the way a woman actually writes, calories
+// land ~23% low and fat ~31% low. Ron's call was not to nudge the numbers, because any
+// correction is a guess on top of a guess and moves the women who DO state quantities too.
+// So it is said out loud instead. One line by default, because a paragraph at the top of
+// the logging screen would eat the chat; "לפרטים" opens the rest, ✕ closes it.
+function EstimateNote({ style }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ background: C.amberBg, borderRadius: 10, padding: "8px 10px", ...style }}>
+      {!open ? (
+        <div style={{ fontSize: 13, color: C.amber, lineHeight: 1.5 }}>
+          המספרים הם הערכה. <span onClick={() => setOpen(true)} style={{ fontWeight: 700, textDecoration: "underline", cursor: "pointer" }}>לפרטים</span>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <div style={{ fontSize: 13, color: C.amber, lineHeight: 1.6, flex: 1 }}>
+            <div>המספרים כאן הם הערכה ולא מדידה.</div>
+            <div style={{ marginTop: 6 }}>מה שהכי משפיע עליהם הוא הכמות שאכלת, ולכן ככל שתפרטי אותה (כף, כוס, פרוסה, גרמים), ההערכה תהיה קרובה יותר למה שבאמת היה בצלחת.</div>
+            <div style={{ marginTop: 6 }}>מה שחשוב הוא המגמה לאורך הימים, ולא המספר המדויק של ארוחה אחת.</div>
+          </div>
+          <span onClick={() => setOpen(false)} aria-label="סגירה" style={{ fontSize: 17, lineHeight: 1, color: C.amber, cursor: "pointer", flexShrink: 0, padding: "0 2px" }}>✕</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1578,6 +1605,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
             </ResponsiveContainer>
           </div>
         )}
+        <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.5, marginTop: 10 }}>הקלוריות והמאקרו הם הערכה.</div>
       </div>
       <div ref={weightRef} style={cardBox}>
         <CardHeading icon={TrendingDown} text="דוח משקל" />
@@ -3384,6 +3412,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         )}
         {step === "ai" && (
           <div data-tut="ai-chat" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+            <EstimateNote style={{ marginBottom: 8, flexShrink: 0 }} />
             <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8, overscrollBehavior: "contain" }}>
               {aiMsgs.map((m, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-start" : "flex-end", marginBottom: 8 }}>
@@ -5280,7 +5309,18 @@ function urlBase64ToUint8Array(base64String) {
   return arr;
 }
 
-// Subscribes the device to the daily 19:00 reminder. Requests permission (must be
+// The hour she wants the evening reminder at. Kept on the device and sent up with the
+// subscription, so every existing caller of enableDailyReminder keeps working unchanged and
+// the choice is re-sent on every app load. Friday is fixed at 18:00 for everyone and
+// Saturday is silent, both decided in api/notify.js, not here.
+const REMINDER_HOURS = [19, 20, 21, 22];
+const REMINDER_HOUR_KEY = "myprime_reminder_hour";
+function reminderHour() {
+  try { const h = Number(localStorage.getItem(REMINDER_HOUR_KEY)); return REMINDER_HOURS.includes(h) ? h : 19; } catch (e) { return 19; }
+}
+function setReminderHour(h) { try { localStorage.setItem(REMINDER_HOUR_KEY, String(h)); } catch (e) {} }
+
+// Subscribes the device to the daily evening reminder. Requests permission (must be
 // from a user gesture on iOS), then registers a push subscription and stores it server-side.
 async function enableDailyReminder(email) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
@@ -5304,7 +5344,7 @@ async function enableDailyReminder(email) {
     // Read here rather than passed in, so every existing caller keeps working unchanged.
     let startDate = "";
     try { startDate = localStorage.getItem("myprime_start_date") || ""; } catch (e) {}
-    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", subscription: sub, startDate }) });
+    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", subscription: sub, startDate, hour: reminderHour() }) });
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: "error" };
@@ -5345,15 +5385,36 @@ function ReminderRow({ email }) {
     else if (r.reason === "unsupported") setStatus("unsupported");
   };
   const turnOff = async () => { setBusy(true); await disableDailyReminder(); setBusy(false); setStatus("off"); };
+  const [hour, setHour] = useState(reminderHour());
+  // Re-registering is what carries the new hour to the server, so the picker only has to
+  // save it first. Nothing happens while the reminder is off; the hour rides along when
+  // she turns it on, and on every app load after that.
+  const pickHour = async (h) => {
+    setHour(h); setReminderHour(h);
+    if (status !== "on") return;
+    setBusy(true); await enableDailyReminder(email); setBusy(false);
+  };
   return (
+    <>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderTop: `1px solid ${C.line}`, marginTop: 8, gap: 10 }}>
-      <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Clock size={18} color={C.brand} /> תזכורת יומית ב-19:00</span>
+      <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Clock size={18} color={C.brand} /> תזכורת יומית ב-{hour}:00</span>
       {status === "on" && <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 14, color: C.brand, fontWeight: 600 }}>מופעלת</span><span onClick={busy ? undefined : turnOff} style={{ fontSize: 13.5, color: C.faint, cursor: "pointer", textDecoration: "underline" }}>כיבוי</span></span>}
       {status === "off" && <button onClick={busy ? undefined : turnOn} style={{ flexShrink: 0, border: "none", background: C.brand, color: "#fff", borderRadius: 10, padding: "8px 16px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>הפעלה</button>}
       {status === "denied" && <span style={{ fontSize: 12.5, color: C.faint, maxWidth: 180, textAlign: "end" }}>ההתראות חסומות. אפשר לאפשר אותן בהגדרות הדפדפן או המכשיר.</span>}
       {status === "unsupported" && <span style={{ fontSize: 12.5, color: C.faint, maxWidth: 180, textAlign: "end" }}>באייפון צריך קודם להוסיף את האפליקציה למסך הבית.</span>}
       {status === "loading" && <span style={{ fontSize: 13, color: C.faint }}>...</span>}
     </div>
+    {(status === "on" || status === "off") && (
+      <div style={{ padding: "0 0 14px" }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          {REMINDER_HOURS.map((h) => (
+            <button key={h} onClick={busy ? undefined : () => pickHour(h)} style={{ flex: 1, border: hour === h ? "none" : `1px solid ${C.line}`, background: hour === h ? C.brand : "transparent", color: hour === h ? "#fff" : C.sub, borderRadius: 10, padding: "8px 0", fontSize: 14.5, fontFamily: fontStack, fontWeight: 600, cursor: "pointer" }}>{h}:00</button>
+          ))}
+        </div>
+        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>בשישי התזכורת תגיע ב-18:00, לפני כניסת השבת. בשבת לא נשלחת תזכורת.</div>
+      </div>
+    )}
+    </>
   );
 }
 
