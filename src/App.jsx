@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.71";
+const VERSION = "4.72";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -530,6 +530,17 @@ async function bkUpload(email, code, plaintext) {
 async function bkFetch(email) {
   try { const r = await fetch(`/api/backup?email=${encodeURIComponent(email)}`); if (!r.ok) return { exists: false }; return await r.json(); }
   catch (e) { return { exists: false }; }
+}
+// Auto-generated backup code, for women who never opened the backup screen.
+// Uppercase only, without the characters that are easy to misread on a phone
+// (I, O, 0, 1), and split in two groups so it can be read off the screen and
+// typed by hand on a new device.
+function bkMakeCode() {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const buf = window.crypto.getRandomValues(new Uint8Array(8));
+  let s = "";
+  for (let i = 0; i < 8; i++) { if (i === 4) s += "-"; s += abc[buf[i] % abc.length]; }
+  return s;
 }
 
 /* ============================================================
@@ -1899,6 +1910,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
               <div>
                 <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Lock size={15} color={C.sub} />גיבוי מוצפן: {profile.backup && profile.backup.enabled ? "מופעל" : "כבוי"}{profile.backup && profile.backup.enabled ? <Check size={15} color={C.brand} /> : null}</div>
                 <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{profile.backup && profile.backup.enabled ? "מגובה אוטומטית, רק את יכולה לפתוח" : "הפעלת גיבוי מוצפן בענן"}</div>
+                {profile.backup && profile.backup.enabled && bkGetCode() ? <div style={{ fontSize: 13.5, color: C.sub, marginTop: 3 }}>קוד השחזור שלך: <span style={{ direction: "ltr", unicodeBidi: "isolate", fontWeight: 700, letterSpacing: 0.5, color: C.ink }}>{bkGetCode()}</span></div> : null}
               </div>
               <ChevronDown size={20} color={C.sub} style={{ transform: "rotate(-90deg)", flexShrink: 0 }} />
             </div>
@@ -5203,6 +5215,11 @@ function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCo
   const [code, setCode] = useState("");
   const [code2, setCode2] = useState("");
   const [msg, setMsg] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const myCode = bkGetCode();
+  const copyCode = async () => {
+    try { await navigator.clipboard.writeText(myCode); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch (e) {}
+  };
   const run = async (fn) => { setMsg(null); const r = await fn(); setMsg({ ok: r.ok, text: r.msg }); return r; };
   const codeOk = code.trim().length >= 4 && code === code2;
   const inputS = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", marginBottom: 8 };
@@ -5211,7 +5228,17 @@ function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCo
       <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 14 }}>הנתונים שלך נשמרים במכשיר. גיבוי מוצפן שומר עותק בענן שרק את יכולה לפתוח - אף אחד, גם לא מיי פריים, לא רואה את התוכן.</p>
       {enabled && mode === "view" && (
         <>
-          <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 14.5, color: C.brandD, lineHeight: 1.6 }}>הגיבוי המוצפן מופעל ומגובה אוטומטית פעם ביום. משויך ל-<span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{(backup && backup.email) || gateEmail}</span>.</div>
+          <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", marginBottom: 14, fontSize: 14.5, color: C.brandD, lineHeight: 1.6 }}>הגיבוי המוצפן מופעל ומגובה אוטומטית אחרי כל שינוי. משויך ל-<span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{(backup && backup.email) || gateEmail}</span>.</div>
+          {myCode && (
+            <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+              <div style={{ fontSize: 14, color: C.sub, marginBottom: 6 }}>קוד השחזור שלך</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <span style={{ direction: "ltr", unicodeBidi: "isolate", fontSize: 22, fontWeight: 700, letterSpacing: 1.5, color: C.ink }}>{myCode}</span>
+                <span onClick={copyCode} style={{ fontSize: 14.5, color: C.brandD, cursor: "pointer", flexShrink: 0 }}>{copied ? "הועתק" : "העתקה"}</span>
+              </div>
+              <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.55, marginTop: 8 }}>שמרי אותו במקום בטוח. אם תתקיני את האפליקציה מחדש או תעברי לטלפון חדש, זה הקוד שיפתח לך את הנתונים. הוא לא נשמר אצלנו ואי אפשר לשחזר אותו.</div>
+            </div>
+          )}
           <Btn disabled={busy} onClick={() => run(onBackupNow)}>{busy ? "מגבה..." : "גבה עכשיו"}</Btn>
           <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setMsg(null); setCode(""); setCode2(""); setMode("reset"); }} style={{ color: C.sub }}>איפוס קוד</Btn></div>
         </>
@@ -5622,6 +5649,31 @@ export default function App() {
     window.addEventListener("pagehide", flush);
     return () => { clearTimeout(t); document.removeEventListener("visibilitychange", onHide); window.removeEventListener("pagehide", flush); };
   }, [gate, onboarded, profile, log, checkins, stepsByDate, waterByDate, weights, today, gateEmail]);
+
+  // Every woman gets the encrypted backup, without having to do anything: the code is
+  // generated here, kept only on her device, and shown to her in the profile. The server
+  // still stores ciphertext only, so this changes nothing about what anyone can see.
+  // Runs only after onboarding, i.e. AFTER the restore offer above was already shown and
+  // passed on, so an existing cloud blob at this point is one she cannot open anyway.
+  const bkAutoRef = useRef(false);
+  useEffect(() => {
+    if (gate !== "ok" || !onboarded) return;
+    if (profile.backup && profile.backup.enabled) return;
+    if (!bkSubtle || bkAutoRef.current) return;
+    const email = ((profile.backup && profile.backup.email) || gateEmail || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    bkAutoRef.current = true;
+    (async () => {
+      const code = bkGetCode() || bkMakeCode();
+      try {
+        const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "");
+        if (!ok) { bkAutoRef.current = false; return; } // silent: retries on the next load
+        bkSetCode(code);
+        setProfile((p) => ({ ...p, backup: { enabled: true, email, auto: true } }));
+        try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {}
+      } catch (e) { bkAutoRef.current = false; }
+    })();
+  }, [gate, onboarded, profile.backup, gateEmail, today]);
 
   const doRestore = async (code) => {
     const email = (gateEmail || "").trim().toLowerCase();
