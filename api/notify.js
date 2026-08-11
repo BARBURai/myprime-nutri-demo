@@ -54,10 +54,25 @@ function isFriday(today) {
   return new Date(today).getUTCDay() === 5;
 }
 
-// The hour the evening reminder aims for. On Friday it goes an hour earlier so it lands
-// well before Shabbat comes in, instead of arriving as everyone is sitting down.
-function eveningHour(today) {
-  return isFriday(today) ? 18 : 19;
+// Each woman picks the hour her evening reminder lands, from a short fixed list, in
+// profile > העדפות אפליקציה. A subscription written before this existed carries no hour
+// and stays on 19:00, exactly as it was. FRIDAY overrides every choice: fixed at 18:00 for
+// everyone, so it lands well before Shabbat comes in instead of arriving as she sits down.
+const REMINDER_HOURS = [19, 20, 21, 22];
+const FRIDAY_HOUR = 18;
+const DEFAULT_HOUR = 19;
+function reminderHourOf(rec, today) {
+  if (isFriday(today)) return FRIDAY_HOUR;
+  const h = Number(rec && rec.hour);
+  return REMINDER_HOURS.includes(h) ? h : DEFAULT_HOUR;
+}
+// Which groups a run starting at Jerusalem hour h may serve: its own, plus the previous
+// hour's as a second chance. Vercel starts a scheduled job somewhere inside its hour, so a
+// run that slips past the hour would otherwise deliver nothing at all that day. This is the
+// same two-chance protection the single 19:00 reminder always had, now applied per group.
+function groupsForHour(h) {
+  const last = REMINDER_HOURS[REMINDER_HOURS.length - 1];
+  return [h, h - 1].filter((g) => g >= FRIDAY_HOUR && g <= last);
 }
 
 // Day number within the program, day 1 being her start Sunday.
@@ -96,10 +111,18 @@ export default async function handler(req, res) {
   // Manual runs are for seeing the message on your own phone. Left unset, everyone gets it.
   const only = String((req.query && req.query.only) || "").trim().toLowerCase();
   const kind = morning ? "morning" : "evening";
-  const startHour = morning ? 7 : eveningHour(israelDay(0));
   const h = jerusalemHour();
-  if (!force && (h < startHour || h > startHour + 1)) {
-    return res.status(200).json({ ok: true, skipped: `outside ${startHour}:00-${startHour + 1}:59 Jerusalem` });
+  // Morning is one time for everyone and keeps the plain two-hour window. Evening is per
+  // woman now, so instead of one window there are hour groups, and this run serves the
+  // group due now plus the previous one. ?hour=22 forces a single group, for testing.
+  const askedHour = Number((req.query && req.query.hour) || 0);
+  let groups = morning ? [] : (askedHour ? [askedHour] : groupsForHour(h));
+  if (morning && !force && (h < 7 || h > 8)) {
+    return res.status(200).json({ ok: true, skipped: "outside 7:00-8:59 Jerusalem" });
+  }
+  if (!morning && !groups.length) {
+    if (!force) return res.status(200).json({ ok: true, skipped: `no reminder group at ${h}:00 Jerusalem` });
+    groups = [FRIDAY_HOUR, ...REMINDER_HOURS]; // a forced manual run reaches everyone
   }
 
   const RU = process.env.UPSTASH_REDIS_REST_URL;
@@ -108,13 +131,28 @@ export default async function handler(req, res) {
   const PRIV = process.env.VAPID_PRIVATE;
   if (!RU || !RT || !PUB || !PRIV) return res.status(200).json({ ok: false, reason: "not_configured" });
 
-  // Claim the day. SET NX succeeds for exactly one run, so the second cron in the window
-  // finds the day taken and stops before sending anything.
+  // Claim before sending. SET NX succeeds for exactly one run, so the second cron in the
+  // window finds the day taken and stops. The evening claims PER HOUR GROUP: with one claim
+  // for the whole evening, the 19:00 run would take the day and nobody who chose 22:00
+  // would ever be served.
+  let serve = groups;
   if (!force) {
-    try {
-      const claimed = await redisCmd(RU, RT, ["SET", `push:sent:${kind}:${israelDay(0)}`, "1", "NX", "EX", "172800"]);
-      if (claimed !== "OK") return res.status(200).json({ ok: true, skipped: `already sent today (${kind})` });
-    } catch (e) { /* a Redis hiccup must not silence the day; better a rare duplicate */ }
+    if (morning) {
+      try {
+        const claimed = await redisCmd(RU, RT, ["SET", `push:sent:morning:${israelDay(0)}`, "1", "NX", "EX", "172800"]);
+        if (claimed !== "OK") return res.status(200).json({ ok: true, skipped: "already sent today (morning)" });
+      } catch (e) { /* a Redis hiccup must not silence the day; better a rare duplicate */ }
+    } else {
+      const got = [];
+      for (const g of groups) {
+        try {
+          const claimed = await redisCmd(RU, RT, ["SET", `push:sent:evening:${g}:${israelDay(0)}`, "1", "NX", "EX", "172800"]);
+          if (claimed === "OK") got.push(g);
+        } catch (e) { got.push(g); /* same rule: a hiccup must not silence the hour */ }
+      }
+      serve = got;
+      if (!serve.length) return res.status(200).json({ ok: true, skipped: "already sent today (evening)" });
+    }
   }
 
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:hello@myprime.co.il", PUB, PRIV);
@@ -169,6 +207,7 @@ export default async function handler(req, res) {
 
     let payload = eveningPayload;
     if (!morning && !hasTracker(rec.startDate, today)) { quiet++; continue; }
+    if (!morning && !serve.includes(reminderHourOf(rec, today))) { quiet++; continue; }
     if (morning) {
       if (!hasNewContent(rec.startDate, today)) { quiet++; continue; }
       const email = (rec.email || "").trim().toLowerCase();
@@ -196,5 +235,5 @@ export default async function handler(req, res) {
       }
     }
   }
-  return res.status(200).json({ ok: true, kind: morning ? "morning" : "evening", sent, pruned, failed, quiet, total: entries.length });
+  return res.status(200).json({ ok: true, kind: morning ? "morning" : "evening", hours: morning ? null : serve, sent, pruned, failed, quiet, total: entries.length });
 }
