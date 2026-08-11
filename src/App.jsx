@@ -198,7 +198,11 @@ const FOODS = [
   { id: "tomato", name: "עגבניה", search: "עגבניה עגבניות ירק", per100: { kcal: 18, p: 0.9, f: 0.2, c: 3.9 }, measures: [{ label: "יחידה", g: 120 }, { label: "100 ג׳", g: 100 }], def: 1 },
   { id: "avocado", name: "אבוקדו", search: "אבוקדו", per100: { kcal: 160, p: 2, f: 15, c: 9 }, measures: [{ label: "חצי", g: 100 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "tahini", name: "טחינה גולמית", search: "טחינה", per100: { kcal: 595, p: 17, f: 53, c: 21 }, measures: [{ label: "כף", g: 15 }, { label: "100 ג׳", g: 100 }], def: 0 },
-  { id: "hummus", name: "חומוס (ממרח)", search: "חומוס", per100: { kcal: 177, p: 8, f: 10, c: 14 }, measures: [{ label: "כף", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
+  // Israeli hummus, from צמרת ("סלט חומוס, ביתי"). The old row carried the American
+  // commercial value of 177 kcal, which is a different product: the Israeli salads in the
+  // national database run from 223 to 322, and 269 sits in the middle of them. A woman
+  // logging 100g was under-counting by about half, every time.
+  { id: "hummus", name: "חומוס (ממרח)", search: "חומוס", per100: { kcal: 269, p: 10.8, f: 17.6, c: 19 }, measures: [{ label: "כף", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "almond", name: "שקדים", search: "שקדים אגוזים", per100: { kcal: 579, p: 21, f: 50, c: 22 }, measures: [{ label: "חופן", g: 30 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "potato", name: "תפוח אדמה מבושל", search: "תפוח אדמה תפוד", per100: { kcal: 87, p: 2, f: 0.1, c: 20 }, measures: [{ label: "בינוני", g: 150 }, { label: "100 ג׳", g: 100 }], def: 0 },
   { id: "lentil", name: "עדשים מבושלות", search: "עדשים קטניות", per100: { kcal: 116, p: 9, f: 0.4, c: 20 }, measures: [{ label: "כוס", g: 198 }, { label: "100 ג׳", g: 100 }], def: 0 },
@@ -481,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.66";
+const VERSION = "4.69";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2282,7 +2286,7 @@ async function aiMealChat(messages, ctx) {
     estimateRule + " " +
     "בסיס הערכים: התבססי ככל האפשר על ערכי מאגר התזונה הלאומי של משרד הבריאות (\"צמרת\") עבור מזונות ישראליים, כדי שההערכות יהיו עקביות ומדויקות. " +
     "תמיד סיימי בשאלה עדינה - מה היא חושבת, או אם יש לה את המצרכים. אם חסר לה מצרך (למשל אין סלמון) - הציעי מיד חלופה זמינה ופשוטה. " +
-    "אל תפני אותה לדבר עם אדם, מאמנת או צוות, ואל תציעי ליצור קשר או להעביר פנייה לאף אחד - את כאן כדי לעזור עם האוכל והתזונה בלבד. " +
+    "אל תפני אותה לדבר עם אדם, מאמנת או צוות, ואל תציעי ליצור קשר או להעביר פנייה לאף אחד - את כאן כדי לעזור עם האוכל והתזונה בלבד. החריג היחיד לכלל הזה הוא המשפט הקבוע שכתוב למטה, שאותו יש להחזיר כלשונו. " +
     "אל תיתני ייעוץ רפואי. " +
     // A QA run had her build a post-bariatric-surgery menu and call a yoghurt "suitable for
     // the early stages after stomach surgery". The old one-liner above was not enough: the
@@ -2297,6 +2301,13 @@ async function aiMealChat(messages, ctx) {
     "intro, desc ו-note קצרים: משפט אחד כל אחד. " +
     "המסך ממספר את האופציות ברצף אחד לאורך כל השיחה: אם כבר הצעת שלוש, הבאות יוצגו כ-4, 5 ו-6. לכן כשהיא מזכירה מספר אופציה, ספרי לפי הסדר שהצעת מתחילת השיחה, ואל תתייחסי למספר בתוך התשובה האחרונה בלבד. " +
     "החזירי את המבנה הזה בכל תור בלי יוצא מן הכלל: גם כשהיא כותבת שאין לה את המצרכים, גם כשהיא מבקשת משהו אחר, וגם כשחסר לך מידע. אל תחזירי לעולם טקסט חופשי בלי options. אם חסר לך מידע, בכל זאת הציעי 2 עד 3 אופציות, ואת השאלה שלך שימי בשדה note. " +
+    // The one exception, and it is deliberate. The screen is for meal ideas only: anything
+    // else gets a fixed sentence rather than an improvised answer. A QA run had her open a
+    // reply to "I have no strength, I want to give up on the whole programme" with a
+    // calorie challenge, which is not a conversation this screen should be having.
+    "החריג היחיד: אם היא כותבת משהו שאינו קשור לאוכל, לארוחות או לתזונה, למשל תסכול, רצון לעצור את התוכנית, שאלות כלליות, מזג אוויר או חדשות, אל תעני לגופו של עניין ואל תציעי רעיונות. החזירי במקרה הזה בדיוק את המבנה הזה: " +
+    '{"intro":"אני מצטערת, אני יכולה לעזור רק ברעיונות לאוכל באפליקציה הזו 🙂 רק רוצה להגיד לך, שתמיד את יכולה לשתף בקבוצת הוואטסאפ שלך, או את ענת בפרטי. אם בא לך רעיון לארוחה, כתבי לי ואשמח לעזור.","options":[],"note":""}. ' +
+    "זה המקרה היחיד שבו options ריק. " +
     "אל תשתמשי בכוכביות, בקווים מפרידים או בכל סימון עיצוב בתוך הטקסט.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
@@ -3884,7 +3895,12 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     // It also never joins the history, so the next turn is not built on top of it. A short
     // follow-up like "I do not have that" sometimes makes the model answer in plain prose
     // instead of the structure, and asking again is enough - so ask again, once, silently.
-    const data = parseMealOptions(r.text);
+    // An off-topic message gets the fixed sentence and NO options, on purpose. That is valid
+    // JSON with an empty options array, so it must be told apart from an answer that simply
+    // failed to parse - otherwise the deliberate refusal would land on the error path.
+    const clean = extractAiJson(r.text);
+    const refusal = clean && Array.isArray(clean.options) && clean.options.length === 0 && String(clean.intro || "").trim();
+    const data = refusal ? { intro: clean.intro, options: [], note: "" } : parseMealOptions(r.text);
     if (!data) {
       if (!isRetry) { run(history, true); return; }
       setLoading(false); setBadAnswer(true); return;
