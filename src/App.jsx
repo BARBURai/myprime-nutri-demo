@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.72";
+const VERSION = "4.73";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1906,14 +1906,6 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
                 </div>
               </div>
             )}
-            <div onClick={onOpenBackup} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
-              <div>
-                <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}><Lock size={15} color={C.sub} />גיבוי מוצפן: {profile.backup && profile.backup.enabled ? "מופעל" : "כבוי"}{profile.backup && profile.backup.enabled ? <Check size={15} color={C.brand} /> : null}</div>
-                <div style={{ fontSize: 13.5, color: C.sub, marginTop: 2 }}>{profile.backup && profile.backup.enabled ? "מגובה אוטומטית, רק את יכולה לפתוח" : "הפעלת גיבוי מוצפן בענן"}</div>
-                {profile.backup && profile.backup.enabled && bkGetCode() ? <div style={{ fontSize: 13.5, color: C.sub, marginTop: 3 }}>קוד השחזור שלך: <span style={{ direction: "ltr", unicodeBidi: "isolate", fontWeight: 700, letterSpacing: 0.5, color: C.ink }}>{bkGetCode()}</span></div> : null}
-              </div>
-              <ChevronDown size={20} color={C.sub} style={{ transform: "rotate(-90deg)", flexShrink: 0 }} />
-            </div>
             <div style={{ fontSize: 14, color: C.faint, marginTop: 8 }}>את כעת בשבוע {programWeekFor(profile.startDate, TODAY)} בתוכנית.</div>
           </div>
         )}
@@ -2005,6 +1997,17 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
               <button onClick={() => setProfile({ ...profile, hideRewards: !profile.hideRewards })} style={{ flexShrink: 0, border: profile.hideRewards ? `1px solid ${C.line}` : "none", background: profile.hideRewards ? "transparent" : C.brand, color: profile.hideRewards ? C.sub : "#fff", borderRadius: 10, padding: "8px 18px", fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{profile.hideRewards ? "מוסתרים" : "מוצגים"}</button>
             </div>
             <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>{profile.hideRewards ? "המדליות, הגביעים וחלונות החגיגה מוסתרים. אפשר להחזיר בכל רגע." : "אם הגביעים והמדליות לא בשבילך - אפשר להסתיר אותם לגמרי (גם את חלונות החגיגה). מעקב המשימות היומי נשאר כרגיל."}</div>
+          </div>
+
+          {/* Backup lives here, not under "נתוני בסיס". A restore code is not a body
+              measurement, and nobody would look for it next to age and height. */}
+          <div onClick={onOpenBackup} style={{ padding: "14px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Lock size={17} color={C.sub} /> גיבוי מוצפן: {profile.backup && profile.backup.enabled ? "מופעל" : "כבוי"}{profile.backup && profile.backup.enabled ? <Check size={16} color={C.brand} /> : null}</span>
+              <ChevronDown size={20} color={C.sub} style={{ transform: "rotate(-90deg)", flexShrink: 0 }} />
+            </div>
+            <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>{profile.backup && profile.backup.enabled ? "מגובה אוטומטית, רק את יכולה לפתוח" : "הפעלת גיבוי מוצפן בענן"}</div>
+            {profile.backup && profile.backup.enabled && bkGetCode() ? <div style={{ fontSize: 13.5, color: C.sub, marginTop: 5 }}>קוד השחזור שלך: <span style={{ direction: "ltr", unicodeBidi: "isolate", fontWeight: 700, letterSpacing: 0.5, color: C.ink }}>{bkGetCode()}</span></div> : null}
           </div>
         </div>)}
       </div>
