@@ -20,7 +20,12 @@
     <meta property="og:site_name" content="מיי פריים 360" />
     <meta property="og:title" content="מיי פריים 360 - אפליקציית הליווי" />
     <meta property="og:description" content="מיי פריים 360 - אפליקציית הליווי" />
-    <meta property="og:url" content="https://myprime-nutri-demo.vercel.app/" />
+    <!-- No og:url on purpose. The app is served from two addresses at once (the original
+         vercel one for the pilot, app.myprime.co.il for everyone who joins from 11 August
+         2026), and a fixed og:url would tell WhatsApp that the shared link "really" belongs
+         to the other one. A new participant would then land on the pilot's address and her
+         diary would live there. Without the tag the preview simply follows whatever link
+         was actually sent. -->
     <meta property="og:image" content="https://myprime-nutri-demo.vercel.app/share.jpg" />
     <meta property="og:image:width" content="400" />
     <meta property="og:image:height" content="400" />
