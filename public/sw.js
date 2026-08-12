@@ -20,10 +20,13 @@ self.addEventListener("push", (event) => {
   const body = data.body || "יומן המעקב נפתח לך, היכנסי למלא את היום";
   const options = {
     body,
-    // No `icon` on purpose. Android already shows the app's own icon on the notification,
-    // and setting one here added a SECOND copy of the same logo on the other side, which
-    // ate the width the Hebrew title needs and pushed it into an ellipsis. Ron compared it
-    // against an older install that sets none, and that one reads better.
+    // Back in v4.77, after v4.70 removed it. The reasoning in v4.70 was wrong: the clean
+    // notification Ron was comparing against came from Kajabi's app, not from ours.
+    // Android keeps a round slot for a large icon whatever we do, and with no `icon` it
+    // fills that slot with a letter monogram of the site name, so removing it bought
+    // nothing and cost us the logo. The Hebrew title is truncated either way, at about ten
+    // characters, so shortening it does not help and was not attempted.
+    icon: "/icon-192.png",
     badge: "/icon-192.png",
     dir: "rtl",
     lang: "he",
