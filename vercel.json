@@ -1,6 +1,13 @@
 {
+  "_comment": "One entry per hour, on purpose. A range like 0 15-21 * * * is the same thing in one line, but a Hobby account only allows a cron to fire ONCE A DAY, so Vercel rejects that schedule before it even creates a deployment: no build, no error row, the push simply vanishes. That is what happened to v4.75 and v4.76 on 11 August 2026. UTC 15 to 21 covers Jerusalem 18:00 to 23:00 in both summer (UTC+3) and winter (UTC+2). api/notify.js works out the Jerusalem hour itself and does nothing on a run that lands outside the reminder hours.",
   "crons": [
-    { "path": "/api/notify", "schedule": "0 15-21 * * *" },
+    { "path": "/api/notify", "schedule": "0 15 * * *" },
+    { "path": "/api/notify", "schedule": "0 16 * * *" },
+    { "path": "/api/notify", "schedule": "0 17 * * *" },
+    { "path": "/api/notify", "schedule": "0 18 * * *" },
+    { "path": "/api/notify", "schedule": "0 19 * * *" },
+    { "path": "/api/notify", "schedule": "0 20 * * *" },
+    { "path": "/api/notify", "schedule": "0 21 * * *" },
     { "path": "/api/notify?kind=morning", "schedule": "0 4 * * *" },
     { "path": "/api/notify?kind=morning", "schedule": "0 5 * * *" },
     { "path": "/api/usage-report", "schedule": "0 5 * * *" }
