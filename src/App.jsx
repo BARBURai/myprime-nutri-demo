@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.79";
+const VERSION = "4.80";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -645,19 +645,28 @@ function MacroRow({ p, f, c, tp, tf, tc, headline }) {
 // correction is a guess on top of a guess and moves the women who DO state quantities too.
 // So it is said out loud instead. One line by default, because a paragraph at the top of
 // the logging screen would eat the chat; "לפרטים" opens the rest, ✕ closes it.
-// Is the on-screen keyboard up? Same rule the frame-height code uses, kept local and
-// read-only so it cannot fight it. Used to hand the chat back the room the keyboard takes.
-function useKeyboardOpen() {
-  const [open, setOpen] = useState(false);
+// Is she typing right now? Used only to hand the chat back the two lines the microphone
+// hint takes while the keyboard is up. Deliberately based on focus and NOT on viewport
+// arithmetic: the first version compared window.innerHeight to visualViewport.height, and
+// on the very iPhone this was meant to help those two are equal while the keyboard is up,
+// so it read "closed" and the hint stayed. Ron caught it in two screenshots with identical
+// numbers and opposite results. A short grace period on blur stops it flickering while iOS
+// animates the keyboard away.
+function useTyping() {
+  const [on, setOn] = useState(false);
   useEffect(() => {
-    const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    if (!vv) return;
-    const read = () => setOpen(Math.max(0, (window.innerHeight || 0) - vv.height) > 80);
-    read();
-    vv.addEventListener("resize", read);
-    return () => vv.removeEventListener("resize", read);
+    let t = null;
+    const editable = (el) => {
+      const tag = ((el && el.tagName) || "").toLowerCase();
+      return tag === "input" || tag === "textarea" || (el && el.isContentEditable === true);
+    };
+    const onIn = (e) => { if (editable(e.target)) { clearTimeout(t); setOn(true); } };
+    const onOut = () => { clearTimeout(t); t = setTimeout(() => setOn(false), 400); };
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("focusout", onOut);
+    return () => { clearTimeout(t); document.removeEventListener("focusin", onIn); document.removeEventListener("focusout", onOut); };
   }, []);
-  return open;
+  return on;
 }
 function EstimateNote({ style }) {
   const [open, setOpen] = useState(false);
@@ -2881,7 +2890,7 @@ function NotesFab({ notes, setNotes, screen, userName }) {
    ============================================================ */
 function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onUndoEntry, onTourEvent, startDate }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
-  const kbOpen = useKeyboardOpen();
+  const kbOpen = useTyping();
   const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || (() => { const h = new Date().getHours(); return h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; })());
   const [food, setFood] = useState(state.editEntry ? (FOODS.find((f) => f.name === state.editEntry.name) || foodFromEntry(state.editEntry)) : null);
   const [grams, setGrams] = useState(state.editEntry?.g || 100);
@@ -5988,60 +5997,34 @@ export default function App() {
     const onFocusOut = () => remeasure();
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
-    // iOS scrolls the document itself to reveal the focused field, which pushes the whole
-    // fixed app frame up: pink background at the bottom, bars and input off the top, and
-    // she has to scroll back down. A single scrollTo raced with that and lost about half
-    // the time, which is why the jump was intermittent. Pin the document to the top a few
-    // times while the keyboard settles instead. Only the document scrolls here; the chat
-    // list scrolls inside its own element and is untouched.
-    let kbTimers = [];
-    const pinTop = () => {
-      kbTimers.forEach(clearTimeout);
-      kbTimers = [0, 60, 150, 300, 600].map((ms) => setTimeout(() => { try { window.scrollTo(0, 0); } catch (e) {} }, ms));
-    };
-    // Pinning after the fact still lost the race sometimes. While the keyboard is up, take
-    // the document out of the scroll flow entirely so iOS has nothing left to push. The
-    // frame is already exactly one viewport tall, so this is visually identical; only the
-    // ability to scroll the document away disappears. The chat list keeps its own scroll.
-    let wasKbUp = false;
-    let docLocked = false;
-    const lockDoc = (on) => {
-      if (on === docLocked) return;
-      docLocked = on;
-      try {
-        const b = document.body;
-        b.style.position = on ? "fixed" : "";
-        b.style.top = on ? "0" : "";
-        b.style.left = on ? "0" : "";
-        b.style.right = on ? "0" : "";
-        b.style.width = on ? "100%" : "";
-      } catch (e) {}
-    };
+    // v4.80 removed three mechanisms from here: keyboard detection, locking the document
+    // (body position:fixed) and re-pinning it to the top. All three existed to fight iOS
+    // scrolling the page when the keyboard opens, and all three depended on spotting the
+    // keyboard, which is the part that could not be made reliable.
+    //
+    // The diagnostic strip finally caught the failure with numbers, on 12 August 2026:
+    //   win 362  vv 362  off -16  sY 353  |  vvh 699px  fH 699  lk N
+    // window.innerHeight had shrunk WITH the keyboard, so winH - vv.height was 0, the
+    // keyboard read as closed, nothing was locked, and iOS scrolled the page 353px.
+    //
+    // But the deeper question none of the four earlier attempts asked is why there was
+    // anywhere to scroll TO. `.app-outer` carried min-height:100vh, so with the keyboard
+    // open the page stayed 699 tall inside a 362 viewport: 337 spare pixels, and 337 + the
+    // 16px accessory bar is the 353 that was measured. The page is now sized to --vvh
+    // instead, so on a phone there is no scroll range at all and nothing to fight.
     const apply = () => {
       try {
         // Pinch-zoom also shrinks visualViewport.height, which used to be mistaken for
         // the keyboard opening - the frame collapsed and the bottom bar crept upward.
-        // Only treat it as a keyboard when the page is not zoomed in.
         const zoomed = (vv.scale || 1) > 1.02;
         if (zoomed) return; // pinch shrinks the visual viewport - not a real height change
-        const winH = window.innerHeight || 0;
-        const kb = Math.max(0, winH - vv.height);
-        // v4.14 skipped the height write on a big shrink with no text field focused, to
-        // tell a system sheet from the keyboard. That guess is gone: on iOS the focus
-        // answer flickers mid-animation, the keyboard got mistaken for a sheet, the write
-        // was skipped and the frame stayed full height while the keyboard pushed the bars
-        // off screen. That is what made the jump intermittent across v4.14 to v4.18.
-        // The sheet case is covered without guessing, by remeasure() on focusout, on window
-        // focus, and by the __mpRemeasure hook the share button calls.
         // Always size the frame to the height that is actually visible. Relying on
         // 100dvh let the bottom bar slip under the phone's own navigation bar.
         document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
-        const kbUp = kb > 80;
-        lockDoc(kbUp);
-        // Only on the transition, not on every pass: the watchdog below calls this four
-        // times a second, and re-pinning that often would fight her own scrolling.
-        if (kbUp && !wasKbUp) pinTop();
-        wasKbUp = kbUp;
+        // Belt and braces, and cheap: on a phone the page has no scroll range, so this can
+        // only ever fire if something reintroduces one. Checking the invariant rather than
+        // waiting for an event is what made the height fix work, so the same is done here.
+        if ((window.innerWidth || 0) <= 440 && (window.scrollY || 0) !== 0) window.scrollTo(0, 0);
       } catch (e) {}
     };
     // Watchdog. The diagnostic caught the failure directly: visualViewport.height at 352
@@ -6079,8 +6062,6 @@ export default function App() {
       clearInterval(watchdog);
       timers.forEach(clearTimeout);
       burst.forEach(clearTimeout);
-      kbTimers.forEach(clearTimeout);
-      lockDoc(false);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
       document.removeEventListener("visibilitychange", onShow);
@@ -6132,7 +6113,22 @@ export default function App() {
         .txt-large{zoom:1.12}
         /* Blocks whose layout is too tight to scale - kept at their normal size. */
         .txt-large .no-textscale{zoom:0.893}
-        @media (max-width:440px){.app-outer{padding:0;align-items:stretch}.phone-frame{width:100%;height:100vh;height:100dvh;height:var(--vvh,100dvh);border-radius:0;box-shadow:none;border:none}}`}</style>
+        /* THE fix for the iPhone jump, v4.80. On a phone the page is sized to the height
+           that is actually visible, exactly like the frame inside it, so there is no spare
+           page left to scroll to and iOS cannot drag the app out of view. Before this,
+           min-height:100vh kept the page at full height while the keyboard shrank the
+           viewport, which left ~337 spare pixels; the diagnostic measured iOS scrolling
+           into 353 of them. Desktop is untouched: there the frame is a fixed 800px and the
+           window is expected to scroll. */
+        @media (max-width:440px){
+          /* The browser's default 8px body margin is what the new QA check caught: the page
+             was 8px taller than the window, which is 8px of scroll range, which is all iOS
+             needs. It also means the app has been drawing with a thin white border around
+             it on phones all along, so removing it is a small improvement in its own right. */
+          html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+          .app-outer{padding:0;align-items:stretch;min-height:0;height:var(--vvh,100dvh);overflow:hidden}
+          .phone-frame{width:100%;height:100vh;height:100dvh;height:var(--vvh,100dvh);border-radius:0;box-shadow:none;border:none}
+        }`}</style>
       <div className="phone-frame">
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}

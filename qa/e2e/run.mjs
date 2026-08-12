@@ -309,6 +309,38 @@ const CHECKS = [
       return { ok: isPhone ? shown > 0 : shown === 0, detail: isPhone ? `בטלפון, נמצאו ${shown}` : `במחשב, נמצאו ${shown} (מצופה 0)` };
     },
   },
+  {
+    // The invariant behind the iPhone jump (v4.80). While the keyboard is open the page
+    // used to stay at full height inside a shrunken viewport, leaving spare page for iOS
+    // to scroll into, and the app was dragged out of view. On a phone the page must have
+    // NO scroll range at all. Chromium on Linux cannot reproduce the iPhone itself, but it
+    // can prove the condition that made it possible is gone: try to scroll the document by
+    // force, and fail if it moves even one pixel.
+    name: "בטלפון אי אפשר לגלול את העמוד עצמו, גם עם שדה כתיבה פתוח",
+    async run(browser, device) {
+      if (!device.isMobile) return { skip: true, detail: "רלוונטי לטלפון בלבד" };
+      const { page, context } = await openApp(browser, device, { day: 10 });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.locator("text=תיאור ב-AI").first().click().catch(() => {});
+      await page.waitForTimeout(700);
+      const box = page.locator("textarea").first();
+      if (await box.count()) { await box.click().catch(() => {}); await page.waitForTimeout(300); }
+      const r = await page.evaluate(() => {
+        const before = window.scrollY;
+        window.scrollTo(0, 900);
+        const after = window.scrollY;
+        const doc = document.documentElement;
+        return { before, after, scrollH: doc.scrollHeight, clientH: doc.clientHeight };
+      });
+      await context.close();
+      const noRange = r.scrollH <= r.clientH + 1;
+      const cannotScroll = r.after === 0 && r.before === 0;
+      return {
+        ok: noRange && cannotScroll,
+        detail: `גובה העמוד ${r.scrollH} מול חלון ${r.clientH}, אחרי ניסיון גלילה בכוח sY=${r.after}`,
+      };
+    },
+  },
 ];
 
 /* ---------- run ---------- */
