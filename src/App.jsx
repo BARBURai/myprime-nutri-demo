@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.81";
+const VERSION = "4.82";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2827,7 +2827,7 @@ function IntroOverlay({ onClose, name }) {
   );
 }
 
-function NotesFab({ notes, setNotes, screen, userName }) {
+function NotesFab({ notes, setNotes, screen, userName, email }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
@@ -2842,7 +2842,9 @@ function NotesFab({ notes, setNotes, screen, userName }) {
     try {
       await fetch(FEEDBACK_URL, {
         method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ device, name: userName || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
+        // email rides along so a note can be answered. Ron could only reach these women through
+        // the WhatsApp group before, because the file had a name and a device id and no way back.
+        body: JSON.stringify({ device, name: userName || "", email: email || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
       });
       setSent(true); setTimeout(() => setSent(false), 2500); setNotes([]);
     } catch (e) { alert("השליחה נכשלה - בדקי חיבור לאינטרנט ונסי שוב."); }
@@ -5543,25 +5545,37 @@ export default function App() {
 
   // Android/Samsung hardware "back": intercept so the app doesn't close instantly.
   // Back first closes an open sheet/modal; otherwise it asks whether to leave.
-  const [showExit, setShowExit] = useState(false);
   const modalRef = useRef(modal); modalRef.current = modal;
   const sheetRef = useRef(sheet); sheetRef.current = sheet;
-  const exitRef = useRef(showExit); exitRef.current = showExit;
-  const leavingRef = useRef(false);
+  const tabRef = useRef(tab); tabRef.current = tab;
+  // Android's back button, rebuilt in v4.82 after a participant reported that it always
+  // asked whether to leave MyPrime, from any screen, and that answering "leave" did nothing.
+  // Both were true. The old version kept a history entry alive at all times so the press
+  // could never reach the system, and then offered its own exit button - which cannot work,
+  // because a page is not allowed to close itself. The result was a dead end.
+  //
+  // Now a history entry is kept ONLY while something of ours can be closed: an open window,
+  // or a tab other than the diary. Back then closes that, one layer at a time. On the diary
+  // with nothing open there is no entry left, the press reaches Android, and it closes the
+  // app exactly as it does in every other app. No dialog, and nothing that pretends to work.
+  const sentinelRef = useRef(false);
   useEffect(() => {
-    try { window.history.pushState({ mp: 1 }, ""); } catch (e) {}
+    const layered = !!(modal || sheet || tab !== "day");
+    if (layered && !sentinelRef.current) {
+      try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+    }
+  }, [modal, sheet, tab]);
+  useEffect(() => {
     const onPop = () => {
-      if (leavingRef.current) return;
+      sentinelRef.current = false; // the browser just consumed it
       if (modalRef.current) setModal(null);
       else if (sheetRef.current) setSheet(null);
-      else if (exitRef.current) setShowExit(false);
-      else setShowExit(true);
-      try { window.history.pushState({ mp: 1 }, ""); } catch (e) {}
+      else if (tabRef.current !== "day") setTab("day");
+      // Nothing of ours left: no new entry is pushed, so the next press exits the app.
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
-  const confirmExit = () => { leavingRef.current = true; setShowExit(false); try { window.history.go(-2); } catch (e) {} };
 
   const checkAccess = async (em, nm, isLogin) => {
     setGate("checking"); setGateMsg("");
@@ -5919,13 +5933,13 @@ export default function App() {
   // Intermittent-fasting intro bubble: once, on the day screen, from week 8 day 4 (Wednesday) onward.
   useEffect(() => {
     if (!onboarded || showIntro || tab !== "day") return;
-    if (sheet || modal || showExit) return;
+    if (sheet || modal) return;
     if (profile.fasting) return; // already opted in (e.g. via the profile toggle)
     if ((profile.tipsSeen || []).includes("fastingintro")) return;
     const wd = dowOf(today); // 0=Sat, 1=Sun .. 6=Fri
     const eligible = (programWeek === 8 && wd >= 4) || programWeek > 8;
     if (eligible) setSheet("fastingIntro");
-  }, [programWeek, today, tab, sheet, modal, showExit, onboarded, showIntro, profile.fasting, profile.tipsSeen]);
+  }, [programWeek, today, tab, sheet, modal, onboarded, showIntro, profile.fasting, profile.tipsSeen]);
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
   const setWeightForDate = (date, kg) => { setWeights((w) => [...w.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
   const reportAddWeight = () => setSheet("weight");
@@ -6159,7 +6173,7 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showExit || showIntro)} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
@@ -6268,7 +6282,7 @@ export default function App() {
             is not rendered anywhere, so nothing can ever set showIntro back to false, and
             keeping the condition would hide the bubble from every woman for the whole of
             her first session. The condition is dropped until IntroOverlay comes back. */}
-        {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
+        {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} email={gateEmail} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {favPrompt && (
           <div onClick={() => setFavPrompt(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
@@ -6289,18 +6303,6 @@ export default function App() {
               {/iphone|ipad|ipod/i.test(navigator.userAgent || "") && <p style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, margin: "0 0 14px" }}>כשיופיע חלון של הטלפון - בחרי "אישור".</p>}
               <Btn onClick={acceptNotify}>כן, הזכירו לי</Btn>
               <Btn variant="ghost" onClick={dismissNotify} style={{ marginTop: 8 }}>לא עכשיו</Btn>
-            </div>
-          </div>
-        )}
-        {showExit && (
-          <div onClick={() => setShowExit(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 50 }}>
-            <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
-              <div style={{ fontSize: 20, fontWeight: 600, color: C.ink, marginBottom: 6 }}>לצאת מ-MyPrime?</div>
-              <p style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, margin: "0 0 18px" }}>אפשר להישאר ולהמשיך בדיוק מאיפה שעצרת.</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <Btn onClick={() => setShowExit(false)}>להישאר</Btn>
-                <Btn variant="ghost" onClick={confirmExit}>לצאת</Btn>
-              </div>
             </div>
           </div>
         )}
