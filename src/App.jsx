@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.78";
+const VERSION = "4.79";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5020,11 +5020,11 @@ function DevViewportBar() {
   // for the app. Only the small dot is tappable; the readout itself ignores pointers.
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} aria-label="אבחון מסך" style={{ position: "fixed", top: 2, left: 2, zIndex: 2147483647, width: 22, height: 22, borderRadius: "50%", border: "none", background: bad ? "#f66" : "#0a0", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "monospace", cursor: "pointer", opacity: 0.75, padding: 0 }}>vp</button>
+      <button onClick={() => setOpen(true)} aria-label="אבחון מסך" style={{ position: "fixed", top: "calc(2px + env(safe-area-inset-top, 0px))", left: 2, zIndex: 2147483647, width: 22, height: 22, borderRadius: "50%", border: "none", background: bad ? "#f66" : "#0a0", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "monospace", cursor: "pointer", opacity: 0.75, padding: 0 }}>vp</button>
     );
   }
   return (
-    <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "normal", overflowWrap: "anywhere", pointerEvents: "none" }}>
+    <div style={{ position: "fixed", top: "env(safe-area-inset-top, 0px)", left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "normal", overflowWrap: "anywhere", pointerEvents: "none" }}>
       <div style={{ color: "#0f0" }}>NOW {line(s)}</div>
       <div style={{ color: bad ? "#f66" : "#666" }}>BAD {bad ? `[${bad.why}] ${line(bad)}` : "none yet"}</div>
       <div style={{ pointerEvents: "auto", display: "flex", gap: 8, marginTop: 2 }}>
@@ -5040,7 +5040,7 @@ function DevDateBar({ onAnchor }) {
   const reset = () => { try { window.localStorage.removeItem("myprime_dev_today"); } catch (e) {} window.location.reload(); };
   const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
   return (
-    <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
+    <div style={{ position: "absolute", top: "env(safe-area-inset-top, 0px)", left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
       <span style={{ opacity: 0.7 }}>DEV - יום מדומה</span>
       <button onClick={() => setDay(addDays(TODAY, -1))} style={btn}>-1</button>
       <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
