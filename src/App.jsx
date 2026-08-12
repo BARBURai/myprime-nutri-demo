@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.75";
+const VERSION = "4.76";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1856,10 +1856,18 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
   const [newSens, setNewSens] = useState("");
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   // One-line summary of what she picked, shown while the section is collapsed.
+  // Two different things used to be flattened into one unlabelled list, so "גלוטן" read as
+  // a diet style, and an empty sensitivity list showed nothing at all rather than saying so.
+  // Exactly the mistake the favourites prompt had before v4.48. Each part carries its own
+  // label now, and "nothing reported" is stated out loud instead of left blank.
   const dietSummary = (() => {
-    const parts = [...(profile.diet || []), ...(profile.allergies || []), ...customSens];
-    if (!parts.length) return "לא הוגדרו עדיין - אפשר להוסיף";
-    return parts.length <= 3 ? parts.join(" · ") : `${parts.slice(0, 3).join(" · ")} ועוד ${parts.length - 3}`;
+    const short = (arr) => (arr.length <= 3 ? arr.join(", ") : `${arr.slice(0, 3).join(", ")} ועוד ${arr.length - 3}`);
+    const style = profile.diet || [];
+    const sens = [...(profile.allergies || []), ...customSens];
+    const out = [];
+    if (style.length) out.push(`סגנון תזונה: ${short(style)}`);
+    out.push(sens.length ? `רגישויות: ${short(sens)}` : "לא דווח על רגישויות");
+    return out.join(" · ");
   })();
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
