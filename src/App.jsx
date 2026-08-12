@@ -5024,7 +5024,7 @@ function DevViewportBar() {
     );
   }
   return (
-    <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", pointerEvents: "none" }}>
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 2147483647, background: "#000", fontFamily: "monospace", fontSize: 11, fontWeight: 700, lineHeight: 1.35, padding: "4px 6px", direction: "ltr", textAlign: "left", whiteSpace: "normal", overflowWrap: "anywhere", pointerEvents: "none" }}>
       <div style={{ color: "#0f0" }}>NOW {line(s)}</div>
       <div style={{ color: bad ? "#f66" : "#666" }}>BAD {bad ? `[${bad.why}] ${line(bad)}` : "none yet"}</div>
       <div style={{ pointerEvents: "auto", display: "flex", gap: 8, marginTop: 2 }}>
