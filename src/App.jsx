@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.80";
+const VERSION = "4.81";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2888,6 +2888,13 @@ function NotesFab({ notes, setNotes, screen, userName }) {
 /* ============================================================
    ADD / EDIT MODAL
    ============================================================ */
+// The chat is thrown away with the window it lives in, so leaving it by mistake, even for
+// a second, meant starting the whole conversation over. Reported by a participant. The last
+// conversation is kept here for as long as the app stays open, and cleared the moment she
+// actually adds the food to the diary, which is when it is finished. A reload clears it too,
+// so nothing outlives the session and nothing is written to storage.
+const AI_OPENING = () => ([{ role: "assistant", text: "היי! ספרי לי מה אכלת ואעזור להעריך את הקלוריות 😋\nכדי שאוכל לדייק כבר מההתחלה, נסי לפרט כמה שיותר: איך האוכל הוכן (מטוגן / אפוי / מבושל / על הגריל), אם הוספת שמן / חמאה / רוטב, מה שתית, וכמות משוערת (גרמים, כוסות או כפות).\nככל שתפרטי יותר, ההערכה תהיה מדויקת יותר. אפשר לדבר או לכתוב." }]);
+let aiSession = null;
 function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onUndoEntry, onTourEvent, startDate }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
   const kbOpen = useTyping();
@@ -2979,11 +2986,11 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         reader.readAsDataURL(file);
       });
   };
-  const [aiMsgs, setAiMsgs] = useState([{ role: "assistant", text: "היי! ספרי לי מה אכלת ואעזור להעריך את הקלוריות 😋\nכדי שאוכל לדייק כבר מההתחלה, נסי לפרט כמה שיותר: איך האוכל הוכן (מטוגן / אפוי / מבושל / על הגריל), אם הוספת שמן / חמאה / רוטב, מה שתית, וכמות משוערת (גרמים, כוסות או כפות).\nככל שתפרטי יותר, ההערכה תהיה מדויקת יותר. אפשר לדבר או לכתוב." }]);
+  const [aiMsgs, setAiMsgs] = useState(() => (aiSession && aiSession.msgs) || AI_OPENING());
   const [aiApi, setAiApi] = useState([]);
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiDoneItems, setAiDoneItems] = useState(null);
+  const [aiDoneItems, setAiDoneItems] = useState(() => (aiSession && aiSession.doneItems) || null);
   const [reconciling, setReconciling] = useState(false);
   const finishItems = (items) => {
     setReconciling(true);
@@ -3016,6 +3023,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const aiEndRef = useRef(null);
   useEffect(() => { const el = aiInputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [aiInput, step]);
   useEffect(() => { aiEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [aiMsgs, aiLoading, aiDoneItems]);
+  // Remember the conversation for as long as the app is open, so closing the window by
+  // mistake does not throw it away.
+  useEffect(() => { if (step === "ai") aiSession = { msgs: aiMsgs, doneItems: aiDoneItems }; }, [step, aiMsgs, aiDoneItems]);
   const sendAi = async (textArg) => {
     const text = (textArg != null ? textArg : aiInput).trim();
     if (!text || aiLoading) return;
@@ -3477,6 +3487,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                     const defName = aiDoneItems.map((it) => it.name).join(" + ");
                     const oneName = aiOneName.trim() || defName;
                     const doCommit = () => {
+                      aiSession = null; // logged, so the conversation is done and the next one starts clean
                       if (multi && aiAsOne) commit([{ meal, name: oneName, g: sums.g || 1, unit: "g", source: "estimated", kcal: sums.kcal, p: sums.p, f: sums.f, c: sums.c, servingG: sums.g || 1 }]);
                       else commit(aiDoneItems.map((it) => ({ meal, name: it.name, g: it.grams, unit: it.unit || "g", source: it.source || "estimated", kcal: it.kcal, p: it.p, f: it.f, c: it.c, ...(it._pieces ? { servingG: it.pieceG, servings: it.servings, pieceUnit: it.pieceUnit } : {}) })));
                     };
