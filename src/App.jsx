@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.77";
+const VERSION = "4.78";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -645,6 +645,20 @@ function MacroRow({ p, f, c, tp, tf, tc, headline }) {
 // correction is a guess on top of a guess and moves the women who DO state quantities too.
 // So it is said out loud instead. One line by default, because a paragraph at the top of
 // the logging screen would eat the chat; "לפרטים" opens the rest, ✕ closes it.
+// Is the on-screen keyboard up? Same rule the frame-height code uses, kept local and
+// read-only so it cannot fight it. Used to hand the chat back the room the keyboard takes.
+function useKeyboardOpen() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const read = () => setOpen(Math.max(0, (window.innerHeight || 0) - vv.height) > 80);
+    read();
+    vv.addEventListener("resize", read);
+    return () => vv.removeEventListener("resize", read);
+  }, []);
+  return open;
+}
 function EstimateNote({ style }) {
   const [open, setOpen] = useState(false);
   return (
@@ -2867,6 +2881,7 @@ function NotesFab({ notes, setNotes, screen, userName }) {
    ============================================================ */
 function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onUndoEntry, onTourEvent, startDate }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
+  const kbOpen = useKeyboardOpen();
   const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || (() => { const h = new Date().getHours(); return h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; })());
   const [food, setFood] = useState(state.editEntry ? (FOODS.find((f) => f.name === state.editEntry.name) || foodFromEntry(state.editEntry)) : null);
   const [grams, setGrams] = useState(state.editEntry?.g || 100);
@@ -3175,7 +3190,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px calc(84px + env(safe-area-inset-bottom, 0px))" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px))" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
           <button onClick={close} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
@@ -3487,7 +3502,11 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               <textarea ref={aiInputRef} value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }} disabled={aiLoading} rows={1} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
               <button onClick={() => sendAi()} disabled={aiLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Send size={18} /></button>
             </div>
-            <div style={{ fontSize: 13, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>
+            {/* Hidden while the keyboard is up. It wraps to two lines on a phone, and with
+                the keyboard open those two lines are the difference between reading the
+                whole message above and reading half of it. It is back the moment she is
+                done typing, which is when it is any use to her anyway. */}
+            {!kbOpen && <div style={{ fontSize: 13, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>}
           </div>
         )}
         {step === "qty" && food && (
