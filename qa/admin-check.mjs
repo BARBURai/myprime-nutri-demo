@@ -38,6 +38,7 @@ globalThis.fetch = async (url) => {
   else if (cmd === "HGET") result = H(a)[b] ?? null;
   else if (cmd === "HDEL") { delete H(a)[b]; result = 1; }
   else if (cmd === "HGETALL") { const o = H(a); result = Object.keys(o).flatMap((k) => [k, o[k]]); }
+  else if (cmd === "KEYS") { const pre = String(a).replace(/\*$/, ""); result = Object.keys(store.kv).filter((k) => k.startsWith(pre)); }
   else if (cmd === "SET") { store.kv[a] = b; result = "OK"; }
   else if (cmd === "GET") result = store.kv[a] ?? null;
   else result = 0; // ZADD / ZREM / ZCARD / ZRANGE etc.
@@ -131,6 +132,12 @@ console.log("\nאפליקציה חדשה מול קג'אבי");
   await callAccess("nili@test.com");
   const after = (await callAdmin({ key: KEY })).body.women;
   check("כניסה ראשונה מעבירה אותה לאפליקציה החדשה", after.find((w) => w.email === "nili@test.com").newApp === true);
+
+  // A woman who has a backup but has not opened the app since admin:seen began still
+  // belongs to the new app. This is the backfill that stops the list under-reporting.
+  store.kv["bk:michal@test.com"] = "cipher";
+  const back = (await callAdmin({ key: KEY })).body.women;
+  check("גיבוי קיים מספיק כדי לסמן אותה כחדשה", back.find((w) => w.email === "michal@test.com").newApp === true);
 }
 
 console.log("\nחוסן");

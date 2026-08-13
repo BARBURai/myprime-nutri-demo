@@ -73,6 +73,7 @@ export default async function handler(req, res) {
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
   let overrides = {}, seen = {};
+  const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
       const out = {};
@@ -81,6 +82,30 @@ export default async function handler(req, res) {
     };
     try { overrides = flat(await redis(RU, RT, "HGETALL", "admin:overrides")); } catch (e) {}
     try { seen = flat(await redis(RU, RT, "HGETALL", "admin:seen")); } catch (e) {}
+
+    // Who is on the new app. admin:seen only starts at v4.87, so it alone would report far
+    // fewer women than really moved over. Every other durable trace a woman leaves by
+    // opening the app counts too: her encrypted backup (written automatically since v4.72),
+    // her device list, and her notification registration. None of these can be forgotten or
+    // mistyped the way a manual tag can.
+    Object.keys(seen).forEach((e) => appEmails.add(e.toLowerCase()));
+    const scan = async (pattern, prefixLen) => {
+      try {
+        const keys = (await redis(RU, RT, "KEYS", pattern)) || [];
+        keys.forEach((k) => {
+          const e = String(k).slice(prefixLen).toLowerCase();
+          if (e.includes("@")) appEmails.add(e);
+        });
+      } catch (e) { /* one missing source must not empty the whole list */ }
+    };
+    await scan("bk:*", 3);
+    await scan("devices:*", 8);
+    try {
+      const subs = flat(await redis(RU, RT, "HGETALL", "push:subs"));
+      Object.values(subs).forEach((v) => {
+        try { const j = JSON.parse(v); if (j && j.email) appEmails.add(String(j.email).toLowerCase()); } catch (e) {}
+      });
+    } catch (e) {}
   }
 
   const today = israelDay(0);
@@ -96,7 +121,7 @@ export default async function handler(req, res) {
       // Opening the app at least once is what puts her on the new app. This only counts
       // from the day admin:seen started being written, so the list fills in over a few days
       // as each woman next opens the app.
-      newApp: !!w.sheetNewApp || !!seenAt,
+      newApp: !!w.sheetNewApp || appEmails.has(w.email),
       until,
       override: ovr ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "", prev: ovr.prev || "" } : null,
       expired: !!until && today > until,
