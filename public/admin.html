@@ -261,6 +261,8 @@ function render(){
     (searching ? '<div class="note">תוצאות חיפוש מכל הרשומות בגיליון, בלי סינון לפי מחזור, קבוצה או אפליקציה.</div>' :
       '<div class="chips"><span class="chip'+(missing.length?" warn":"")+(MISSING?" on":"")+'" data-m="1">'+
         (missing.length?"⚠ ":"")+'חסרות קבוצה ('+missing.length+')</span></div>'+
+      // Say what the list covers, so a woman who is missing from it does not read as a bug.
+      (MISSING ? '<div class="note">מוצגות רק נשים ללא אות קבוצה במחזור של השבוע ובמחזור של השבוע הבא.</div>' : '')+
       (MISSING ? '' : '<div class="lbl">אפליקציה</div><div class="chips">'+
         '<span class="chip'+(APP==="new"?" on":"")+'" data-p="new">אפליקציה חדשה ('+nNew+')</span>'+
         '<span class="chip'+(APP==="old"?" on":"")+'" data-p="old">קג\'אבי ('+nOld+')</span>'+
@@ -273,7 +275,9 @@ function render(){
         '<span class="chip'+(MONTH?"":" on")+'" data-mo="">כל השנה</span>'+
         monthKeys.map(function(mo){ return '<span class="chip'+(MONTH===mo?" on":"")+'" data-mo="'+esc(mo)+'">'+esc(HEB_MONTHS[parseInt(mo,10)-1])+' ('+months[mo]+')</span>'; }).join("")+
       '</div>'+
-      (MONTH
+      // In the missing-group view the month is deliberately "whole year", but the cohorts
+      // still matter there: they are the two Ron is placing.
+      (MONTH || MISSING
         ? '<div class="lbl">מחזור</div><div class="chips">'+
           '<span class="chip'+(COHORT?"":" on")+'" data-d="">הכל</span>'+
           dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+esc(cohortLabel(d))+' ('+cohorts[d]+')</span>'; }).join("")+
