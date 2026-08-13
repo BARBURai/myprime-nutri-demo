@@ -89,9 +89,14 @@ export default async function handler(req, res) {
     const raw = overrides[w.email];
     if (raw) { try { ovr = JSON.parse(raw); } catch (e) {} }
     const until = (ovr && ovr.until) || w.sheetEnd || "";
+    const seenAt = seen[w.email] || "";
     return {
       ...w,
-      seen: seen[w.email] || "",
+      seen: seenAt,
+      // Opening the app at least once is what puts her on the new app. This only counts
+      // from the day admin:seen started being written, so the list fills in over a few days
+      // as each woman next opens the app.
+      newApp: !!w.sheetNewApp || !!seenAt,
       until,
       override: ovr ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "", prev: ovr.prev || "" } : null,
       expired: !!until && today > until,

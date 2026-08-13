@@ -44,7 +44,7 @@
 // store: a change made here never touches that file, because ManyChat and the access gate
 // both depend on it. The screen therefore always shows the sheet's value next to a manual
 // change rather than replacing it.
-var KEY = "", WHO = "", DATA = null, COHORT = null, GROUP = "", SHOWCANCELLED = false, EDITING = "";
+var KEY = "", WHO = "", DATA = null, APP = "new", COHORT = null, GROUP = "", SHOWCANCELLED = false, EDITING = "";
 var app = document.getElementById("app");
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
@@ -101,10 +101,13 @@ function render(){
   // A group is a cohort AND a letter together. Every cohort runs א..ה (two to five of them),
   // so "קבוצה ב" of the January intake and "קבוצה ב" of the April intake are different
   // groups of different women. Merging them by letter alone is what produced "ב (522)".
-  var cohorts = {}, pool = [];
+  var cohorts = {}, pool = [], nNew = 0, nOld = 0;
   DATA.women.forEach(function(w){
     if(w.cancelled && !SHOWCANCELLED) return;
     if(!w.start) return;
+    if(w.newApp) nNew++; else nOld++;
+    if(APP==="new" && !w.newApp) return;
+    if(APP==="old" && w.newApp) return;
     cohorts[w.start] = (cohorts[w.start]||0)+1;
     pool.push(w);
   });
@@ -129,6 +132,11 @@ function render(){
   var html = '<h1>ניהול משתתפות</h1>'+
     '<div class="sub">'+list.length+' משתתפות · מחוברת כ'+esc(WHO||"?")+'</div>'+
     '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
+    '<div class="lbl">אפליקציה</div><div class="chips">'+
+      '<span class="chip'+(APP==="new"?" on":"")+'" data-p="new">אפליקציה חדשה ('+nNew+')</span>'+
+      '<span class="chip'+(APP==="old"?" on":"")+'" data-p="old">קג\'אבי ('+nOld+')</span>'+
+      '<span class="chip'+(APP===""?" on":"")+'" data-p="">הכל</span>'+
+    '</div>'+
     '<div class="lbl">מחזור</div><div class="chips">'+
       '<span class="chip'+(COHORT?"":" on")+'" data-d="">כל המחזורים</span>'+
       dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+il(d)+' ('+cohorts[d]+')</span>'; }).join("")+
@@ -173,6 +181,7 @@ function render(){
   var qEl = document.getElementById("q");
   qEl.oninput = function(){ var v=this.selectionStart; render(); var n=document.getElementById("q"); n.focus(); n.setSelectionRange(v,v); };
 
+  app.querySelectorAll("[data-p]").forEach(function(el){ el.onclick=function(){ APP=el.getAttribute("data-p"); COHORT=null; GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-d]").forEach(function(el){ el.onclick=function(){ COHORT=el.getAttribute("data-d"); GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });

@@ -90,6 +90,9 @@ export async function loadSheet(csvUrl) {
     first: findCol(header, ["F_NAME", "שם פרטי", "first name", "firstname"]),
     last: findCol(header, ["L_NAME", "שם משפחה", "last name", "lastname"]),
     email: findCol(header, ["CF_EMAIL", "מייל", "email", "אימייל"]),
+    // Optional. Until Ron marks the new-app women in the sheet, membership is decided by
+    // whether we have ever seen her open the app, which is a fact rather than a tag.
+    newapp: findCol(header, ["אפליקציה חדשה", "אפליקציה"]),
   };
 
   const women = [];
@@ -126,6 +129,7 @@ export async function loadSheet(csvUrl) {
       start: startSunday ? ymd(startSunday) : "",
       months: Number.isFinite(months) && months > 0 ? months : null,
       cancelled: col.cancel !== -1 ? isTrue(cells[col.cancel]) : false,
+      sheetNewApp: col.newapp !== -1 ? isTrue(cells[col.newapp]) : false,
       sheetEnd: startSunday ? ymd(accessEnd(startSunday, months)) : "",
     });
   });

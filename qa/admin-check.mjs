@@ -70,7 +70,12 @@ const check = (name, cond, extra) => {
 
 console.log("\nקריאת הגיליון");
 const { women, headers } = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
-check("כל שבע העמודות אותרו לפי כותרת", Object.values(headers).every(Boolean), JSON.stringify(headers));
+// newapp is optional: the sheet does not carry it yet, and membership falls back to
+// whether we have ever seen her open the app.
+check("כל עמודות החובה אותרו לפי כותרת",
+  ["cancel", "start", "months", "phone", "group", "first", "last", "email"].every((k) => headers[k]),
+  JSON.stringify(headers));
+check("עמודת האפליקציה אופציונלית ואינה נדרשת", headers.newapp === false);
 check("חמש נשים נקראו", women.length === 5, "התקבל " + women.length);
 const yafit = women.find((w) => w.email === "yafit@test.com");
 check("שם פרטי ומשפחה נקראים מ-F_NAME ו-L_NAME", yafit.first === "יפית" && yafit.last === "קורן");
@@ -117,6 +122,16 @@ await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", until: "", by: 
 check("ביטול השינוי מחזיר לגיליון", (await callAccess("yafit@test.com")).body.allowed === true);
 const y3 = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "yafit@test.com");
 check("ואז אין יותר סימון ידני", y3.override === null && y3.until === "2026-11-23");
+
+console.log("\nאפליקציה חדשה מול קג'אבי");
+{
+  const before = (await callAdmin({ key: KEY })).body.women;
+  check("מי שנכנסה לאפליקציה מסומנת כחדשה", before.find((w) => w.email === "yafit@test.com").newApp === true);
+  check("מי שמעולם לא נכנסה אינה מסומנת", before.find((w) => w.email === "nili@test.com").newApp === false);
+  await callAccess("nili@test.com");
+  const after = (await callAdmin({ key: KEY })).body.women;
+  check("כניסה ראשונה מעבירה אותה לאפליקציה החדשה", after.find((w) => w.email === "nili@test.com").newApp === true);
+}
 
 console.log("\nחוסן");
 const hadFetch = globalThis.fetch;
