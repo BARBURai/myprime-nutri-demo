@@ -36,7 +36,8 @@
   .chip.warn.on{background:#fff4e5}
   .warnpill{background:#fff4e5;color:var(--warn)}
   .btn.sm{padding:6px 10px;font-size:13px}
-  .adds{display:flex;gap:6px;flex-wrap:wrap}
+  .field.sm{padding:6px 8px;font-size:14px;width:auto}
+  .adds{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .empty{text-align:center;color:var(--soft);padding:40px 0}
   a{color:var(--pink)}
 </style>
@@ -191,8 +192,12 @@ function render(){
         ' · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')+
       (EDITING===w.email
         ? '<div class="edit"><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
-          '<span class="adds">'+
-            [7,14,30,90].map(function(n){ return '<button class="btn sm" data-add="'+n+'" data-for="'+esc(w.email)+'">+'+n+' ימים</button>'; }).join("")+
+          '<span class="adds">הוסיפי '+
+            '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
+            '<select class="field sm" style="width:100px" id="u_'+esc(w.email)+'">'+
+              '<option value="d">ימים</option><option value="w">שבועות</option><option value="m">חודשים</option>'+
+            '</select>'+
+            '<button class="btn sm" data-add="1" data-for="'+esc(w.email)+'">הוסיפי</button>'+
           '</span>'+
           '<button class="btn p" data-save="'+esc(w.email)+'">שמירה</button>'+
           (w.override?'<button class="btn" data-clear="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
@@ -215,12 +220,16 @@ function render(){
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){ EDITING=el.getAttribute("data-edit"); render(); }; });
-  // The buttons move the date for her; a clerk should never be doing calendar arithmetic.
+  // A clerk says "another two months", not a date. The amount and the unit are hers to
+  // choose; months move by calendar month so "another month" lands on the same day number.
   app.querySelectorAll("[data-add]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-for"), inp=document.getElementById("d_"+em);
-    var base = inp.value || DATA.today;
-    var d = new Date(base+"T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() + parseInt(el.getAttribute("data-add"),10));
+    var n = parseInt(document.getElementById("n_"+em).value,10);
+    if(!(n>0)){ alert("צריך להזין מספר"); return; }
+    var unit = document.getElementById("u_"+em).value;
+    var d = new Date((inp.value||DATA.today)+"T00:00:00Z");
+    if(unit==="m") d.setUTCMonth(d.getUTCMonth()+n);
+    else d.setUTCDate(d.getUTCDate() + n*(unit==="w"?7:1));
     inp.value = d.toISOString().slice(0,10);
   }; });
   app.querySelectorAll("[data-cancel]").forEach(function(el){ el.onclick=function(){ EDITING=""; render(); }; });
