@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>ניהול משתתפות · מיי פריים 360</title>
 <style>
-  :root{--bg:#faf7f8;--card:#fff;--ink:#2d2430;--soft:#7b6f80;--line:#ece4ee;--pink:#c2185b;--pinkbg:#fce4ec;--ok:#2e7d32;--warn:#b26a00}
+  :root{--bg:#faf7f8;--card:#fff;--ink:#2d2430;--soft:#2d2430;--line:#ece4ee;--pink:#c2185b;--pinkbg:#fce4ec;--ok:#2e7d32;--warn:#b26a00}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Rubik,Arial,sans-serif;padding:env(safe-area-inset-top) 0 40px}
   .wrap{max-width:760px;margin:0 auto;padding:16px}
@@ -62,7 +62,11 @@ function dayInProgram(w){
   if(!w.start||!DATA) return "";
   var n = days(w.start, DATA.today)+1;
   if(n<1) return "טרם התחילה";
-  return "יום "+n;
+  // The same reading the woman sees in her own tracker: cohorts start on a Sunday, so day 1
+  // is Sunday and day 7 is Saturday. Past day 70 the programme is over and there is no
+  // week 11, so the plain day number is the honest answer.
+  if(n>70) return "יום "+n+" · אחרי סיום התוכנית";
+  return "שבוע "+(Math.floor((n-1)/7)+1)+" יום "+(((n-1)%7)+1);
 }
 function lastSeen(w){
   if(!w.seen) return "עוד לא נכנסה";
