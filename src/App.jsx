@@ -1082,7 +1082,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Lock size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>גיבוי מאובטח</span></div>
             <p style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.65, marginTop: 0, marginBottom: 10 }}>
-              מה שאת ממלאת פה באפליקציה נשמר במכשיר שלך בלבד ורק לך יש גישה לנתונים האלה. לחברת מיי פריים אין אפשרות לראות את הנתונים או להשתמש בהם.
+              מה שאת ממלאת פה באפליקציה נשמר במכשיר שלך בלבד ורק לך יש גישה לנתונים האלה. לחברת מיי פריים אין אפשרות לראות את הנתונים או להשתמש בהם. נשמרים אצלנו נתוני שימוש באפליקציה בלבד.
             </p>
             <p style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.65, marginTop: 0, marginBottom: 14 }}>
               אם תרצי, נשמור גיבוי <b>מוצפן</b> בענן - כך שאם תחליפי טלפון או יקרה משהו למכשיר, תוכלי לשחזר הכל. הגיבוי מוצפן כך ש<b>רק את</b> יכולה לפתוח אותו.
@@ -3899,7 +3899,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
           <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל איתו נרשמת לתוכנית" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
           <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.7, textAlign: "right", marginBottom: 4 }}>
             <Lock size={13} style={{ display: "inline", verticalAlign: "-2px", marginInlineEnd: 5 }} />
-            מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
+            מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה אוספת נתוני שימוש באפליקציה בלבד. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
           </div>
           <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 0 12px", textAlign: "right" }}>
             <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
