@@ -32,6 +32,9 @@
   .edit{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .note{color:var(--soft);font-size:13px;margin-top:14px}
   .lbl{font-size:13px;color:var(--soft);margin-top:10px}
+  .chip.warn{border-color:var(--warn);color:var(--warn);font-weight:600}
+  .chip.warn.on{background:#fff4e5}
+  .warnpill{background:#fff4e5;color:var(--warn)}
   .empty{text-align:center;color:var(--soft);padding:40px 0}
   a{color:var(--pink)}
 </style>
@@ -44,7 +47,9 @@
 // store: a change made here never touches that file, because ManyChat and the access gate
 // both depend on it. The screen therefore always shows the sheet's value next to a manual
 // change rather than replacing it.
-var KEY = "", WHO = "", DATA = null, APP = "new", COHORT = null, GROUP = "", SHOWCANCELLED = false, EDITING = "";
+var KEY = "", WHO = "", DATA = null, APP = "new", COHORT = null, GROUP = "", SHOWCANCELLED = false, MISSING = false, EDITING = "";
+// Which women still need a group letter is decided in api/admin.js (needsGroup), so the
+// rule has one home and the offline check covers it.
 var app = document.getElementById("app");
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
@@ -111,6 +116,10 @@ function render(){
     cohorts[w.start] = (cohorts[w.start]||0)+1;
     pool.push(w);
   });
+  // Missing-group check. Deliberately outside the app filter: a woman who started this week
+  // and has not opened the app yet reads as Kajabi, and she is exactly the one to catch.
+  var missing = DATA.women.filter(function(w){ return w.needsGroup; });
+
   var dates = Object.keys(cohorts).sort().reverse();   // newest intake first
   if(COHORT === null) COHORT = dates.length ? dates[0] : "";
 
@@ -119,8 +128,8 @@ function render(){
   inCohort.forEach(function(w){ if(w.group) groups[w.group]=(groups[w.group]||0)+1; });
   var letters = Object.keys(groups).sort(function(a,b){ return a.localeCompare(b,"he"); });
 
-  var list = inCohort.filter(function(w){
-    if(GROUP && w.group!==GROUP) return false;
+  var list = (MISSING ? missing : inCohort).filter(function(w){
+    if(!MISSING && GROUP && w.group!==GROUP) return false;
     if(q){
       var hay = (w.first+" "+w.last+" "+w.email+" "+w.phone).toLowerCase();
       if(hay.indexOf(q)===-1) return false;
@@ -132,7 +141,12 @@ function render(){
   var html = '<h1>ניהול משתתפות</h1>'+
     '<div class="sub">'+list.length+' משתתפות · מחוברת כ'+esc(WHO||"?")+'</div>'+
     '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
-    '<div class="lbl">אפליקציה</div><div class="chips">'+
+    (missing.length
+      ? '<div class="chips"><span class="chip warn'+(MISSING?" on":"")+'" data-m="1">⚠ חסרות קבוצה במחזור החדש ('+missing.length+')</span></div>'
+      : '<div class="chips"><span class="chip'+(MISSING?" on":"")+'" data-m="1">חסרות קבוצה במחזור החדש (0)</span></div>')+
+    (MISSING
+      ? '<div class="note">מוצגות רק נשים ללא אות קבוצה שהמחזור שלהן מתחיל בשבוע האחרון או בעתיד. אלה שהתחילו מזמן אינן מוצגות כאן.</div>'
+      : '<div class="lbl">אפליקציה</div><div class="chips">'+
       '<span class="chip'+(APP==="new"?" on":"")+'" data-p="new">אפליקציה חדשה ('+nNew+')</span>'+
       '<span class="chip'+(APP==="old"?" on":"")+'" data-p="old">קג\'אבי ('+nOld+')</span>'+
       '<span class="chip'+(APP===""?" on":"")+'" data-p="">הכל</span>'+
@@ -140,15 +154,15 @@ function render(){
     '<div class="lbl">מחזור</div><div class="chips">'+
       '<span class="chip'+(COHORT?"":" on")+'" data-d="">כל המחזורים</span>'+
       dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+il(d)+' ('+cohorts[d]+')</span>'; }).join("")+
-    '</div>';
+    '</div>');
 
-  if(letters.length){
+  if(letters.length && !MISSING){
     html += '<div class="lbl">קבוצה</div><div class="chips">'+
       '<span class="chip'+(GROUP?"":" on")+'" data-g="">הכל</span>'+
       letters.map(function(g){ return '<span class="chip'+(GROUP===g?" on":"")+'" data-g="'+esc(g)+'">'+esc(g)+' ('+groups[g]+')</span>'; }).join("")+
       '</div>';
   }
-  html += '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>';
+  if(!MISSING) html += '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>';
 
   if(!list.length) html += '<div class="empty">לא נמצאה אף משתתפת</div>';
 
@@ -156,7 +170,7 @@ function render(){
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
     html += '<div class="card">'+
       '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
-      (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'')+
+      (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
       (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+'</div>'+
       '<div class="meta">'+esc(w.phone||"אין טלפון")+' · '+esc(w.email)+'</div>'+
       '<div class="meta">מחזור '+il(w.start)+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
@@ -181,6 +195,7 @@ function render(){
   var qEl = document.getElementById("q");
   qEl.oninput = function(){ var v=this.selectionStart; render(); var n=document.getElementById("q"); n.focus(); n.setSelectionRange(v,v); };
 
+  app.querySelectorAll("[data-m]").forEach(function(el){ el.onclick=function(){ MISSING=!MISSING; EDITING=""; render(); }; });
   app.querySelectorAll("[data-p]").forEach(function(el){ el.onclick=function(){ APP=el.getAttribute("data-p"); COHORT=null; GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-d]").forEach(function(el){ el.onclick=function(){ COHORT=el.getAttribute("data-d"); GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
