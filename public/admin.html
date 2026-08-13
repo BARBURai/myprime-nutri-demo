@@ -72,15 +72,18 @@ function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){retur
 function il(d){ if(!d) return ""; var p=d.split("-"); return p[2]+"."+p[1]+"."+p[0]; }
 // Cohorts start on a Sunday, so "this week's" cohort is the most recent Sunday and the next
 // one is seven days later. Naming them saves the clerk working it out from a date.
-function cohortLabel(d){
-  if(!DATA) return il(d);
+function weekSundays(){
   var t = new Date(DATA.today+"T00:00:00Z");
   t.setUTCDate(t.getUTCDate() - t.getUTCDay());       // Sunday of the current week
   var cur = t.toISOString().slice(0,10);
   t.setUTCDate(t.getUTCDate() + 7);
-  var next = t.toISOString().slice(0,10);
-  if(d === cur) return "מחזור נוכחי · "+il(d);
-  if(d === next) return "המחזור הבא · "+il(d);
+  return { cur: cur, next: t.toISOString().slice(0,10) };
+}
+function cohortLabel(d){
+  if(!DATA) return il(d);
+  var w = weekSundays();
+  if(d === w.cur) return "מחזור נוכחי · "+il(d);
+  if(d === w.next) return "המחזור הבא · "+il(d);
   return il(d);
 }
 function stamp(iso){ if(!iso) return ""; var d=new Date(iso); if(isNaN(d)) return "";
@@ -154,10 +157,12 @@ function usagePanel(w){
     '</div>';
 }
 
-function save(email, until){
+function save(email, patch){
+  var body = { email: email, by: WHO };
+  for(var k in patch) body[k] = patch[k];
   return fetch("/api/admin?key="+encodeURIComponent(KEY),{
     method:"POST", headers:{"content-type":"application/json"},
-    body:JSON.stringify({email:email, until:until, by:WHO})
+    body:JSON.stringify(body)
   }).then(function(r){ return r.json(); });
 }
 
@@ -228,6 +233,14 @@ function render(){
     cohorts[w.start] = (cohorts[w.start]||0)+1;
   });
   var dates = Object.keys(cohorts).sort().reverse();
+  // In the missing-group view both cohorts are always drawn, even at zero. A cohort that
+  // simply vanishes leaves the clerk guessing whether it is fine or whether it was filtered
+  // out, and "(0)" answers that outright.
+  if(MISSING){
+    var wk = weekSundays();
+    dates = [wk.next, wk.cur];
+    dates.forEach(function(d){ if(!cohorts[d]) cohorts[d] = 0; });
+  }
   if(COHORT && dates.indexOf(COHORT) === -1) COHORT = "";
 
   var inCohort = base.filter(function(w){
@@ -292,13 +305,14 @@ function render(){
         : '')+
       '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>');
 
-  if(!list.length) html += '<div class="empty">לא נמצאה אף משתתפת</div>';
+  if(!list.length) html += '<div class="empty">'+
+    (MISSING ? "אין כאן נשים ללא קבוצה. הכל משויך." : "לא נמצאה אף משתתפת")+'</div>';
 
   list.forEach(function(w){
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
     html += '<div class="card">'+
       '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
-      (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+      (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
       (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+'</div>'+
       '<div class="meta">'+esc(w.phone||"אין טלפון")+' · '+esc(w.email)+'</div>'+
@@ -309,12 +323,25 @@ function render(){
         : '')+
       (w.override?'<div class="manual">שונה ידנית · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')+
       ((w.log&&w.log.length)?'<div class="log">'+w.log.map(function(L){
-        return esc(stamp(L.at))+' · '+esc(L.by||"לא ידוע")+' · '+
-          (L.to ? 'שינתה את תאריך הגישה מ-'+(L.from?il(L.from):"לא ידוע")+' ל-'+il(L.to)
-                : 'החזירה לתאריך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
+        var pre = esc(stamp(L.at))+' · '+esc(L.by||"לא ידוע")+' · ';
+        if(L.field === "group"){
+          return pre + (L.to ? 'שינתה את הקבוצה מ-'+(L.from?esc(L.from):"ללא קבוצה")+' ל-'+esc(L.to)
+                             : 'החזירה את הקבוצה לערך שבגיליון'+(L.from?' (הייתה '+esc(L.from)+')':''));
+        }
+        return pre + (L.to ? 'שינתה את תאריך הגישה מ-'+(L.from?il(L.from):"לא ידוע")+' ל-'+il(L.to)
+                           : 'החזירה את תאריך הגישה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
       }).join('<br>')+'</div>':'')+
       (EDITING===w.email
-        ? '<div class="edit"><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
+        ? '<div class="edit"><span>קבוצה:</span>'+
+            '<select class="field sm" id="g_'+esc(w.email)+'">'+
+              '<option value=""'+(w.group?"":" selected")+'>ללא קבוצה</option>'+
+              ["א","ב","ג","ד","ה"].map(function(L){ return '<option value="'+L+'"'+(w.group===L?" selected":"")+'>'+L+'</option>'; }).join("")+
+            '</select>'+
+            '<button class="btn" data-savegroup="'+esc(w.email)+'">שמירת קבוצה</button>'+
+            (w.groupOverride?'<button class="btn" data-cleargroup="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+          '</div>'+
+          '<div class="note">שיוך הקבוצה כאן משמש את האפליקציה בלבד. <b>יש לעדכן גם את הגיליון הראשי.</b></div>'+
+          '<div class="edit"><span>גישה עד:</span><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
           '<span class="adds">הוסיפי '+
             '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
             '<select class="field sm" style="width:100px" id="u_'+esc(w.email)+'">'+
@@ -328,7 +355,7 @@ function render(){
         : '<div class="acts">'+
           (w.phone?'<a class="btn" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
           (w.newApp
-            ? '<button class="btn" data-edit="'+esc(w.email)+'">שינוי תאריך גישה</button>'+
+            ? '<button class="btn" data-edit="'+esc(w.email)+'">עריכה</button>'+
               '<button class="btn" data-stats="'+esc(w.email)+'">'+(STATS===w.email?"סגירת נתוני שימוש":"נתוני שימוש")+'</button>'
             : '')+
           '</div>'+
@@ -379,13 +406,25 @@ function render(){
     var em=el.getAttribute("data-save"), v=document.getElementById("d_"+em).value;
     if(!v){ alert("צריך לבחור תאריך"); return; }
     el.disabled=true; el.textContent="שומרת...";
-    save(em,v).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
+    save(em,{until:v}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
       .catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירה"; });
+  }; });
+  app.querySelectorAll("[data-savegroup]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-savegroup"), g=document.getElementById("g_"+em).value;
+    el.disabled=true; el.textContent="שומרת...";
+    save(em,{group:g}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
+      .catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירת קבוצה"; });
+  }; });
+  app.querySelectorAll("[data-cleargroup]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-cleargroup");
+    el.disabled=true;
+    save(em,{group:""}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
+      .catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
   }; });
   app.querySelectorAll("[data-clear]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-clear");
     el.disabled=true;
-    save(em,"").then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
+    save(em,{until:""}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
       .catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
   }; });
 }

@@ -7,7 +7,7 @@
 // and api/access.js prefers it over the sheet. The screen always shows both values, so a
 // manual change is visible rather than hidden.
 //
-//   admin:overrides  field = email, value = JSON({ until, by, at, prev })
+//   admin:overrides  field = email, value = JSON({ until, group, by, at, log[] })
 //   admin:seen       field = email, value = "YYYY-MM-DD" of her last app open
 //   admin:usage      field = email, value = JSON from api/usage.js (counts only)
 //
@@ -25,6 +25,7 @@ async function redis(base, token, ...args) {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 export default async function handler(req, res) {
   const key = String(req.query.key || "");
@@ -41,10 +42,17 @@ export default async function handler(req, res) {
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
     const email = String((body && body.email) || "").trim().toLowerCase();
-    const until = String((body && body.until) || "").trim();
     const by = String((body && body.by) || "").trim().slice(0, 40);
+    // Each field is edited on its own, and an empty string means "back to the sheet". The
+    // key being absent is what distinguishes "not touched" from "cleared".
+    const hasUntil = body && Object.prototype.hasOwnProperty.call(body, "until");
+    const hasGroup = body && Object.prototype.hasOwnProperty.call(body, "group");
+    const until = String((body && body.until) || "").trim();
+    const group = String((body && body.group) || "").trim();
     if (!email) return res.status(400).json({ ok: false, error: "missing_email" });
-    if (until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
+    if (!hasUntil && !hasGroup) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (hasUntil && until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
+    if (hasGroup && group && !GROUP_RE.test(group)) return res.status(400).json({ ok: false, error: "bad_group" });
     if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
     try {
       // Every change is kept: who, when, and the exact move from one date to another. A
@@ -56,20 +64,29 @@ export default async function handler(req, res) {
         if (old) cur = JSON.parse(old) || {};
       } catch (e) {}
 
-      // What the access date was before this edit. With no override in force that is the
-      // sheet's own value, so read it rather than logging a blank.
-      let from = cur.until || "";
-      if (!from) {
+      // What the value was before this edit. With no override in force that is the sheet's
+      // own value, so read it rather than logging a blank.
+      let sheetRow = null;
+      if ((hasUntil && !cur.until) || (hasGroup && !cur.group)) {
         try {
           const sheet = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
-          const row = sheet.women.find((w) => w.email === email);
-          if (row) from = row.sheetEnd || "";
+          sheetRow = sheet.women.find((w) => w.email === email) || null;
         } catch (e) { /* an unreadable sheet must not block the save */ }
       }
 
       const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
-      log.unshift({ at: new Date().toISOString(), by, from, to: until });
-      const rec = JSON.stringify({ until, by, at: new Date().toISOString(), prev: cur.until || "", log });
+      const at = new Date().toISOString();
+      if (hasUntil) {
+        log.unshift({ at, by, field: "until", from: cur.until || (sheetRow ? sheetRow.sheetEnd : "") || "", to: until });
+      }
+      if (hasGroup) {
+        log.unshift({ at, by, field: "group", from: cur.group || (sheetRow ? sheetRow.group : "") || "", to: group });
+      }
+      const rec = JSON.stringify({
+        until: hasUntil ? until : (cur.until || ""),
+        group: hasGroup ? group : (cur.group || ""),
+        by, at, log: log.slice(0, 20),
+      });
       await redis(RU, RT, "HSET", "admin:overrides", email, rec);
       return res.status(200).json({ ok: true });
     } catch (e) {
@@ -139,6 +156,7 @@ export default async function handler(req, res) {
     const raw = overrides[w.email];
     if (raw) { try { ovr = JSON.parse(raw); } catch (e) {} }
     const until = (ovr && ovr.until) || w.sheetEnd || "";
+    const group = (ovr && ovr.group) || w.group || "";
     const seenAt = seen[w.email] || "";
     let use = null;
     if (usage[w.email]) { try { use = JSON.parse(usage[w.email]); } catch (e) {} }
@@ -150,13 +168,16 @@ export default async function handler(req, res) {
       // as each woman next opens the app.
       newApp: !!w.sheetNewApp || appEmails.has(w.email),
       usage: use,
+      group,
+      sheetGroup: w.group || "",
+      groupOverride: (ovr && ovr.group) ? { group: ovr.group, by: ovr.by || "" } : null,
       until,
       // `override` is only in force while it carries a date. The log survives a clearing, so
       // the office can always see what was done and by whom.
       override: (ovr && ovr.until) ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "" } : null,
       log: (ovr && Array.isArray(ovr.log)) ? ovr.log : [],
       expired: !!until && today > until,
-      needsGroup: !w.cancelled && !w.group && (w.start === thisWeek || w.start === nextWeek),
+      needsGroup: !w.cancelled && !group && (w.start === thisWeek || w.start === nextWeek),
     };
   });
 
