@@ -87,29 +87,38 @@ export async function loadSheet(csvUrl) {
     months: findCol(header, ["חודשי גישה נוספים"]),
     phone: findCol(header, ["ID", "טלפון", "phone"]),
     group: findCol(header, ["קבוצה", "group"]),
-    first: findCol(header, ["שם פרטי", "first name", "firstname", "שם"]),
-    last: findCol(header, ["שם משפחה", "last name", "lastname"]),
+    first: findCol(header, ["F_NAME", "שם פרטי", "first name", "firstname"]),
+    last: findCol(header, ["L_NAME", "שם משפחה", "last name", "lastname"]),
+    email: findCol(header, ["CF_EMAIL", "מייל", "email", "אימייל"]),
   };
 
   const women = [];
   const seenEmail = new Set();
   lines.forEach((line, idx) => {
     if (idx === 0) return;
-    const email = ((line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0] || "").toLowerCase();
-    if (!email || seenEmail.has(email)) return;
-    seenEmail.add(email);
     const cells = parseCsvLine(line);
     const cell = (i) => (i !== -1 && cells[i] != null ? String(cells[i]).trim() : "");
+    const DATE_IN = /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/;
 
-    let startStr = cell(col.start);
-    if (!startStr) startStr = (line.match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0] || "";
+    const email = (cell(col.email).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) ||
+      line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0];
+    if (!email) return;
+    const em = email.toLowerCase();
+    if (seenEmail.has(em)) return;
+    seenEmail.add(em);
+
+    // The start cell carries a time ("2026-01-04 0:00:00"), so pull the date out of it
+    // rather than parsing the whole cell. Parsing it whole is what made every woman read
+    // as having no start date, which in turn emptied the participants list.
+    let startStr = (cell(col.start).match(DATE_IN) || [])[0] || "";
+    if (!startStr) startStr = (line.match(DATE_IN) || [])[0] || "";
     const startSunday = parseDateToSunday(startStr);
 
     const monthsRaw = cell(col.months).replace(/[^\d]/g, "");
     const months = monthsRaw ? parseInt(monthsRaw, 10) : null;
 
     women.push({
-      email,
+      email: em,
       first: cell(col.first),
       last: cell(col.last),
       phone: cell(col.phone).replace(/[^\d]/g, ""),

@@ -14,14 +14,16 @@ process.env.ACCESS_SHEET_CSV_URL = "https://sheet.test/csv";
 process.env.UPSTASH_REDIS_REST_URL = "https://redis.test";
 process.env.UPSTASH_REDIS_REST_TOKEN = "t";
 
-// Columns deliberately out of order, with the two-space start header and a trailing
-// marketing column, because that is what the real sheet looks like.
+// The real header row of "נרשמות 360 לבדיקה", including the two spaces after FINAL, the
+// English name columns, and the timestamp glued to the start date. That timestamp is what
+// made every woman parse as having no start date, so it stays in the fixture on purpose.
 const CSV = [
-  'קבוצה,הורידה אפליקציה,שם פרטי,שם משפחה,ID,מייל,ביטלה,360 - FINAL  PERSONAL START,חודשי גישה נוספים',
-  'קבוצה 12,TRUE,יפית,קורן,972501111111,yafit@test.com,FALSE,2026-06-14,3',
-  'קבוצה 12,TRUE,נילי,לביא,972502222222,nili@test.com,FALSE,2026-06-14,',
-  'קבוצה 7,FALSE,רותי,כהן,972503333333,ruti@test.com,TRUE,2026-01-04,3',
-  'קבוצה 7,TRUE,מיכל,לוי,972504444444,michal@test.com,FALSE,2025-01-05,3',
+  'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,הורידה אפליקציה,ביטלה,שבוע בתוכנית,צמיד,קבוצה,חודשי גישה נוספים',
+  '972501111111,יפית,קורן,yafit@test.com,2026-06-14 0:00:00,TRUE,FALSE,10.00,TRUE,ב,3',
+  '972502222222,נילי,לביא,nili@test.com,2026-06-14 12:00:00,TRUE,FALSE,10.00,TRUE,ב,',
+  '972503333333,רותי,כהן,ruti@test.com,2026-01-04 0:00:00,FALSE,TRUE,10.00,TRUE,א,3',
+  '972504444444,מיכל,לוי,michal@test.com,2025-01-05 0:00:00,TRUE,FALSE,10.00,TRUE,א,3',
+  '972505555555,שרה,אלמונית,sara@test.com,,TRUE,FALSE,0.00,FALSE,ג,',
 ].join("\n");
 
 const store = { hash: {}, kv: {} };
@@ -69,12 +71,14 @@ const check = (name, cond, extra) => {
 console.log("\nקריאת הגיליון");
 const { women, headers } = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
 check("כל שבע העמודות אותרו לפי כותרת", Object.values(headers).every(Boolean), JSON.stringify(headers));
-check("ארבע נשים נקראו", women.length === 4, "התקבל " + women.length);
+check("חמש נשים נקראו", women.length === 5, "התקבל " + women.length);
 const yafit = women.find((w) => w.email === "yafit@test.com");
-check("שם פרטי ומשפחה", yafit.first === "יפית" && yafit.last === "קורן");
+check("שם פרטי ומשפחה נקראים מ-F_NAME ו-L_NAME", yafit.first === "יפית" && yafit.last === "קורן");
 check("טלפון בפורמט 972", yafit.phone === "972501111111");
-check("קבוצה", yafit.group === "קבוצה 12");
-check("תאריך התחלה נצמד ליום ראשון", yafit.start === "2026-06-14");
+check("קבוצה", yafit.group === "ב");
+check("תאריך עם שעה נקרא נכון ונצמד ליום ראשון", yafit.start === "2026-06-14", yafit.start);
+check("גם תאריך עם שעה שאינה חצות", women.find((w) => w.email === "nili@test.com").start === "2026-06-14");
+check("מי שאין לה תאריך התחלה מסומנת ככזאת", women.find((w) => w.email === "sara@test.com").start === "");
 check('רק "ביטלה" מסמנת ביטול, לא "הורידה אפליקציה"', yafit.cancelled === false);
 check("מי שביטלה מסומנת", women.find((w) => w.email === "ruti@test.com").cancelled === true);
 check("סיום גישה מחושב: 70 יום ועוד 3 חודשים", yafit.sheetEnd === "2026-11-23", yafit.sheetEnd);
