@@ -152,6 +152,44 @@ console.log("\nאפליקציה חדשה מול קג'אבי");
   check("גיבוי קיים מספיק כדי לסמן אותה כחדשה", back.find((w) => w.email === "michal@test.com").newApp === true);
 }
 
+console.log("\nשיוך קבוצה ידני");
+{
+  const sun = (n) => { const d = new Date(); d.setUTCHours(0,0,0,0);
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + n * 7); return d.toISOString().slice(0,10); };
+  CSV2 = [
+    'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים',
+    `972520000001,בלי,קבוצה,g1@test.com,${sun(0)} 12:00:00,FALSE,,3`,
+    `972520000002,עם,קבוצה,g2@test.com,${sun(0)} 12:00:00,FALSE,א,3`,
+  ].join("\n");
+  const at = async (em) => (await callAdmin({ key: KEY })).body.women.find((w) => w.email === em);
+
+  check("אות שאינה עברית נדחית", (await callAdmin({ key: KEY }, "POST", { email: "g1@test.com", group: "X" })).code === 400);
+  check("בקשה בלי שום שדה נדחית", (await callAdmin({ key: KEY }, "POST", { email: "g1@test.com" })).code === 400);
+  check("לפני השיוך היא נספרת כחסרת קבוצה", (await at("g1@test.com")).needsGroup === true);
+
+  await callAdmin({ key: KEY }, "POST", { email: "g1@test.com", group: "ג", by: "רון" });
+  const g1 = await at("g1@test.com");
+  check("הקבוצה נשמרה", g1.group === "ג");
+  check("ולא נספרת יותר כחסרת קבוצה", g1.needsGroup === false);
+  check("הגיליון עדיין מציג ריק לצידה", g1.sheetGroup === "");
+  check("היומן מתעד שינוי קבוצה", g1.log[0].field === "group" && g1.log[0].to === "ג" && g1.log[0].by === "רון");
+
+  await callAdmin({ key: KEY }, "POST", { email: "g2@test.com", group: "ד", by: "רון" });
+  const g2 = await at("g2@test.com");
+  check("שינוי קבוצה קיימת גובר על הגיליון", g2.group === "ד" && g2.sheetGroup === "א");
+  check("והיומן מתעד מאיזו אות לאיזו", g2.log[0].from === "א" && g2.log[0].to === "ד");
+
+  await callAdmin({ key: KEY }, "POST", { email: "g2@test.com", group: "" });
+  const g3 = await at("g2@test.com");
+  check("חזרה לגיליון מחזירה את האות המקורית", g3.group === "א" && g3.groupOverride === null);
+
+  await callAdmin({ key: KEY }, "POST", { email: "g1@test.com", until: "2027-05-01", by: "רון" });
+  const g4 = await at("g1@test.com");
+  check("שינוי תאריך אינו מוחק את שיוך הקבוצה", g4.group === "ג" && g4.until === "2027-05-01");
+  check("ושתי הפעולות יושבות ביומן", g4.log.length === 2 && g4.log[0].field === "until" && g4.log[1].field === "group");
+  CSV2 = null;
+}
+
 console.log("\nחסרות קבוצה: השבוע והשבוע הבא בלבד");
 {
   // Cohorts always start on a Sunday, so build the fixture off real Sundays rather than
