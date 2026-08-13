@@ -35,6 +35,8 @@
   .chip.warn{border-color:var(--warn);color:var(--warn);font-weight:600}
   .chip.warn.on{background:#fff4e5}
   .warnpill{background:#fff4e5;color:var(--warn)}
+  .btn.sm{padding:6px 10px;font-size:13px}
+  .adds{display:flex;gap:6px;flex-wrap:wrap}
   .empty{text-align:center;color:var(--soft);padding:40px 0}
   a{color:var(--pink)}
 </style>
@@ -125,11 +127,15 @@ function render(){
 
   var inCohort = pool.filter(function(w){ return !COHORT || w.start===COHORT; });
   var groups = {};
-  inCohort.forEach(function(w){ if(w.group) groups[w.group]=(groups[w.group]||0)+1; });
+  var noGroup = 0;
+  inCohort.forEach(function(w){ if(w.group) groups[w.group]=(groups[w.group]||0)+1; else noGroup++; });
   var letters = Object.keys(groups).sort(function(a,b){ return a.localeCompare(b,"he"); });
 
   var list = (MISSING ? missing : inCohort).filter(function(w){
-    if(!MISSING && GROUP && w.group!==GROUP) return false;
+    // "-" is the chip for women with no letter at all: without it the group chips add up to
+    // less than the cohort and there is no way to reach the difference.
+    if(!MISSING && GROUP === "-" && w.group) return false;
+    if(!MISSING && GROUP && GROUP !== "-" && w.group!==GROUP) return false;
     if(q){
       var hay = (w.first+" "+w.last+" "+w.email+" "+w.phone).toLowerCase();
       if(hay.indexOf(q)===-1) return false;
@@ -156,10 +162,11 @@ function render(){
       dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+il(d)+' ('+cohorts[d]+')</span>'; }).join("")+
     '</div>');
 
-  if(letters.length && !MISSING){
+  if((letters.length || noGroup) && !MISSING){
     html += '<div class="lbl">קבוצה</div><div class="chips">'+
       '<span class="chip'+(GROUP?"":" on")+'" data-g="">הכל</span>'+
       letters.map(function(g){ return '<span class="chip'+(GROUP===g?" on":"")+'" data-g="'+esc(g)+'">'+esc(g)+' ('+groups[g]+')</span>'; }).join("")+
+      (noGroup ? '<span class="chip warn'+(GROUP==="-"?" on":"")+'" data-g="-">ללא קבוצה ('+noGroup+')</span>' : '')+
       '</div>';
   }
   if(!MISSING) html += '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>';
@@ -180,6 +187,9 @@ function render(){
         ' · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')+
       (EDITING===w.email
         ? '<div class="edit"><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
+          '<span class="adds">'+
+            [7,14,30,90].map(function(n){ return '<button class="btn sm" data-add="'+n+'" data-for="'+esc(w.email)+'">+'+n+' ימים</button>'; }).join("")+
+          '</span>'+
           '<button class="btn p" data-save="'+esc(w.email)+'">שמירה</button>'+
           (w.override?'<button class="btn" data-clear="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
           '<button class="btn" data-cancel="1">ביטול</button></div>'
@@ -201,6 +211,14 @@ function render(){
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){ EDITING=el.getAttribute("data-edit"); render(); }; });
+  // The buttons move the date for her; a clerk should never be doing calendar arithmetic.
+  app.querySelectorAll("[data-add]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-for"), inp=document.getElementById("d_"+em);
+    var base = inp.value || DATA.today;
+    var d = new Date(base+"T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + parseInt(el.getAttribute("data-add"),10));
+    inp.value = d.toISOString().slice(0,10);
+  }; });
   app.querySelectorAll("[data-cancel]").forEach(function(el){ el.onclick=function(){ EDITING=""; render(); }; });
   app.querySelectorAll("[data-save]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-save"), v=document.getElementById("d_"+em).value;
