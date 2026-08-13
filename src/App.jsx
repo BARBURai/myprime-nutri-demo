@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.83";
+const VERSION = "4.84";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2842,9 +2842,13 @@ function NotesFab({ notes, setNotes, screen, userName, email }) {
     try {
       await fetch(FEEDBACK_URL, {
         method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
-        // email rides along so a note can be answered. Ron could only reach these women through
-        // the WhatsApp group before, because the file had a name and a device id and no way back.
-        body: JSON.stringify({ device, name: userName || "", email: email || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
+        // The email rides along twice, on purpose. `email` is the clean field, for when the
+        // Apps Script behind the sheet is taught to write it into a column of its own. Until
+        // then that field is dropped on the floor, so the address is ALSO folded into `name`,
+        // which the script already writes. That is what makes the phone lookup work today
+        // without touching the script at all. Ron could otherwise only reach these women
+        // through the WhatsApp group: the file held a name and a device id and no way back.
+        body: JSON.stringify({ device, name: [userName || "", email || ""].filter(Boolean).join(" · "), email: email || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
       });
       setSent(true); setTimeout(() => setSent(false), 2500); setNotes([]);
     } catch (e) { alert("השליחה נכשלה - בדקי חיבור לאינטרנט ונסי שוב."); }
