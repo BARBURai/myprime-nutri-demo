@@ -72,15 +72,18 @@ function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){retur
 function il(d){ if(!d) return ""; var p=d.split("-"); return p[2]+"."+p[1]+"."+p[0]; }
 // Cohorts start on a Sunday, so "this week's" cohort is the most recent Sunday and the next
 // one is seven days later. Naming them saves the clerk working it out from a date.
-function cohortLabel(d){
-  if(!DATA) return il(d);
+function weekSundays(){
   var t = new Date(DATA.today+"T00:00:00Z");
   t.setUTCDate(t.getUTCDate() - t.getUTCDay());       // Sunday of the current week
   var cur = t.toISOString().slice(0,10);
   t.setUTCDate(t.getUTCDate() + 7);
-  var next = t.toISOString().slice(0,10);
-  if(d === cur) return "מחזור נוכחי · "+il(d);
-  if(d === next) return "המחזור הבא · "+il(d);
+  return { cur: cur, next: t.toISOString().slice(0,10) };
+}
+function cohortLabel(d){
+  if(!DATA) return il(d);
+  var w = weekSundays();
+  if(d === w.cur) return "מחזור נוכחי · "+il(d);
+  if(d === w.next) return "המחזור הבא · "+il(d);
   return il(d);
 }
 function stamp(iso){ if(!iso) return ""; var d=new Date(iso); if(isNaN(d)) return "";
@@ -230,6 +233,14 @@ function render(){
     cohorts[w.start] = (cohorts[w.start]||0)+1;
   });
   var dates = Object.keys(cohorts).sort().reverse();
+  // In the missing-group view both cohorts are always drawn, even at zero. A cohort that
+  // simply vanishes leaves the clerk guessing whether it is fine or whether it was filtered
+  // out, and "(0)" answers that outright.
+  if(MISSING){
+    var wk = weekSundays();
+    dates = [wk.next, wk.cur];
+    dates.forEach(function(d){ if(!cohorts[d]) cohorts[d] = 0; });
+  }
   if(COHORT && dates.indexOf(COHORT) === -1) COHORT = "";
 
   var inCohort = base.filter(function(w){
@@ -294,7 +305,8 @@ function render(){
         : '')+
       '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>');
 
-  if(!list.length) html += '<div class="empty">לא נמצאה אף משתתפת</div>';
+  if(!list.length) html += '<div class="empty">'+
+    (MISSING ? "אין כאן נשים ללא קבוצה. הכל משויך." : "לא נמצאה אף משתתפת")+'</div>';
 
   list.forEach(function(w){
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
