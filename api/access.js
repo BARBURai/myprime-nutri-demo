@@ -182,7 +182,19 @@ export default async function handler(req, res) {
   // 2) usage window (only when a parseable start date exists for this participant)
   const startSunday = parseDateToSunday(startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
-  if (startSunday && isExpired(startSunday, extraMonths)) {
+  // A clerk can extend or end a woman's access from the admin screen. That decision is
+  // stored on our side (admin:overrides) and wins over the sheet, so nothing ever writes
+  // back into the file ManyChat and this gate both read. Never fatal: a Redis hiccup must
+  // leave the sheet in charge rather than lock a paying woman out.
+  let clerkUntil = "";
+  try {
+    const raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", email);
+    if (raw) clerkUntil = (JSON.parse(raw) || {}).until || "";
+  } catch (e) { /* fall through to the sheet */ }
+  const pastWindow = clerkUntil
+    ? israelDay(0) > clerkUntil
+    : (startSunday && isExpired(startSunday, extraMonths));
+  if (pastWindow) {
     return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate });
   }
 
@@ -229,6 +241,9 @@ export default async function handler(req, res) {
   // manage to get into the app yesterday"). No new endpoint and no extra call from the
   // phone. Two days of life is enough for a job that only ever looks at yesterday.
   if (RU && RT) {
+    // Durable last-seen for the admin screen. The act: flag above lives two days, which is
+    // all the morning notification needs but not enough to answer "when was she last here".
+    try { await redis(RU, RT, "HSET", "admin:seen", email, israelDay(0)); } catch (e) { /* never worth failing a login */ }
     try { await redis(RU, RT, "SET", `act:${israelDay(0)}:${email}`, "1", "EX", 172800); } catch (e) { /* a flag is never worth failing a login over */ }
   }
 
