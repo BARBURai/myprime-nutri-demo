@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.85";
+const VERSION = "4.86";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2827,7 +2827,7 @@ function IntroOverlay({ onClose, name }) {
   );
 }
 
-function NotesFab({ notes, setNotes, screen, userName, email }) {
+function NotesFab({ notes, setNotes, screen, userName, email, phone }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
@@ -2842,13 +2842,13 @@ function NotesFab({ notes, setNotes, screen, userName, email }) {
     try {
       await fetch(FEEDBACK_URL, {
         method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
-        // EXACTLY the payload shape that has always worked. v4.82 added an `email` field and
-        // v4.84 folded the address into `name`; after that a note stopped reaching the sheet
-        // and Ron started getting a mail instead of a row, which is what a failing Apps
-        // Script sends. The feedback channel is live and participants use it, so it is worth
-        // more than the phone lookup: nothing is added back here until the script is visible
-        // and it is clear what it accepts.
-        body: JSON.stringify({ device, name: userName || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
+        // Name, email and phone travel together inside `name`, which is a column the Apps
+        // Script behind the sheet already writes. Everything arrives ready, with no formula
+        // in the sheet at all - and that matters: the lookup formula tried first was an
+        // ARRAYFORMULA over a whole column, which pushed the sheet's last row past 1000, so
+        // the script kept appending far below the visible rows. The row was written every
+        // time; nobody could see it. Nothing here may ever depend on a formula again.
+        body: JSON.stringify({ device, name: [userName || "", email || "", phone || ""].filter(Boolean).join(" · "), version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
       });
       setSent(true); setTimeout(() => setSent(false), 2500); setNotes([]);
     } catch (e) { alert("השליחה נכשלה - בדקי חיבור לאינטרנט ונסי שוב."); }
@@ -5537,6 +5537,7 @@ export default function App() {
   const [futureData, setFutureData] = useState(false); // one-time notice about entries dated ahead
   const [futureConfirm, setFutureConfirm] = useState(false);
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
+  const gatePhone = (() => { try { return localStorage.getItem("myprime_phone") || ""; } catch (e) { return ""; } })();
   const [gateAttempts, setGateAttempts] = useState(0);
   const [gateAgree, setGateAgree] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -5589,6 +5590,10 @@ export default function App() {
       if (d.allowed) {
         try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
         if (d.startDate) { setGateStartDate(d.startDate); try { localStorage.setItem("myprime_start_date", d.startDate); } catch (e) {} }
+        // Her phone, read from the registration sheet by the gate. Kept only so a note she
+        // leaves can be answered; it is her own number, it never leaves her device except
+        // with a note she chose to send, and nothing else in the app reads it.
+        try { if (d.phone) localStorage.setItem("myprime_phone", String(d.phone)); } catch (e) {}
         setGateReason(""); setGate("ok");
       } else {
         const rsn = d.reason || "not_registered";
@@ -6286,7 +6291,7 @@ export default function App() {
             is not rendered anywhere, so nothing can ever set showIntro back to false, and
             keeping the condition would hide the bubble from every woman for the whole of
             her first session. The condition is dropped until IntroOverlay comes back. */}
-        {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} email={gateEmail} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
+        {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} email={gateEmail} phone={gatePhone} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {favPrompt && (
           <div onClick={() => setFavPrompt(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
