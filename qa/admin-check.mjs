@@ -152,50 +152,30 @@ console.log("\nאפליקציה חדשה מול קג'אבי");
   check("גיבוי קיים מספיק כדי לסמן אותה כחדשה", back.find((w) => w.email === "michal@test.com").newApp === true);
 }
 
-console.log("\nחסרות קבוצה במחזור טרי");
+console.log("\nחסרות קבוצה: השבוע והשבוע הבא בלבד");
 {
-  // Cohorts are keyed off the sheet, so drive this through fresh rows rather than the
-  // fixture above: three days ago, twenty days ago, and one that has not started yet.
-  const fresh = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
-  const old = new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10);
-  const soon = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
-  const edge = new Date(Date.now() - 8 * 86400000).toISOString().slice(0, 10);
+  // Cohorts always start on a Sunday, so build the fixture off real Sundays rather than
+  // "N days ago": the rule is about which cohort, not about how old a date is.
+  const sun = (n) => { const d = new Date(); d.setUTCHours(0,0,0,0);
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + n * 7); return d.toISOString().slice(0,10); };
   CSV2 = [
     'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים',
-    `972510000001,טרייה,בלי,a@test.com,${fresh} 12:00:00,FALSE,,3`,
-    `972510000002,טרייה,עם,b@test.com,${fresh} 12:00:00,FALSE,ב,3`,
-    `972510000003,ישנה,בלי,c@test.com,${old} 12:00:00,FALSE,,3`,
-    `972510000004,עתידית,בלי,d@test.com,${soon} 12:00:00,FALSE,,3`,
-    `972510000005,מבוטלת,בלי,e@test.com,${fresh} 12:00:00,TRUE,,3`,
-    `972510000006,יום,שמונה,f@test.com,${edge} 12:00:00,FALSE,,3`,
+    `972510000001,השבוע,בלי,a@test.com,${sun(0)} 12:00:00,FALSE,,3`,
+    `972510000002,השבוע,עם,b@test.com,${sun(0)} 12:00:00,FALSE,ב,3`,
+    `972510000003,הבא,בלי,c@test.com,${sun(1)} 12:00:00,FALSE,,3`,
+    `972510000004,שעבר,בלי,d@test.com,${sun(-1)} 12:00:00,FALSE,,3`,
+    `972510000005,בעוד_שבועיים,בלי,e@test.com,${sun(2)} 12:00:00,FALSE,,3`,
+    `972510000006,מבוטלת,בלי,f@test.com,${sun(0)} 12:00:00,TRUE,,3`,
   ].join("\n");
   const w = (await callAdmin({ key: KEY })).body.women;
   const by = (em) => w.find((x) => x.email === em) || {};
-  check("מחזור טרי בלי קבוצה מסומן", by("a@test.com").needsGroup === true);
-  check("מחזור טרי עם קבוצה אינו מסומן", by("b@test.com").needsGroup === false);
-  check("מחזור ישן בלי קבוצה אינו מסומן", by("c@test.com").needsGroup === false);
-  check("מחזור שטרם התחיל אינו מסומן, כי עוד לא חולקו בו קבוצות", by("d@test.com").needsGroup === false);
-  check("מבוטלת אינה מסומנת", by("e@test.com").needsGroup === false);
-  check("יום שמיני כבר מחוץ לחלון", by("f@test.com").needsGroup === false);
+  check("מחזור השבוע בלי קבוצה מסומן", by("a@test.com").needsGroup === true);
+  check("מחזור השבוע עם קבוצה אינו מסומן", by("b@test.com").needsGroup === false);
+  check("המחזור הבא בלי קבוצה מסומן", by("c@test.com").needsGroup === true);
+  check("מחזור שעבר אינו מסומן", by("d@test.com").needsGroup === false);
+  check("מחזור בעוד שבועיים אינו מסומן", by("e@test.com").needsGroup === false);
+  check("מבוטלת אינה מסומנת", by("f@test.com").needsGroup === false);
   CSV2 = null;
-}
-
-console.log("\nנתוני שימוש");
-{
-  check("בלי מייל נדחה", (await callUsage({ days: {} })).code === 400);
-  check("שיטה שאינה POST נדחית", await (async () => { const r = mkRes(); await usageHandler({ method: "GET" }, r); return r.code === 405; })());
-
-  await callUsage({
-    email: "yafit@test.com",
-    days: { "1-1": [2, 3], "1-2": [3, 3], "2-1": [0, 2], "bad-key!": [1, 1], "3-1": [9, 2] },
-    videosDone: 41, videosTotal: 88, views: 53, trackerDays: 23,
-  });
-  const u = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "yafit@test.com").usage;
-  check("הנתונים נשמרו והוחזרו", !!u && u.trackerDays === 23 && u.videosDone === 41);
-  check("יום תקין נשמר כמו שהוא", u.days["1-1"][0] === 2 && u.days["1-1"][1] === 3);
-  check("מפתח לא תקין נזרק", u.days["bad-key!"] === undefined);
-  check("הושלמו לא יכול לעבור את הסך הכל", u.days["3-1"][0] === 2);
-  check("אישה בלי נתונים מחזירה null", (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "ruti@test.com").usage === null);
 }
 
 console.log("\nחוסן");

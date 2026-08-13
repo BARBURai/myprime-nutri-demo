@@ -124,12 +124,16 @@ export default async function handler(req, res) {
   }
 
   const today = israelDay(0);
-  // A woman with no group letter cannot be placed in the partnership feature. Only her
-  // cohort's first week counts: before it starts nobody has been assigned a letter yet, so
-  // flagging it would be noise, and once more than a week has passed the placement window
-  // has closed and it is no longer worth chasing.
-  const FRESH_DAYS = 7;
-  const daysBetween = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
+  // A woman with no group letter cannot be placed in the partnership feature. Exactly two
+  // cohorts matter: the one running this week, and next week's, which Ron assigns on the
+  // Thursday before it starts. Anything older has missed its window, and anything further
+  // out is not being placed yet. Cohorts always begin on a Sunday.
+  const sundayOfWeek = (weeksAhead) => {
+    const d = new Date(israelDay(0) + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + weeksAhead * 7);
+    return d.toISOString().slice(0, 10);
+  };
+  const thisWeek = sundayOfWeek(0), nextWeek = sundayOfWeek(1);
   const women = sheet.women.map((w) => {
     let ovr = null;
     const raw = overrides[w.email];
@@ -152,11 +156,7 @@ export default async function handler(req, res) {
       override: (ovr && ovr.until) ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "" } : null,
       log: (ovr && Array.isArray(ovr.log)) ? ovr.log : [],
       expired: !!until && today > until,
-      needsGroup: (() => {
-        if (w.cancelled || !w.start || w.group) return false;
-        const age = daysBetween(w.start, today);
-        return age >= 0 && age <= FRESH_DAYS;
-      })(),
+      needsGroup: !w.cancelled && !w.group && (w.start === thisWeek || w.start === nextWeek),
     };
   });
 
