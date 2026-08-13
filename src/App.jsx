@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "4.84";
+const VERSION = "4.85";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2842,13 +2842,13 @@ function NotesFab({ notes, setNotes, screen, userName, email }) {
     try {
       await fetch(FEEDBACK_URL, {
         method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" },
-        // The email rides along twice, on purpose. `email` is the clean field, for when the
-        // Apps Script behind the sheet is taught to write it into a column of its own. Until
-        // then that field is dropped on the floor, so the address is ALSO folded into `name`,
-        // which the script already writes. That is what makes the phone lookup work today
-        // without touching the script at all. Ron could otherwise only reach these women
-        // through the WhatsApp group: the file held a name and a device id and no way back.
-        body: JSON.stringify({ device, name: [userName || "", email || ""].filter(Boolean).join(" · "), email: email || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
+        // EXACTLY the payload shape that has always worked. v4.82 added an `email` field and
+        // v4.84 folded the address into `name`; after that a note stopped reaching the sheet
+        // and Ron started getting a mail instead of a row, which is what a failing Apps
+        // Script sends. The feedback channel is live and participants use it, so it is worth
+        // more than the phone lookup: nothing is added back here until the script is visible
+        // and it is clear what it accepts.
+        body: JSON.stringify({ device, name: userName || "", version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
       });
       setSent(true); setTimeout(() => setSent(false), 2500); setNotes([]);
     } catch (e) { alert("השליחה נכשלה - בדקי חיבור לאינטרנט ונסי שוב."); }
