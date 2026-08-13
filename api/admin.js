@@ -9,6 +9,7 @@
 //
 //   admin:overrides  field = email, value = JSON({ until, by, at, prev })
 //   admin:seen       field = email, value = "YYYY-MM-DD" of her last app open
+//   admin:usage      field = email, value = JSON from api/usage.js (counts only)
 //
 // GET  /api/admin?key=<ADMIN_KEY>              -> { ok, women[], headers, today }
 // POST /api/admin?key=<ADMIN_KEY>              -> { email, until, by }   ("" clears it)
@@ -72,7 +73,7 @@ export default async function handler(req, res) {
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
-  let overrides = {}, seen = {};
+  let overrides = {}, seen = {}, usage = {};
   const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
@@ -82,6 +83,7 @@ export default async function handler(req, res) {
     };
     try { overrides = flat(await redis(RU, RT, "HGETALL", "admin:overrides")); } catch (e) {}
     try { seen = flat(await redis(RU, RT, "HGETALL", "admin:seen")); } catch (e) {}
+    try { usage = flat(await redis(RU, RT, "HGETALL", "admin:usage")); } catch (e) {}
 
     // Who is on the new app. admin:seen only starts at v4.87, so it alone would report far
     // fewer women than really moved over. Every other durable trace a woman leaves by
@@ -121,6 +123,8 @@ export default async function handler(req, res) {
     if (raw) { try { ovr = JSON.parse(raw); } catch (e) {} }
     const until = (ovr && ovr.until) || w.sheetEnd || "";
     const seenAt = seen[w.email] || "";
+    let use = null;
+    if (usage[w.email]) { try { use = JSON.parse(usage[w.email]); } catch (e) {} }
     return {
       ...w,
       seen: seenAt,
@@ -128,6 +132,7 @@ export default async function handler(req, res) {
       // from the day admin:seen started being written, so the list fills in over a few days
       // as each woman next opens the app.
       newApp: !!w.sheetNewApp || appEmails.has(w.email),
+      usage: use,
       until,
       override: ovr ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "", prev: ovr.prev || "" } : null,
       expired: !!until && today > until,

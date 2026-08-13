@@ -38,6 +38,13 @@
   .btn.sm{padding:6px 10px;font-size:13px}
   .field.sm{padding:6px 8px;font-size:14px;width:auto}
   .adds{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .stats{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  .statline{font-size:14px;margin-bottom:4px}
+  .bars{display:flex;gap:3px;align-items:flex-end;overflow-x:auto;padding-bottom:4px}
+  .bar{flex:0 0 auto;width:16px;text-align:center}
+  .barbox{height:90px;display:flex;align-items:flex-end;background:var(--line);border-radius:3px}
+  .barfill{width:100%;background:var(--pink);border-radius:3px}
+  .barlbl{font-size:10px;margin-top:2px}
   .empty{text-align:center;color:var(--soft);padding:40px 0}
   a{color:var(--pink)}
 </style>
@@ -51,6 +58,7 @@
 // both depend on it. The screen therefore always shows the sheet's value next to a manual
 // change rather than replacing it.
 var KEY = "", WHO = "", DATA = null, APP = "new", COHORT = null, GROUP = "", SHOWCANCELLED = false, MISSING = false, EDITING = "";
+var STATS = "", STATSMODE = "day";   // which card has its usage panel open, and at what zoom
 // Which women still need a group letter is decided in api/admin.js (needsGroup), so the
 // rule has one home and the offline check covers it.
 var app = document.getElementById("app");
@@ -75,6 +83,54 @@ function lastSeen(w){
   if(n<=0) return "נכנסה היום";
   if(n===1) return "נכנסה אתמול";
   return "נכנסה לפני "+n+" ימים";
+}
+
+// Her progress, drawn from counts only. Programme day N maps to week/day the same way the
+// tracker does: cohorts start on Sunday, so day 1 is Sunday and day 7 is Saturday.
+function usageBars(u, mode){
+  var out = [];
+  if(mode === "week"){
+    for(var wk=1; wk<=10; wk++){
+      var got=0, tot=0;
+      for(var dy=1; dy<=7; dy++){
+        var p = u.days[wk+"-"+dy];
+        if(p){ got += p[0]; tot += p[1]; }
+      }
+      if(tot) out.push({ label:"ש"+wk, pct: Math.round(got*100/tot), title:"שבוע "+wk+": "+got+" מתוך "+tot });
+    }
+    return out;
+  }
+  for(var n=1; n<=70; n++){
+    var w2 = Math.floor((n-1)/7)+1, d2 = ((n-1)%7)+1;
+    var pair = u.days[w2+"-"+d2];
+    if(!pair) continue;
+    out.push({ label:String(n), pct: Math.round(pair[0]*100/pair[1]),
+               title:"שבוע "+w2+" יום "+d2+": "+pair[0]+" מתוך "+pair[1] });
+  }
+  return out;
+}
+
+function usagePanel(w){
+  var u = w.usage;
+  if(!u) return '<div class="stats"><div class="meta">אין עדיין נתוני שימוש. הם נאספים בפעם הבאה שהיא תפתח את האפליקציה.</div></div>';
+  var tot=0, got=0;
+  Object.keys(u.days||{}).forEach(function(k){ got += u.days[k][0]; tot += u.days[k][1]; });
+  var bars = usageBars(u, STATSMODE);
+  return '<div class="stats">'+
+    '<div class="statline"><b>'+(tot?Math.round(got*100/tot):0)+'%</b> מהתכנים · '+
+      '<b>'+u.videosDone+'</b> מתוך '+u.videosTotal+' סרטונים · '+
+      '<b>'+u.trackerDays+'</b> ימי יומן מעקב · '+
+      '<b>'+u.views+'</b> צפיות בסרטונים</div>'+
+    '<div class="chips"><span class="chip'+(STATSMODE==="day"?" on":"")+'" data-sm="day">לפי יום</span>'+
+      '<span class="chip'+(STATSMODE==="week"?" on":"")+'" data-sm="week">לפי שבוע</span></div>'+
+    (bars.length
+      ? '<div class="bars">'+bars.map(function(b){
+          return '<div class="bar" title="'+esc(b.title)+'">'+
+            '<div class="barbox"><div class="barfill" style="height:'+Math.max(b.pct,2)+'%"></div></div>'+
+            '<div class="barlbl">'+esc(b.label)+'</div></div>';
+        }).join("")+'</div>'
+      : '<div class="meta">עוד לא צפתה בשום תוכן.</div>')+
+    '</div>';
 }
 
 function save(email, until){
@@ -204,7 +260,9 @@ function render(){
           '<button class="btn" data-cancel="1">ביטול</button></div>'
         : '<div class="acts">'+
           (w.phone?'<a class="btn" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
-          '<button class="btn" data-edit="'+esc(w.email)+'">שינוי תאריך גישה</button></div>')+
+          '<button class="btn" data-edit="'+esc(w.email)+'">שינוי תאריך גישה</button>'+
+          '<button class="btn" data-stats="'+esc(w.email)+'">'+(STATS===w.email?"סגירת נתוני שימוש":"נתוני שימוש")+'</button></div>')+
+      (STATS===w.email ? usagePanel(w) : '')+
       '</div>';
   });
 
@@ -219,6 +277,10 @@ function render(){
   app.querySelectorAll("[data-d]").forEach(function(el){ el.onclick=function(){ COHORT=el.getAttribute("data-d"); GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
+  app.querySelectorAll("[data-stats]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-stats"); STATS = (STATS===em ? "" : em); render(); }; });
+  app.querySelectorAll("[data-sm]").forEach(function(el){ el.onclick=function(){
+    STATSMODE = el.getAttribute("data-sm"); render(); }; });
   app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){ EDITING=el.getAttribute("data-edit"); render(); }; });
   // A clerk says "another two months", not a date. The amount and the unit are hers to
   // choose; months move by calendar month so "another month" lands on the same day number.

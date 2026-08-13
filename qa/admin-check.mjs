@@ -5,6 +5,7 @@
 //   node qa/admin-check.mjs
 
 import adminHandler from "../api/admin.js";
+import usageHandler from "../api/usage.js";
 import accessHandler from "../api/access.js";
 import { loadSheet } from "../api/_sheet.js";
 
@@ -56,6 +57,11 @@ function mkRes() {
 const callAdmin = async (query, method = "GET", body = null) => {
   const res = mkRes();
   await adminHandler({ query, method, body }, res);
+  return res;
+};
+const callUsage = async (body) => {
+  const res = mkRes();
+  await usageHandler({ method: "POST", body }, res);
   return res;
 };
 const callAccess = async (email) => {
@@ -167,6 +173,24 @@ console.log("\nחסרות קבוצה במחזור טרי");
   check("מבוטלת אינה מסומנת", by("e@test.com").needsGroup === false);
   check("יום שמיני כבר מחוץ לחלון", by("f@test.com").needsGroup === false);
   CSV2 = null;
+}
+
+console.log("\nנתוני שימוש");
+{
+  check("בלי מייל נדחה", (await callUsage({ days: {} })).code === 400);
+  check("שיטה שאינה POST נדחית", await (async () => { const r = mkRes(); await usageHandler({ method: "GET" }, r); return r.code === 405; })());
+
+  await callUsage({
+    email: "yafit@test.com",
+    days: { "1-1": [2, 3], "1-2": [3, 3], "2-1": [0, 2], "bad-key!": [1, 1], "3-1": [9, 2] },
+    videosDone: 41, videosTotal: 88, views: 53, trackerDays: 23,
+  });
+  const u = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "yafit@test.com").usage;
+  check("הנתונים נשמרו והוחזרו", !!u && u.trackerDays === 23 && u.videosDone === 41);
+  check("יום תקין נשמר כמו שהוא", u.days["1-1"][0] === 2 && u.days["1-1"][1] === 3);
+  check("מפתח לא תקין נזרק", u.days["bad-key!"] === undefined);
+  check("הושלמו לא יכול לעבור את הסך הכל", u.days["3-1"][0] === 2);
+  check("אישה בלי נתונים מחזירה null", (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "ruti@test.com").usage === null);
 }
 
 console.log("\nחוסן");

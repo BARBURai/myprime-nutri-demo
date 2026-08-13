@@ -11,7 +11,7 @@ import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
-import { ContentDayCard, ContentModule, contentForDay } from "./content/ContentModule";
+import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -5536,6 +5536,28 @@ export default function App() {
   const [gateNotice, setGateNotice] = useState(""); // shown under the greeting, not by the button
   const [futureData, setFutureData] = useState(false); // one-time notice about entries dated ahead
   const [futureConfirm, setFutureConfirm] = useState(false);
+  // Progress counts for the office screen, sent once per load. Counts only: how much of each
+  // day's content she finished, video completions, and how many days she filled the tracker.
+  // Nothing about food, weight or measurements leaves the device, and this must stay that way.
+  const usageSentRef = useRef(false);
+  useEffect(() => {
+    if (gate !== "ok" || usageSentRef.current) return;
+    const em = gateEmail || (() => { try { return localStorage.getItem("myprime_access_email") || ""; } catch (e) { return ""; } })();
+    if (!em) return;
+    usageSentRef.current = true;
+    let payload;
+    try {
+      const u = usageSummary();
+      const trackerDays = Object.keys(checkins || {}).filter((d) => {
+        const v = checkins[d];
+        return v && typeof v === "object" && Object.keys(v).length > 0;
+      }).length;
+      payload = { email: em, ...u, trackerDays };
+    } catch (e) { return; }
+    fetch("/api/usage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
+      .catch(() => { /* a participant must never see this fail */ });
+  }, [gate, gateEmail, checkins]);
+
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
   const gatePhone = (() => { try { return localStorage.getItem("myprime_phone") || ""; } catch (e) { return ""; } })();
   const [gateAttempts, setGateAttempts] = useState(0);
