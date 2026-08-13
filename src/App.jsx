@@ -11,7 +11,7 @@ import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
-import { ContentDayCard, ContentModule, contentForDay } from "./content/ContentModule";
+import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -1082,7 +1082,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Lock size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>גיבוי מאובטח</span></div>
             <p style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.65, marginTop: 0, marginBottom: 10 }}>
-              מה שאת ממלאת פה באפליקציה נשמר במכשיר שלך בלבד ורק לך יש גישה לנתונים האלה. לחברת מיי פריים אין אפשרות לראות את הנתונים או להשתמש בהם.
+              מה שאת ממלאת פה באפליקציה נשמר במכשיר שלך בלבד ורק לך יש גישה לנתונים האלה. לחברת מיי פריים אין אפשרות לראות את הנתונים או להשתמש בהם. נשמרים אצלנו נתוני שימוש באפליקציה בלבד.
             </p>
             <p style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.65, marginTop: 0, marginBottom: 14 }}>
               אם תרצי, נשמור גיבוי <b>מוצפן</b> בענן - כך שאם תחליפי טלפון או יקרה משהו למכשיר, תוכלי לשחזר הכל. הגיבוי מוצפן כך ש<b>רק את</b> יכולה לפתוח אותו.
@@ -3899,7 +3899,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
           <input value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onSubmit()} type="email" inputMode="email" placeholder="המייל איתו נרשמת לתוכנית" style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 17, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", textAlign: "center", marginBottom: 12, direction: "ltr" }} />
           <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.7, textAlign: "right", marginBottom: 4 }}>
             <Lock size={13} style={{ display: "inline", verticalAlign: "-2px", marginInlineEnd: 5 }} />
-            מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
+            מיי פריים ה.ד.ס בע"מ ("החברה") אינה אוספת מידע אישי אודות המשתמשות באפליקציה והמידע אינו נשמר במאגרי החברה. החברה אוספת נתוני שימוש באפליקציה בלבד. החברה עושה שימוש באפליקציה בהתאם להוראות מדיניות העוגיות. ככל שמשתמשת תמסור לחברה מידע אישי, החברה תאסוף ותעבד מידע אישי אודותיה בהתאם להוראות מדיניות הפרטיות של החברה, כפי שמופיעה באתר.
           </div>
           <div onClick={() => setAgree(!agree)} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 0 12px", textAlign: "right" }}>
             <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${agree ? C.brand : C.line}`, background: agree ? C.brand : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{agree && <Check size={14} color="#fff" />}</div>
@@ -5536,6 +5536,28 @@ export default function App() {
   const [gateNotice, setGateNotice] = useState(""); // shown under the greeting, not by the button
   const [futureData, setFutureData] = useState(false); // one-time notice about entries dated ahead
   const [futureConfirm, setFutureConfirm] = useState(false);
+  // Progress counts for the office screen, sent once per load. Counts only: how much of each
+  // day's content she finished, video completions, and how many days she filled the tracker.
+  // Nothing about food, weight or measurements leaves the device, and this must stay that way.
+  const usageSentRef = useRef(false);
+  useEffect(() => {
+    if (gate !== "ok" || usageSentRef.current) return;
+    const em = gateEmail || (() => { try { return localStorage.getItem("myprime_access_email") || ""; } catch (e) { return ""; } })();
+    if (!em) return;
+    usageSentRef.current = true;
+    let payload;
+    try {
+      const u = usageSummary();
+      const trackerDays = Object.keys(checkins || {}).filter((d) => {
+        const v = checkins[d];
+        return v && typeof v === "object" && Object.keys(v).length > 0;
+      }).length;
+      payload = { email: em, ...u, trackerDays };
+    } catch (e) { return; }
+    fetch("/api/usage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
+      .catch(() => { /* a participant must never see this fail */ });
+  }, [gate, gateEmail, checkins]);
+
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
   const gatePhone = (() => { try { return localStorage.getItem("myprime_phone") || ""; } catch (e) { return ""; } })();
   const [gateAttempts, setGateAttempts] = useState(0);

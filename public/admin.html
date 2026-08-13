@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>ניהול משתתפות · מיי פריים 360</title>
 <style>
-  :root{--bg:#faf7f8;--card:#fff;--ink:#2d2430;--soft:#7b6f80;--line:#ece4ee;--pink:#c2185b;--pinkbg:#fce4ec;--ok:#2e7d32;--warn:#b26a00}
+  :root{--bg:#faf7f8;--card:#fff;--ink:#2d2430;--soft:#2d2430;--line:#ece4ee;--pink:#c2185b;--pinkbg:#fce4ec;--ok:#2e7d32;--warn:#b26a00}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Rubik,Arial,sans-serif;padding:env(safe-area-inset-top) 0 40px}
   .wrap{max-width:760px;margin:0 auto;padding:16px}
@@ -31,6 +31,20 @@
   .btn.p{background:var(--pink);border-color:var(--pink);color:#fff;font-weight:600}
   .edit{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .note{color:var(--soft);font-size:13px;margin-top:14px}
+  .lbl{font-size:13px;color:var(--soft);margin-top:10px}
+  .chip.warn{border-color:var(--warn);color:var(--warn);font-weight:600}
+  .chip.warn.on{background:#fff4e5}
+  .warnpill{background:#fff4e5;color:var(--warn)}
+  .btn.sm{padding:6px 10px;font-size:13px}
+  .field.sm{padding:6px 8px;font-size:14px;width:auto}
+  .adds{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .stats{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  .statline{font-size:14px;margin-bottom:4px}
+  .bars{display:flex;gap:3px;align-items:flex-end;overflow-x:auto;padding-bottom:4px}
+  .bar{flex:0 0 auto;width:16px;text-align:center}
+  .barbox{height:90px;display:flex;align-items:flex-end;background:var(--line);border-radius:3px}
+  .barfill{width:100%;background:var(--pink);border-radius:3px}
+  .barlbl{font-size:10px;margin-top:2px}
   .empty{text-align:center;color:var(--soft);padding:40px 0}
   a{color:var(--pink)}
 </style>
@@ -43,7 +57,10 @@
 // store: a change made here never touches that file, because ManyChat and the access gate
 // both depend on it. The screen therefore always shows the sheet's value next to a manual
 // change rather than replacing it.
-var KEY = "", WHO = "", DATA = null, GROUP = "", SHOWCANCELLED = false, EDITING = "";
+var KEY = "", WHO = "", DATA = null, APP = "new", COHORT = null, GROUP = "", SHOWCANCELLED = false, MISSING = false, EDITING = "";
+var STATS = "", STATSMODE = "day";   // which card has its usage panel open, and at what zoom
+// Which women still need a group letter is decided in api/admin.js (needsGroup), so the
+// rule has one home and the offline check covers it.
 var app = document.getElementById("app");
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
@@ -54,7 +71,11 @@ function dayInProgram(w){
   if(!w.start||!DATA) return "";
   var n = days(w.start, DATA.today)+1;
   if(n<1) return "טרם התחילה";
-  return "יום "+n;
+  // The same reading the woman sees in her own tracker: cohorts start on a Sunday, so day 1
+  // is Sunday and day 7 is Saturday. Past day 70 the programme is over and there is no
+  // week 11, so the plain day number is the honest answer.
+  if(n>70) return "יום "+n+" · אחרי סיום התוכנית";
+  return "שבוע "+(Math.floor((n-1)/7)+1)+" יום "+(((n-1)%7)+1);
 }
 function lastSeen(w){
   if(!w.seen) return "עוד לא נכנסה";
@@ -62,6 +83,54 @@ function lastSeen(w){
   if(n<=0) return "נכנסה היום";
   if(n===1) return "נכנסה אתמול";
   return "נכנסה לפני "+n+" ימים";
+}
+
+// Her progress, drawn from counts only. Programme day N maps to week/day the same way the
+// tracker does: cohorts start on Sunday, so day 1 is Sunday and day 7 is Saturday.
+function usageBars(u, mode){
+  var out = [];
+  if(mode === "week"){
+    for(var wk=1; wk<=10; wk++){
+      var got=0, tot=0;
+      for(var dy=1; dy<=7; dy++){
+        var p = u.days[wk+"-"+dy];
+        if(p){ got += p[0]; tot += p[1]; }
+      }
+      if(tot) out.push({ label:"ש"+wk, pct: Math.round(got*100/tot), title:"שבוע "+wk+": "+got+" מתוך "+tot });
+    }
+    return out;
+  }
+  for(var n=1; n<=70; n++){
+    var w2 = Math.floor((n-1)/7)+1, d2 = ((n-1)%7)+1;
+    var pair = u.days[w2+"-"+d2];
+    if(!pair) continue;
+    out.push({ label:String(n), pct: Math.round(pair[0]*100/pair[1]),
+               title:"שבוע "+w2+" יום "+d2+": "+pair[0]+" מתוך "+pair[1] });
+  }
+  return out;
+}
+
+function usagePanel(w){
+  var u = w.usage;
+  if(!u) return '<div class="stats"><div class="meta">אין עדיין נתוני שימוש. הם נאספים בפעם הבאה שהיא תפתח את האפליקציה.</div></div>';
+  var tot=0, got=0;
+  Object.keys(u.days||{}).forEach(function(k){ got += u.days[k][0]; tot += u.days[k][1]; });
+  var bars = usageBars(u, STATSMODE);
+  return '<div class="stats">'+
+    '<div class="statline"><b>'+(tot?Math.round(got*100/tot):0)+'%</b> מהתכנים · '+
+      '<b>'+u.videosDone+'</b> מתוך '+u.videosTotal+' סרטונים · '+
+      '<b>'+u.trackerDays+'</b> ימי יומן מעקב · '+
+      '<b>'+u.views+'</b> צפיות בסרטונים</div>'+
+    '<div class="chips"><span class="chip'+(STATSMODE==="day"?" on":"")+'" data-sm="day">לפי יום</span>'+
+      '<span class="chip'+(STATSMODE==="week"?" on":"")+'" data-sm="week">לפי שבוע</span></div>'+
+    (bars.length
+      ? '<div class="bars">'+bars.map(function(b){
+          return '<div class="bar" title="'+esc(b.title)+'">'+
+            '<div class="barbox"><div class="barfill" style="height:'+Math.max(b.pct,2)+'%"></div></div>'+
+            '<div class="barlbl">'+esc(b.label)+'</div></div>';
+        }).join("")+'</div>'
+      : '<div class="meta">עוד לא צפתה בשום תוכן.</div>')+
+    '</div>';
 }
 
 function save(email, until){
@@ -96,27 +165,72 @@ function askKey(msg){
 
 function render(){
   var q = (document.getElementById("q") ? document.getElementById("q").value : "").trim().toLowerCase();
-  var groups = {}, list = [];
-  DATA.women.forEach(function(w){ if(w.group) groups[w.group]=(groups[w.group]||0)+1; });
 
+  // A group is a cohort AND a letter together. Every cohort runs א..ה (two to five of them),
+  // so "קבוצה ב" of the January intake and "קבוצה ב" of the April intake are different
+  // groups of different women. Merging them by letter alone is what produced "ב (522)".
+  var cohorts = {}, pool = [], nNew = 0, nOld = 0;
   DATA.women.forEach(function(w){
     if(w.cancelled && !SHOWCANCELLED) return;
-    if(GROUP && w.group!==GROUP) return;
+    if(!w.start) return;
+    if(w.newApp) nNew++; else nOld++;
+    if(APP==="new" && !w.newApp) return;
+    if(APP==="old" && w.newApp) return;
+    cohorts[w.start] = (cohorts[w.start]||0)+1;
+    pool.push(w);
+  });
+  // Missing-group check. Deliberately outside the app filter: a woman who started this week
+  // and has not opened the app yet reads as Kajabi, and she is exactly the one to catch.
+  var missing = DATA.women.filter(function(w){ return w.needsGroup; });
+
+  var dates = Object.keys(cohorts).sort().reverse();   // newest intake first
+  if(COHORT === null) COHORT = dates.length ? dates[0] : "";
+
+  var inCohort = pool.filter(function(w){ return !COHORT || w.start===COHORT; });
+  var groups = {};
+  var noGroup = 0;
+  inCohort.forEach(function(w){ if(w.group) groups[w.group]=(groups[w.group]||0)+1; else noGroup++; });
+  var letters = Object.keys(groups).sort(function(a,b){ return a.localeCompare(b,"he"); });
+
+  var list = (MISSING ? missing : inCohort).filter(function(w){
+    // "-" is the chip for women with no letter at all: without it the group chips add up to
+    // less than the cohort and there is no way to reach the difference.
+    if(!MISSING && GROUP === "-" && w.group) return false;
+    if(!MISSING && GROUP && GROUP !== "-" && w.group!==GROUP) return false;
     if(q){
       var hay = (w.first+" "+w.last+" "+w.email+" "+w.phone).toLowerCase();
-      if(hay.indexOf(q)===-1) return;
+      if(hay.indexOf(q)===-1) return false;
     }
-    list.push(w);
+    return true;
   });
-  list.sort(function(a,b){ return (a.first+a.last).localeCompare(b.first+b.last,"he"); });
+  list.sort(function(a,b){ return (a.first+" "+a.last).localeCompare(b.first+" "+b.last,"he"); });
 
-  var names = Object.keys(groups).sort(function(a,b){ return a.localeCompare(b,"he",{numeric:true}); });
   var html = '<h1>ניהול משתתפות</h1>'+
-    '<div class="sub">'+DATA.women.length+' רשומות · '+names.length+' קבוצות · מחוברת כ'+esc(WHO||"?")+'</div>'+
+    '<div class="sub">'+list.length+' משתתפות · מחוברת כ'+esc(WHO||"?")+'</div>'+
     '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
-    '<div class="chips"><span class="chip'+(GROUP?"":" on")+'" data-g="">הכל</span>'+
-    names.map(function(g){ return '<span class="chip'+(GROUP===g?" on":"")+'" data-g="'+esc(g)+'">'+esc(g)+' ('+groups[g]+')</span>'; }).join("")+
-    '<span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>';
+    (missing.length
+      ? '<div class="chips"><span class="chip warn'+(MISSING?" on":"")+'" data-m="1">⚠ חסרות קבוצה במחזור החדש ('+missing.length+')</span></div>'
+      : '<div class="chips"><span class="chip'+(MISSING?" on":"")+'" data-m="1">חסרות קבוצה במחזור החדש (0)</span></div>')+
+    (MISSING
+      ? '<div class="note">מוצגות רק נשים ללא אות קבוצה שהמחזור שלהן התחיל בשבעת הימים האחרונים. מחזור שטרם התחיל אינו מוצג, כי עוד לא חולקו בו קבוצות.</div>'
+      : '<div class="lbl">אפליקציה</div><div class="chips">'+
+      '<span class="chip'+(APP==="new"?" on":"")+'" data-p="new">אפליקציה חדשה ('+nNew+')</span>'+
+      '<span class="chip'+(APP==="old"?" on":"")+'" data-p="old">קג\'אבי ('+nOld+')</span>'+
+      '<span class="chip'+(APP===""?" on":"")+'" data-p="">הכל</span>'+
+    '</div>'+
+    '<div class="lbl">מחזור</div><div class="chips">'+
+      '<span class="chip'+(COHORT?"":" on")+'" data-d="">כל המחזורים</span>'+
+      dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+il(d)+' ('+cohorts[d]+')</span>'; }).join("")+
+    '</div>');
+
+  if((letters.length || noGroup) && !MISSING){
+    html += '<div class="lbl">קבוצה</div><div class="chips">'+
+      '<span class="chip'+(GROUP?"":" on")+'" data-g="">הכל</span>'+
+      letters.map(function(g){ return '<span class="chip'+(GROUP===g?" on":"")+'" data-g="'+esc(g)+'">'+esc(g)+' ('+groups[g]+')</span>'; }).join("")+
+      (noGroup ? '<span class="chip warn'+(GROUP==="-"?" on":"")+'" data-g="-">ללא קבוצה ('+noGroup+')</span>' : '')+
+      '</div>';
+  }
+  if(!MISSING) html += '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>';
 
   if(!list.length) html += '<div class="empty">לא נמצאה אף משתתפת</div>';
 
@@ -124,22 +238,31 @@ function render(){
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
     html += '<div class="card">'+
       '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
-      (w.group?'<span class="grp">'+esc(w.group)+'</span>':'')+
+      (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
       (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+'</div>'+
       '<div class="meta">'+esc(w.phone||"אין טלפון")+' · '+esc(w.email)+'</div>'+
-      '<div class="meta">'+(w.start?"התחילה "+il(w.start)+" · "+dayInProgram(w):"אין תאריך התחלה")+' · '+lastSeen(w)+'</div>'+
+      '<div class="meta">מחזור '+il(w.start)+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
       '<div class="until">גישה עד: <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+
       (w.expired?" (הסתיימה)":"")+'</div>'+
       (w.override?'<div class="manual">שונה ידנית'+(w.override.by?" על ידי "+esc(w.override.by):"")+
         ' · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')+
       (EDITING===w.email
         ? '<div class="edit"><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
+          '<span class="adds">הוסיפי '+
+            '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
+            '<select class="field sm" style="width:100px" id="u_'+esc(w.email)+'">'+
+              '<option value="d">ימים</option><option value="w">שבועות</option><option value="m">חודשים</option>'+
+            '</select>'+
+            '<button class="btn sm" data-add="1" data-for="'+esc(w.email)+'">הוסיפי</button>'+
+          '</span>'+
           '<button class="btn p" data-save="'+esc(w.email)+'">שמירה</button>'+
           (w.override?'<button class="btn" data-clear="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
           '<button class="btn" data-cancel="1">ביטול</button></div>'
         : '<div class="acts">'+
           (w.phone?'<a class="btn" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
-          '<button class="btn" data-edit="'+esc(w.email)+'">שינוי תאריך גישה</button></div>')+
+          '<button class="btn" data-edit="'+esc(w.email)+'">שינוי תאריך גישה</button>'+
+          '<button class="btn" data-stats="'+esc(w.email)+'">'+(STATS===w.email?"סגירת נתוני שימוש":"נתוני שימוש")+'</button></div>')+
+      (STATS===w.email ? usagePanel(w) : '')+
       '</div>';
   });
 
@@ -149,9 +272,28 @@ function render(){
   var qEl = document.getElementById("q");
   qEl.oninput = function(){ var v=this.selectionStart; render(); var n=document.getElementById("q"); n.focus(); n.setSelectionRange(v,v); };
 
+  app.querySelectorAll("[data-m]").forEach(function(el){ el.onclick=function(){ MISSING=!MISSING; EDITING=""; render(); }; });
+  app.querySelectorAll("[data-p]").forEach(function(el){ el.onclick=function(){ APP=el.getAttribute("data-p"); COHORT=null; GROUP=""; EDITING=""; render(); }; });
+  app.querySelectorAll("[data-d]").forEach(function(el){ el.onclick=function(){ COHORT=el.getAttribute("data-d"); GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
+  app.querySelectorAll("[data-stats]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-stats"); STATS = (STATS===em ? "" : em); render(); }; });
+  app.querySelectorAll("[data-sm]").forEach(function(el){ el.onclick=function(){
+    STATSMODE = el.getAttribute("data-sm"); render(); }; });
   app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){ EDITING=el.getAttribute("data-edit"); render(); }; });
+  // A clerk says "another two months", not a date. The amount and the unit are hers to
+  // choose; months move by calendar month so "another month" lands on the same day number.
+  app.querySelectorAll("[data-add]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-for"), inp=document.getElementById("d_"+em);
+    var n = parseInt(document.getElementById("n_"+em).value,10);
+    if(!(n>0)){ alert("צריך להזין מספר"); return; }
+    var unit = document.getElementById("u_"+em).value;
+    var d = new Date((inp.value||DATA.today)+"T00:00:00Z");
+    if(unit==="m") d.setUTCMonth(d.getUTCMonth()+n);
+    else d.setUTCDate(d.getUTCDate() + n*(unit==="w"?7:1));
+    inp.value = d.toISOString().slice(0,10);
+  }; });
   app.querySelectorAll("[data-cancel]").forEach(function(el){ el.onclick=function(){ EDITING=""; render(); }; });
   app.querySelectorAll("[data-save]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-save"), v=document.getElementById("d_"+em).value;

@@ -5,6 +5,7 @@
 //   node qa/admin-check.mjs
 
 import adminHandler from "../api/admin.js";
+import usageHandler from "../api/usage.js";
 import accessHandler from "../api/access.js";
 import { loadSheet } from "../api/_sheet.js";
 
@@ -14,20 +15,23 @@ process.env.ACCESS_SHEET_CSV_URL = "https://sheet.test/csv";
 process.env.UPSTASH_REDIS_REST_URL = "https://redis.test";
 process.env.UPSTASH_REDIS_REST_TOKEN = "t";
 
-// Columns deliberately out of order, with the two-space start header and a trailing
-// marketing column, because that is what the real sheet looks like.
+// The real header row of "נרשמות 360 לבדיקה", including the two spaces after FINAL, the
+// English name columns, and the timestamp glued to the start date. That timestamp is what
+// made every woman parse as having no start date, so it stays in the fixture on purpose.
 const CSV = [
-  'קבוצה,הורידה אפליקציה,שם פרטי,שם משפחה,ID,מייל,ביטלה,360 - FINAL  PERSONAL START,חודשי גישה נוספים',
-  'קבוצה 12,TRUE,יפית,קורן,972501111111,yafit@test.com,FALSE,2026-06-14,3',
-  'קבוצה 12,TRUE,נילי,לביא,972502222222,nili@test.com,FALSE,2026-06-14,',
-  'קבוצה 7,FALSE,רותי,כהן,972503333333,ruti@test.com,TRUE,2026-01-04,3',
-  'קבוצה 7,TRUE,מיכל,לוי,972504444444,michal@test.com,FALSE,2025-01-05,3',
+  'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,הורידה אפליקציה,ביטלה,שבוע בתוכנית,צמיד,קבוצה,חודשי גישה נוספים',
+  '972501111111,יפית,קורן,yafit@test.com,2026-06-14 0:00:00,TRUE,FALSE,10.00,TRUE,ב,3',
+  '972502222222,נילי,לביא,nili@test.com,2026-06-14 12:00:00,TRUE,FALSE,10.00,TRUE,ב,',
+  '972503333333,רותי,כהן,ruti@test.com,2026-01-04 0:00:00,FALSE,TRUE,10.00,TRUE,א,3',
+  '972504444444,מיכל,לוי,michal@test.com,2025-01-05 0:00:00,TRUE,FALSE,10.00,TRUE,א,3',
+  '972505555555,שרה,אלמונית,sara@test.com,,TRUE,FALSE,0.00,FALSE,ג,',
 ].join("\n");
 
+let CSV2 = null;   // lets a test swap the sheet for a few rows of its own
 const store = { hash: {}, kv: {} };
 globalThis.fetch = async (url) => {
   const u = String(url);
-  if (u.startsWith("https://sheet.test")) return { ok: true, text: async () => CSV };
+  if (u.startsWith("https://sheet.test")) return { ok: true, text: async () => (CSV2 || CSV) };
   const parts = u.replace("https://redis.test/", "").split("/").map(decodeURIComponent);
   const [cmd, a, b, c] = parts;
   const H = (k) => (store.hash[k] = store.hash[k] || {});
@@ -36,6 +40,7 @@ globalThis.fetch = async (url) => {
   else if (cmd === "HGET") result = H(a)[b] ?? null;
   else if (cmd === "HDEL") { delete H(a)[b]; result = 1; }
   else if (cmd === "HGETALL") { const o = H(a); result = Object.keys(o).flatMap((k) => [k, o[k]]); }
+  else if (cmd === "KEYS") { const pre = String(a).replace(/\*$/, ""); result = Object.keys(store.kv).filter((k) => k.startsWith(pre)); }
   else if (cmd === "SET") { store.kv[a] = b; result = "OK"; }
   else if (cmd === "GET") result = store.kv[a] ?? null;
   else result = 0; // ZADD / ZREM / ZCARD / ZRANGE etc.
@@ -54,6 +59,11 @@ const callAdmin = async (query, method = "GET", body = null) => {
   await adminHandler({ query, method, body }, res);
   return res;
 };
+const callUsage = async (body) => {
+  const res = mkRes();
+  await usageHandler({ method: "POST", body }, res);
+  return res;
+};
 const callAccess = async (email) => {
   const res = mkRes();
   await accessHandler({ query: { email, device: "dev-1" }, method: "GET" }, res);
@@ -68,13 +78,20 @@ const check = (name, cond, extra) => {
 
 console.log("\nקריאת הגיליון");
 const { women, headers } = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
-check("כל שבע העמודות אותרו לפי כותרת", Object.values(headers).every(Boolean), JSON.stringify(headers));
-check("ארבע נשים נקראו", women.length === 4, "התקבל " + women.length);
+// newapp is optional: the sheet does not carry it yet, and membership falls back to
+// whether we have ever seen her open the app.
+check("כל עמודות החובה אותרו לפי כותרת",
+  ["cancel", "start", "months", "phone", "group", "first", "last", "email"].every((k) => headers[k]),
+  JSON.stringify(headers));
+check("עמודת האפליקציה אופציונלית ואינה נדרשת", headers.newapp === false);
+check("חמש נשים נקראו", women.length === 5, "התקבל " + women.length);
 const yafit = women.find((w) => w.email === "yafit@test.com");
-check("שם פרטי ומשפחה", yafit.first === "יפית" && yafit.last === "קורן");
+check("שם פרטי ומשפחה נקראים מ-F_NAME ו-L_NAME", yafit.first === "יפית" && yafit.last === "קורן");
 check("טלפון בפורמט 972", yafit.phone === "972501111111");
-check("קבוצה", yafit.group === "קבוצה 12");
-check("תאריך התחלה נצמד ליום ראשון", yafit.start === "2026-06-14");
+check("קבוצה", yafit.group === "ב");
+check("תאריך עם שעה נקרא נכון ונצמד ליום ראשון", yafit.start === "2026-06-14", yafit.start);
+check("גם תאריך עם שעה שאינה חצות", women.find((w) => w.email === "nili@test.com").start === "2026-06-14");
+check("מי שאין לה תאריך התחלה מסומנת ככזאת", women.find((w) => w.email === "sara@test.com").start === "");
 check('רק "ביטלה" מסמנת ביטול, לא "הורידה אפליקציה"', yafit.cancelled === false);
 check("מי שביטלה מסומנת", women.find((w) => w.email === "ruti@test.com").cancelled === true);
 check("סיום גישה מחושב: 70 יום ועוד 3 חודשים", yafit.sheetEnd === "2026-11-23", yafit.sheetEnd);
@@ -113,6 +130,68 @@ await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", until: "", by: 
 check("ביטול השינוי מחזיר לגיליון", (await callAccess("yafit@test.com")).body.allowed === true);
 const y3 = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "yafit@test.com");
 check("ואז אין יותר סימון ידני", y3.override === null && y3.until === "2026-11-23");
+
+console.log("\nאפליקציה חדשה מול קג'אבי");
+{
+  const before = (await callAdmin({ key: KEY })).body.women;
+  check("מי שנכנסה לאפליקציה מסומנת כחדשה", before.find((w) => w.email === "yafit@test.com").newApp === true);
+  check("מי שמעולם לא נכנסה אינה מסומנת", before.find((w) => w.email === "nili@test.com").newApp === false);
+  await callAccess("nili@test.com");
+  const after = (await callAdmin({ key: KEY })).body.women;
+  check("כניסה ראשונה מעבירה אותה לאפליקציה החדשה", after.find((w) => w.email === "nili@test.com").newApp === true);
+
+  // A woman who has a backup but has not opened the app since admin:seen began still
+  // belongs to the new app. This is the backfill that stops the list under-reporting.
+  store.kv["bk:michal@test.com"] = "cipher";
+  const back = (await callAdmin({ key: KEY })).body.women;
+  check("גיבוי קיים מספיק כדי לסמן אותה כחדשה", back.find((w) => w.email === "michal@test.com").newApp === true);
+}
+
+console.log("\nחסרות קבוצה במחזור טרי");
+{
+  // Cohorts are keyed off the sheet, so drive this through fresh rows rather than the
+  // fixture above: three days ago, twenty days ago, and one that has not started yet.
+  const fresh = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+  const old = new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10);
+  const soon = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+  const edge = new Date(Date.now() - 8 * 86400000).toISOString().slice(0, 10);
+  CSV2 = [
+    'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים',
+    `972510000001,טרייה,בלי,a@test.com,${fresh} 12:00:00,FALSE,,3`,
+    `972510000002,טרייה,עם,b@test.com,${fresh} 12:00:00,FALSE,ב,3`,
+    `972510000003,ישנה,בלי,c@test.com,${old} 12:00:00,FALSE,,3`,
+    `972510000004,עתידית,בלי,d@test.com,${soon} 12:00:00,FALSE,,3`,
+    `972510000005,מבוטלת,בלי,e@test.com,${fresh} 12:00:00,TRUE,,3`,
+    `972510000006,יום,שמונה,f@test.com,${edge} 12:00:00,FALSE,,3`,
+  ].join("\n");
+  const w = (await callAdmin({ key: KEY })).body.women;
+  const by = (em) => w.find((x) => x.email === em) || {};
+  check("מחזור טרי בלי קבוצה מסומן", by("a@test.com").needsGroup === true);
+  check("מחזור טרי עם קבוצה אינו מסומן", by("b@test.com").needsGroup === false);
+  check("מחזור ישן בלי קבוצה אינו מסומן", by("c@test.com").needsGroup === false);
+  check("מחזור שטרם התחיל אינו מסומן, כי עוד לא חולקו בו קבוצות", by("d@test.com").needsGroup === false);
+  check("מבוטלת אינה מסומנת", by("e@test.com").needsGroup === false);
+  check("יום שמיני כבר מחוץ לחלון", by("f@test.com").needsGroup === false);
+  CSV2 = null;
+}
+
+console.log("\nנתוני שימוש");
+{
+  check("בלי מייל נדחה", (await callUsage({ days: {} })).code === 400);
+  check("שיטה שאינה POST נדחית", await (async () => { const r = mkRes(); await usageHandler({ method: "GET" }, r); return r.code === 405; })());
+
+  await callUsage({
+    email: "yafit@test.com",
+    days: { "1-1": [2, 3], "1-2": [3, 3], "2-1": [0, 2], "bad-key!": [1, 1], "3-1": [9, 2] },
+    videosDone: 41, videosTotal: 88, views: 53, trackerDays: 23,
+  });
+  const u = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "yafit@test.com").usage;
+  check("הנתונים נשמרו והוחזרו", !!u && u.trackerDays === 23 && u.videosDone === 41);
+  check("יום תקין נשמר כמו שהוא", u.days["1-1"][0] === 2 && u.days["1-1"][1] === 3);
+  check("מפתח לא תקין נזרק", u.days["bad-key!"] === undefined);
+  check("הושלמו לא יכול לעבור את הסך הכל", u.days["3-1"][0] === 2);
+  check("אישה בלי נתונים מחזירה null", (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "ruti@test.com").usage === null);
+}
 
 console.log("\nחוסן");
 const hadFetch = globalThis.fetch;

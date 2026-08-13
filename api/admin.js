@@ -9,6 +9,7 @@
 //
 //   admin:overrides  field = email, value = JSON({ until, by, at, prev })
 //   admin:seen       field = email, value = "YYYY-MM-DD" of her last app open
+//   admin:usage      field = email, value = JSON from api/usage.js (counts only)
 //
 // GET  /api/admin?key=<ADMIN_KEY>              -> { ok, women[], headers, today }
 // POST /api/admin?key=<ADMIN_KEY>              -> { email, until, by }   ("" clears it)
@@ -72,7 +73,8 @@ export default async function handler(req, res) {
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
-  let overrides = {}, seen = {};
+  let overrides = {}, seen = {}, usage = {};
+  const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
       const out = {};
@@ -81,22 +83,66 @@ export default async function handler(req, res) {
     };
     try { overrides = flat(await redis(RU, RT, "HGETALL", "admin:overrides")); } catch (e) {}
     try { seen = flat(await redis(RU, RT, "HGETALL", "admin:seen")); } catch (e) {}
+    try { usage = flat(await redis(RU, RT, "HGETALL", "admin:usage")); } catch (e) {}
+
+    // Who is on the new app. admin:seen only starts at v4.87, so it alone would report far
+    // fewer women than really moved over. Every other durable trace a woman leaves by
+    // opening the app counts too: her encrypted backup (written automatically since v4.72),
+    // her device list, and her notification registration. None of these can be forgotten or
+    // mistyped the way a manual tag can.
+    Object.keys(seen).forEach((e) => appEmails.add(e.toLowerCase()));
+    const scan = async (pattern, prefixLen) => {
+      try {
+        const keys = (await redis(RU, RT, "KEYS", pattern)) || [];
+        keys.forEach((k) => {
+          const e = String(k).slice(prefixLen).toLowerCase();
+          if (e.includes("@")) appEmails.add(e);
+        });
+      } catch (e) { /* one missing source must not empty the whole list */ }
+    };
+    await scan("bk:*", 3);
+    await scan("devices:*", 8);
+    try {
+      const subs = flat(await redis(RU, RT, "HGETALL", "push:subs"));
+      Object.values(subs).forEach((v) => {
+        try { const j = JSON.parse(v); if (j && j.email) appEmails.add(String(j.email).toLowerCase()); } catch (e) {}
+      });
+    } catch (e) {}
   }
 
   const today = israelDay(0);
+  // A woman with no group letter cannot be placed in the partnership feature. Only her
+  // cohort's first week counts: before it starts nobody has been assigned a letter yet, so
+  // flagging it would be noise, and once more than a week has passed the placement window
+  // has closed and it is no longer worth chasing.
+  const FRESH_DAYS = 7;
+  const daysBetween = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
   const women = sheet.women.map((w) => {
     let ovr = null;
     const raw = overrides[w.email];
     if (raw) { try { ovr = JSON.parse(raw); } catch (e) {} }
     const until = (ovr && ovr.until) || w.sheetEnd || "";
+    const seenAt = seen[w.email] || "";
+    let use = null;
+    if (usage[w.email]) { try { use = JSON.parse(usage[w.email]); } catch (e) {} }
     return {
       ...w,
-      seen: seen[w.email] || "",
+      seen: seenAt,
+      // Opening the app at least once is what puts her on the new app. This only counts
+      // from the day admin:seen started being written, so the list fills in over a few days
+      // as each woman next opens the app.
+      newApp: !!w.sheetNewApp || appEmails.has(w.email),
+      usage: use,
       until,
       override: ovr ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "", prev: ovr.prev || "" } : null,
       expired: !!until && today > until,
+      needsGroup: (() => {
+        if (w.cancelled || !w.start || w.group) return false;
+        const age = daysBetween(w.start, today);
+        return age >= 0 && age <= FRESH_DAYS;
+      })(),
     };
   });
 
-  return res.status(200).json({ ok: true, today, headers: sheet.headers, women });
+  return res.status(200).json({ ok: true, today, headers: sheet.headers, rawHeaders: sheet.rawHeaders, women });
 }

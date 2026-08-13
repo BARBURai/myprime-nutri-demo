@@ -3,6 +3,7 @@ import { Play, Maximize2, Film, Dumbbell, ClipboardCheck, FileText, Info, Downlo
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
 export { contentForDay } from "./data";
 
+
 /* ============================================================
    MyPrime course content module.
    Views: "היום" / "כל התוכנית" (browse opened days) / מועדפים / חיפוש /
@@ -17,6 +18,10 @@ export { contentForDay } from "./data";
 
 const DONE_KEY = "mp_content_done_v1";
 const FAV_KEY = "mp_content_fav_v1";
+// How many times each lesson's video reached the watch threshold. Separate from DONE_KEY,
+// which only ever records that it happened once: re-watching keeps a lesson done, so a
+// counter is the only way to see that she went back to something.
+const VIEWS_KEY = "mp_content_views_v1";
 function loadStore(key) { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) { return {}; } }
 function saveStore(key, obj) { try { localStorage.setItem(key, JSON.stringify(obj)); } catch (e) {} }
 function lessonKey(week, day, i) { return `W${week}D${day}-${i}`; }
@@ -150,8 +155,6 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
 
 
 
-
-
 export function ContentDayCard({ week, dow, C, font, onOpen }) {
   const day = contentForDay(week, dow);
   if (!day) return null;
@@ -218,6 +221,12 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   const isFav = (w, d, i) => !!fav[lessonKey(w, d, i)];
   const toggleDone = (w, d, i) => setDone((s) => { const n = { ...s }; const k = lessonKey(w, d, i); if (n[k]) delete n[k]; else n[k] = 1; saveStore(DONE_KEY, n); return n; });
   // Auto-complete: mark done without ever un-marking (re-watching keeps it done).
+  const bumpView = (w, d, i) => {
+    const v = loadStore(VIEWS_KEY);
+    const k = lessonKey(w, d, i);
+    v[k] = (v[k] || 0) + 1;
+    saveStore(VIEWS_KEY, v);
+  };
   const markDone = (w, d, i) => setDone((s) => { const k = lessonKey(w, d, i); if (s[k]) return s; const n = { ...s, [k]: 1 }; saveStore(DONE_KEY, n); return n; });
   const toggleFav = (w, d, i) => setFav((s) => { const n = { ...s }; const k = lessonKey(w, d, i); if (n[k]) delete n[k]; else n[k] = 1; saveStore(FAV_KEY, n); return n; });
   const dayDoneCount = (dd) => dd.lessons.reduce((s, _l, i) => s + (isDone(dd.week, dd.day, i) ? 1 : 0), 0);
@@ -527,7 +536,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               </div>
             )}
 
-            {l.videoId && <div data-tut="lessonplayer"><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => markDone(openL.week, openL.day, openL.i) : undefined} /></div>}
+            {l.videoId && <div data-tut="lessonplayer"><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => { bumpView(openL.week, openL.day, openL.i); markDone(openL.week, openL.day, openL.i); } : undefined} /></div>}
             {l.sections && l.sections.map((sec, si) => (
               <div key={si} style={{ marginBottom: 20 }}>
                 {sec.h && <div style={{ fontSize: 21, fontWeight: 700, color: C.brandD, marginBottom: 8 }}>{sec.h}</div>}
@@ -700,4 +709,26 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
       {zoomPage && <ZoomViewer src={zoomPage} onClose={() => setZoomPage(null)} />}
     </div>
   );
+}
+
+// Progress as plain numbers, for the office screen. Per programme day: how many lessons she
+// finished out of how many exist. Plus video completions and repeat views. Nothing here says
+// what she ate, what she weighs, or what she wrote.
+export function usageSummary() {
+  const done = loadStore(DONE_KEY);
+  const views = loadStore(VIEWS_KEY);
+  const days = {};
+  let vDone = 0, vTotal = 0, vViews = 0;
+  CONTENT_DAYS.forEach((d) => {
+    const lessons = d.lessons || [];
+    let n = 0;
+    lessons.forEach((l, i) => {
+      const k = lessonKey(d.week, d.day, i);
+      if (done[k]) n++;
+      if (l.videoId) { vTotal++; if (done[k]) vDone++; }
+      vViews += views[k] || 0;
+    });
+    if (lessons.length) days[`${d.week}-${d.day}`] = [n, lessons.length];
+  });
+  return { days, videosDone: vDone, videosTotal: vTotal, views: vViews };
 }
