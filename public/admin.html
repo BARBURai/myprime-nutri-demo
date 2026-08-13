@@ -26,6 +26,7 @@
   .until{margin-top:8px;font-size:15px}
   .manual{color:var(--warn);font-size:13px;margin-top:2px}
   .log{font-size:12.5px;margin-top:4px;line-height:1.6}
+  .lnk{background:none;border:none;padding:0 2px;color:var(--pink);cursor:pointer;font-size:13px;text-decoration:underline}
   .expired{color:var(--pink);font-weight:600}
   .acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
   .btn{padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink)}
@@ -85,6 +86,22 @@ function cohortLabel(d){
   if(d === w.cur) return "מחזור נוכחי · "+il(d);
   if(d === w.next) return "המחזור הבא · "+il(d);
   return il(d);
+}
+// Copy to clipboard with a visible confirmation. A clerk on a phone cannot select text out
+// of a card reliably, and the phone and the email are the two things she is always after.
+function copyText(txt, el){
+  var done = function(){ var old = el.textContent; el.textContent = "הועתק ✓";
+    setTimeout(function(){ el.textContent = old; }, 1200); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(function(){ fallback(); });
+  } else fallback();
+  function fallback(){
+    var ta = document.createElement("textarea");
+    ta.value = txt; ta.setAttribute("readonly",""); ta.style.position="fixed"; ta.style.top="-1000px";
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); done(); }catch(e){ alert(txt); }
+    document.body.removeChild(ta);
+  }
 }
 function stamp(iso){ if(!iso) return ""; var d=new Date(iso); if(isNaN(d)) return "";
   var p=function(n){return (n<10?"0":"")+n;};
@@ -315,7 +332,9 @@ function render(){
       (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
       (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+'</div>'+
-      '<div class="meta">'+esc(w.phone||"אין טלפון")+' · '+esc(w.email)+'</div>'+
+      '<div class="meta">'+esc(w.phone||"אין טלפון")+
+        (w.phone?' <button class="lnk" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+
+        ' · '+esc(w.email)+' <button class="lnk" data-copy="'+esc(w.email)+'">העתקה</button></div>'+
       '<div class="meta">מחזור '+il(w.start)+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
       (w.newApp
         ? '<div class="until">גישה עד: <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+
@@ -384,6 +403,8 @@ function render(){
   app.querySelectorAll("[data-d]").forEach(function(el){ el.onclick=function(){ COHORT=el.getAttribute("data-d"); GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
+  app.querySelectorAll("[data-copy]").forEach(function(el){ el.onclick=function(){
+    copyText(el.getAttribute("data-copy"), el); }; });
   app.querySelectorAll("[data-stats]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-stats"); STATS = (STATS===em ? "" : em); render(); }; });
   app.querySelectorAll("[data-sm]").forEach(function(el){ el.onclick=function(){
