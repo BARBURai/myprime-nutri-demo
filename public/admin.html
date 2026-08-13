@@ -59,7 +59,7 @@
 // store: a change made here never touches that file, because ManyChat and the access gate
 // both depend on it. The screen therefore always shows the sheet's value next to a manual
 // change rather than replacing it.
-var KEY = "", WHO = "", DATA = null, APP = "new", MONTH = null, COHORT = "", GROUP = "", SHOWCANCELLED = false, MISSING = false, EDITING = "";
+var KEY = "", WHO = "", DATA = null, APP = "new", YEAR = null, MONTH = null, COHORT = "", GROUP = "", SHOWCANCELLED = false, MISSING = false, EDITING = "";
 var HEB_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 function monthLabel(ym){ var p = ym.split("-"); return HEB_MONTHS[parseInt(p[1],10)-1]+" "+p[0]; }
 var STATS = "", STATSMODE = "day";   // which card has its usage panel open, and at what zoom
@@ -189,25 +189,33 @@ function render(){
   var missing = DATA.women.filter(function(w){ return w.needsGroup; });
   var base = MISSING ? missing : pool;
 
-  // Cohorts, grouped by month. Forty-odd chips going back years was unreadable, so the month
-  // is picked first and only that month's two to five cohorts are drawn.
-  var months = {}, cohorts = {};
+  // Cohorts are chosen year, then month, then date. Every step is one tap on a chip: a
+  // dropdown of forty-odd cohorts saved no time, and a single row of chips going back years
+  // could not be read at all.
+  var years = {}, months = {}, cohorts = {};
+  base.forEach(function(w){ years[w.start.slice(0,4)] = (years[w.start.slice(0,4)]||0)+1; });
+  var yearKeys = Object.keys(years).sort().reverse();
+  if(YEAR === null || yearKeys.indexOf(YEAR) === -1) YEAR = yearKeys.length ? yearKeys[0] : "";
+
   base.forEach(function(w){
-    months[w.start.slice(0,7)] = (months[w.start.slice(0,7)]||0)+1;
+    if(w.start.slice(0,4) !== YEAR) return;
+    months[w.start.slice(5,7)] = (months[w.start.slice(5,7)]||0)+1;
   });
   var monthKeys = Object.keys(months).sort().reverse();
   if(MONTH === null) MONTH = MISSING ? "" : (monthKeys.length ? monthKeys[0] : "");
   if(MONTH && monthKeys.indexOf(MONTH) === -1) MONTH = "";
 
   base.forEach(function(w){
-    if(MONTH && w.start.slice(0,7) !== MONTH) return;
+    if(w.start.slice(0,4) !== YEAR) return;
+    if(MONTH && w.start.slice(5,7) !== MONTH) return;
     cohorts[w.start] = (cohorts[w.start]||0)+1;
   });
   var dates = Object.keys(cohorts).sort().reverse();
   if(COHORT && dates.indexOf(COHORT) === -1) COHORT = "";
 
   var inCohort = base.filter(function(w){
-    if(MONTH && w.start.slice(0,7) !== MONTH) return false;
+    if(w.start.slice(0,4) !== YEAR) return false;
+    if(MONTH && w.start.slice(5,7) !== MONTH) return false;
     if(COHORT && w.start !== COHORT) return false;
     return true;
   });
@@ -241,13 +249,14 @@ function render(){
         '<span class="chip'+(APP==="old"?" on":"")+'" data-p="old">קג\'אבי ('+nOld+')</span>'+
         '<span class="chip'+(APP===""?" on":"")+'" data-p="">הכל</span>'+
       '</div>')+
-      '<div class="lbl">חודש</div><div class="chips">'+
-        '<select class="field sm" id="mo" style="min-width:150px">'+
-          '<option value=""'+(MONTH?"":" selected")+'>כל המחזורים</option>'+
-          monthKeys.map(function(m){ return '<option value="'+esc(m)+'"'+(MONTH===m?" selected":"")+'>'+esc(monthLabel(m))+' ('+months[m]+')</option>'; }).join("")+
-        '</select>'+
+      '<div class="lbl">שנה</div><div class="chips">'+
+        yearKeys.map(function(y){ return '<span class="chip'+(YEAR===y?" on":"")+'" data-y="'+esc(y)+'">'+esc(y)+' ('+years[y]+')</span>'; }).join("")+
       '</div>'+
-      (dates.length > 1 || MONTH || MISSING
+      '<div class="lbl">חודש</div><div class="chips">'+
+        '<span class="chip'+(MONTH?"":" on")+'" data-mo="">כל השנה</span>'+
+        monthKeys.map(function(mo){ return '<span class="chip'+(MONTH===mo?" on":"")+'" data-mo="'+esc(mo)+'">'+esc(HEB_MONTHS[parseInt(mo,10)-1])+' ('+months[mo]+')</span>'; }).join("")+
+      '</div>'+
+      (MONTH
         ? '<div class="lbl">מחזור</div><div class="chips">'+
           '<span class="chip'+(COHORT?"":" on")+'" data-d="">הכל</span>'+
           dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+il(d)+' ('+cohorts[d]+')</span>'; }).join("")+
@@ -307,11 +316,13 @@ function render(){
     MISSING=!MISSING; EDITING="";
     // Turning it on opens every cohort and preselects "ללא קבוצה", so what is on screen
     // matches what the chip promises without the clerk setting three filters by hand.
-    MONTH = MISSING ? "" : null; COHORT = ""; GROUP = MISSING ? "-" : "";
+    YEAR = null; MONTH = MISSING ? "" : null; COHORT = ""; GROUP = MISSING ? "-" : "";
     render(); }; });
-  var moEl = document.getElementById("mo");
-  if(moEl) moEl.onchange = function(){ MONTH = this.value; COHORT = ""; GROUP = ""; EDITING = ""; render(); };
-  app.querySelectorAll("[data-p]").forEach(function(el){ el.onclick=function(){ APP=el.getAttribute("data-p"); MONTH=null; COHORT=""; GROUP=""; EDITING=""; render(); }; });
+  app.querySelectorAll("[data-y]").forEach(function(el){ el.onclick=function(){
+    YEAR = el.getAttribute("data-y"); MONTH = null; COHORT = ""; GROUP = ""; EDITING = ""; render(); }; });
+  app.querySelectorAll("[data-mo]").forEach(function(el){ el.onclick=function(){
+    MONTH = el.getAttribute("data-mo"); COHORT = ""; GROUP = ""; EDITING = ""; render(); }; });
+  app.querySelectorAll("[data-p]").forEach(function(el){ el.onclick=function(){ APP=el.getAttribute("data-p"); YEAR=null; MONTH=null; COHORT=""; GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-d]").forEach(function(el){ el.onclick=function(){ COHORT=el.getAttribute("data-d"); GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
