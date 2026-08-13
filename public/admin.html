@@ -43,7 +43,7 @@
 // store: a change made here never touches that file, because ManyChat and the access gate
 // both depend on it. The screen therefore always shows the sheet's value next to a manual
 // change rather than replacing it.
-var KEY = "", WHO = "", DATA = null, GROUP = "", SHOWCANCELLED = false, EDITING = "";
+var KEY = "", WHO = "", DATA = null, GROUP = "", SHOWCANCELLED = false, ALL = false, EDITING = "";
 var app = document.getElementById("app");
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
@@ -96,27 +96,32 @@ function askKey(msg){
 
 function render(){
   var q = (document.getElementById("q") ? document.getElementById("q").value : "").trim().toLowerCase();
-  var groups = {}, list = [];
-  DATA.women.forEach(function(w){ if(w.group) groups[w.group]=(groups[w.group]||0)+1; });
-
+  var groups = {}, base = [], list = [];
   DATA.women.forEach(function(w){
     if(w.cancelled && !SHOWCANCELLED) return;
-    if(GROUP && w.group!==GROUP) return;
+    // The sheet holds every woman who ever registered. A participant of the running
+    // programme is one with a start date; without this the screen shows 2,000 rows.
+    if(!ALL && !w.start) return;
     if(q){
       var hay = (w.first+" "+w.last+" "+w.email+" "+w.phone).toLowerCase();
       if(hay.indexOf(q)===-1) return;
     }
-    list.push(w);
+    base.push(w);
   });
+  // Counts come from what is actually on screen, so a chip never promises rows the
+  // current filter has already removed.
+  base.forEach(function(w){ if(w.group) groups[w.group]=(groups[w.group]||0)+1; });
+  list = base.filter(function(w){ return !GROUP || w.group===GROUP; });
   list.sort(function(a,b){ return (a.first+a.last).localeCompare(b.first+b.last,"he"); });
 
   var names = Object.keys(groups).sort(function(a,b){ return a.localeCompare(b,"he",{numeric:true}); });
   var html = '<h1>ניהול משתתפות</h1>'+
-    '<div class="sub">'+DATA.women.length+' רשומות · '+names.length+' קבוצות · מחוברת כ'+esc(WHO||"?")+'</div>'+
+    '<div class="sub">'+list.length+' משתתפות'+(ALL?" (כל הגיליון)":"")+' · מחוברת כ'+esc(WHO||"?")+'</div>'+
     '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
     '<div class="chips"><span class="chip'+(GROUP?"":" on")+'" data-g="">הכל</span>'+
     names.map(function(g){ return '<span class="chip'+(GROUP===g?" on":"")+'" data-g="'+esc(g)+'">'+esc(g)+' ('+groups[g]+')</span>'; }).join("")+
-    '<span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>';
+    '<span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span>'+
+    '<span class="chip'+(ALL?" on":"")+'" data-a="1">כל הרשומות בגיליון</span></div>';
 
   if(!list.length) html += '<div class="empty">לא נמצאה אף משתתפת</div>';
 
@@ -143,6 +148,7 @@ function render(){
       '</div>';
   });
 
+  html += '<div class="note">עמודות הגיליון: '+esc((DATA.rawHeaders||[]).join(" | "))+'</div>';
   html += '<div class="note">שינוי כאן נשמר אצלנו וגובר על הגיליון. <b>הגיליון הראשי לא משתנה</b>, כי הוא הקובץ ש-ManyChat עובד איתו.</div>';
   app.innerHTML = html;
 
@@ -150,6 +156,7 @@ function render(){
   qEl.oninput = function(){ var v=this.selectionStart; render(); var n=document.getElementById("q"); n.focus(); n.setSelectionRange(v,v); };
 
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
+  app.querySelectorAll("[data-a]").forEach(function(el){ el.onclick=function(){ ALL=!ALL; EDITING=""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){ EDITING=el.getAttribute("data-edit"); render(); }; });
   app.querySelectorAll("[data-cancel]").forEach(function(el){ el.onclick=function(){ EDITING=""; render(); }; });

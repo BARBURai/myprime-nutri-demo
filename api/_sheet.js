@@ -123,5 +123,8 @@ export async function loadSheet(csvUrl) {
 
   const headers = {};
   for (const k of Object.keys(col)) headers[k] = col[k] !== -1;
-  return { women, headers };
+  // The sheet's own header row, echoed back so a renamed column can be mapped from what the
+  // file actually says instead of by guessing. Guessing is what put email addresses on the
+  // admin screen where first and last names belong.
+  return { women, headers, rawHeaders: header.map((h) => String(h || "").trim()).filter(Boolean) };
 }

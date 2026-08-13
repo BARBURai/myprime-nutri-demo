@@ -98,5 +98,5 @@ export default async function handler(req, res) {
     };
   });
 
-  return res.status(200).json({ ok: true, today, headers: sheet.headers, women });
+  return res.status(200).json({ ok: true, today, headers: sheet.headers, rawHeaders: sheet.rawHeaders, women });
 }
