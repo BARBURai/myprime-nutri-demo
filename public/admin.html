@@ -25,6 +25,7 @@
   .meta{color:var(--soft);font-size:14px;margin-top:4px;word-break:break-word}
   .until{margin-top:8px;font-size:15px}
   .manual{color:var(--warn);font-size:13px;margin-top:2px}
+  .log{font-size:12.5px;margin-top:4px;line-height:1.6}
   .expired{color:var(--pink);font-weight:600}
   .acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
   .btn{padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink)}
@@ -69,6 +70,22 @@ var app = document.getElementById("app");
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
 function il(d){ if(!d) return ""; var p=d.split("-"); return p[2]+"."+p[1]+"."+p[0]; }
+// Cohorts start on a Sunday, so "this week's" cohort is the most recent Sunday and the next
+// one is seven days later. Naming them saves the clerk working it out from a date.
+function cohortLabel(d){
+  if(!DATA) return il(d);
+  var t = new Date(DATA.today+"T00:00:00Z");
+  t.setUTCDate(t.getUTCDate() - t.getUTCDay());       // Sunday of the current week
+  var cur = t.toISOString().slice(0,10);
+  t.setUTCDate(t.getUTCDate() + 7);
+  var next = t.toISOString().slice(0,10);
+  if(d === cur) return "מחזור נוכחי · "+il(d);
+  if(d === next) return "המחזור הבא · "+il(d);
+  return il(d);
+}
+function stamp(iso){ if(!iso) return ""; var d=new Date(iso); if(isNaN(d)) return "";
+  var p=function(n){return (n<10?"0":"")+n;};
+  return p(d.getDate())+"."+p(d.getMonth()+1)+"."+d.getFullYear()+" "+p(d.getHours())+":"+p(d.getMinutes()); }
 function days(a,b){ return Math.round((Date.parse(b+"T00:00:00Z")-Date.parse(a+"T00:00:00Z"))/86400000); }
 
 function dayInProgram(w){
@@ -259,7 +276,7 @@ function render(){
       (MONTH
         ? '<div class="lbl">מחזור</div><div class="chips">'+
           '<span class="chip'+(COHORT?"":" on")+'" data-d="">הכל</span>'+
-          dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+il(d)+' ('+cohorts[d]+')</span>'; }).join("")+
+          dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+esc(cohortLabel(d))+' ('+cohorts[d]+')</span>'; }).join("")+
         '</div>'
         : '')+
       ((letters.length || noGroup)
@@ -282,10 +299,16 @@ function render(){
       (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+'</div>'+
       '<div class="meta">'+esc(w.phone||"אין טלפון")+' · '+esc(w.email)+'</div>'+
       '<div class="meta">מחזור '+il(w.start)+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
-      '<div class="until">גישה עד: <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+
-      (w.expired?" (הסתיימה)":"")+'</div>'+
-      (w.override?'<div class="manual">שונה ידנית'+(w.override.by?" על ידי "+esc(w.override.by):"")+
-        ' · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')+
+      (w.newApp
+        ? '<div class="until">גישה עד: <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+
+          (w.expired?" (הסתיימה)":"")+'</div>'
+        : '')+
+      (w.override?'<div class="manual">שונה ידנית · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')+
+      ((w.log&&w.log.length)?'<div class="log">'+w.log.map(function(L){
+        return esc(stamp(L.at))+' · '+esc(L.by||"לא ידוע")+' · '+
+          (L.to ? 'שינתה את תאריך הגישה מ-'+(L.from?il(L.from):"לא ידוע")+' ל-'+il(L.to)
+                : 'החזירה לתאריך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
+      }).join('<br>')+'</div>':'')+
       (EDITING===w.email
         ? '<div class="edit"><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
           '<span class="adds">הוסיפי '+
@@ -300,8 +323,12 @@ function render(){
           '<button class="btn" data-cancel="1">ביטול</button></div>'
         : '<div class="acts">'+
           (w.phone?'<a class="btn" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
-          '<button class="btn" data-edit="'+esc(w.email)+'">שינוי תאריך גישה</button>'+
-          '<button class="btn" data-stats="'+esc(w.email)+'">'+(STATS===w.email?"סגירת נתוני שימוש":"נתוני שימוש")+'</button></div>')+
+          (w.newApp
+            ? '<button class="btn" data-edit="'+esc(w.email)+'">שינוי תאריך גישה</button>'+
+              '<button class="btn" data-stats="'+esc(w.email)+'">'+(STATS===w.email?"סגירת נתוני שימוש":"נתוני שימוש")+'</button>'
+            : '')+
+          '</div>'+
+          (w.newApp ? '' : '<div class="meta">מנוהלת בקג\'אבי. שינוי תאריך גישה ונתוני שימוש אינם רלוונטיים כאן.</div>'))+
       (STATS===w.email ? usagePanel(w) : '')+
       '</div>';
   });

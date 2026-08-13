@@ -47,17 +47,30 @@ export default async function handler(req, res) {
     if (until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
     if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
     try {
-      if (!until) {
-        await redis(RU, RT, "HDEL", "admin:overrides", email);
-      } else {
-        let prev = "";
+      // Every change is kept: who, when, and the exact move from one date to another. A
+      // clearing is a change too, so the record stays with an empty `until` rather than being
+      // deleted, which would take the history with it.
+      let cur = {};
+      try {
+        const old = await redis(RU, RT, "HGET", "admin:overrides", email);
+        if (old) cur = JSON.parse(old) || {};
+      } catch (e) {}
+
+      // What the access date was before this edit. With no override in force that is the
+      // sheet's own value, so read it rather than logging a blank.
+      let from = cur.until || "";
+      if (!from) {
         try {
-          const old = await redis(RU, RT, "HGET", "admin:overrides", email);
-          if (old) prev = (JSON.parse(old) || {}).until || "";
-        } catch (e) {}
-        const rec = JSON.stringify({ until, by, at: new Date().toISOString(), prev });
-        await redis(RU, RT, "HSET", "admin:overrides", email, rec);
+          const sheet = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
+          const row = sheet.women.find((w) => w.email === email);
+          if (row) from = row.sheetEnd || "";
+        } catch (e) { /* an unreadable sheet must not block the save */ }
       }
+
+      const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
+      log.unshift({ at: new Date().toISOString(), by, from, to: until });
+      const rec = JSON.stringify({ until, by, at: new Date().toISOString(), prev: cur.until || "", log });
+      await redis(RU, RT, "HSET", "admin:overrides", email, rec);
       return res.status(200).json({ ok: true });
     } catch (e) {
       return res.status(500).json({ ok: false, error: "write_failed" });
@@ -134,7 +147,10 @@ export default async function handler(req, res) {
       newApp: !!w.sheetNewApp || appEmails.has(w.email),
       usage: use,
       until,
-      override: ovr ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "", prev: ovr.prev || "" } : null,
+      // `override` is only in force while it carries a date. The log survives a clearing, so
+      // the office can always see what was done and by whom.
+      override: (ovr && ovr.until) ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "" } : null,
+      log: (ovr && Array.isArray(ovr.log)) ? ovr.log : [],
       expired: !!until && today > until,
       needsGroup: (() => {
         if (w.cancelled || !w.start || w.group) return false;

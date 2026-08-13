@@ -125,11 +125,16 @@ const y2 = view.women.find((w) => w.email === "yafit@test.com");
 check("המסך מציג את השינוי הידני", y2.override && y2.override.until === "2026-01-01");
 check("ולצידו את ערך הגיליון המקורי", y2.sheetEnd === "2026-11-23");
 check("שם מי ששינתה נשמר", y2.override.by === "הפקידה");
+check("נרשמה שורת יומן לשינוי", y2.log.length === 1 && y2.log[0].by === "הפקידה");
+check("היומן מתעד מאיזה תאריך לאיזה", y2.log[0].from === "2026-11-23" && y2.log[0].to === "2026-01-01",
+  JSON.stringify(y2.log[0]));
 
 await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", until: "", by: "הפקידה" });
 check("ביטול השינוי מחזיר לגיליון", (await callAccess("yafit@test.com")).body.allowed === true);
 const y3 = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "yafit@test.com");
 check("ואז אין יותר סימון ידני", y3.override === null && y3.until === "2026-11-23");
+check("אבל היומן נשמר, כולל פעולת הביטול", y3.log.length === 2 && y3.log[0].to === "" && y3.log[0].from === "2026-01-01",
+  JSON.stringify(y3.log));
 
 console.log("\nאפליקציה חדשה מול קג'אבי");
 {
