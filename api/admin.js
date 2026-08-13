@@ -109,9 +109,10 @@ export default async function handler(req, res) {
   }
 
   const today = israelDay(0);
-  // A woman with no group letter cannot be placed in the partnership feature. Only worth
-  // chasing while her cohort is fresh: seven days back, and no limit forward so an intake
-  // that has not started yet is caught while it can still be fixed.
+  // A woman with no group letter cannot be placed in the partnership feature. Only her
+  // cohort's first week counts: before it starts nobody has been assigned a letter yet, so
+  // flagging it would be noise, and once more than a week has passed the placement window
+  // has closed and it is no longer worth chasing.
   const FRESH_DAYS = 7;
   const daysBetween = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
   const women = sheet.women.map((w) => {
@@ -130,7 +131,11 @@ export default async function handler(req, res) {
       until,
       override: ovr ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "", prev: ovr.prev || "" } : null,
       expired: !!until && today > until,
-      needsGroup: !w.cancelled && !!w.start && !w.group && daysBetween(w.start, today) <= FRESH_DAYS,
+      needsGroup: (() => {
+        if (w.cancelled || !w.start || w.group) return false;
+        const age = daysBetween(w.start, today);
+        return age >= 0 && age <= FRESH_DAYS;
+      })(),
     };
   });
 

@@ -148,6 +148,7 @@ console.log("\nחסרות קבוצה במחזור טרי");
   const fresh = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
   const old = new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10);
   const soon = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+  const edge = new Date(Date.now() - 8 * 86400000).toISOString().slice(0, 10);
   CSV2 = [
     'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים',
     `972510000001,טרייה,בלי,a@test.com,${fresh} 12:00:00,FALSE,,3`,
@@ -155,14 +156,16 @@ console.log("\nחסרות קבוצה במחזור טרי");
     `972510000003,ישנה,בלי,c@test.com,${old} 12:00:00,FALSE,,3`,
     `972510000004,עתידית,בלי,d@test.com,${soon} 12:00:00,FALSE,,3`,
     `972510000005,מבוטלת,בלי,e@test.com,${fresh} 12:00:00,TRUE,,3`,
+    `972510000006,יום,שמונה,f@test.com,${edge} 12:00:00,FALSE,,3`,
   ].join("\n");
   const w = (await callAdmin({ key: KEY })).body.women;
   const by = (em) => w.find((x) => x.email === em) || {};
   check("מחזור טרי בלי קבוצה מסומן", by("a@test.com").needsGroup === true);
   check("מחזור טרי עם קבוצה אינו מסומן", by("b@test.com").needsGroup === false);
   check("מחזור ישן בלי קבוצה אינו מסומן", by("c@test.com").needsGroup === false);
-  check("מחזור שטרם התחיל בלי קבוצה מסומן", by("d@test.com").needsGroup === true);
+  check("מחזור שטרם התחיל אינו מסומן, כי עוד לא חולקו בו קבוצות", by("d@test.com").needsGroup === false);
   check("מבוטלת אינה מסומנת", by("e@test.com").needsGroup === false);
+  check("יום שמיני כבר מחוץ לחלון", by("f@test.com").needsGroup === false);
   CSV2 = null;
 }
 

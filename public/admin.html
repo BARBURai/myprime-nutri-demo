@@ -145,7 +145,7 @@ function render(){
       ? '<div class="chips"><span class="chip warn'+(MISSING?" on":"")+'" data-m="1">⚠ חסרות קבוצה במחזור החדש ('+missing.length+')</span></div>'
       : '<div class="chips"><span class="chip'+(MISSING?" on":"")+'" data-m="1">חסרות קבוצה במחזור החדש (0)</span></div>')+
     (MISSING
-      ? '<div class="note">מוצגות רק נשים ללא אות קבוצה שהמחזור שלהן מתחיל בשבוע האחרון או בעתיד. אלה שהתחילו מזמן אינן מוצגות כאן.</div>'
+      ? '<div class="note">מוצגות רק נשים ללא אות קבוצה שהמחזור שלהן התחיל בשבעת הימים האחרונים. מחזור שטרם התחיל אינו מוצג, כי עוד לא חולקו בו קבוצות.</div>'
       : '<div class="lbl">אפליקציה</div><div class="chips">'+
       '<span class="chip'+(APP==="new"?" on":"")+'" data-p="new">אפליקציה חדשה ('+nNew+')</span>'+
       '<span class="chip'+(APP==="old"?" on":"")+'" data-p="old">קג\'אבי ('+nOld+')</span>'+
