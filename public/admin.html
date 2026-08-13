@@ -35,6 +35,8 @@
   .chip.warn{border-color:var(--warn);color:var(--warn);font-weight:600}
   .chip.warn.on{background:#fff4e5}
   .warnpill{background:#fff4e5;color:var(--warn)}
+  .newpill{background:#e6f4ea;color:#1b5e20}
+  .oldpill{background:#eee;color:#555}
   .btn.sm{padding:6px 10px;font-size:13px}
   .field.sm{padding:6px 8px;font-size:14px;width:auto}
   .adds{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
@@ -192,22 +194,27 @@ function render(){
   inCohort.forEach(function(w){ if(w.group) groups[w.group]=(groups[w.group]||0)+1; else noGroup++; });
   var letters = Object.keys(groups).sort(function(a,b){ return a.localeCompare(b,"he"); });
 
-  var list = (MISSING ? missing : inCohort).filter(function(w){
-    // "-" is the chip for women with no letter at all: without it the group chips add up to
-    // less than the cohort and there is no way to reach the difference.
-    if(!MISSING && GROUP === "-" && w.group) return false;
-    if(!MISSING && GROUP && GROUP !== "-" && w.group!==GROUP) return false;
-    if(q){
-      var hay = (w.first+" "+w.last+" "+w.email+" "+w.phone).toLowerCase();
-      if(hay.indexOf(q)===-1) return false;
-    }
-    return true;
-  });
+  var searching = !!q;
+  var list;
+  if(searching){
+    list = DATA.women.filter(function(w){
+      return (w.first+" "+w.last+" "+w.email+" "+w.phone).toLowerCase().indexOf(q) !== -1;
+    });
+  } else {
+    list = (MISSING ? missing : inCohort).filter(function(w){
+      // "-" is the chip for women with no letter at all: without it the group chips add up
+      // to less than the cohort and there is no way to reach the difference.
+      if(!MISSING && GROUP === "-" && w.group) return false;
+      if(!MISSING && GROUP && GROUP !== "-" && w.group!==GROUP) return false;
+      return true;
+    });
+  }
   list.sort(function(a,b){ return (a.first+" "+a.last).localeCompare(b.first+" "+b.last,"he"); });
 
   var html = '<h1>ניהול משתתפות</h1>'+
     '<div class="sub">'+list.length+' משתתפות · מחוברת כ'+esc(WHO||"?")+'</div>'+
     '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
+    (searching ? '<div class="note">תוצאות חיפוש מכל הרשומות בגיליון, בלי סינון לפי מחזור, קבוצה או אפליקציה.</div>' : 
     (missing.length
       ? '<div class="chips"><span class="chip warn'+(MISSING?" on":"")+'" data-m="1">⚠ חסרות קבוצה במחזור החדש ('+missing.length+')</span></div>'
       : '<div class="chips"><span class="chip'+(MISSING?" on":"")+'" data-m="1">חסרות קבוצה במחזור החדש (0)</span></div>')+
@@ -221,16 +228,16 @@ function render(){
     '<div class="lbl">מחזור</div><div class="chips">'+
       '<span class="chip'+(COHORT?"":" on")+'" data-d="">כל המחזורים</span>'+
       dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+il(d)+' ('+cohorts[d]+')</span>'; }).join("")+
-    '</div>');
+    '</div>'));
 
-  if((letters.length || noGroup) && !MISSING){
+  if((letters.length || noGroup) && !MISSING && !searching){
     html += '<div class="lbl">קבוצה</div><div class="chips">'+
       '<span class="chip'+(GROUP?"":" on")+'" data-g="">הכל</span>'+
       letters.map(function(g){ return '<span class="chip'+(GROUP===g?" on":"")+'" data-g="'+esc(g)+'">'+esc(g)+' ('+groups[g]+')</span>'; }).join("")+
       (noGroup ? '<span class="chip warn'+(GROUP==="-"?" on":"")+'" data-g="-">ללא קבוצה ('+noGroup+')</span>' : '')+
       '</div>';
   }
-  if(!MISSING) html += '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>';
+  if(!MISSING && !searching) html += '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>';
 
   if(!list.length) html += '<div class="empty">לא נמצאה אף משתתפת</div>';
 
@@ -239,6 +246,7 @@ function render(){
     html += '<div class="card">'+
       '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
       (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+      (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
       (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+'</div>'+
       '<div class="meta">'+esc(w.phone||"אין טלפון")+' · '+esc(w.email)+'</div>'+
       '<div class="meta">מחזור '+il(w.start)+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
