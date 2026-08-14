@@ -26,6 +26,7 @@
   .until{margin-top:8px;font-size:15px}
   .manual{color:var(--warn);font-size:13px;margin-top:2px}
   .log{font-size:12.5px;margin-top:4px;line-height:1.6}
+  .lnk{background:none;border:none;padding:0 2px;color:var(--pink);cursor:pointer;font-size:13px;text-decoration:underline}
   .expired{color:var(--pink);font-weight:600}
   .acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
   .btn{padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink)}
@@ -64,6 +65,9 @@ var KEY = "", WHO = "", DATA = null, APP = "new", YEAR = null, MONTH = null, COH
 var HEB_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 function monthLabel(ym){ var p = ym.split("-"); return HEB_MONTHS[parseInt(p[1],10)-1]+" "+p[0]; }
 var STATS = "", STATSMODE = "day";   // which card has its usage panel open, and at what zoom
+// The repeat-view counter shipped with v4.98 and has no history before that date. Saying so
+// stops "0" from reading as "she watched nothing".
+var VIEWS_SINCE = "2026-08-13";
 // Which women still need a group letter is decided in api/admin.js (needsGroup), so the
 // rule has one home and the offline check covers it.
 var app = document.getElementById("app");
@@ -85,6 +89,22 @@ function cohortLabel(d){
   if(d === w.cur) return "מחזור נוכחי · "+il(d);
   if(d === w.next) return "המחזור הבא · "+il(d);
   return il(d);
+}
+// Copy to clipboard with a visible confirmation. A clerk on a phone cannot select text out
+// of a card reliably, and the phone and the email are the two things she is always after.
+function copyText(txt, el){
+  var done = function(){ var old = el.textContent; el.textContent = "הועתק ✓";
+    setTimeout(function(){ el.textContent = old; }, 1200); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(function(){ fallback(); });
+  } else fallback();
+  function fallback(){
+    var ta = document.createElement("textarea");
+    ta.value = txt; ta.setAttribute("readonly",""); ta.style.position="fixed"; ta.style.top="-1000px";
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); done(); }catch(e){ alert(txt); }
+    document.body.removeChild(ta);
+  }
 }
 function stamp(iso){ if(!iso) return ""; var d=new Date(iso); if(isNaN(d)) return "";
   var p=function(n){return (n<10?"0":"")+n;};
@@ -111,12 +131,14 @@ function lastSeen(w){
 
 // Her progress, drawn from counts only. Programme day N maps to week/day the same way the
 // tracker does: cohorts start on Sunday, so day 1 is Sunday and day 7 is Saturday.
-function usageBars(u, mode){
+function usageBars(u, mode, upToDay){
   var out = [];
   if(mode === "week"){
-    for(var wk=1; wk<=10; wk++){
+    var lastWeek = Math.min(10, Math.ceil(upToDay/7));
+    for(var wk=1; wk<=lastWeek; wk++){
       var got=0, tot=0;
       for(var dy=1; dy<=7; dy++){
+        if((wk-1)*7+dy > upToDay) break;      // a week still in progress counts only its days so far
         var p = u.days[wk+"-"+dy];
         if(p){ got += p[0]; tot += p[1]; }
       }
@@ -124,10 +146,10 @@ function usageBars(u, mode){
     }
     return out;
   }
-  for(var n=1; n<=70; n++){
+  for(var n=1; n<=upToDay; n++){
     var w2 = Math.floor((n-1)/7)+1, d2 = ((n-1)%7)+1;
     var pair = u.days[w2+"-"+d2];
-    if(!pair) continue;
+    if(!pair) continue;                        // Saturdays carry no content
     out.push({ label:String(n), pct: Math.round(pair[0]*100/pair[1]),
                title:"שבוע "+w2+" יום "+d2+": "+pair[0]+" מתוך "+pair[1] });
   }
@@ -137,14 +159,24 @@ function usageBars(u, mode){
 function usagePanel(w){
   var u = w.usage;
   if(!u) return '<div class="stats"><div class="meta">אין עדיין נתוני שימוש. הם נאספים בפעם הבאה שהיא תפתח את האפליקציה.</div></div>';
+
+  // Only days she has actually reached. Drawing the rest of the programme as empty bars made
+  // a woman on day 6 look as though she had missed the twelve days after it.
+  var today = w.start ? Math.max(0, Math.min(70, days(w.start, DATA.today)+1)) : 70;
+  if(!today) return '<div class="stats"><div class="meta">המחזור שלה עוד לא התחיל.</div></div>';
+
   var tot=0, got=0;
-  Object.keys(u.days||{}).forEach(function(k){ got += u.days[k][0]; tot += u.days[k][1]; });
-  var bars = usageBars(u, STATSMODE);
+  for(var n=1; n<=today; n++){
+    var pair = u.days[(Math.floor((n-1)/7)+1)+"-"+(((n-1)%7)+1)];
+    if(pair){ got += pair[0]; tot += pair[1]; }
+  }
+  var bars = usageBars(u, STATSMODE, today);
   return '<div class="stats">'+
-    '<div class="statline"><b>'+(tot?Math.round(got*100/tot):0)+'%</b> מהתכנים · '+
-      '<b>'+u.videosDone+'</b> מתוך '+u.videosTotal+' סרטונים · '+
-      '<b>'+u.trackerDays+'</b> ימי יומן מעקב · '+
-      '<b>'+u.views+'</b> צפיות בסרטונים</div>'+
+    '<div class="statline"><b>'+(tot?Math.round(got*100/tot):0)+'%</b> מהתכנים שנפתחו לה · '+
+      '<b>'+u.videosDone+'</b> סרטונים · '+
+      '<b>'+u.trackerDays+'</b> ימי יומן מעקב'+
+      (u.views ? ' · <b>'+u.views+'</b> צפיות חוזרות' : '')+'</div>'+
+    (u.views ? '' : '<div class="meta">צפיות חוזרות נספרות מ-'+il(VIEWS_SINCE)+'.</div>')+
     '<div class="chips"><span class="chip'+(STATSMODE==="day"?" on":"")+'" data-sm="day">לפי יום</span>'+
       '<span class="chip'+(STATSMODE==="week"?" on":"")+'" data-sm="week">לפי שבוע</span></div>'+
     (bars.length
@@ -152,7 +184,8 @@ function usagePanel(w){
           return '<div class="bar" title="'+esc(b.title)+'">'+
             '<div class="barbox"><div class="barfill" style="height:'+Math.max(b.pct,2)+'%"></div></div>'+
             '<div class="barlbl">'+esc(b.label)+'</div></div>';
-        }).join("")+'</div>'
+        }).join("")+'</div>'+
+        '<div class="meta">כל עמודה היא יום בתוכנית. הגובה הוא כמה מהתכנים של אותו יום היא סיימה.</div>'
       : '<div class="meta">עוד לא צפתה בשום תוכן.</div>')+
     '</div>';
 }
@@ -315,7 +348,9 @@ function render(){
       (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
       (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+'</div>'+
-      '<div class="meta">'+esc(w.phone||"אין טלפון")+' · '+esc(w.email)+'</div>'+
+      '<div class="meta">'+esc(w.phone||"אין טלפון")+
+        (w.phone?' <button class="lnk" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+
+        ' · '+esc(w.email)+' <button class="lnk" data-copy="'+esc(w.email)+'">העתקה</button></div>'+
       '<div class="meta">מחזור '+il(w.start)+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
       (w.newApp
         ? '<div class="until">גישה עד: <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+
@@ -384,6 +419,8 @@ function render(){
   app.querySelectorAll("[data-d]").forEach(function(el){ el.onclick=function(){ COHORT=el.getAttribute("data-d"); GROUP=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
+  app.querySelectorAll("[data-copy]").forEach(function(el){ el.onclick=function(){
+    copyText(el.getAttribute("data-copy"), el); }; });
   app.querySelectorAll("[data-stats]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-stats"); STATS = (STATS===em ? "" : em); render(); }; });
   app.querySelectorAll("[data-sm]").forEach(function(el){ el.onclick=function(){
