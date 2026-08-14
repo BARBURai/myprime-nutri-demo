@@ -1870,6 +1870,8 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
+  // The goal only exists from week 2 onward, so before that there is nothing to edit.
+  const stepGoalEditable = (programWeek || 1) >= 2;
   const [baseOpen, setBaseOpen] = useState(false);
   const [dietOpen, setDietOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
@@ -1978,12 +1980,18 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
         {unlockedOn(profile.startDate, TODAY, MACRO_UNLOCK) && <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
       </div>
 
-      <div onClick={() => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: effStepGoal != null ? effStepGoal : 2000 })} style={{ background: C.amberBg, borderRadius: 12, padding: 12, marginBottom: 14, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div onClick={stepGoalEditable ? () => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: effStepGoal != null ? effStepGoal : 2000 }) : undefined} style={{ background: C.amberBg, borderRadius: 12, padding: 12, marginBottom: 14, cursor: stepGoalEditable ? "pointer" : "default", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ fontSize: 14, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}><Footprints size={15} color={C.amber} /> יעד צעדים יומי</span>
           {profile.stepBaseline != null && <span style={{ fontSize: 12.5, color: C.faint }}>התחלת ב-{profile.stepBaseline.toLocaleString()}</span>}
         </span>
-        <span style={{ fontWeight: 600, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}>{effStepGoal != null ? `${effStepGoal.toLocaleString()} צעדים` : "מודדת ממוצע"} <Pencil size={13} color={C.faint} /></span>
+        {/* Week 1 measures her baseline, and the goal is computed on the first day of week 2
+            from the whole week she just recorded. Letting her type a number in the middle of
+            that week would be quietly overwritten, which is what "it will not save" looked
+            like from her side. So it is read-only until then, and it says why. */}
+        {stepGoalEditable
+          ? <span style={{ fontWeight: 600, color: C.amber, display: "flex", alignItems: "center", gap: 6 }}>{effStepGoal != null ? `${effStepGoal.toLocaleString()} צעדים` : "מודדת ממוצע"} <Pencil size={13} color={C.faint} /></span>
+          : <span style={{ fontSize: 13, color: C.amber, textAlign: "left", maxWidth: 160, lineHeight: 1.4 }}>מודדת ממוצע<br /><span style={{ color: C.faint }}>היעד נקבע ביום הראשון של שבוע 2</span></span>}
       </div>
 
       <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 4 }}>
