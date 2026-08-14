@@ -216,6 +216,32 @@ console.log("\nחסרות קבוצה: השבוע והשבוע הבא בלבד");
   CSV2 = null;
 }
 
+console.log("\nנתוני שימוש");
+{
+  check("בלי מייל נדחה", (await callUsage({ days: {} })).code === 400);
+  check("שיטה שאינה POST נדחית", await (async () => { const r = mkRes(); await usageHandler({ method: "GET" }, r); return r.code === 405; })());
+
+  await callUsage({
+    email: "yafit@test.com",
+    days: { "1-1": [2, 3], "1-2": [3, 3], "2-1": [0, 2], "bad-key!": [1, 1], "3-1": [9, 2] },
+    videosDone: 41, videosTotal: 88, views: 53, trackerDays: 23,
+  });
+  const u = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "yafit@test.com").usage;
+  check("הנתונים נשמרו והוחזרו", !!u && u.trackerDays === 23 && u.videosDone === 41);
+  check("יום תקין נשמר כמו שהוא", u.days["1-1"][0] === 2 && u.days["1-1"][1] === 3);
+  check("מפתח לא תקין נזרק", u.days["bad-key!"] === undefined);
+  check("הושלמו לא יכול לעבור את הסך הכל", u.days["3-1"][0] === 2);
+  check("אישה בלי נתונים מחזירה null", (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "ruti@test.com").usage === null);
+
+  // The evening reminder reads this flag to skip a woman who already finished today.
+  const day = new Date().toISOString().slice(0, 10);
+  check("בלי doneToday לא נכתב סימון", !store.kv[`trk:${day}:yafit@test.com`]);
+  await callUsage({ email: "yafit@test.com", days: {}, day, doneToday: true });
+  check("עם doneToday נכתב סימון ליום הנוכחי", store.kv[`trk:${day}:yafit@test.com`] === "1");
+  await callUsage({ email: "nili@test.com", days: {}, day: "not-a-date", doneToday: true });
+  check("תאריך לא תקין אינו יוצר סימון", !store.kv["trk:not-a-date:nili@test.com"]);
+}
+
 console.log("\nחוסן");
 const hadFetch = globalThis.fetch;
 globalThis.fetch = async (url) => {

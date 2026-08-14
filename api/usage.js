@@ -60,6 +60,12 @@ export default async function handler(req, res) {
 
   try {
     await redis(RU, RT, "HSET", "admin:usage", email, JSON.stringify(rec));
+    // "She finished today's tasks", so tonight's reminder can skip her. One day only: it
+    // expires on its own, and tomorrow she is back in the list unless she finishes again.
+    if (body && body.doneToday) {
+      const day = String(body.day || "").match(/^\d{4}-\d{2}-\d{2}$/) ? body.day : null;
+      if (day) { try { await redis(RU, RT, "SET", `trk:${day}:${email}`, "1", "EX", 172800); } catch (e) {} }
+    }
     return res.status(200).json({ ok: true, stored: true });
   } catch (e) {
     // Never worth surfacing to a participant: this runs in the background on app load.
