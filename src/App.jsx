@@ -485,7 +485,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.11";
+const VERSION = "5.12";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5403,9 +5403,12 @@ async function enableDailyReminder(email) {
     }
     // Her start date rides along so the morning push can tell which program day she is on.
     // Read here rather than passed in, so every existing caller keeps working unchanged.
-    let startDate = "";
+    let startDate = "", pushName = "";
     try { startDate = localStorage.getItem("myprime_start_date") || ""; } catch (e) {}
-    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", subscription: sub, startDate, hour: reminderHour() }) });
+    // Her first name, so the evening push can congratulate her by name on a day she finished.
+    // Read here rather than passed in, so all five call sites stay as they are.
+    try { pushName = localStorage.getItem("myprime_access_name") || ""; } catch (e) {}
+    await fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email || "", name: pushName || "", subscription: sub, startDate, hour: reminderHour() }) });
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: "error" };
@@ -5547,12 +5550,18 @@ export default function App() {
   // Progress counts for the office screen, sent once per load. Counts only: how much of each
   // day's content she finished, video completions, and how many days she filled the tracker.
   // Nothing about food, weight or measurements leaves the device, and this must stay that way.
-  const usageSentRef = useRef(false);
+  const usageSentRef = useRef("");
   useEffect(() => {
-    if (gate !== "ok" || usageSentRef.current) return;
+    if (gate !== "ok") return;
+    // Re-send when today's completion flips, so the evening reminder can skip a woman who
+    // already finished. Sending once per load would miss the common case: she fills the
+    // tracker at 18:00 without reloading, and the 19:00 push still asks whether she filled it.
+    const doneToday = !!(checkins[TODAY] && checkins[TODAY]._done);
+    const stamp = TODAY + (doneToday ? ":done" : ":open");
+    if (usageSentRef.current === stamp) return;
     const em = gateEmail || (() => { try { return localStorage.getItem("myprime_access_email") || ""; } catch (e) { return ""; } })();
     if (!em) return;
-    usageSentRef.current = true;
+    usageSentRef.current = stamp;
     let payload;
     try {
       const u = usageSummary();
@@ -5560,7 +5569,7 @@ export default function App() {
         const v = checkins[d];
         return v && typeof v === "object" && Object.keys(v).length > 0;
       }).length;
-      payload = { email: em, ...u, trackerDays };
+      payload = { email: em, ...u, trackerDays, day: TODAY, doneToday };
     } catch (e) { return; }
     fetch("/api/usage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
       .catch(() => { /* a participant must never see this fail */ });

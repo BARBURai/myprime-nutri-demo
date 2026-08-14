@@ -1,4 +1,7 @@
 // Daily Web Push, two jobs from one function:
+//   Anyone who already finished today's tasks gets a congratulation instead of the reminder,
+//   at the same hour: api/usage.js sets trk:<day>:<email> the moment the day is marked
+//   complete, and that flag expires by itself the next day.
 //   evening (default) - 19:00 Asia/Jerusalem, "did you fill the diary today?", same text for
 //     everyone, on programme days 3 to 70. On FRIDAY it aims for 18:00 instead, so it lands
 //     before Shabbat comes in; vercel.json has a Friday-only 15:00 UTC cron for that, and the
@@ -186,6 +189,19 @@ export default async function handler(req, res) {
   // Who was NOT in the app yesterday. One MGET for everyone rather than a round trip per
   // woman, which at 1,300 subscriptions is the difference between one call and 1,300.
   const wasActive = new Map();
+  // Who already finished today's tasks. Asking a woman whether she filled the tracker after
+  // she just filled it is noise, and noise is what makes her switch notifications off, which
+  // costs her the reminders that do help. One MGET for everyone, same as above.
+  const doneToday = new Set();
+  if (!morning) {
+    const emails = [...new Set(entries.map(([, v]) => { try { return (JSON.parse(v).email || "").trim().toLowerCase(); } catch (e) { return ""; } }).filter(Boolean))];
+    if (emails.length) {
+      try {
+        const vals = await redisCmd(RU, RT, ["MGET", ...emails.map((e) => `trk:${today}:${e}`)]);
+        emails.forEach((e, i) => { if (Array.isArray(vals) && vals[i]) doneToday.add(e); });
+      } catch (e) { /* unknown: send the reminder rather than silence someone who needs it */ }
+    }
+  }
   if (morning) {
     const emails = [...new Set(entries.map(([, v]) => { try { return (JSON.parse(v).email || "").trim().toLowerCase(); } catch (e) { return ""; } }).filter(Boolean))];
     if (emails.length) {
@@ -206,6 +222,17 @@ export default async function handler(req, res) {
     if (only && (rec.email || "").trim().toLowerCase() !== only) continue;
 
     let payload = eveningPayload;
+    // A woman who finished everything today gets praise instead of a reminder, at the same
+    // hour. Silence would have worked too, but a medal earned and not mentioned is a wasted
+    // moment, and asking her whether she filled the tracker she just filled is noise.
+    if (!morning && doneToday.has((rec.email || "").trim().toLowerCase())) {
+      const nm = String(rec.name || "").trim();
+      payload = JSON.stringify({
+        title: nm ? `כל הכבוד ${nm}! 🥇` : "כל הכבוד! 🥇",
+        body: "ביצעת היום את כל המשימות וקיבלת מדליה. תמשיכי ככה ותראי תוצאות ❤️ ענת",
+        url: "/",
+      });
+    }
     if (!morning && !hasTracker(rec.startDate, today)) { quiet++; continue; }
     if (!morning && !serve.includes(reminderHourOf(rec, today))) { quiet++; continue; }
     if (morning) {
