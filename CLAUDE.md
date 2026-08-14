@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v5.10** · עודכן: 12 באוגוסט 2026
+**גרסה נוכחית: v5.11** · עודכן: 12 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -261,7 +261,7 @@ QA_BASE_URL="https://myprime-nutri-demo.vercel.app" node qa/run-qa.mjs   # שכ�
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs
+node qa/version-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -773,6 +773,12 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v5.11** - **מספר הגרסה שהאפליקציה הציגה נתקע על v4.86 במשך עשרים וארבע גרסאות.** ה-`sed` שעדכן את `CLAUDE.md` הצליח, וזה שעדכן את `src/App.jsx` לא מצא את המחרוזת ולא עשה כלום, **וכל עדכון אחריו חיפש מחרוזת שכבר לא הייתה שם.** אף בדיקה לא תפסה, כי הקוד תקין וה-build עובר.
+
+**זה לא קוסמטי:** המספר הזה הוא מה שרון קורא כדי לדעת אם הטלפון שלו מריץ את הקוד החדש. **הוא הראה 4.86 בזמן שבייצור רץ 5.10.**
+
+**נוספה `qa/version-check.mjs`** שמשווה את שני המקומות ונופלת אם הם לא זהים, והיא נכנסה גם לרשימת בדיקות השלמות של סעיף 3.
 
 **v5.10** - **"לא מצליחה לשמור את יעד הצעדים" בשבוע 1, ומשתתפת דיווחה.** היא כן שמרה, **והאפליקציה פשוט התעלמה.** `effectiveStepGoal` מחזירה `null` לפני שבוע 2, ולכן השורה המשיכה להציג "מודדת ממוצע" אחרי כל שמירה. **שדה שניתן לעריכה ואין לעריכה שום השפעה נקרא כתקלה.**
 
