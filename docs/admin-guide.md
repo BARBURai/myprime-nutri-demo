@@ -168,4 +168,4 @@ https://app.myprime.co.il/admin.html
 
 ---
 
-*עודכן לגרסה 5.21*
+*עודכן לגרסה 5.22*
