@@ -43,6 +43,14 @@ check("הצ׳יפ נוסף רק למי שמגיע לה", /showGlow \? \[\.\.\.FI
 check("ובצ׳יפ הזה שורת השבועות נעלמת", /!isPdf && !isGlow &&/.test(mod));
 check("אין מקף ארוך בקופי", !/[–—]/.test(glow));
 
+console.log("\nארבעת הסרטונים\n");
+const ids = (glow.match(/videoId: "([0-9a-f-]{36})"/g) || []);
+check("ארבעה סרטונים: מבוא ושלושה שיעורים", ids.length === 4, ids.length + " סרטונים");
+check("לכל אחד מזהה תקין ושונה", new Set(ids).size === 4);
+check("המבוא ראשון", glow.indexOf('"מבוא"') < glow.indexOf('"שיעור 3'));
+check("הכותרות בדיוק כפי שרון שלח", ["מבוא", "שיעור 3 - פריימר ובסיס (מייק אפ)", "שיעור 6 איפור עיניים בסיסי", "שיעור 8 - מראה עיניים מעושן"].every((t) => glow.includes(`title: "${t}"`)));
+check("כולם מסוג וידאו ובלי דפים", (glow.match(/type: "video"/g) || []).length === 4 && !/pdf|pageImages/.test(glow));
+
 console.log("\nשני התיקונים שאושרו באותה גרסה\n");
 check("שבת נקראת כשישי במסך כל התוכנית", /const openDow = todayDow === 0 \? 6 : todayDow;/.test(mod));
 check("והכלל משתמש בו ולא ב-todayDow", /d <= openDow/.test(mod) && !/d <= todayDow/.test(mod));
