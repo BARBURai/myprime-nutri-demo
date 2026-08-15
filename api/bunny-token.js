@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { isGlowVideo } from "./glow-ids.js";
+import { isGlowVideo } from "./_glow-ids.js";
 
 // Bunny Stream library that holds the MyPrime course videos.
 // The library ID and CDN hostname are NOT secret (they appear in every play URL),

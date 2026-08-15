@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v5.20** · עודכן: 15 באוגוסט 2026
+**גרסה נוכחית: v5.21** · עודכן: 15 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -284,7 +284,7 @@ QA_BASE_URL="https://myprime-nutri-demo.vercel.app" node qa/run-qa.mjs   # שכ�
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -798,6 +798,14 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 
 ## 17. יומן שינויים אחרון
 
+**v5.21** - **הבנייה בוורסל נפלה על "No more than 12 Serverless Functions", ואצלי היא עברה.** `api/_glow-ids.js` נוצר ב-v5.19 בשם `api/glow-ids.js`, **ווורסל סופרת כל קובץ בתיקייה `api/` כפונקציה**, גם כשהוא רק רשימה משותפת. זה העלה את המספר מ-12 ל-13 ופסל את כל הדיפלוי.
+
+**הפתרון כבר היה בשימוש בריפו ולא שמתי לב אליו: `api/_sheet.js`.** קובץ שמתחיל בקו תחתון אינו נספר. הקובץ שונה ל-`api/_glow-ids.js`.
+
+**זו המלכודת השלישית של וורסל שנרשמת כאן, וכולן חולקות אותו דפוס: הבנייה המקומית עוברת, והכשל הוא של וורסל בלבד.** ראה גם סעיף 5.6, טווח שעות ב-cron ושדות משלנו ב-`vercel.json`.
+
+**נוספה `qa/vercel-limits-check.mjs`** שסופרת את הפונקציות, מוודאת שכל קובץ עם קו תחתון באמת אינו נקודת קצה, ובודקת גם את שתי המלכודות של `vercel.json`. **12 מתוך 12 עכשיו, כלומר כל פונקציה חדשה תפיל את הבדיקה לפני הדחיפה ולא אחריה.**
+
 **v5.20** - **באג שהעליתי ב-v5.16 הפיל את מסך "כל התוכנית" לגמרי, ורון ראה את התכנים נעלמים.** בתיקון "שום יום לא נפתח מעצמו" מחקתי משתנה, **ושורה שמתחתיו המשיכה להשתמש בו.** התוצאה היא שגיאת ריצה בכל פעם שהרשימה מנסה להיצייר.
 
 **למה שום דבר לא תפס את זה:** **הבנייה עוברת**, כי זו לא שגיאת תחביר. **כל אחת עשרה בדיקות הלא מקוונות עוברות**, כי הן לא מריצות דפדפן. **ושכבה 3 עברה 32 מתוך 32**, כי לא היה בה ולו תרחיש אחד שפותח את "כל התוכנית".
@@ -816,7 +824,7 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 
 **שתי החלטות שחשוב לשמור:**
 1. **הבונוס נכשל לצד הבטוח, ו-88 סרטוני התוכנית לא.** בלי מייל, בלי דגל או כשה-Redis נופל, הבונוס נחסם **והתוכנית ממשיכה לעבוד**. תקלה אצלנו לעולם לא תנעל אישה מהתוכנית ששילמה עליה
-2. **`api/glow-ids.js` חייב להישאר זהה ל-`src/content/glow.js`.** `qa/glow-check.mjs` משווה ונופלת על הבדל. **שיעור שיתווסף רק בצד אחד יהיה או בלתי ניתן לצפייה, או פתוח לכולם**
+2. **`api/_glow-ids.js` חייב להישאר זהה ל-`src/content/glow.js`.** `qa/glow-check.mjs` משווה ונופלת על הבדל. **שיעור שיתווסף רק בצד אחד יהיה או בלתי ניתן לצפייה, או פתוח לכולם**
 
 **ובמסך עצמו:** שיעור בונוס אינו מרונדר גם אם מצב פתוח ישן מצביע עליו.
 
