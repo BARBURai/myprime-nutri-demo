@@ -115,7 +115,7 @@ export default async function handler(req, res) {
   if (!sheetUrl) return res.status(200).json({ allowed: true, reason: "not_configured", configured: false });
   if (!email) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
 
-  let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "";
+  let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false;
   try {
     // Cache-busting: Google's published CSV can serve a stale copy for a few minutes.
     // Appending a timestamp helps fetch a fresher version, and we ask fetch not to cache.
@@ -127,7 +127,7 @@ export default async function handler(req, res) {
     // Locate the "ביטלה" (cancellation) and start-date columns by header name.
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
-    let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, headerFound = false;
+    let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, headerFound = false;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
       cancelCol = findCol(header, ["ביטלה"]);
@@ -137,6 +137,8 @@ export default async function handler(req, res) {
       phoneCol = findCol(header, ["ID", "טלפון", "phone"]);
       startCol = findCol(header, ["360 - FINAL PERSONAL START", "FINAL PERSONAL START", "PERSONAL START"]);
       monthsCol = findCol(header, ["חודשי גישה נוספים"]);
+      // Optional. Marks the women who also received the מיי פריים Glow bonus lessons.
+      glowCol = findCol(header, ["בונוס איפור"]);
       headerFound = cancelCol !== -1 || startCol !== -1;
     }
 
@@ -148,6 +150,7 @@ export default async function handler(req, res) {
       const cells = parseCsvLine(line);
 
       if (phoneCol !== -1 && cells[phoneCol]) phone = String(cells[phoneCol]).replace(/[^\d]/g, "");
+      if (glowCol !== -1) glow = /^(true|yes|1|כן|✓|v)$/i.test(String(cells[glowCol] || "").trim());
 
       // Start date: prefer the exact column; else first date-looking token in the row.
       if (startCol !== -1 && cells[startCol]) {
@@ -247,5 +250,5 @@ export default async function handler(req, res) {
     try { await redis(RU, RT, "SET", `act:${israelDay(0)}:${email}`, "1", "EX", 172800); } catch (e) { /* a flag is never worth failing a login over */ }
   }
 
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone });
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow });
 }
