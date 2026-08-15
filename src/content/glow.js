@@ -22,9 +22,12 @@
 export const GLOW_TITLE = "בונוס: שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים Glow";
 export const GLOW_CHIP = "מיי פריים Glow";
 // On the diary card, where space is tight and it is seen every day until she starts watching.
-export const GLOW_CARD_LINE = "בונוס: 3 שיעורי Glow";
+export const GLOW_CARD_LINE = "בונוס: 3 שיעורי Glow 💄";
 // One compact row inside "התוכן שלי היום", instead of listing the lessons under every day.
 export const GLOW_ROW = "שיעורי הבונוס שלך במיי פריים Glow";
+// lucide has no lipstick, and a paintbrush would read as art. The emoji says makeup at a
+// glance and needs no icon set.
+export const GLOW_EMOJI = "💄";
 
 // She has played at least one bonus lesson. Only used to stop nagging her on the diary card:
 // the row inside the content screen stays, because it is her way back to them.

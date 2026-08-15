@@ -39,11 +39,12 @@ console.log("\nהקופי והמסננים\n");
 check("הכותרת בדיוק כפי שאושרה", glow.includes('export const GLOW_TITLE = "בונוס: שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים Glow"'));
 check("שם הצ׳יפ בדיוק כפי שאושר", glow.includes('export const GLOW_CHIP = "מיי פריים Glow"'));
 check("השורה מופיעה בכרטיס של מסך היום", /glow && hasGlow\(\) && !glowStarted\(\) && <div/.test(mod));
-check("הכיתוב הקצר ביומן בדיוק כפי שאושר", glow.includes('export const GLOW_CARD_LINE = "בונוס: 3 שיעורי Glow"'));
+check("הכיתוב הקצר ביומן בדיוק כפי שאושר", glow.includes('export const GLOW_CARD_LINE = "בונוס: 3 שיעורי Glow 💄"'));
+check("סימן השפתון מופיע בארבעת המקומות", (mod.match(/GLOW_EMOJI/g) || []).length >= 4);
 check("הכיתוב של השורה הקטנה בדיוק כפי שאושר", glow.includes('export const GLOW_ROW = "שיעורי הבונוס שלך במיי פריים Glow"'));
 check("שנייה אחת של צפייה מורידה את השורה מהיומן", /if \(!startedRef\.current && t > 0\)/.test(mod) && /onStart=\{openL\.week === 0 \? markGlowStarted/.test(mod));
 check("ובמסך התוכן יש שורה אחת שמקפיצה לרשימה ולא הרשימה עצמה", /setTypeF\("glow"\); setView\("all"\)/.test(mod));
-check("הצ׳יפ נוסף רק למי שמגיע לה", /showGlow \? \[\.\.\.FILTER_CHIPS, \["glow", GLOW_CHIP\]\] : FILTER_CHIPS/.test(mod));
+check("הצ׳יפ נוסף רק למי שמגיע לה", /showGlow \? \[\.\.\.FILTER_CHIPS, \["glow", .*GLOW_CHIP.*\]\] : FILTER_CHIPS/.test(mod));
 check("ובצ׳יפ הזה שורת השבועות נעלמת", /!isPdf && !isGlow &&/.test(mod));
 check("אין מקף ארוך בקופי", !/[–—]/.test(glow));
 
