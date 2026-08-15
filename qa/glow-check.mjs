@@ -58,7 +58,7 @@ check("שום יום לא נפתח מעצמו", /const opened = !!dayOpen\[dk\];
 check("ולא נשאר קוד שפותח את היום הנוכחי", !/setDayOpen\(\{ \[`\$\{todayWeek\}/.test(mod));
 
 console.log("\nהסרטונים עצמם חסומים בשרת, ולא רק במסך\n");
-const ids2 = read("api/glow-ids.js");
+const ids2 = read("api/_glow-ids.js");
 const token = read("api/bunny-token.js");
 // Every video id in the app ships inside the JavaScript bundle, so hiding the rows is not
 // protection. The only thing that actually stops a woman without the TRUE is the server
