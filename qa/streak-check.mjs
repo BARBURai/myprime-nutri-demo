@@ -105,5 +105,18 @@ for (let n = 2; n <= 70; n++) seen.add(txt(n));
 check("לפחות 30 ניסוחים שונים ב-70 יום", seen.size >= 30, seen.size + " ניסוחים");
 check("אין מקף ארוך באף משפט", ![...seen].some((t) => /[–—]/.test(t)));
 
+console.log("\nהשלמת אימון כוח, ומסך החגיגה\n");
+// A woman who trains Mon/Wed/Fri could never close Sun/Tue/Thu. The make-up row lives only
+// inside the tracker sheet, so none of the counting screens see it - that is the whole point,
+// and it is what these three checks pin down.
+const app = src;
+check("שורת ההשלמה מוצגת רק בשני, ברביעי ובשישי", /dn === 2 \|\| dn === 4 \|\| dn === 6 \? addDays\(date, -1\)/.test(app));
+check("והיא כותבת ליום הקודם ולא להיום", /setPrevValue\("strength"/.test(app));
+check("היא לא נוספה לרשימת המשימות", !/strengthmakeup/.test(app) && !/"makeup"/.test(readFileSync(new URL("../src/checkins.js", import.meta.url), "utf8")));
+check("הקופי של שורת ההשלמה מדויק", app.includes("(אופציונלי למעקב היום, במידה ועשית היום במקום אתמול. אנחנו ממליצים על יום מנוחה בין אימון לאימון)"));
+check("מסך החגיגה קופץ רק על היום הנוכחי", /if \(d === today\) celebrate = true;/.test(app));
+check("שורת הרצף מופיעה גם במסך הגביע", (app.match(/ימים ברצף<\/div>/g) || []).length === 2);
+check("החתימה של ענת כבר לא אפורה וקטנה", !/C\.faint, fontSize: 14 \}\}>ענת/.test(app));
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);

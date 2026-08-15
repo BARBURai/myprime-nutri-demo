@@ -535,7 +535,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.13";
+const VERSION = "5.14";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4409,13 +4409,23 @@ function CheckinCard({ date, today, week, phaseWeek, tasks, answers, auto, locke
   );
 }
 
-function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate, tipsSeen, onTipsSeen }) {
+function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate, tipsSeen, onTipsSeen, prevAnswers, setPrevValue }) {
   const hasAuto = tasks.some((t) => t.auto);
   const showAutoNote = hasAuto && !(tipsSeen || []).includes("autotasks");
   const dd = parseDay(date);
   const rel = relLabel(date);
   const wk = Math.min(programWeekFor(startDate, date), 10);
   const dn = dowOf(date);
+  // Strength sits on Sun/Tue/Thu, and a woman who trains Mon/Wed/Fri could never close those
+  // days. On Mon/Wed/Fri she gets one extra row that ticks YESTERDAY's workout, so the day
+  // she missed closes and earns its medal. It is not a task of today: it stays out of the
+  // ring, out of dayComplete and out of the weekly summary.
+  const prevDate = dn === 2 || dn === 4 || dn === 6 ? addDays(date, -1) : null;
+  const prevHasStrength = !!prevDate && activeTasks(Math.min(programWeekFor(startDate, prevDate), 10), dowOf(prevDate)).some((t) => t.id === "strength");
+  // Captured once on open: she trained on the recommended day, so there is nothing to make up.
+  // Read live, the row would vanish under her finger the moment she ticked it.
+  const [showMakeup] = useState(() => prevHasStrength && (prevAnswers || {}).strength !== true);
+  const makeupDone = (prevAnswers || {}).strength === true;
   const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${phaseLabel(programWeekFor(startDate, date), dn)}`;
   return (
     <SheetShell title="המעקב היומי שלי" onClose={onClose}>
@@ -4456,6 +4466,15 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
                   </div>
                 );
               })}
+              {g.id === "move" && showMakeup && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                    <span style={{ fontSize: 16, color: C.ink }}>אימון כוח</span>
+                    <span style={{ fontSize: 12.5, color: C.sub, marginTop: 2, lineHeight: 1.5 }}>(אופציונלי למעקב היום, במידה ועשית היום במקום אתמול. אנחנו ממליצים על יום מנוחה בין אימון לאימון)</span>
+                  </div>
+                  <button onClick={() => setPrevValue && setPrevValue("strength", makeupDone ? null : true)} aria-label="אימון כוח" style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 9, border: `1.5px solid ${makeupDone ? C.brand : C.line}`, background: makeupDone ? C.brand : C.panel, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{makeupDone ? <Check size={16} /> : null}</button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -4491,14 +4510,14 @@ function CheckinCheer({ name, streak, onClose }) {
         {cheer.streak >= 2 && <div style={{ fontSize: 18, fontWeight: 700, color: C.brand, marginTop: 8 }}>{cheer.streak} ימים ברצף</div>}
         <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{cheer.text}
           {firstEver && <div style={{ marginTop: 6 }}>אפשר תמיד להוסיף עוד עדכונים באפליקציה</div>}
-          <div style={{ marginTop: 2, color: C.faint, fontSize: 14 }}>ענת</div></div>
+          <div style={{ marginTop: 2 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>
       </div>
     </div>
   );
 }
 
-function TrophyCheer({ week, name, onClose }) {
+function TrophyCheer({ week, name, streak, onClose }) {
   const colors = ["#F4C04A", C.brand, C.amber, C.info, C.macroC];
   const src = week >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${Math.max(1, Math.min(9, week))}.webp`;
   const champ = week >= 10;
@@ -4512,7 +4531,8 @@ function TrophyCheer({ week, name, onClose }) {
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.35)" }}>
         <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
         <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : "גביע השבוע נכנס לארון!"}</div>
-        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2, color: C.faint, fontSize: 14 }}>ענת</div></div>
+        {streak >= 2 && <div style={{ fontSize: 18, fontWeight: 700, color: C.brand, marginTop: 8 }}>{streak} ימים ברצף</div>}
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>{champ ? "סגירה 💜" : "ממשיכות חזק 💜"}</Btn></div>
       </div>
     </div>
@@ -4529,7 +4549,7 @@ function FastingIntroModal({ onOptIn, onDismiss }) {
           היום העליתי לך סרטון על משימת הצום לסירוגין.<br />
           אם את מעוניינת לנסות את המשימה - אשרי זאת בכפתור.<br />
           תמיד אפשר לשנות את הבחירה בפרופיל.
-          <div style={{ marginTop: 8, color: C.faint, fontSize: 14 }}>ענת</div>
+          <div style={{ marginTop: 8 }}>ענת</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 18 }}>
           <Btn onClick={onOptIn}>כן, אשמח לנסות 💜</Btn>
@@ -6028,7 +6048,10 @@ export default function App() {
     for (let n = 1; n <= total; n++) {
       const d = addDays(profile.startDate, n - 1);
       if (dayComplete(profile.startDate, d, profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog) && !(checkins[d] && checkins[d]._done)) {
-        next[d] = { ...(next[d] || {}), _done: true }; changed = true; celebrate = true;
+        next[d] = { ...(next[d] || {}), _done: true }; changed = true;
+        // Only today gets the confetti. A day closed after the fact - a late fill, or the
+        // make-up of yesterday's strength workout - still earns its medal, quietly.
+        if (d === today) celebrate = true;
       }
     }
     if (changed) setCheckins(next);
@@ -6340,9 +6363,9 @@ export default function App() {
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
-            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
+            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
-            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
