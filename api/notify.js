@@ -222,17 +222,12 @@ export default async function handler(req, res) {
     if (only && (rec.email || "").trim().toLowerCase() !== only) continue;
 
     let payload = eveningPayload;
-    // A woman who finished everything today gets praise instead of a reminder, at the same
-    // hour. Silence would have worked too, but a medal earned and not mentioned is a wasted
-    // moment, and asking her whether she filled the tracker she just filled is noise.
-    if (!morning && doneToday.has((rec.email || "").trim().toLowerCase())) {
-      const nm = String(rec.name || "").trim();
-      payload = JSON.stringify({
-        title: nm ? `כל הכבוד ${nm}! 🥇` : "כל הכבוד! 🥇",
-        body: "ביצעת היום את כל המשימות וקיבלת מדליה. תמשיכי ככה ותראי תוצאות ❤️ ענת",
-        url: "/",
-      });
-    }
+    // A woman who already finished everything today gets nothing tonight. Asking her whether
+    // she filled the tracker she just filled is noise, and the congratulation is not sent from
+    // here: it is on the celebration screen inside the app, the moment she closes the day.
+    // That reaches her at any hour, including long after this reminder has gone out, and it
+    // reaches her even if she has notifications turned off.
+    if (!morning && doneToday.has((rec.email || "").trim().toLowerCase())) { quiet++; continue; }
     if (!morning && !hasTracker(rec.startDate, today)) { quiet++; continue; }
     if (!morning && !serve.includes(reminderHourOf(rec, today))) { quiet++; continue; }
     if (morning) {
