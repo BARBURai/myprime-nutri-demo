@@ -21,6 +21,20 @@
 // not one of the three, which is why the heading still reads "שלושה שיעורים" above four rows.
 export const GLOW_TITLE = "בונוס: שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים Glow";
 export const GLOW_CHIP = "מיי פריים Glow";
+// On the diary card, where space is tight and it is seen every day until she starts watching.
+export const GLOW_CARD_LINE = "בונוס: 3 שיעורי Glow";
+// One compact row inside "התוכן שלי היום", instead of listing the lessons under every day.
+export const GLOW_ROW = "שיעורי הבונוס שלך במיי פריים Glow";
+
+// She has played at least one bonus lesson. Only used to stop nagging her on the diary card:
+// the row inside the content screen stays, because it is her way back to them.
+export const GLOW_STARTED_KEY = "mp_glow_started_v1";
+export function glowStarted() {
+  try { return localStorage.getItem(GLOW_STARTED_KEY) === "1"; } catch (e) { return false; }
+}
+export function markGlowStarted() {
+  try { localStorage.setItem(GLOW_STARTED_KEY, "1"); } catch (e) {}
+}
 
 export const GLOW_DAY = {
   week: 0,

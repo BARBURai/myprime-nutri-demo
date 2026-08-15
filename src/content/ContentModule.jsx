@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Play, Maximize2, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
-import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, hasGlow } from "./glow";
+import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, hasGlow, glowStarted, markGlowStarted } from "./glow";
 export { contentForDay } from "./data";
 
 
@@ -79,7 +79,7 @@ function loadPlayerJs() {
 const WATCH_THRESHOLD = 0.8; // mark complete after 80% real watch time
 const SEEK_GAP = 3;          // seconds: a jump larger than this between timeupdates is a seek, not playback
 
-function BunnyPlayer({ videoId, C, font, onReach80 }) {
+function BunnyPlayer({ videoId, C, font, onReach80, onStart }) {
   const [url, setUrl] = useState(null);
   const [err, setErr] = useState(false);
   const liveRef = useRef(true);
@@ -91,8 +91,11 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
   const lastTimeRef = useRef(null); // previous currentTime seen
   const firedRef = useRef(false);   // 80% already reported
   const reachCbRef = useRef(onReach80);
+  const startCbRef = useRef(onStart);
+  const startedRef = useRef(false); // "she pressed play", reported once
   const playerRef = useRef(null);
   useEffect(() => { reachCbRef.current = onReach80; }, [onReach80]);
+  useEffect(() => { startCbRef.current = onStart; }, [onStart]);
 
   useEffect(() => {
     liveRef.current = true;
@@ -110,7 +113,7 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
 
   // Reset tracking whenever the video changes.
   useEffect(() => {
-    durationRef.current = 0; watchedRef.current = 0; lastTimeRef.current = null; firedRef.current = false;
+    durationRef.current = 0; watchedRef.current = 0; lastTimeRef.current = null; firedRef.current = false; startedRef.current = false;
   }, [videoId]);
 
   // Attach player.js and accumulate real watch time (seeks ignored).
@@ -128,6 +131,9 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
         player.on("timeupdate", (data) => {
           const t = data && typeof data.seconds === "number" ? data.seconds : (typeof data === "number" ? data : null);
           if (t == null) return;
+          // A second of playback is enough to count as "she has seen it". Used only to stop
+          // the bonus line nagging her on the diary card.
+          if (!startedRef.current && t > 0) { startedRef.current = true; if (startCbRef.current) startCbRef.current(); }
           if (data && typeof data.duration === "number" && data.duration > 0) durationRef.current = data.duration;
           const prev = lastTimeRef.current;
           if (prev != null) {
@@ -185,7 +191,7 @@ export function ContentDayCard({ week, dow, C, font, onOpen, glow }) {
       <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
         <div style={{ fontSize: 20, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>הסרטונים שלך היום</div>
         <div style={{ fontSize: 15, color: C.brandD, marginTop: 3 }}>{day.theme ? day.theme + " · " : ""}{track ? `${doneCount}/${n}` : `${n} ${n === 1 ? "פריט" : "פריטים"}`}</div>
-        {glow && hasGlow() && <div style={{ fontSize: 14, color: C.brandD, marginTop: 4, lineHeight: 1.45 }}>{GLOW_TITLE}</div>}
+        {glow && hasGlow() && !glowStarted() && <div style={{ fontSize: 14, color: C.brandD, marginTop: 4, lineHeight: 1.45 }}>{GLOW_CARD_LINE}</div>}
       </div>
       <ChevronLeft size={20} color={C.brand} style={{ flexShrink: 0 }} />
     </div>
@@ -551,7 +557,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               </div>
             )}
 
-            {l.videoId && <div data-tut="lessonplayer"><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => { bumpView(openL.week, openL.day, openL.i); markDone(openL.week, openL.day, openL.i); } : undefined} /></div>}
+            {l.videoId && <div data-tut="lessonplayer"><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => { bumpView(openL.week, openL.day, openL.i); markDone(openL.week, openL.day, openL.i); } : undefined} onStart={openL.week === 0 ? markGlowStarted : undefined} /></div>}
             {l.sections && l.sections.map((sec, si) => (
               <div key={si} style={{ marginBottom: 20 }}>
                 {sec.h && <div style={{ fontSize: 21, fontWeight: 700, color: C.brandD, marginBottom: 8 }}>{sec.h}</div>}
@@ -735,8 +741,13 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
         {showGlow && (
           <>
             <div style={{ borderTop: `1px solid ${C.line}`, margin: "20px 0 14px" }} />
-            <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, marginBottom: 10, lineHeight: 1.4 }}>{GLOW_TITLE}</div>
-            {GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="today" />)}
+            <div onClick={() => { setTypeF("glow"); setView("all"); }} role="button" style={rowStyle}>
+              <div style={iconWrap}><Film size={21} color={C.brand} /></div>
+              <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{GLOW_ROW}</div>
+              </div>
+              <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
+            </div>
           </>
         )}
       </div>
