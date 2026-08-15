@@ -57,5 +57,21 @@ check("והכלל משתמש בו ולא ב-todayDow", /d <= openDow/.test(mod) 
 check("שום יום לא נפתח מעצמו", /const opened = !!dayOpen\[dk\];/.test(mod));
 check("ולא נשאר קוד שפותח את היום הנוכחי", !/setDayOpen\(\{ \[`\$\{todayWeek\}/.test(mod));
 
+console.log("\nהסרטונים עצמם חסומים בשרת, ולא רק במסך\n");
+const ids2 = read("api/glow-ids.js");
+const token = read("api/bunny-token.js");
+// Every video id in the app ships inside the JavaScript bundle, so hiding the rows is not
+// protection. The only thing that actually stops a woman without the TRUE is the server
+// refusing to sign the playback link.
+const listA = (glow.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) || []).sort();
+const listB = (ids2.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) || []).sort();
+check("רשימת המזהים בשרת זהה לזו שבאפליקציה", listA.length === 4 && JSON.stringify(listA) === JSON.stringify(listB), listA.length + " מול " + listB.length);
+check("שליפת הקישור בודקת אם זה סרטון בונוס", /isGlowVideo\(videoId\)/.test(token));
+check("ובלי הרשאה מחזירה סירוב", /not_entitled/.test(token) && /status\(403\)/.test(token));
+check("ההרשאה נכתבת ונמחקת בכל כניסה", /SET", `glow:\$\{email\}`/.test(access) && /DEL", `glow:\$\{email\}`/.test(access));
+check("האפליקציה שולחת את המייל בשליפת הקישור", /email=\$\{encodeURIComponent\(em\)\}/.test(mod));
+check("שיעור בונוס אינו נפתח כשאין הרשאה גם במסך", /w === 0 \? \(showGlow \? GLOW_DAY : null\)/.test(mod));
+check("88 סרטוני התוכנית לא נגעו ולא נחסמים", !/isGlowVideo/.test(mod) && token.indexOf("isGlowVideo") > 0);
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);

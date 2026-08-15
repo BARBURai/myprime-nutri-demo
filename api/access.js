@@ -248,6 +248,13 @@ export default async function handler(req, res) {
     // all the morning notification needs but not enough to answer "when was she last here".
     try { await redis(RU, RT, "HSET", "admin:seen", email, israelDay(0)); } catch (e) { /* never worth failing a login */ }
     try { await redis(RU, RT, "SET", `act:${israelDay(0)}:${email}`, "1", "EX", 172800); } catch (e) { /* a flag is never worth failing a login over */ }
+    // Entitlement to the מיי פריים Glow bonus, so api/bunny-token.js can refuse to sign
+    // those videos for anyone else. Rewritten on every entry and deleted the moment the
+    // TRUE leaves the sheet, so it can never outlive the sheet by more than one load.
+    try {
+      if (glow) await redis(RU, RT, "SET", `glow:${email}`, "1", "EX", 2592000);
+      else await redis(RU, RT, "DEL", `glow:${email}`);
+    } catch (e) { /* the bonus is never worth failing a login over */ }
   }
 
   return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow });

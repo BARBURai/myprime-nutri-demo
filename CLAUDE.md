@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v5.18** · עודכן: 15 באוגוסט 2026
+**גרסה נוכחית: v5.19** · עודכן: 15 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -284,7 +284,7 @@ QA_BASE_URL="https://myprime-nutri-demo.vercel.app" node qa/run-qa.mjs   # שכ�
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -797,6 +797,24 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v5.19** - **שיעורי הבונוס נחסמים עכשיו בשרת ולא רק במסך.** רון ביקש לוודא שמי שאין לה TRUE בעמודה לא מקבלת אותם **בשום צורה ואופן**, ובבדיקה התברר שהסתרת השורות אינה הגנה.
+
+**הסיבה:** **כל מזהי הסרטונים נשלחים לדפדפן בתוך קוד האפליקציה**, וספרתי 88 מהם בקובץ הבנוי. **ו-`api/bunny-token.js` חתם על כל מזהה שביקשו ממנו, בלי שום בדיקה.** כלומר מי שנכנסה פעם אחת יכלה לשלוף את המזהים ולייצר לעצמה קישורי צפייה, לתמיד. **אומת מול הייצור: התקבל קישור חתום תקין.**
+
+**מה שנבנה:** `api/access.js` כותב `glow:<מייל>` ב-Redis בכל כניסה **ומוחק אותו ברגע שה-TRUE יורד מהגיליון**, ו-`api/bunny-token.js` מסרב לחתום על ארבעת מזהי הבונוס בלי הדגל הזה.
+
+**שתי החלטות שחשוב לשמור:**
+1. **הבונוס נכשל לצד הבטוח, ו-88 סרטוני התוכנית לא.** בלי מייל, בלי דגל או כשה-Redis נופל, הבונוס נחסם **והתוכנית ממשיכה לעבוד**. תקלה אצלנו לעולם לא תנעל אישה מהתוכנית ששילמה עליה
+2. **`api/glow-ids.js` חייב להישאר זהה ל-`src/content/glow.js`.** `qa/glow-check.mjs` משווה ונופלת על הבדל. **שיעור שיתווסף רק בצד אחד יהיה או בלתי ניתן לצפייה, או פתוח לכולם**
+
+**ובמסך עצמו:** שיעור בונוס אינו מרונדר גם אם מצב פתוח ישן מצביע עליו.
+
+**`qa/bunny-token-check.mjs`, 10 בדיקות**, מריצה את הקובץ האמיתי מול Redis מדומה, כולל המקרה שבו Redis נופל.
+
+**מה שנשאר פתוח אצל רון בלוח הבקרה של באני:** רשימת ה-Allowed domains ריקה, כלומר כל אתר בעולם יכול להטמיע את הסרטונים. **שאר ההגדרות נבדקו בצילום מסך ותקינות:** direct play כבוי, block direct url דלוק, embed token דלוק, CDN token דלוק. **ושני דברים שאינם באותו מסך: MP4 Fallback בהגדרות הקידוד, וכפתור ההורדה בהגדרות הנגן.**
+
+**וצילום מסך אי אפשר למנוע** באפליקציית אינטרנט. רק DRM בתשלום, וגם היא לא מונעת צילום בטלפון שני.
 
 **v5.18** - הוספת מקף בכותרת "שיעור 6 - איפור עיניים בסיסי", לאחידות עם שני האחרים.
 

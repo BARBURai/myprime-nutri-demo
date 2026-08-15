@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { isGlowVideo } from "./glow-ids.js";
 
 // Bunny Stream library that holds the MyPrime course videos.
 // The library ID and CDN hostname are NOT secret (they appear in every play URL),
@@ -20,6 +21,30 @@ export default async function handler(req, res) {
   if (!key) {
     res.status(500).json({ error: "not_configured" });
     return;
+  }
+
+  // The bonus lessons are the only videos here that not every participant is entitled to.
+  // The flag is written by api/access.js on every entry, so removing the TRUE in the sheet
+  // takes her access away on her next load rather than at some later refresh.
+  //
+  // Deliberately fail CLOSED: no email, no flag, or Redis unreachable all mean no. The
+  // programme's own 88 videos are untouched by this and keep working in every case, so a
+  // Redis hiccup can never lock a woman out of the course she paid for.
+  if (isGlowVideo(videoId)) {
+    const email = String((req.query && req.query.email) || "").trim().toLowerCase();
+    const RU = process.env.UPSTASH_REDIS_REST_URL;
+    const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
+    let ok = false;
+    if (email && email.includes("@") && RU && RT) {
+      try {
+        const r = await fetch(`${RU}/GET/${encodeURIComponent("glow:" + email)}`, { headers: { Authorization: `Bearer ${RT}` } });
+        if (r.ok) ok = (await r.json()).result === "1";
+      } catch (e) { ok = false; }
+    }
+    if (!ok) {
+      res.status(403).json({ error: "not_entitled" });
+      return;
+    }
   }
   const expires = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS;
   const token = crypto.createHash("sha256").update(key + videoId + expires).digest("hex");

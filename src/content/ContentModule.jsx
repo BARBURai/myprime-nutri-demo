@@ -97,7 +97,11 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
   useEffect(() => {
     liveRef.current = true;
     setUrl(null); setErr(false);
-    fetch(`/api/bunny-token?videoId=${encodeURIComponent(videoId)}`)
+    // Her email rides along so the server can check entitlement for the bonus lessons. It is
+    // ignored for the 60 programme days, which every participant may watch.
+    let em = "";
+    try { em = localStorage.getItem("myprime_access_email") || ""; } catch (e) {}
+    fetch(`/api/bunny-token?videoId=${encodeURIComponent(videoId)}${em ? `&email=${encodeURIComponent(em)}` : ""}`)
       .then((r) => r.json())
       .then((d) => { if (!liveRef.current) return; if (d && d.url) setUrl(d.url); else setErr(true); })
       .catch(() => { if (liveRef.current) setErr(true); });
@@ -224,7 +228,9 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     }
   }, [view]);
 
-  const dayByWD = (w, d) => (w === 0 ? GLOW_DAY : allDays.find((dd) => dd.week === w && dd.day === d));
+  // Week 0 is the bonus. Guarded by showGlow as well, so that even a stale open-lesson state
+  // cannot render a bonus lesson for a woman who is not marked for it.
+  const dayByWD = (w, d) => (w === 0 ? (showGlow ? GLOW_DAY : null) : allDays.find((dd) => dd.week === w && dd.day === d));
   const isDone = (w, d, i) => !!done[lessonKey(w, d, i)];
   const isFav = (w, d, i) => !!fav[lessonKey(w, d, i)];
   const toggleDone = (w, d, i) => setDone((s) => { const n = { ...s }; const k = lessonKey(w, d, i); if (n[k]) delete n[k]; else n[k] = 1; saveStore(DONE_KEY, n); return n; });
