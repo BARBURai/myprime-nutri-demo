@@ -682,6 +682,9 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               : visibleDays.map((dd) => {
                 const dk = `${dd.week}-${dd.day}`;
                 // Closed by default, today's day included. She opens what she wants to see.
+                // isCurrent only drives the "היום" badge. On Shabbat nothing is badged, which
+                // is honest: no day of the week matches it.
+                const isCurrent = dd.week === todayWeek && dd.day === todayDow;
                 const opened = !!dayOpen[dk];
                 const track = tracksProgress(dd);
                 const shown = dd.lessons.map((l, i) => ({ l, i })).filter(({ l }) => matchesChip(l, typeF));
