@@ -420,6 +420,56 @@ function autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, acti
 }
 // A day is auto-marked complete (_done) by an effect in App the moment every
 // active task is done - no button. _done also drives the medal/trophy counts.
+
+// How many days in a row she has closed, counting back from the last day she closed.
+//
+// Two rules that matter more than the arithmetic:
+// Shabbat neither counts nor breaks. She gets no notification that day by design, and
+// breaking her streak over a day we ourselves gave her would be unfair.
+// Nothing is stored: the run is recomputed from her diary every time. That is what lets
+// a late fill at 22:00, or a day filled in retroactively tomorrow, keep the streak whole.
+function doneStreak(checkins, startDate, today) {
+  if (!startDate || !checkins) return 0;
+  const done = (d) => !!(checkins[d] && checkins[d]._done);
+  let d = today;
+  while (d >= startDate && !done(d)) d = addDays(d, -1);
+  if (d < startDate) return 0;
+  let n = 0;
+  while (d >= startDate) {
+    if (done(d)) n++;
+    else if (dowOf(d) !== 0) break;
+    d = addDays(d, -1);
+  }
+  return n;
+}
+
+// The line under the medal, and the sentence under it. Both move on cycles of a different
+// length - 7 sentences, 10 emoji, her name every third - so the same pairing only comes
+// back around after 70 days and it never reads as a template.
+const CHEER_LINES = ["המשיכי כך", "ממש יפה", "את בדרך הנכונה", "כל הכבוד לך", "אלופה!", "גאה בך", "את בפריים שלך"];
+const CHEER_EMOJI = ["🌸", "🌷", "🌼", "💐", "🥇", "🏆", "✨", "👏", "❤️", "💜"];
+const CHEER_MILESTONES = {
+  10: { t: "זה כבר לא מקרי", e: "🏆" },
+  20: { t: "זה כבר חלק מהיום שלך", e: "❤️" },
+  30: { t: "חודש שלם שלא ויתרת על עצמך", e: "🎉" },
+  40: { t: "זה כבר הרגל ולא מאמץ", e: "✨" },
+  50: { t: "זה כבר מי שאת", e: "💜" },
+  60: { t: "את בפריים שלך", e: "💐" },
+};
+function cheerFor(streak, name) {
+  const nm = (name || "").trim();
+  const ms = CHEER_MILESTONES[streak];
+  // A milestone always carries her name. It is rare enough that it lands as a personal note.
+  if (ms) return { streak, text: `${nm ? nm + ", " : ""}${ms.t} ${ms.e}` };
+  if (streak < 2) return { streak: 0, text: `כל הכבוד${nm ? ", " + nm : ""}. עוד יום שהשלמת, אני איתך 💜` };
+  // Milestone days are skipped when counting position, so the three cycles keep their
+  // order across a milestone instead of jumping a slot on the day after one.
+  let i = streak - 1;
+  for (const k in CHEER_MILESTONES) if (Number(k) < streak) i--;
+  const line = CHEER_LINES[i % CHEER_LINES.length];
+  const emoji = CHEER_EMOJI[i % CHEER_EMOJI.length];
+  return { streak, text: `${i % 3 === 2 && nm ? nm + ", " : ""}${line} ${emoji}` };
+}
 // Whether a task reads as "done" (a positive, for the warm count).
 function taskDone(task, answers, auto) {
   if (task.auto) {
@@ -485,7 +535,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.12";
+const VERSION = "5.13";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4415,8 +4465,19 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
   );
 }
 
-function CheckinCheer({ name, onClose }) {
+const CHEER_SEEN_KEY = "mp_cheer_seen_v1";
+function CheckinCheer({ name, streak, onClose }) {
   const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
+  const cheer = cheerFor(streak, name);
+  // "מדליה נכנסה לאוסף" can read as though the day is now sealed. Said once, the first
+  // time she ever sees this screen, so she knows she can keep adding to today.
+  const [firstEver] = useState(() => {
+    try {
+      if (localStorage.getItem(CHEER_SEEN_KEY)) return false;
+      localStorage.setItem(CHEER_SEEN_KEY, "1");
+      return true;
+    } catch (e) { return false; }
+  });
   return (
     <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
       <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
@@ -4427,7 +4488,10 @@ function CheckinCheer({ name, onClose }) {
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", textAlign: "center", maxWidth: 300, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.3)" }}>
         <img src={MEDAL_SRC} alt="" width={100} height={100} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.6s cubic-bezier(.2,1.3,.5,1) both" }} />
         <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginTop: 10 }}>מדליה נכנסה לאוסף!</div>
-        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>כל הכבוד{name && name.trim() ? `, ${name.trim()}` : ""}. עוד יום שהשלמת, אני איתך 💜<div style={{ marginTop: 2, color: C.faint, fontSize: 14 }}>ענת</div></div>
+        {cheer.streak >= 2 && <div style={{ fontSize: 18, fontWeight: 700, color: C.brand, marginTop: 8 }}>{cheer.streak} ימים ברצף</div>}
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{cheer.text}
+          {firstEver && <div style={{ marginTop: 6 }}>אפשר תמיד להוסיף עוד עדכונים באפליקציה</div>}
+          <div style={{ marginTop: 2, color: C.faint, fontSize: 14 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>
       </div>
     </div>
@@ -6277,7 +6341,7 @@ export default function App() {
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
-            {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} onClose={() => setSheet(null)} />}
+            {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
