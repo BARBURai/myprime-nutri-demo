@@ -80,5 +80,19 @@ check("האפליקציה שולחת את המייל בשליפת הקישור",
 check("שיעור בונוס אינו נפתח כשאין הרשאה גם במסך", /w === 0 \? \(showGlow \? GLOW_DAY : null\)/.test(mod));
 check("88 סרטוני התוכנית לא נגעו ולא נחסמים", !/isGlowVideo/.test(mod) && token.indexOf("isGlowVideo") > 0);
 
+console.log("\nהסימון הידני במסך הניהול\n");
+const adminApi = read("api/admin.js");
+const adminUi = read("public/admin.html");
+// Google serves the published sheet from a cache and lags by minutes. Our own store does not,
+// which is the whole reason the clerk can set this here at all.
+check("הניהול מקבל ושומר את הסימון", /hasOwnProperty\.call\(body, "glow"\)/.test(adminApi) && /glow: hasGlow \? glow/.test(adminApi));
+check("רק 1, 0 או ריק מתקבלים", /glow !== "1" && glow !== "0"/.test(adminApi));
+check("הניהול מחזיר גם את מה שכתוב בגיליון", /sheetGlow: !!w\.glow/.test(adminApi));
+check("והשער מעדיף את הסימון הידני", /ovr\.glow === "1"\) glow = true/.test(access) && /ovr\.glow === "0"\) glow = false/.test(access));
+check("כל שינוי נרשם ביומן", /field: "glow"/.test(adminApi));
+check("המסך מציג את שני הערכים זה לצד זה", adminUi.includes("בגיליון: ") && adminUi.includes("שיעורי בונוס Glow"));
+check("השורה מוצגת רק למי שבאפליקציה החדשה", /w\.newApp\s*\?\s*'<div class="edit"><span>שיעורי בונוס Glow/.test(adminUi));
+check('"חזרה לגיליון" מופיע רק כשיש מה לבטל', /w\.glowOverride\?'<button class="btn" data-glow=""/.test(adminUi));
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);

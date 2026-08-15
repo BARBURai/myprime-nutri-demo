@@ -359,6 +359,11 @@ function render(){
       (w.override?'<div class="manual">שונה ידנית · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')+
       ((w.log&&w.log.length)?'<div class="log">'+w.log.map(function(L){
         var pre = esc(stamp(L.at))+' · '+esc(L.by||"לא ידוע")+' · ';
+        if(L.field === "glow"){
+          return pre + (L.to === "1" ? 'נתנה גישה לשיעורי הבונוס'
+                      : L.to === "0" ? 'הסירה גישה לשיעורי הבונוס'
+                      : 'החזירה את שיעורי הבונוס לערך שבגיליון');
+        }
         if(L.field === "group"){
           return pre + (L.to ? 'שינתה את הקבוצה מ-'+(L.from?esc(L.from):"ללא קבוצה")+' ל-'+esc(L.to)
                              : 'החזירה את הקבוצה לערך שבגיליון'+(L.from?' (הייתה '+esc(L.from)+')':''));
@@ -376,6 +381,14 @@ function render(){
             (w.groupOverride?'<button class="btn" data-cleargroup="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
           '</div>'+
           '<div class="note">שיוך הקבוצה כאן משמש את האפליקציה בלבד. <b>יש לעדכן גם את הגיליון הראשי.</b></div>'+
+          (w.newApp
+            ? '<div class="edit"><span>שיעורי בונוס Glow'+(w.glowOverride?" ✎":"")+':</span>'+
+                '<span>'+(w.glow?"<b>יש גישה</b>":"<b>אין גישה</b>")+' · בגיליון: '+(w.sheetGlow?"יש גישה":"אין גישה")+'</span>'+
+                '<button class="btn'+(w.glow?" p":"")+'" data-glow="1" data-for="'+esc(w.email)+'">יש גישה</button>'+
+                '<button class="btn'+(w.glow?"":" p")+'" data-glow="0" data-for="'+esc(w.email)+'">אין גישה</button>'+
+                (w.glowOverride?'<button class="btn" data-glow="" data-for="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+              '</div>'
+            : '')+
           '<div class="edit"><span>גישה עד:</span><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
           '<span class="adds">הוסיפי '+
             '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
@@ -451,6 +464,15 @@ function render(){
     el.disabled=true; el.textContent="שומרת...";
     save(em,{group:g}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
       .catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירת קבוצה"; });
+  }; });
+  // The bonus lessons. Kept in our own store, so it applies on her next load instead of
+  // waiting minutes for Google's published sheet to refresh. The panel stays open, because
+  // the clerk usually wants to see the new state right where she pressed.
+  app.querySelectorAll("[data-glow]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-for"), v=el.getAttribute("data-glow");
+    el.disabled=true;
+    save(em,{glow:v}).then(function(r){ if(!r.ok) throw new Error(); return load().then(render); })
+      .catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
   }; });
   app.querySelectorAll("[data-cleargroup]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-cleargroup");

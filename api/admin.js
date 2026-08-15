@@ -7,7 +7,7 @@
 // and api/access.js prefers it over the sheet. The screen always shows both values, so a
 // manual change is visible rather than hidden.
 //
-//   admin:overrides  field = email, value = JSON({ until, group, by, at, log[] })
+//   admin:overrides  field = email, value = JSON({ until, group, glow, by, at, log[] })
 //   admin:seen       field = email, value = "YYYY-MM-DD" of her last app open
 //   admin:usage      field = email, value = JSON from api/usage.js (counts only)
 //
@@ -47,10 +47,16 @@ export default async function handler(req, res) {
     // key being absent is what distinguishes "not touched" from "cleared".
     const hasUntil = body && Object.prototype.hasOwnProperty.call(body, "until");
     const hasGroup = body && Object.prototype.hasOwnProperty.call(body, "group");
+    // The מיי פריים Glow bonus. "" means back to the sheet, "1" grants it, "0" takes it away
+    // even when the sheet says TRUE. Set here rather than in the sheet because Google serves
+    // the published CSV from a cache and takes minutes; this takes effect on her next load.
+    const hasGlow = body && Object.prototype.hasOwnProperty.call(body, "glow");
+    const glow = String((body && body.glow) || "").trim();
     const until = String((body && body.until) || "").trim();
     const group = String((body && body.group) || "").trim();
     if (!email) return res.status(400).json({ ok: false, error: "missing_email" });
-    if (!hasUntil && !hasGroup) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (!hasUntil && !hasGroup && !hasGlow) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (hasGlow && glow && glow !== "1" && glow !== "0") return res.status(400).json({ ok: false, error: "bad_glow" });
     if (hasUntil && until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
     if (hasGroup && group && !GROUP_RE.test(group)) return res.status(400).json({ ok: false, error: "bad_group" });
     if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
@@ -67,7 +73,7 @@ export default async function handler(req, res) {
       // What the value was before this edit. With no override in force that is the sheet's
       // own value, so read it rather than logging a blank.
       let sheetRow = null;
-      if ((hasUntil && !cur.until) || (hasGroup && !cur.group)) {
+      if ((hasUntil && !cur.until) || (hasGroup && !cur.group) || (hasGlow && !cur.glow)) {
         try {
           const sheet = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
           sheetRow = sheet.women.find((w) => w.email === email) || null;
@@ -82,9 +88,14 @@ export default async function handler(req, res) {
       if (hasGroup) {
         log.unshift({ at, by, field: "group", from: cur.group || (sheetRow ? sheetRow.group : "") || "", to: group });
       }
+      if (hasGlow) {
+        const was = cur.glow || (sheetRow ? (sheetRow.glow ? "1" : "0") : "");
+        log.unshift({ at, by, field: "glow", from: was, to: glow });
+      }
       const rec = JSON.stringify({
         until: hasUntil ? until : (cur.until || ""),
         group: hasGroup ? group : (cur.group || ""),
+        glow: hasGlow ? glow : (cur.glow || ""),
         by, at, log: log.slice(0, 20),
       });
       await redis(RU, RT, "HSET", "admin:overrides", email, rec);
@@ -171,6 +182,11 @@ export default async function handler(req, res) {
       group,
       sheetGroup: w.group || "",
       groupOverride: (ovr && ovr.group) ? { group: ovr.group, by: ovr.by || "" } : null,
+      // Both values travel to the screen: what the sheet says, and what is in force. The
+      // clerk must never have to guess which of the two she is looking at.
+      glow: (ovr && ovr.glow) ? ovr.glow === "1" : !!w.glow,
+      sheetGlow: !!w.glow,
+      glowOverride: (ovr && ovr.glow) ? { glow: ovr.glow, by: ovr.by || "" } : null,
       until,
       // `override` is only in force while it carries a date. The log survives a clearing, so
       // the office can always see what was done and by whom.

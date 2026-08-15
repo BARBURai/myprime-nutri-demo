@@ -192,7 +192,15 @@ export default async function handler(req, res) {
   let clerkUntil = "";
   try {
     const raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", email);
-    if (raw) clerkUntil = (JSON.parse(raw) || {}).until || "";
+    if (raw) {
+      const ovr = JSON.parse(raw) || {};
+      clerkUntil = ovr.until || "";
+      // The Glow bonus, set from the office screen. "1" grants it and "0" takes it away even
+      // when the sheet says TRUE; anything else leaves the sheet in charge. This is the fast
+      // path: the sheet reaches us through Google's cache and lags by minutes.
+      if (ovr.glow === "1") glow = true;
+      else if (ovr.glow === "0") glow = false;
+    }
   } catch (e) { /* fall through to the sheet */ }
   const pastWindow = clerkUntil
     ? israelDay(0) > clerkUntil
