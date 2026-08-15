@@ -12,6 +12,7 @@ import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
+import { GLOW_STARTED_KEY } from "./content/glow";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -543,7 +544,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.23";
+const VERSION = "5.24";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5170,6 +5171,9 @@ function DevViewportBar() {
 function DevDateBar({ onAnchor }) {
   const setDay = (d) => { try { window.localStorage.setItem("myprime_dev_today", d); } catch (e) {} window.location.reload(); };
   const reset = () => { try { window.localStorage.removeItem("myprime_dev_today"); } catch (e) {} window.location.reload(); };
+  // "She has already started watching a bonus lesson" is a one-way flag, so without this
+  // there is no way back to the state a new woman sees. Testing tool only.
+  const resetGlow = () => { try { window.localStorage.removeItem(GLOW_STARTED_KEY); } catch (e) {} window.location.reload(); };
   const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
   return (
     <div style={{ position: "absolute", top: "env(safe-area-inset-top, 0px)", left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
@@ -5178,6 +5182,7 @@ function DevDateBar({ onAnchor }) {
       <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
       <button onClick={() => setDay(addDays(TODAY, 1))} style={btn}>+1</button>
       <button onClick={reset} style={btn}>איפוס</button>
+      <button onClick={resetGlow} style={{ ...btn, background: "#a45" }}>איפוס Glow</button>
       <button onClick={() => onAnchor && onAnchor()} style={{ ...btn, background: "#0a7" }}>קבע יום 1</button>
     </div>
   );

@@ -41,6 +41,8 @@ check("שם הצ׳יפ בדיוק כפי שאושר", glow.includes('export cons
 check("השורה מופיעה בכרטיס של מסך היום", /glow && hasGlow\(\) && !glowStarted\(\) && <div/.test(mod));
 check("הכיתוב הקצר ביומן בדיוק כפי שאושר", glow.includes('export const GLOW_CARD_LINE = "בונוס: 3 שיעורי Glow 💄"'));
 check("סימן השפתון מופיע בארבעת המקומות", (mod.match(/GLOW_EMOJI/g) || []).length >= 4);
+// The started flag is one way. Without a reset there is no way back to what a new woman sees.
+check("יש כפתור איפוס לסימון הצפייה בסרגל הבדיקות", /איפוס Glow/.test(app) && /removeItem\(GLOW_STARTED_KEY\)/.test(app));
 check("הכיתוב של השורה הקטנה בדיוק כפי שאושר", glow.includes('export const GLOW_ROW = "שיעורי הבונוס שלך במיי פריים Glow"'));
 check("שנייה אחת של צפייה מורידה את השורה מהיומן", /if \(!startedRef\.current && t > 0\)/.test(mod) && /onStart=\{openL\.week === 0 \? markGlowStarted/.test(mod));
 check("ובמסך התוכן יש שורה אחת שמקפיצה לרשימה ולא הרשימה עצמה", /setTypeF\("glow"\); setView\("all"\)/.test(mod));
