@@ -154,8 +154,15 @@ console.log("\nאפליקציה חדשה מול קג'אבי");
 
 console.log("\nשיוך קבוצה ידני");
 {
-  const sun = (n) => { const d = new Date(); d.setUTCHours(0,0,0,0);
-    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + n * 7); return d.toISOString().slice(0,10); };
+  // The cohort Sunday must be worked out in ISRAEL time, exactly as api/admin.js does it.
+  // Computed in UTC, this file passed all day and failed only between 21:00 UTC and midnight,
+  // when Israel is already on the next date. That is the trap in section 20 of CLAUDE.md.
+  const sun = (n) => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const d = new Date(today + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + n * 7);
+    return d.toISOString().slice(0, 10);
+  };
   CSV2 = [
     'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים',
     `972520000001,בלי,קבוצה,g1@test.com,${sun(0)} 12:00:00,FALSE,,3`,
@@ -194,8 +201,15 @@ console.log("\nחסרות קבוצה: השבוע והשבוע הבא בלבד");
 {
   // Cohorts always start on a Sunday, so build the fixture off real Sundays rather than
   // "N days ago": the rule is about which cohort, not about how old a date is.
-  const sun = (n) => { const d = new Date(); d.setUTCHours(0,0,0,0);
-    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + n * 7); return d.toISOString().slice(0,10); };
+  // The cohort Sunday must be worked out in ISRAEL time, exactly as api/admin.js does it.
+  // Computed in UTC, this file passed all day and failed only between 21:00 UTC and midnight,
+  // when Israel is already on the next date. That is the trap in section 20 of CLAUDE.md.
+  const sun = (n) => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const d = new Date(today + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + n * 7);
+    return d.toISOString().slice(0, 10);
+  };
   CSV2 = [
     'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים',
     `972510000001,השבוע,בלי,a@test.com,${sun(0)} 12:00:00,FALSE,,3`,
