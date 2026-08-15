@@ -115,6 +115,11 @@ check("והיא כותבת ליום הקודם ולא להיום", /setPrevValue
 check("היא לא נוספה לרשימת המשימות", !/strengthmakeup/.test(app) && !/"makeup"/.test(readFileSync(new URL("../src/checkins.js", import.meta.url), "utf8")));
 check("הקופי של שורת ההשלמה מדויק", app.includes("(אופציונלי למעקב היום, במידה ועשית היום במקום אתמול. אנחנו ממליצים על יום מנוחה בין אימון לאימון)"));
 check("מסך החגיגה קופץ רק על היום הנוכחי", /if \(d === today\) celebrate = true;/.test(app));
+// Ticking the row and seeing nothing happen reads as a dead button, and that is exactly what
+// happens when the missed day was short of more than the workout.
+check("יש שורת משוב אחרי הסימון", app.includes("נסגר לך 🌸") && app.includes("חסרות שם עוד"));
+check("והיא מבחינה בין משימה אחת לכמה", app.includes("חסרה שם עוד משימה אחת"));
+check("המשוב נשען על ספירת המשימות שנותרו ליום הקודם", /function remainingRequired\(/.test(app) && /prevRemaining=\{remainingRequired\(/.test(app));
 check("שורת הרצף מופיעה גם במסך הגביע", (app.match(/ימים ברצף<\/div>/g) || []).length === 2);
 check("החתימה של ענת כבר לא אפורה וקטנה", !/C\.faint, fontSize: 14 \}\}>ענת/.test(app));
 

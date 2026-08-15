@@ -504,6 +504,14 @@ function dayComplete(startDate, date, keepShabbat, checkins, stepsByDate, waterB
   const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog);
   return ts.every((t) => taskDone(t, ans, au));
 }
+// How many required tasks a day is still short of. Used for the line she sees after making
+// up yesterday's strength workout: ticking it and seeing nothing happen reads as a dead button.
+function remainingRequired(startDate, date, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog) {
+  const ts = tasksForDate(startDate, date, keepShabbat).filter((t) => !t.optional);
+  const ans = (checkins && checkins[date]) || {};
+  const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog);
+  return ts.filter((t) => !taskDone(t, ans, au)).length;
+}
 const seedEntry = (id, date, meal, foodId, g, source = "verified") => {
   const f = FOOD_BY_ID[foodId];
   return { id, date, meal, name: f.name, g, source, ...nutritionFor(f, g) };
@@ -535,7 +543,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.14";
+const VERSION = "5.15";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4409,7 +4417,7 @@ function CheckinCard({ date, today, week, phaseWeek, tasks, answers, auto, locke
   );
 }
 
-function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate, tipsSeen, onTipsSeen, prevAnswers, setPrevValue }) {
+function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate, tipsSeen, onTipsSeen, prevAnswers, setPrevValue, prevRemaining }) {
   const hasAuto = tasks.some((t) => t.auto);
   const showAutoNote = hasAuto && !(tipsSeen || []).includes("autotasks");
   const dd = parseDay(date);
@@ -4426,6 +4434,11 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
   // Read live, the row would vanish under her finger the moment she ticked it.
   const [showMakeup] = useState(() => prevHasStrength && (prevAnswers || {}).strength !== true);
   const makeupDone = (prevAnswers || {}).strength === true;
+  const prevDayName = prevDate ? HE_DAYS_FULL[parseDay(prevDate).getUTCDay()] : "";
+  const missing = prevRemaining == null ? 0 : prevRemaining;
+  const makeupNote = !makeupDone ? "" : missing === 0
+    ? `נרשם, ויום ${prevDayName} נסגר לך 🌸`
+    : `נרשם ליום ${prevDayName}. ${missing === 1 ? "חסרה שם עוד משימה אחת" : `חסרות שם עוד ${missing} משימות`}`;
   const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${phaseLabel(programWeekFor(startDate, date), dn)}`;
   return (
     <SheetShell title="המעקב היומי שלי" onClose={onClose}>
@@ -4471,6 +4484,7 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
                   <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                     <span style={{ fontSize: 16, color: C.ink }}>אימון כוח</span>
                     <span style={{ fontSize: 12.5, color: C.sub, marginTop: 2, lineHeight: 1.5 }}>(אופציונלי למעקב היום, במידה ועשית היום במקום אתמול. אנחנו ממליצים על יום מנוחה בין אימון לאימון)</span>
+                    {makeupNote && <span style={{ fontSize: 12.5, color: C.brandD, fontWeight: 600, marginTop: 4, lineHeight: 1.5 }}>{makeupNote}</span>}
                   </div>
                   <button onClick={() => setPrevValue && setPrevValue("strength", makeupDone ? null : true)} aria-label="אימון כוח" style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 9, border: `1.5px solid ${makeupDone ? C.brand : C.line}`, background: makeupDone ? C.brand : C.panel, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{makeupDone ? <Check size={16} /> : null}</button>
                 </div>
@@ -6363,7 +6377,7 @@ export default function App() {
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
-            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
+            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
