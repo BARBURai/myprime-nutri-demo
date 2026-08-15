@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Play, Maximize2, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
-import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, hasGlow, glowStarted, markGlowStarted } from "./glow";
+import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted } from "./glow";
 export { contentForDay } from "./data";
 
 
@@ -652,7 +652,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     // lessons would appear under every week and read as a bug.
     const isGlow = typeF === "glow";
     const visibleDays = isPdf || isGlow ? [] : weekDays.filter((dd) => dd.lessons.some((l) => matchesChip(l, typeF)));
-    const chips = showGlow ? [...FILTER_CHIPS, ["glow", GLOW_CHIP]] : FILTER_CHIPS;
+    const chips = showGlow ? [...FILTER_CHIPS, ["glow", `${GLOW_EMOJI} ${GLOW_CHIP}`]] : FILTER_CHIPS;
     return (
       <div style={overlay}>
         <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
@@ -675,7 +675,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
 
           {isGlow ? (
             <>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, marginBottom: 10, lineHeight: 1.4 }}>{GLOW_TITLE}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, marginBottom: 10, lineHeight: 1.4 }}>{GLOW_EMOJI} {GLOW_TITLE}</div>
               {GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="all" />)}
             </>
           ) : isPdf ? (
@@ -742,7 +742,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
           <>
             <div style={{ borderTop: `1px solid ${C.line}`, margin: "20px 0 14px" }} />
             <div onClick={() => { setTypeF("glow"); setView("all"); }} role="button" style={rowStyle}>
-              <div style={iconWrap}><Film size={21} color={C.brand} /></div>
+              <div style={{ ...iconWrap, fontSize: 22 }}>{GLOW_EMOJI}</div>
               <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
                 <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{GLOW_ROW}</div>
               </div>
