@@ -152,6 +152,28 @@ const CHECKS = [
     },
   },
   {
+    // Nothing here opened "כל התוכנית" until now, and that is how a plain ReferenceError
+    // shipped: a variable was removed while a line below still used it. The build passes on
+    // that, and every offline check passes on it, because it only throws while rendering.
+    name: "מסך כל התוכנית נפתח, מציג שבועות, ובלי שגיאת JavaScript",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device, { day: 15 });
+      // The card carries data-tut; matching on its text hits the heading inside it, which is
+      // not the clickable element.
+      await page.locator('[data-tut="contentcard"], [aria-label="כל התוכנית"]').first().click();
+      await page.waitForTimeout(500);
+      await page.locator('[data-tut="content-tab-all"]').first().click();
+      await page.waitForTimeout(600);
+      const weeks = await page.locator("text=/^שבוע \\d+$/").count();
+      const days = await page.locator("text=/^יום \\d$/").count();
+      // She must be able to open a day and see its lessons.
+      if (days > 0) { await page.locator("text=/^יום \\d$/").first().click(); await page.waitForTimeout(400); }
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return { ok: weeks > 0 && days > 0 && bad.length === 0, detail: `${weeks} שבועות · ${days} ימים · ${bad.length} שגיאות ${bad[0] || ""}` };
+    },
+  },
+  {
     name: "הוספת מזון מהחיפוש מגיעה ליומן",
     async run(browser, device) {
       const { context, page } = await openApp(browser, device);
