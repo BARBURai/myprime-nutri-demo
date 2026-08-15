@@ -93,6 +93,7 @@ export async function loadSheet(csvUrl) {
     // Optional. Until Ron marks the new-app women in the sheet, membership is decided by
     // whether we have ever seen her open the app, which is a fact rather than a tag.
     newapp: findCol(header, ["אפליקציה חדשה", "אפליקציה"]),
+    glow: findCol(header, ["בונוס איפור"]),
   };
 
   const women = [];
@@ -130,6 +131,8 @@ export async function loadSheet(csvUrl) {
       months: Number.isFinite(months) && months > 0 ? months : null,
       cancelled: col.cancel !== -1 ? isTrue(cells[col.cancel]) : false,
       sheetNewApp: col.newapp !== -1 ? isTrue(cells[col.newapp]) : false,
+      // מיי פריים Glow bonus lessons. Optional column: absent means nobody has it.
+      glow: col.glow !== -1 ? isTrue(cells[col.glow]) : false,
       sheetEnd: startSunday ? ymd(accessEnd(startSunday, months)) : "",
     });
   });

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Play, Maximize2, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
+import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, hasGlow } from "./glow";
 export { contentForDay } from "./data";
 
 
@@ -155,7 +156,7 @@ function BunnyPlayer({ videoId, C, font, onReach80 }) {
 
 
 
-export function ContentDayCard({ week, dow, C, font, onOpen }) {
+export function ContentDayCard({ week, dow, C, font, onOpen, glow }) {
   const day = contentForDay(week, dow);
   if (!day) return null;
   const n = day.lessons.length;
@@ -180,15 +181,21 @@ export function ContentDayCard({ week, dow, C, font, onOpen }) {
       <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
         <div style={{ fontSize: 20, fontWeight: 700, color: C.brandD, lineHeight: 1.4 }}>הסרטונים שלך היום</div>
         <div style={{ fontSize: 15, color: C.brandD, marginTop: 3 }}>{day.theme ? day.theme + " · " : ""}{track ? `${doneCount}/${n}` : `${n} ${n === 1 ? "פריט" : "פריטים"}`}</div>
+        {glow && hasGlow() && <div style={{ fontSize: 14, color: C.brandD, marginTop: 4, lineHeight: 1.45 }}>{GLOW_TITLE}</div>}
       </div>
       <ChevronLeft size={20} color={C.brand} style={{ flexShrink: 0 }} />
     </div>
   );
 }
 
-export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent }) {
+export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow }) {
   const allDays = CONTENT_DAYS;
-  const isOpenDay = (w, d) => (w < todayWeek) || (w === todayWeek && d <= todayDow);
+  const showGlow = !!glow && hasGlow();
+  // Saturday carries day-of-week 0, and "everything up to today" then matches nothing, so the
+  // whole current week vanished from "כל התוכנית" - on the Saturday of week 1 the screen was
+  // empty. Shabbat reads as Friday here, the same way the tracker already treats it.
+  const openDow = todayDow === 0 ? 6 : todayDow;
+  const isOpenDay = (w, d) => (w < todayWeek) || (w === todayWeek && d <= openDow);
   const openDaysList = allDays.filter((dd) => isOpenDay(dd.week, dd.day)).slice().sort((a, b) => a.week - b.week || a.day - b.day);
   const openWeeks = [...new Set(openDaysList.map((dd) => dd.week))].sort((a, b) => a - b);
   const todayDay = contentForDay(week, dow);
@@ -212,11 +219,12 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     if (view === "all" && selWeek == null) {
       const wk = openWeeks.includes(todayWeek) ? todayWeek : (openWeeks[openWeeks.length - 1] || 1);
       setSelWeek(wk);
-      setDayOpen({ [`${todayWeek}-${todayDow}`]: true });
+      // Nothing is expanded on arrival. Today's day used to open by itself, and on any day
+      // it failed to match it stayed shut, so it read as random. She opens what she wants.
     }
   }, [view]);
 
-  const dayByWD = (w, d) => allDays.find((dd) => dd.week === w && dd.day === d);
+  const dayByWD = (w, d) => (w === 0 ? GLOW_DAY : allDays.find((dd) => dd.week === w && dd.day === d));
   const isDone = (w, d, i) => !!done[lessonKey(w, d, i)];
   const isFav = (w, d, i) => !!fav[lessonKey(w, d, i)];
   const toggleDone = (w, d, i) => setDone((s) => { const n = { ...s }; const k = lessonKey(w, d, i); if (n[k]) delete n[k]; else n[k] = 1; saveStore(DONE_KEY, n); return n; });
@@ -239,6 +247,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   const nextUp = (w, d, i) => {
     const dd = dayByWD(w, d);
     if (dd && dd.lessons[i + 1]) return { week: w, day: d, i: i + 1 };
+    if (w === 0) return null; // the bonus is its own set: it never spills into the programme
     const pos = openDaysList.findIndex((x) => x.week === w && x.day === d);
     for (let j = pos + 1; j < openDaysList.length; j++) { if (openDaysList[j].lessons.length) return { week: openDaysList[j].week, day: openDaysList[j].day, i: 0 }; }
     return null;
@@ -627,7 +636,11 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     const wk = selWeek == null ? (openWeeks[openWeeks.length - 1] || 1) : selWeek;
     const weekDays = openDaysList.filter((dd) => dd.week === wk);
     const isPdf = typeF === "pdf";
-    const visibleDays = isPdf ? [] : weekDays.filter((dd) => dd.lessons.some((l) => matchesChip(l, typeF)));
+    // The bonus belongs to no week, so its chip hides the week row. Otherwise the same three
+    // lessons would appear under every week and read as a bug.
+    const isGlow = typeF === "glow";
+    const visibleDays = isPdf || isGlow ? [] : weekDays.filter((dd) => dd.lessons.some((l) => matchesChip(l, typeF)));
+    const chips = showGlow ? [...FILTER_CHIPS, ["glow", GLOW_CHIP]] : FILTER_CHIPS;
     return (
       <div style={overlay}>
         <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
@@ -638,17 +651,22 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
             <button onClick={() => setView("fav")} style={{ flex: 1, border: `1.5px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 12, padding: "11px 8px", fontFamily: font, fontSize: 16, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Heart size={18} /> המועדפים שלי</button>
           </div>
 
-          {!isPdf && (
+          {!isPdf && !isGlow && (
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 14 }}>
               {openWeeks.map((w) => (<button key={w} onClick={() => setSelWeek(w)} style={{ flexShrink: 0, border: "none", cursor: "pointer", borderRadius: 999, padding: "8px 16px", fontFamily: font, fontSize: 16, fontWeight: 700, background: w === wk ? C.brand : C.bg, color: w === wk ? "#fff" : C.ink }}>שבוע {w}</button>))}
             </div>
           )}
 
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 16 }}>
-            {FILTER_CHIPS.map(([id, lbl]) => (<button key={id} onClick={() => setTypeF(id)} style={{ border: `1.5px solid ${typeF === id ? C.brand : C.line}`, cursor: "pointer", borderRadius: 999, padding: "6px 13px", fontFamily: font, fontSize: 15, fontWeight: 600, background: typeF === id ? C.brandBg : C.panel, color: typeF === id ? C.brandD : C.ink }}>{lbl}</button>))}
+            {chips.map(([id, lbl]) => (<button key={id} onClick={() => setTypeF(id)} style={{ border: `1.5px solid ${typeF === id ? C.brand : C.line}`, cursor: "pointer", borderRadius: 999, padding: "6px 13px", fontFamily: font, fontSize: 15, fontWeight: 600, background: typeF === id ? C.brandBg : C.panel, color: typeF === id ? C.brandD : C.ink }}>{lbl}</button>))}
           </div>
 
-          {isPdf ? (
+          {isGlow ? (
+            <>
+              <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, marginBottom: 10, lineHeight: 1.4 }}>{GLOW_TITLE}</div>
+              {GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="all" />)}
+            </>
+          ) : isPdf ? (
             pageEntries.length === 0
               ? <div style={{ fontSize: 16, color: C.sub, textAlign: "center", padding: "22px 14px" }}>אין דפים זמינים עדיין.</div>
               : pageEntries.map((x) => <ResultRow key={lessonKey(x.week, x.day, x.i)} w={x.week} d={x.day} l={x.l} i={x.i} from="all" pagesOnly subtitle={`שבוע ${x.week} יום ${x.day} · ${x.l.pageImages.length} עמודים`} />)
@@ -657,8 +675,8 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               ? <div style={{ fontSize: 16, color: C.sub, textAlign: "center", padding: "22px 14px" }}>אין תוכן מסוג זה בשבוע {wk}.</div>
               : visibleDays.map((dd) => {
                 const dk = `${dd.week}-${dd.day}`;
-                const isCurrent = dd.week === todayWeek && dd.day === todayDow;
-                const opened = dayOpen[dk] != null ? dayOpen[dk] : isCurrent;
+                // Closed by default, today's day included. She opens what she wants to see.
+                const opened = !!dayOpen[dk];
                 const track = tracksProgress(dd);
                 const shown = dd.lessons.map((l, i) => ({ l, i })).filter(({ l }) => matchesChip(l, typeF));
                 return (
@@ -703,6 +721,13 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               </div>
             )}
             {todayDay.lessons.map((l, i) => <LessonRow key={i} w={todayDay.week} d={todayDay.day} l={l} i={i} from="today" />)}
+          </>
+        )}
+        {showGlow && (
+          <>
+            <div style={{ borderTop: `1px solid ${C.line}`, margin: "20px 0 14px" }} />
+            <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, marginBottom: 10, lineHeight: 1.4 }}>{GLOW_TITLE}</div>
+            {GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="today" />)}
           </>
         )}
       </div>
