@@ -29,7 +29,7 @@ export const GLOW_DAY = {
   lessons: [
     { title: "מבוא", type: "video", videoId: "405fc049-0e7a-4447-9f1d-193845c0b4b9" },
     { title: "שיעור 3 - פריימר ובסיס (מייק אפ)", type: "video", videoId: "f7dc36be-25b6-45ef-bb9c-4315b94cddb4" },
-    { title: "שיעור 6 איפור עיניים בסיסי", type: "video", videoId: "81e96d03-c4a6-40e5-9442-432629fd8b33" },
+    { title: "שיעור 6 - איפור עיניים בסיסי", type: "video", videoId: "81e96d03-c4a6-40e5-9442-432629fd8b33" },
     { title: "שיעור 8 - מראה עיניים מעושן", type: "video", videoId: "333ac741-4dba-41d5-bdce-946503c74660" },
   ],
 };
