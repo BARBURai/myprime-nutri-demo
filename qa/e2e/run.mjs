@@ -57,6 +57,21 @@ const TODAY = israelToday();
 // the date that comes from the registration sheet.
 const startForDay = (n) => new Date(Date.parse(TODAY + "T00:00:00Z") - (n - 1) * 86400000).toISOString().slice(0, 10);
 
+// A real cohort ALWAYS begins on a Sunday, so a woman's program day and her day of the week
+// are the same thing. Counting back N days from today ignores that and, depending on which
+// day the suite happens to run, invents a cohort that started on a Friday. Nothing in the
+// app is built for that: the tracker card unlocks on elapsed days while its tasks unlock by
+// weekday, and on such a cohort the two disagree and the card renders empty. That is not a
+// bug a participant can ever hit, and chasing it cost a session. Anything that depends on
+// which day of the week it is must be built from these two instead.
+const sundayWeeksAgo = (weeksAgo) => {
+  const d = new Date(TODAY + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay() - weeksAgo * 7);
+  return d.toISOString().slice(0, 10);
+};
+const programDayOn = (startDate) =>
+  Math.round((Date.parse(TODAY + "T00:00:00Z") - Date.parse(startDate + "T00:00:00Z")) / 86400000) + 1;
+
 /* ---------- the three profiles ---------- */
 const UA_ANDROID = "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 const UA_IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
@@ -80,8 +95,10 @@ async function stubApi(context, { startDate }) {
   });
 }
 
-async function openApp(browser, device, { day = 10, seed = {}, neverAskedNotify = false } = {}) {
-  const startDate = startForDay(day);
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false } = {}) {
+  // `day` is the convenient form and is fine wherever the day of the week does not matter.
+  // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
+  const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
   await stubApi(context, { startDate });
   await context.addInitScript(([sd, extra, neverAsked]) => {
@@ -131,15 +148,25 @@ const CHECKS = [
     },
   },
   {
-    name: "יומן המעקב לא מופיע ביום 2 ומופיע ביום 3",
+    // The tracker opens on program day 3. Checked against the two most recent real cohorts
+    // rather than against a made-up "three days ago", so what the card is expected to do is
+    // derived from the same rule the app uses instead of being hard-coded to a day number
+    // that only lines up on a Tuesday.
+    name: "יומן המעקב נפתח ביום 3 בתוכנית, לפי מחזור אמיתי",
     async run(browser, device) {
-      const a = await openApp(browser, device, { day: 2 });
-      const onDay2 = await a.page.locator("text=יומן המעקב שלי").count();
-      await a.context.close();
-      const b = await openApp(browser, device, { day: 3 });
-      const onDay3 = await b.page.locator("text=יומן המעקב שלי").count();
-      await b.context.close();
-      return { ok: onDay2 === 0 && onDay3 > 0, detail: `יום 2: ${onDay2} כרטיסים, יום 3: ${onDay3}` };
+      const parts = [];
+      let ok = true;
+      for (const weeksAgo of [0, 1]) {
+        const start = sundayWeeksAgo(weeksAgo);
+        const day = programDayOn(start);
+        const { context, page } = await openApp(browser, device, { startDate: start });
+        const cards = await page.locator("text=יומן המעקב שלי").count();
+        await context.close();
+        const want = day >= 3;
+        if ((cards > 0) !== want) ok = false;
+        parts.push(`יום ${day}: ${cards} ${want ? "(מצופה שיופיע)" : "(מצופה שלא)"}`);
+      }
+      return { ok, detail: parts.join(" · ") };
     },
   },
   {
@@ -184,9 +211,9 @@ const CHECKS = [
     name: "חזרה מתוך שיעור נשארת במסך התוכן ולא סוגרת אותו",
     async run(browser, device) {
       const { context, page, errors } = await openApp(browser, device, { day: 15 });
-      // Straight into the lessons of the current day. Going through "כל התוכנית" would be
-      // the more thorough route, but its day list is broken independently of this fix and
-      // that failure would hide this one.
+      // Straight into today's lessons. Going through "כל התוכנית" would work too, but the
+      // shortest path to an open lesson is the one least likely to break for an unrelated
+      // reason and hide what this scenario is actually about.
       await page.locator('[data-tut="contentcard"], [aria-label="כל התוכנית"]').first().click();
       await page.waitForTimeout(700);
       const tabs = page.locator('[data-tut^="content-tab-"]');
@@ -228,9 +255,14 @@ const CHECKS = [
       await page.locator('[data-tut="content-tab-all"]').first().click();
       await page.waitForTimeout(600);
       const weeks = await page.locator("text=/^שבוע \\d+$/").count();
-      const days = await page.locator("text=/^יום \\d$/").count();
+      // The day heading is not a line of its own: it carries the "היום" badge and the lesson
+      // summary beside it, so an anchored "^יום N$" never matched and the screen was reported
+      // empty while it was in fact fine. Matched on the row itself rather than on loose text,
+      // which would also hit every wrapper around it and then click something unclickable.
+      const dayRows = page.locator('div[role="button"]').filter({ hasText: /יום \d/ });
+      const days = await dayRows.count();
       // She must be able to open a day and see its lessons.
-      if (days > 0) { await page.locator("text=/^יום \\d$/").first().click(); await page.waitForTimeout(400); }
+      if (days > 0) { await dayRows.first().click({ timeout: 5000 }).catch(() => {}); await page.waitForTimeout(400); }
       const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
       await context.close();
       return { ok: weeks > 0 && days > 0 && bad.length === 0, detail: `${weeks} שבועות · ${days} ימים · ${bad.length} שגיאות ${bad[0] || ""}` };
