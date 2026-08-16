@@ -152,6 +152,69 @@ const CHECKS = [
     },
   },
   {
+    // A participant reported that back from inside a recipe landed her on the diary instead
+    // of the recipe list. The open recipe was not a layer the back handler could see. This
+    // is the one part of the Android back button a desktop browser can actually reproduce,
+    // because both arrive as the same popstate.
+    name: "חזרה מתוך מתכון מחזירה לרשימת המתכונים ולא ליומן",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device, { day: 15 });
+      await page.locator('text="מתכונים"').last().click();
+      await page.waitForTimeout(500);
+      const searchBox = page.locator('input[placeholder*="חיפוש מתכון"]');
+      const listBefore = await searchBox.count();
+      await page.locator("img[alt]").first().click();
+      await page.waitForTimeout(400);
+      const inDetail = (await searchBox.count()) === 0;
+      await page.goBack();
+      await page.waitForTimeout(500);
+      const backOnList = (await searchBox.count()) > 0;
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: listBefore > 0 && inDetail && backOnList && bad.length === 0,
+        detail: `רשימה ${listBefore > 0} · נכנסה למתכון ${inDetail} · חזרה לרשימה ${backOnList}`,
+      };
+    },
+  },
+  {
+    // Same fault one screen over: back from inside a lesson used to shut the whole content
+    // screen. The tab strip only exists in the list views, so its absence is what says a
+    // lesson is open, and the close button says we are still inside the content screen.
+    name: "חזרה מתוך שיעור נשארת במסך התוכן ולא סוגרת אותו",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device, { day: 15 });
+      // Straight into the lessons of the current day. Going through "כל התוכנית" would be
+      // the more thorough route, but its day list is broken independently of this fix and
+      // that failure would hide this one.
+      await page.locator('[data-tut="contentcard"], [aria-label="כל התוכנית"]').first().click();
+      await page.waitForTimeout(700);
+      const tabs = page.locator('[data-tut^="content-tab-"]');
+      const rows = page.locator('div[role="button"]');
+      // Not every role=button on the screen is a lesson, and some are off screen, so try a
+      // few and give each a short leash rather than letting one hidden row eat 30 seconds.
+      const n = Math.min(await rows.count(), 10);
+      for (let i = 0; i < n; i++) {
+        const row = rows.nth(i);
+        if (!(await row.isVisible().catch(() => false))) continue;
+        await row.click({ timeout: 3000 }).catch(() => {});
+        await page.waitForTimeout(350);
+        if ((await tabs.count()) === 0) break;   // a lesson opened
+      }
+      const inLesson = (await tabs.count()) === 0;
+      await page.goBack();
+      await page.waitForTimeout(500);
+      const backInList = (await tabs.count()) > 0;
+      const stillOpen = (await page.locator('[aria-label="סגירה"]').count()) > 0;
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: inLesson && backInList && stillOpen && bad.length === 0,
+        detail: `נכנסה לשיעור ${inLesson} · חזרה לרשימה ${backInList} · מסך התוכן עדיין פתוח ${stillOpen}`,
+      };
+    },
+  },
+  {
     // Nothing here opened "כל התוכנית" until now, and that is how a plain ReferenceError
     // shipped: a variable was removed while a line below still used it. The build passes on
     // that, and every offline check passes on it, because it only throws while rendering.
@@ -367,7 +430,7 @@ const CHECKS = [
 
 /* ---------- run ---------- */
 const browser = await chromium.launch({ executablePath: BROWSER });
-console.log(`\n  MyPrime QA שכבה 3 — ${CHECKS.length} בדיקות × ${DEVICES.length} מכשירים\n`);
+console.log(`\n  MyPrime QA שכבה 3 - ${CHECKS.length} בדיקות × ${DEVICES.length} מכשירים\n`);
 for (const device of DEVICES) {
   for (const c of CHECKS) {
     try {

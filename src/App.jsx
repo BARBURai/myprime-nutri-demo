@@ -544,7 +544,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.26";
+const VERSION = "5.27";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1802,10 +1802,11 @@ function RecipeDetail({ r, onBack, onAdd }) {
   );
 }
 
-function RecipesScreen({ addRecipe, sweetsOpen }) {
+// `selected` is held by the app rather than here, so the phone's back button can see an
+// open recipe as a layer and close it back to this list instead of jumping to the diary.
+function RecipesScreen({ addRecipe, sweetsOpen, selected, setSelected }) {
   const [section, setSection] = useState("recipes");
   const [seenSweets, setSeenSweets] = useState(false);
-  const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState("הכל");
   const [query, setQuery] = useState("");
 
@@ -5636,6 +5637,7 @@ export default function App() {
   }, [today]);
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
+  const [recipeSel, setRecipeSel] = useState(null);   // the recipe she has open, if any
   const [lockMsg, setLockMsg] = useState(null);
   const [tour, setTour] = useState(null);
   const [showIntro, setShowIntro] = useState(saved ? false : true);
@@ -5697,6 +5699,17 @@ export default function App() {
   // Back first closes an open sheet/modal; otherwise it asks whether to leave.
   const modalRef = useRef(modal); modalRef.current = modal;
   const sheetRef = useRef(sheet); sheetRef.current = sheet;
+  // The open recipe used to live inside RecipesScreen, where the back handler below could
+  // not see it, so a press from inside a recipe found nothing to close and jumped straight
+  // to the diary. A participant reported exactly that. It lives here now so it counts as a
+  // layer like any other, and it is cleared on leaving the tab so the list is what she
+  // comes back to.
+  const recipeSelRef = useRef(recipeSel); recipeSelRef.current = recipeSel;
+  useEffect(() => { if (tab !== "recipes" && recipeSel) setRecipeSel(null); }, [tab]);
+  // The content module keeps its own levels (a zoomed page, an open lesson, the search and
+  // favourites views). Rather than lift all of them, it hands us a closer that shuts one
+  // level and says whether it took the press.
+  const contentBackRef = useRef(null);
   const tabRef = useRef(tab); tabRef.current = tab;
   // Android's back button, rebuilt in v4.82 after a participant reported that it always
   // asked whether to leave MyPrime, from any screen, and that answering "leave" did nothing.
@@ -5710,16 +5723,26 @@ export default function App() {
   // app exactly as it does in every other app. No dialog, and nothing that pretends to work.
   const sentinelRef = useRef(false);
   useEffect(() => {
-    const layered = !!(modal || sheet || tab !== "day");
+    const layered = !!(modal || sheet || recipeSel || tab !== "day");
     if (layered && !sentinelRef.current) {
       try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
     }
-  }, [modal, sheet, tab]);
+  }, [modal, sheet, recipeSel, tab]);
   useEffect(() => {
     const onPop = () => {
       sentinelRef.current = false; // the browser just consumed it
+      // Innermost first, one level per press, and each level does exactly what its own
+      // on-screen back arrow does. Anything else and the press skips past a screen she is
+      // still looking at.
       if (modalRef.current) setModal(null);
+      else if (sheetRef.current === "content" && contentBackRef.current && contentBackRef.current()) {
+        // A level inside the content module closed and the sheet itself is still open, so
+        // no state of ours changed and the effect above will not run. Push the next entry
+        // here, otherwise the following press would leave the app.
+        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+      }
       else if (sheetRef.current) setSheet(null);
+      else if (recipeSelRef.current) setRecipeSel(null);
       else if (tabRef.current !== "day") setTab("day");
       // Nothing of ours left: no new entry is pushed, so the next press exits the app.
     };
@@ -6337,7 +6360,7 @@ export default function App() {
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
-              {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} />}
+              {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
             </div>
             {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
@@ -6396,7 +6419,7 @@ export default function App() {
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
-            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} onClose={() => setSheet(null)} />}
+            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} onClose={() => setSheet(null)} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
 
