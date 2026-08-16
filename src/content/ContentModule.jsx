@@ -198,7 +198,7 @@ export function ContentDayCard({ week, dow, C, font, onOpen, glow }) {
   );
 }
 
-export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow }) {
+export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, backRef }) {
   const allDays = CONTENT_DAYS;
   const showGlow = !!glow && hasGlow();
   // Saturday carries day-of-week 0, and "everything up to today" then matches nothing, so the
@@ -224,6 +224,22 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   const [dayOpen, setDayOpen] = useState({});
   const [query, setQuery] = useState("");
   const [typeF, setTypeF] = useState("all");
+
+  // The phone's back button, handed up to the app. Each level does exactly what its own
+  // on-screen back arrow does, and the return value says whether the press was used up.
+  // Without this the app only knew that the whole content screen was open, so one press
+  // from inside a lesson shut all of it and landed her back on the diary, several screens
+  // further back than she asked for.
+  useEffect(() => {
+    if (!backRef) return undefined;
+    backRef.current = () => {
+      if (zoomPage) { setZoomPage(null); return true; }
+      if (openL) { setOpenL(null); setView(origin); return true; }
+      if (view === "search" || view === "fav") { setView("all"); return true; }
+      return false;   // nothing left in here, so the app closes the screen itself
+    };
+    return () => { backRef.current = null; };
+  }, [backRef, zoomPage, openL, view, origin]);
 
   useEffect(() => {
     if (view === "all" && selWeek == null) {
