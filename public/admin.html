@@ -190,8 +190,44 @@ function usagePanel(w){
     '</div>';
 }
 
+// Her ManyChat record is keyed by phone, not by email, so every save carries it. Attached
+// here rather than at each button, so no call site can forget it.
+function phoneOf(email){
+  var w = (DATA && DATA.women || []).filter(function(x){ return x.email === email; })[0];
+  return (w && w.phone) || "";
+}
+
+// What ManyChat says about one woman right now, keyed by email. Read only when her card is
+// opened: ManyChat cannot list everyone carrying a tag, so there is no bulk version of this.
+var MC = {};
+function mcLoad(email){
+  var ph = phoneOf(email);
+  if(!ph){ MC[email] = { state:"nophone" }; render(); return; }
+  MC[email] = { state:"loading" };
+  fetch("/api/admin?key="+encodeURIComponent(KEY)+"&mc="+encodeURIComponent(ph))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d && d.off) MC[email] = { state:"off" };
+      else if(d && d.ok && d.found) MC[email] = { state:"ok", tags:d.tags, group:d.group||"" };
+      else if(d && d.ok) MC[email] = { state:"notfound" };
+      else MC[email] = { state:"failed" };
+      render();
+    })
+    .catch(function(){ MC[email] = { state:"failed" }; render(); });
+}
+
+// The local store and ManyChat are written one after the other, and the local one is never
+// held back by the other. So when the second half fails the clerk has to be told exactly
+// that, otherwise she walks away believing the sheet will catch up on its own.
+function mcWarn(r){
+  if(!r || r.mc === "ok" || r.mc === "off" || !r.mc) return;
+  alert(r.mc === "not_found"
+    ? "נשמר אצלנו, אבל לא נמצאה רשומה במניצ'ט לפי הטלפון שלה, ולכן שם שום דבר לא השתנה."
+    : "נשמר אצלנו, אבל העדכון במניצ'ט נכשל. שווה לנסות שוב.");
+}
+
 function save(email, patch){
-  var body = { email: email, by: WHO };
+  var body = { email: email, by: WHO, phone: phoneOf(email) };
   for(var k in patch) body[k] = patch[k];
   return fetch("/api/admin?key="+encodeURIComponent(KEY),{
     method:"POST", headers:{"content-type":"application/json"},
@@ -220,6 +256,30 @@ function askKey(msg){
     boot();
   };
   document.getElementById("k").onkeydown = function(e){ if(e.key==="Enter") document.getElementById("go").click(); };
+}
+
+// The two ManyChat tags that have no column of their own in the sheet, so ManyChat is the
+// only place they can be read from or written to. Read live when the card opens: a stale
+// answer here would be worse than none, because the clerk would switch on something that
+// is already on.
+function mcBlock(w){
+  var s = MC[w.email];
+  var line = function(txt){ return '<div class="note">מניצ\'ט: '+txt+'</div>'; };
+  if(!s || s.state==="loading") return line("בודקת...");
+  if(s.state==="off")      return line("החיבור לא מוגדר.");
+  if(s.state==="nophone")  return line("אין לה טלפון, ולכן אי אפשר למצוא אותה שם.");
+  if(s.state==="notfound") return line("לא נמצאה רשומה לפי הטלפון הזה.");
+  if(s.state!=="ok")       return line('לא הצלחתי להגיע. <button class="lnk" data-mcretry="'+esc(w.email)+'">נסי שוב</button>');
+  var row = function(key, label){
+    var on = !!(s.tags && s.tags[key]);
+    return '<div class="edit"><span>'+label+':</span>'+
+      '<span>'+(on?"<b>יש</b>":"<b>אין</b>")+'</span>'+
+      '<button class="btn'+(on?" p":"")+'" data-mctag="'+key+'" data-on="1" data-for="'+esc(w.email)+'">יש</button>'+
+      '<button class="btn'+(on?"":" p")+'" data-mctag="'+key+'" data-on="0" data-for="'+esc(w.email)+'">אין</button></div>';
+  };
+  return line("קבוצה שם עכשיו <b>"+(s.group?esc(s.group):"ללא")+"</b>")+
+    row("full","קורס האיפור המלא")+
+    row("app","אפליקציה חדשה");
 }
 
 function render(){
@@ -364,6 +424,14 @@ function render(){
                       : L.to === "0" ? 'הסירה גישה לשיעורי הבונוס'
                       : 'החזירה את שיעורי הבונוס לערך שבגיליון');
         }
+        if(L.field === "tag:full"){
+          return pre + (L.to === "1" ? 'סימנה שיש לה את קורס האיפור המלא'
+                                     : 'הסירה את הסימון של קורס האיפור המלא');
+        }
+        if(L.field === "tag:app"){
+          return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה'
+                                     : 'הסירה את הסימון של האפליקציה החדשה');
+        }
         if(L.field === "group"){
           return pre + (L.to ? 'שינתה את הקבוצה מ-'+(L.from?esc(L.from):"ללא קבוצה")+' ל-'+esc(L.to)
                              : 'החזירה את הקבוצה לערך שבגיליון'+(L.from?' (הייתה '+esc(L.from)+')':''));
@@ -380,7 +448,7 @@ function render(){
             '<button class="btn" data-savegroup="'+esc(w.email)+'">שמירת קבוצה</button>'+
             (w.groupOverride?'<button class="btn" data-cleargroup="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
           '</div>'+
-          '<div class="note">שיוך הקבוצה כאן משמש את האפליקציה בלבד. <b>יש לעדכן גם את הגיליון הראשי.</b></div>'+
+          '<div class="note">שיוך הקבוצה נשמר גם במניצ\'ט, ומשם הוא מגיע לגיליון לבד. <b>אין צורך לעדכן את הגיליון ידנית.</b></div>'+
           (w.newApp
             ? '<div class="edit"><span>שיעורי בונוס Glow'+(w.glowOverride?" ✎":"")+':</span>'+
                 '<span>'+(w.glow?"<b>יש גישה</b>":"<b>אין גישה</b>")+' · בגיליון: '+(w.sheetGlow?"יש גישה":"אין גישה")+'</span>'+
@@ -389,6 +457,7 @@ function render(){
                 (w.glowOverride?'<button class="btn" data-glow="" data-for="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
               '</div>'
             : '')+
+          mcBlock(w)+
           '<div class="edit"><span>גישה עד:</span><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
           '<span class="adds">הוסיפי '+
             '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
@@ -438,7 +507,27 @@ function render(){
     var em=el.getAttribute("data-stats"); STATS = (STATS===em ? "" : em); render(); }; });
   app.querySelectorAll("[data-sm]").forEach(function(el){ el.onclick=function(){
     STATSMODE = el.getAttribute("data-sm"); render(); }; });
-  app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){ EDITING=el.getAttribute("data-edit"); render(); }; });
+  // Opening her card is what triggers the single ManyChat lookup. Asked for once per card,
+  // not on every redraw, so pressing a tag button does not fire a second one.
+  app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-edit"); EDITING=em; render();
+    if(!MC[em]) mcLoad(em);
+  }; });
+  app.querySelectorAll("[data-mcretry]").forEach(function(el){ el.onclick=function(){
+    mcLoad(el.getAttribute("data-mcretry")); }; });
+  // The Glow course and the new-app marker. They live only in ManyChat, so the button waits
+  // for the write and then re-reads, rather than assuming it worked.
+  app.querySelectorAll("[data-mctag]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-for"), t=el.getAttribute("data-mctag"), on=el.getAttribute("data-on")==="1";
+    el.disabled=true;
+    save(em,{tag:t, on:on}).then(function(r){
+      if(!r.ok) throw new Error();
+      if(r.mc !== "ok") alert(r.mc === "not_found"
+        ? "לא נמצאה רשומה במניצ'ט לפי הטלפון שלה, ולכן שום דבר לא השתנה שם."
+        : "לא הצלחתי לעדכן את מניצ'ט. נסי שוב.");
+      return load().then(function(){ mcLoad(em); });
+    }).catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
+  }; });
   // A clerk says "another two months", not a date. The amount and the unit are hers to
   // choose; months move by calendar month so "another month" lands on the same day number.
   app.querySelectorAll("[data-add]").forEach(function(el){ el.onclick=function(){
@@ -462,17 +551,21 @@ function render(){
   app.querySelectorAll("[data-savegroup]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-savegroup"), g=document.getElementById("g_"+em).value;
     el.disabled=true; el.textContent="שומרת...";
-    save(em,{group:g}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
+    save(em,{group:g}).then(function(r){ if(!r.ok) throw new Error(); mcWarn(r); delete MC[em]; EDITING=""; return load().then(render); })
       .catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירת קבוצה"; });
   }; });
-  // The bonus lessons. Kept in our own store, so it applies on her next load instead of
-  // waiting minutes for Google's published sheet to refresh. The panel stays open, because
-  // the clerk usually wants to see the new state right where she pressed.
+  // The bonus lessons, written to both places at once: our own store, so it applies on her
+  // next load instead of waiting minutes for Google's published sheet to refresh, and the
+  // matching ManyChat tag, which is where the sheet column comes from in the first place.
+  // The panel stays open, because the clerk wants to see the new state where she pressed.
   app.querySelectorAll("[data-glow]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-for"), v=el.getAttribute("data-glow");
     el.disabled=true;
-    save(em,{glow:v}).then(function(r){ if(!r.ok) throw new Error(); return load().then(render); })
-      .catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
+    save(em,{glow:v}).then(function(r){
+      if(!r.ok) throw new Error();
+      mcWarn(r);
+      return load().then(function(){ mcLoad(em); });
+    }).catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
   }; });
   app.querySelectorAll("[data-cleargroup]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-cleargroup");

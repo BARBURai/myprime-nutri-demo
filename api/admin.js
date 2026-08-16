@@ -27,6 +27,75 @@ async function redis(base, token, ...args) {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
+// ManyChat. The registration sheet is exported out of it, so it is the real source, and a
+// change written here lands in the right place and reaches WhatsApp and the sheet on its
+// own. Three rules hold: the token never leaves the server, only the handful of names
+// below can be touched, and nothing here sends a message or starts an automation.
+const MC = "https://api.manychat.com";
+// She is found by her phone, not her email. The system email and phone fields are empty on
+// these subscribers, so findBySystemField returns nothing at all; the phone sitting in this
+// custom field is the only reliable key, and it is the sheet's ID column verbatim. An email
+// is not even unique here, the same address was found sitting on two separate records.
+const MC_WA_PHONE_FIELD = 11510562;
+const MC_GROUP_FIELD = "קבוצה";
+const MC_TAGS = {
+  demo: "GLOW- DEMO 💄",                       // the three bonus lessons inside the app
+  full: "GLOW-FULL💄💄💄",  // the paid Glow course
+  app: "אפליקציה תזונה",  // on the new app, not Kajabi
+};
+
+async function mc(path, body) {
+  const token = process.env.MANYCHAT_TOKEN;
+  if (!token) return { off: true };
+  const r = await fetch(MC + path, {
+    method: body ? "POST" : "GET",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let j = null;
+  try { j = await r.json(); } catch (e) {}
+  return { ok: r.ok, j };
+}
+
+async function mcFind(phone) {
+  const p = String(phone || "").replace(/[^\d]/g, "");
+  if (!p) return null;
+  const r = await mc(`/fb/subscriber/findByCustomField?field_id=${MC_WA_PHONE_FIELD}&field_value=${encodeURIComponent(p)}`);
+  if (r.off || !r.ok) return null;
+  const d = r.j && r.j.data;
+  const first = Array.isArray(d) ? d[0] : d;
+  return first && first.id ? first : null;
+}
+
+// Push the same change into ManyChat. Runs after the local write and never blocks it: if
+// ManyChat is unreachable the clerk's change still takes effect in the app, which is the
+// thing she is looking at. The screen reports which of the two actually happened.
+async function mcPush({ phone, hasGroup, group, glow, tag, on }) {
+  let sub;
+  try { sub = await mcFind(phone); } catch (e) { return "failed"; }
+  if (!sub) return "not_found";
+  try {
+    if (hasGroup) {
+      await mc("/fb/subscriber/setCustomFieldByName", {
+        subscriber_id: sub.id, field_name: MC_GROUP_FIELD, field_value: group,
+      });
+    }
+    // "Back to the sheet" deliberately leaves the tag alone: it means "whatever ManyChat
+    // already says", so there is nothing to write.
+    if (glow === "1" || glow === "0") {
+      await mc(glow === "1" ? "/fb/subscriber/addTagByName" : "/fb/subscriber/removeTagByName", {
+        subscriber_id: sub.id, tag_name: MC_TAGS.demo,
+      });
+    }
+    if (tag) {
+      await mc(on ? "/fb/subscriber/addTagByName" : "/fb/subscriber/removeTagByName", {
+        subscriber_id: sub.id, tag_name: MC_TAGS[tag],
+      });
+    }
+  } catch (e) { return "failed"; }
+  return "ok";
+}
+
 export default async function handler(req, res) {
   const key = String(req.query.key || "");
   const expected = process.env.ADMIN_KEY || "";
@@ -37,6 +106,29 @@ export default async function handler(req, res) {
 
   const RU = process.env.UPSTASH_REDIS_REST_URL;
   const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  // One woman's live state in ManyChat, read when the clerk opens her card. It is per-woman
+  // and on demand on purpose: ManyChat has no endpoint that lists everyone carrying a tag,
+  // so the only alternative would be one call per row, and the screen would never load.
+  if (req.method === "GET" && req.query.mc) {
+    if (!process.env.MANYCHAT_TOKEN) return res.status(200).json({ ok: true, off: true });
+    let sub = null;
+    try { sub = await mcFind(req.query.mc); }
+    catch (e) { return res.status(200).json({ ok: false, error: "mc_failed" }); }
+    if (!sub) return res.status(200).json({ ok: true, found: false });
+    const names = (sub.tags || []).map((t) => t.name);
+    const gf = (sub.custom_fields || []).find((f) => f.name === MC_GROUP_FIELD);
+    return res.status(200).json({
+      ok: true,
+      found: true,
+      group: (gf && gf.value) || "",
+      tags: {
+        demo: names.includes(MC_TAGS.demo),
+        full: names.includes(MC_TAGS.full),
+        app: names.includes(MC_TAGS.app),
+      },
+    });
+  }
 
   if (req.method === "POST") {
     let body = req.body;
@@ -54,8 +146,15 @@ export default async function handler(req, res) {
     const glow = String((body && body.glow) || "").trim();
     const until = String((body && body.until) || "").trim();
     const group = String((body && body.group) || "").trim();
+    // The two Glow-course and new-app tags have no column of their own in the sheet, so
+    // ManyChat is the only place they are written. Her phone travels with the request
+    // because ManyChat is keyed by it and the sheet is not reloaded on this path.
+    const phone = String((body && body.phone) || "").replace(/[^\d]/g, "");
+    const tag = String((body && body.tag) || "").trim();
+    const on = !!(body && body.on);
     if (!email) return res.status(400).json({ ok: false, error: "missing_email" });
-    if (!hasUntil && !hasGroup && !hasGlow) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (!hasUntil && !hasGroup && !hasGlow && !tag) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (tag && tag !== "full" && tag !== "app") return res.status(400).json({ ok: false, error: "bad_tag" });
     if (hasGlow && glow && glow !== "1" && glow !== "0") return res.status(400).json({ ok: false, error: "bad_glow" });
     if (hasUntil && until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
     if (hasGroup && group && !GROUP_RE.test(group)) return res.status(400).json({ ok: false, error: "bad_group" });
@@ -92,6 +191,11 @@ export default async function handler(req, res) {
         const was = cur.glow || (sheetRow ? (sheetRow.glow ? "1" : "0") : "");
         log.unshift({ at, by, field: "glow", from: was, to: glow });
       }
+      // A tag has no stored value of its own here, only a line in the record, so that the
+      // office can still see who turned it on and when.
+      if (tag) {
+        log.unshift({ at, by, field: "tag:" + tag, from: "", to: on ? "1" : "0" });
+      }
       const rec = JSON.stringify({
         until: hasUntil ? until : (cur.until || ""),
         group: hasGroup ? group : (cur.group || ""),
@@ -99,7 +203,14 @@ export default async function handler(req, res) {
         by, at, log: log.slice(0, 20),
       });
       await redis(RU, RT, "HSET", "admin:overrides", email, rec);
-      return res.status(200).json({ ok: true });
+      // Only after the local write, and never allowed to undo it. The local store is what
+      // the app reads within seconds; ManyChat is what makes the change permanent and
+      // carries it to WhatsApp and to the sheet.
+      let mcState = "off";
+      if (process.env.MANYCHAT_TOKEN && (hasGroup || glow === "1" || glow === "0" || tag)) {
+        mcState = await mcPush({ phone, hasGroup, group, glow: hasGlow ? glow : "", tag, on });
+      }
+      return res.status(200).json({ ok: true, mc: mcState });
     } catch (e) {
       return res.status(500).json({ ok: false, error: "write_failed" });
     }
