@@ -162,8 +162,19 @@ function usagePanel(w){
 
   // Only days she has actually reached. Drawing the rest of the programme as empty bars made
   // a woman on day 6 look as though she had missed the twelve days after it.
+  // The Glow bonus, on its own line and never inside the percentage below. It is the one
+  // number that matters before her cycle starts, because she can watch the bonus while she
+  // waits, and it is what says who to offer the full course to.
+  var glowLine = "";
+  if(u.glowTotal){
+    glowLine = '<div class="statline">💄 <b>'+(u.glowDone||0)+'</b> מתוך '+u.glowTotal+' שיעורי Glow'+
+      (u.glowViews ? ' · <b>'+u.glowViews+'</b> צפיות' : '')+
+      (!u.glowDone && u.glowStarted ? ' · התחילה לצפות' : '')+
+      (!u.glowDone && !u.glowStarted ? ' · עוד לא התחילה' : '')+'</div>';
+  }
+
   var today = w.start ? Math.max(0, Math.min(70, days(w.start, DATA.today)+1)) : 70;
-  if(!today) return '<div class="stats"><div class="meta">המחזור שלה עוד לא התחיל.</div></div>';
+  if(!today) return '<div class="stats">'+glowLine+'<div class="meta">המחזור שלה עוד לא התחיל.</div></div>';
 
   var tot=0, got=0;
   for(var n=1; n<=today; n++){
@@ -176,6 +187,7 @@ function usagePanel(w){
       '<b>'+u.videosDone+'</b> סרטונים · '+
       '<b>'+u.trackerDays+'</b> ימי יומן מעקב'+
       (u.views ? ' · <b>'+u.views+'</b> צפיות חוזרות' : '')+'</div>'+
+    glowLine+
     (u.views ? '' : '<div class="meta">צפיות חוזרות נספרות מ-'+il(VIEWS_SINCE)+'.</div>')+
     '<div class="chips"><span class="chip'+(STATSMODE==="day"?" on":"")+'" data-sm="day">לפי יום</span>'+
       '<span class="chip'+(STATSMODE==="week"?" on":"")+'" data-sm="week">לפי שבוע</span></div>'+

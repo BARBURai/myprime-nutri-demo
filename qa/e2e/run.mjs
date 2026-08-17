@@ -84,23 +84,23 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate }) {
+async function stubApi(context, { startDate, glow = false }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate });
+    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow });
     if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify({ reply: "רשמתי לך", done: false, items: [] }) }] });
     if (url.includes("/api/catalog") || url.includes("/api/il-food")) return json({ items: [] });
     return json({ ok: true });
   });
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate });
+  await stubApi(context, { startDate, glow });
   await context.addInitScript(([sd, extra, neverAsked]) => {
     localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
     localStorage.setItem("myprime_access_name", "בדיקה");
@@ -176,6 +176,44 @@ const CHECKS = [
       const n = await page.locator("text=התכנים שלך").count();
       await context.close();
       return { ok: n > 0, detail: `${n} כרטיסים ביום 80` };
+    },
+  },
+  {
+    // She can watch the Glow bonus while she waits for day 1. The point of this scenario is
+    // the safety half: before her start date NOTHING of the programme is unlocked, and the
+    // button must not become a side door into content she has not reached. Asserted by
+    // counting programme lessons on the screen the button lands her on, which must be zero.
+    name: "לפני תחילת התוכנית: כרטיס הבונוס נפתח, ואין אף שיעור של התוכנית",
+    async run(browser, device) {
+      // Two days from now, so she is genuinely before day 1.
+      const future = new Date(Date.parse(TODAY + "T00:00:00Z") + 2 * 86400000).toISOString().slice(0, 10);
+      const { context, page, errors } = await openApp(browser, device, { startDate: future, glow: true });
+      const card = await page.locator("text=בונוס שמחכה לך כבר עכשיו").count();
+      await page.locator("text=לצפייה בשיעורים").first().click({ timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(900);
+      // The four bonus rows must be there...
+      const bonus = await page.locator("text=/שיעור \\d+ - /").count();
+      // ...and nothing from the programme: no week, no day, no lesson of a day.
+      const weeks = await page.locator("text=/^שבוע \\d+$/").count();
+      const dayRows = await page.locator('div[role="button"]').filter({ hasText: /יום \d/ }).count();
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: card > 0 && bonus >= 3 && weeks === 0 && dayRows === 0 && bad.length === 0,
+        detail: `כרטיס ${card} · שיעורי בונוס ${bonus} · שבועות ${weeks} · ימים ${dayRows}`,
+      };
+    },
+  },
+  {
+    // She is NOT marked for the bonus, so the waiting screen must stay exactly as it was.
+    name: "לפני תחילת התוכנית: בלי הסימון אין כרטיס בונוס",
+    async run(browser, device) {
+      const future = new Date(Date.parse(TODAY + "T00:00:00Z") + 2 * 86400000).toISOString().slice(0, 10);
+      const { context, page } = await openApp(browser, device, { startDate: future, glow: false });
+      const card = await page.locator("text=בונוס שמחכה לך כבר עכשיו").count();
+      const waiting = await page.locator("text=התוכנית שלך מתחילה ביום").count();
+      await context.close();
+      return { ok: card === 0 && waiting > 0, detail: `כרטיס ${card} (מצופה 0) · מסך המתנה ${waiting}` };
     },
   },
   {

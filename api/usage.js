@@ -6,7 +6,8 @@
 // or anything she typed. Those stay on her device, and her backup stays encrypted with a key
 // only she holds. Keep it that way: this endpoint must not grow into a data pipe.
 //
-// POST /api/usage   { email, days: {"1-1":[2,3], ...}, videosDone, videosTotal, views, trackerDays }
+// POST /api/usage   { email, days: {"1-1":[2,3], ...}, videosDone, videosTotal, views,
+//                     trackerDays, glowDone, glowTotal, glowViews, glowStarted }
 // Stored in the Redis HASH `admin:usage`, field = email.
 
 const MAX_DAYS = 70;
@@ -51,6 +52,14 @@ export default async function handler(req, res) {
     videosTotal: num(body && body.videosTotal, 500),
     views: num(body && body.views, 100000),
     trackerDays: num(body && body.trackerDays, 400),
+    // The מיי פריים Glow bonus, kept in fields of its own and never merged into the counts
+    // above. Folded in, it would grow the denominator of "how much of the programme she
+    // watched" and every woman holding the bonus would read as behind the rest. Asked so
+    // the full Glow course can be offered to exactly the women who are watching it.
+    glowDone: num(body && body.glowDone, 50),
+    glowTotal: num(body && body.glowTotal, 50),
+    glowViews: num(body && body.glowViews, 10000),
+    glowStarted: !!(body && body.glowStarted),
     at: new Date().toISOString(),
   };
 
