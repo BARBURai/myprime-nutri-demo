@@ -12,7 +12,7 @@ import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
-import { GLOW_STARTED_KEY } from "./content/glow";
+import { GLOW_STARTED_KEY, hasGlow } from "./content/glow";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -544,7 +544,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.27";
+const VERSION = "5.28";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1280,7 +1280,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
 }
 // Shown when a participant has finished signing up but her programme starts on a
 // later Sunday. Day 1 (and everything with it) unlocks at midnight on that date.
-function PreStartScreen({ name, startDate }) {
+function PreStartScreen({ name, startDate, glow = false, onOpenGlow }) {
   // Phone only: on a desktop there is no home screen to put the icon on.
   const isPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
   const start = new Date(startDate);
@@ -1298,6 +1298,16 @@ function PreStartScreen({ name, startDate }) {
       </div>
       <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
       <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
+      {/* Only for a woman who is marked for the bonus. It opens straight onto the bonus
+          list rather than the content screen: before her start date nothing at all is
+          unlocked, so the ordinary screen would be empty and read as broken. */}
+      {glow && hasGlow() && (
+        <div style={{ background: C.panel, border: `1px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, lineHeight: 1.5 }}>💄 בונוס שמחכה לך כבר עכשיו</div>
+          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, margin: "8px 0 14px" }}>שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים Glow, עם ורד ספיבק.</div>
+          <Btn onClick={onOpenGlow}>לצפייה בשיעורים</Btn>
+        </div>
+      )}
       {isPhone && (
         <div style={{ background: C.brandBg, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
           <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>אפשר לסגור את האפליקציה.</div>
@@ -5638,6 +5648,10 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
   const [recipeSel, setRecipeSel] = useState(null);   // the recipe she has open, if any
+  // Opens the content screen straight onto the bonus list. Deliberately a flag beside the
+  // sheet rather than a sheet of its own, so it is the same screen she already knows and
+  // there is no second code path to keep in step.
+  const [glowDirect, setGlowDirect] = useState(false);
   const [lockMsg, setLockMsg] = useState(null);
   const [tour, setTour] = useState(null);
   const [showIntro, setShowIntro] = useState(saved ? false : true);
@@ -5741,7 +5755,7 @@ export default function App() {
         // here, otherwise the following press would leave the app.
         try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
       }
-      else if (sheetRef.current) setSheet(null);
+      else if (sheetRef.current) { setSheet(null); setGlowDirect(false); }
       else if (recipeSelRef.current) setRecipeSel(null);
       else if (tabRef.current !== "day") setTab("day");
       // Nothing of ours left: no new entry is pushed, so the next press exits the app.
@@ -6358,7 +6372,7 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} overlayOpen={!!(sheet || modal || showIntro)} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
@@ -6419,7 +6433,7 @@ export default function App() {
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
-            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} onClose={() => setSheet(null)} />}
+            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} startGlow={glowDirect} onClose={() => { setSheet(null); setGlowDirect(false); }} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
 

@@ -198,7 +198,7 @@ export function ContentDayCard({ week, dow, C, font, onOpen, glow }) {
   );
 }
 
-export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, backRef }) {
+export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, backRef, startGlow = false }) {
   const allDays = CONTENT_DAYS;
   const showGlow = !!glow && hasGlow();
   // Saturday carries day-of-week 0, and "everything up to today" then matches nothing, so the
@@ -217,13 +217,16 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   // pinch lock can stay on and the top/bottom bars are never scaled.
   useEffect(() => { setDone(loadStore(DONE_KEY)); setFav(loadStore(FAV_KEY)); }, []);
 
-  const [view, setView] = useState("today");
+  // Opened straight onto the bonus list. A woman who has not started yet has nothing at all
+  // unlocked, so the ordinary "today" view would be an empty screen and read as broken. The
+  // bonus chip hides the week row anyway, because the bonus belongs to no week.
+  const [view, setView] = useState(startGlow ? "all" : "today");
   const [openL, setOpenL] = useState(null); // {week, day, i, pagesOnly}
   const [origin, setOrigin] = useState("today");
   const [selWeek, setSelWeek] = useState(null);
   const [dayOpen, setDayOpen] = useState({});
   const [query, setQuery] = useState("");
-  const [typeF, setTypeF] = useState("all");
+  const [typeF, setTypeF] = useState(startGlow ? "glow" : "all");
 
   // The phone's back button, handed up to the app. Each level does exactly what its own
   // on-screen back arrow does, and the return value says whether the press was used up.
@@ -791,5 +794,19 @@ export function usageSummary() {
     });
     if (lessons.length) days[`${d.week}-${d.day}`] = [n, lessons.length];
   });
-  return { days, videosDone: vDone, videosTotal: vTotal, views: vViews };
+  // The bonus is counted on its own and is never folded into the numbers above. Mixed in it
+  // would grow the denominator of "how much of the programme she watched", and every woman
+  // who received the bonus would read as behind the rest in the office screen. Who is
+  // watching the bonus is a different question, asked so the full Glow course can be
+  // offered to exactly those women.
+  let gDone = 0, gViews = 0;
+  GLOW_DAY.lessons.forEach((l, i) => {
+    const k = lessonKey(0, 0, i);
+    if (done[k]) gDone++;
+    gViews += views[k] || 0;
+  });
+  return {
+    days, videosDone: vDone, videosTotal: vTotal, views: vViews,
+    glowDone: gDone, glowTotal: GLOW_DAY.lessons.length, glowViews: gViews, glowStarted: glowStarted(),
+  };
 }
