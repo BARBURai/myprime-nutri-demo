@@ -544,7 +544,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.33";
+const VERSION = "5.36";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -910,8 +910,8 @@ function InstallGuideModal({ onClose }) {
 // ואז לא מוצג כלום והמסך זהה למה שהיה. אלה אינם סרטוני בונוס, ולכן api/bunny-token.js
 // חותם עליהם בלי לדרוש מייל, וזה חשוב: המסך הזה מוצג לפני שהיא בכלל הזינה מייל.
 const INSTALL_VIDEO = {
-  ios: "290cbc3b-56c1-4758-b31d-a8f38868e17f",
-  android: "c6971178-2f9b-4d68-a75f-22b2858758e0",
+  ios: "31e51696-6f76-4209-a8c9-cec1d1c3b3f8",
+  android: "a4580411-9255-4ef1-a862-b93554cc0c81",
 };
 const INSTALL_VIDEO_RATIO = "1080 / 2340";
 
@@ -957,7 +957,7 @@ function InstallGate({ onSkip }) {
   const waHref = "https://wa.me/972547304177?text=" + encodeURIComponent("היי, אני צריכה עזרה בהתקנת האפליקציה של מיי פריים");
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", fontFamily: fontStack }}>
-      <div style={{ flex: 1, overflowY: "auto", padding: "24px 22px 16px", textAlign: "right" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "24px 22px max(24px, env(safe-area-inset-bottom))", textAlign: "right" }}>
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>📲</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>כדי להתחיל, מומלצת התקנה על הטלפון</div>
@@ -1003,9 +1003,10 @@ function InstallGate({ onSkip }) {
         <a href={waHref} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "13px", fontSize: 15.5, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>
           <MessageCircle size={19} /> צריכה עזרה? דברי איתנו בוואטסאפ
         </a>
-      </div>
-      <div style={{ padding: "10px 20px max(16px, env(safe-area-inset-bottom))", borderTop: `1px solid ${C.line}` }}>
-        <button onClick={() => setConfirmBrowser(true)} style={{ width: "100%", border: `1.5px solid ${C.line}`, background: C.panel, color: C.sub, borderRadius: 12, padding: "13px", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>אמשיך בדפדפן בינתיים</button>
+        {/* "אמשיך בדפדפן בינתיים" ישב בסרגל קבוע בתחתית המסך, כלומר מול העיניים שלה כל
+            הזמן, וזה הופך דרך מילוט לאפשרות שקולה. הוא יושב עכשיו בסוף התוכן, אחרי
+            ההנחיות ואחרי הוואטסאפ, ומי שרוצה אותו מגיעה אליו בגלילה. */}
+        <button onClick={() => setConfirmBrowser(true)} style={{ width: "100%", border: `1.5px solid ${C.line}`, background: "transparent", color: C.faint, borderRadius: 12, padding: "13px", fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", marginTop: 10 }}>אמשיך בדפדפן בינתיים</button>
       </div>
       {confirmBrowser && (
         <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
