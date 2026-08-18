@@ -544,7 +544,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.27";
+const VERSION = "5.30";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -907,6 +907,17 @@ function InstallGuideModal({ onClose }) {
 function InstallGate({ onSkip }) {
   const [confirmBrowser, setConfirmBrowser] = useState(false);
   const isIOS = /iphone|ipad|ipod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
+  // Chrome finishes the install silently: the notification it posts is not always shown, and
+  // nothing on this screen changed, so Ron watched himself sit and wait without knowing
+  // whether it had worked. The browser does announce it, we simply were not listening.
+  // Addition only: until this fires the screen is exactly what it was, iPhone never fires it
+  // because the install there is manual, and if it never arrives nothing is worse than before.
+  const [installed, setInstalled] = useState(false);
+  useEffect(() => {
+    const onInstalled = () => setInstalled(true);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => window.removeEventListener("appinstalled", onInstalled);
+  }, []);
   const waHref = "https://wa.me/972547304177?text=" + encodeURIComponent("היי, אני צריכה עזרה בהתקנת האפליקציה של מיי פריים");
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", fontFamily: fontStack }}>
@@ -916,6 +927,12 @@ function InstallGate({ onSkip }) {
           <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>כדי להתחיל, מומלצת התקנה על הטלפון</div>
           <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>ההתקנה נותנת לך אייקון משלה במסך הבית ופתיחה מהירה כמו אפליקציה רגילה.</p>
         </div>
+        {installed && (
+          <div style={{ background: "#E7F4EC", border: "1px solid #1E8449", borderRadius: 14, padding: "14px 16px", marginBottom: 14, textAlign: "right" }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#1E8449", lineHeight: 1.5 }}>✓ ההתקנה הסתיימה</div>
+            <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginTop: 6 }}>האייקון של מיי פריים 360 נמצא עכשיו בטלפון שלך. אפשר לסגור את החלון הזה ולפתוח את האפליקציה מהאייקון 💜</div>
+          </div>
+        )}
         {isIOS ? (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אייפון (Safari)</div>
