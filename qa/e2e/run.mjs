@@ -465,6 +465,42 @@ const CHECKS = [
     },
   },
   {
+    // The install video is an addition and never a route: if Bunny does not answer, the
+    // written steps must still be there. Both halves are asserted here, because the screen
+    // she lands on from the link is the one place where a blank is a lost participant.
+    name: "מסך ההתקנה מציג את הסרטון מעל ההנחיות הכתובות",
+    async run(browser, device) {
+      if (!device.isMobile) return { skip: true, detail: "מסך ההתקנה מוצג בטלפון בלבד" };
+      const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+      await context.route("**/api/**", (route) => {
+        const url = route.request().url();
+        const json = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+        if (url.includes("/api/bunny-token")) return json({ url: "about:blank", expires: 0 });
+        if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate: startForDay(10) });
+        return json({ ok: true });
+      });
+      await context.addInitScript(() => {
+        localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
+        localStorage.removeItem("myprime_install_ack");
+      });
+      const page = await context.newPage();
+      await page.goto(BASE, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(3000);
+      const intro = await page.locator("text=/סרטון קצר שמראה בדיוק איך/").count();
+      const frame = await page.locator('iframe[title="סרטון התקנה"]').count();
+      const withVideo = await page.locator("text=/ואותם שלבים בכתב/").count();
+      const plain = await page.locator("text=/^אייפון \\(Safari\\)$|^אנדרואיד \\(Chrome\\)$/").count();
+      const list = await page.locator("ol li").count();
+      await context.close();
+      // מערכת הפעלה שאין לה עדיין מזהה סרטון חייבת להיראות בדיוק כמו לפני התוספת.
+      // הכלל שנבדק כאן הוא שאין חצי מסך: או פתיח ונגן וכותרת "ואותם שלבים", או
+      // אף אחד מהם והכותרת הרגילה. ובשני המקרים ההנחיות הכתובות קיימות.
+      const full = intro === 1 && frame === 1 && withVideo === 1 && plain === 0;
+      const none = intro === 0 && frame === 0 && withVideo === 0 && plain === 1;
+      return { ok: (full || none) && list >= 4, detail: full ? `עם סרטון, ${list} שלבים` : none ? `בלי סרטון (אין עדיין מזהה), ${list} שלבים` : `לא עקבי: פתיח ${intro}, נגן ${frame}, כותרת עם ${withVideo}, כותרת רגילה ${plain}` };
+    },
+  },
+  {
     // The invariant behind the iPhone jump (v4.80). While the keyboard is open the page
     // used to stay at full height inside a shrunken viewport, leaving spare page for iOS
     // to scroll into, and the app was dragged out of view. On a phone the page must have
