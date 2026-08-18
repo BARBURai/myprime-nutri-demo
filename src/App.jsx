@@ -544,7 +544,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.30";
+const VERSION = "5.33";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -890,8 +890,10 @@ function InstallGuideModal({ onClose }) {
         <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
         <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
           <li>פתחי את האפליקציה בדפדפן Safari.</li>
-          <li>הקישי על כפתור השיתוף (ריבוע עם חץ כלפי מעלה).</li>
-          <li>גללי ובחרי "הוספה למסך הבית".</li>
+          <li>הקישי על שלוש הנקודות (•••) בסרגל שבתחתית המסך. אם מופיע שם כפתור השיתוף עצמו, ריבוע עם חץ כלפי מעלה, הקישי עליו ועברי לשלב 4.</li>
+          <li>בחרי "שיתוף".</li>
+          <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
+          <li>בחרי "הוספה למסך הבית".</li>
           <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
         </ol>
         <OpenFromIconNote />
@@ -900,6 +902,39 @@ function InstallGuideModal({ onClose }) {
         <a href={waHref} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "12px", fontSize: 15, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}><MessageCircle size={18} /> צריכה עזרה? וואטסאפ</a>
         <Btn onClick={onClose}>סגירה</Btn>
       </div>
+    </div>
+  );
+}
+
+// שני סרטוני ההתקנה, בספרייה של באני. מזהה ריק פירושו שאין סרטון למערכת ההפעלה הזאת,
+// ואז לא מוצג כלום והמסך זהה למה שהיה. אלה אינם סרטוני בונוס, ולכן api/bunny-token.js
+// חותם עליהם בלי לדרוש מייל, וזה חשוב: המסך הזה מוצג לפני שהיא בכלל הזינה מייל.
+const INSTALL_VIDEO = {
+  ios: "290cbc3b-56c1-4758-b31d-a8f38868e17f",
+  android: "c6971178-2f9b-4d68-a75f-22b2858758e0",
+};
+const INSTALL_VIDEO_RATIO = "1080 / 2340";
+
+function InstallVideo({ videoId }) {
+  const [url, setUrl] = useState(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    let live = true;
+    setUrl(null); setErr(false);
+    fetch(`/api/bunny-token?videoId=${encodeURIComponent(videoId)}`)
+      .then((r) => r.json())
+      .then((d) => { if (!live) return; if (d && d.url) setUrl(d.url); else setErr(true); })
+      .catch(() => { if (live) setErr(true); });
+    return () => { live = false; };
+  }, [videoId]);
+  // הסרטון הוא תוספת ולא מסלול. אם הוא לא נטען, לא מוצגת שום שגיאה וההנחיות הכתובות
+  // שמתחתיו ממשיכות לעבוד בדיוק כמו קודם.
+  if (err) return null;
+  const box = { position: "relative", width: "100%", aspectRatio: INSTALL_VIDEO_RATIO, borderRadius: 14, overflow: "hidden", background: "#000" };
+  if (!url) return (<div style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center" }}><Loader size={26} className="spin" color="#fff" /></div>);
+  return (
+    <div style={box}>
+      <iframe src={url} loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }} title="סרטון התקנה" />
     </div>
   );
 }
@@ -918,6 +953,7 @@ function InstallGate({ onSkip }) {
     window.addEventListener("appinstalled", onInstalled);
     return () => window.removeEventListener("appinstalled", onInstalled);
   }, []);
+  const vid = isIOS ? INSTALL_VIDEO.ios : INSTALL_VIDEO.android;
   const waHref = "https://wa.me/972547304177?text=" + encodeURIComponent("היי, אני צריכה עזרה בהתקנת האפליקציה של מיי פריים");
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", fontFamily: fontStack }}>
@@ -933,19 +969,28 @@ function InstallGate({ onSkip }) {
             <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginTop: 6 }}>האייקון של מיי פריים 360 נמצא עכשיו בטלפון שלך. אפשר לסגור את החלון הזה ולפתוח את האפליקציה מהאייקון 💜</div>
           </div>
         )}
+        {vid && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>רגע לפני, סרטון קצר שמראה בדיוק איך</div>
+            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>דקה אחת, ואת רואה על המסך כל שלב. אפשר לצפות עד הסוף ואז לעשות, או לעצור באמצע ולעשות תוך כדי 💜</p>
+            <InstallVideo videoId={vid} />
+          </div>
+        )}
         {isIOS ? (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אייפון (Safari)</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>{vid ? "ואותם שלבים בכתב, לאייפון (Safari)" : "אייפון (Safari)"}</div>
             <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
               <li>ודאי שאת בדפדפן Safari.</li>
-              <li>הקישי על כפתור השיתוף (ריבוע עם חץ כלפי מעלה).</li>
-              <li>גללי ובחרי "הוספה למסך הבית".</li>
+              <li>הקישי על שלוש הנקודות (•••) בסרגל שבתחתית המסך. אם מופיע שם כפתור השיתוף עצמו, ריבוע עם חץ כלפי מעלה, הקישי עליו ועברי לשלב 4.</li>
+              <li>בחרי "שיתוף".</li>
+              <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
+              <li>בחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
             </ol>
           </div>
         ) : (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אנדרואיד (Chrome)</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>{vid ? "ואותם שלבים בכתב, לאנדרואיד (Chrome)" : "אנדרואיד (Chrome)"}</div>
             <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
               <li>ודאי שאת בדפדפן Chrome.</li>
               <li>הקישי על תפריט שלוש הנקודות (⋮) בפינה העליונה.</li>
@@ -1282,8 +1327,10 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
             <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
             <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 16px", paddingInlineStart: 20 }}>
               <li>פתחי את האפליקציה בדפדפן Safari.</li>
-              <li>הקישי על כפתור השיתוף (ריבוע עם חץ כלפי מעלה).</li>
-              <li>גללי ובחרי "הוספה למסך הבית".</li>
+              <li>הקישי על שלוש הנקודות (•••) בסרגל שבתחתית המסך. אם מופיע שם כפתור השיתוף עצמו, ריבוע עם חץ כלפי מעלה, הקישי עליו ועברי לשלב 4.</li>
+              <li>בחרי "שיתוף".</li>
+              <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
+              <li>בחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
             </ol>
             <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>לרענון האפליקציה באייפון</div>
@@ -5266,7 +5313,7 @@ function tourLastOnly() { return [TOUR_TAIL[TOUR_TAIL.length - 1]]; }
 
 // Entries below restate copy already in the app (no new claims).
 const FAQ_ITEMS = [
-  { q: "איך מתקינים את האפליקציה בטלפון (כמו אפליקציה רגילה)?", a: "באנדרואיד פותחים בדפדפן Chrome, נכנסים לתפריט שלוש הנקודות ובוחרים 'הוספה למסך הבית'. באייפון פותחים ב-Safari, מקישים על כפתור השיתוף ובוחרים 'הוספה למסך הבית'. כך נוצר אייקון של האפליקציה במסך הבית, ואפשר לפתוח אותה בלחיצה אחת כמו אפליקציה רגילה." },
+  { q: "איך מתקינים את האפליקציה בטלפון (כמו אפליקציה רגילה)?", a: "באנדרואיד פותחים בדפדפן Chrome, נכנסים לתפריט שלוש הנקודות ובוחרים 'הוספה למסך הבית'. באייפון פותחים ב-Safari, מקישים על שלוש הנקודות בתחתית המסך, בוחרים 'שיתוף' ואז 'הוספה למסך הבית'. כך נוצר אייקון של האפליקציה במסך הבית, ואפשר לפתוח אותה בלחיצה אחת כמו אפליקציה רגילה." },
   { q: "האפליקציה נראית ישנה או לא מתעדכנת - איך מרעננים?", a: "באנדרואיד אפשר למשוך את המסך כלפי מטה כדי לרענן, או לסגור את האפליקציה ולפתוח שוב. באייפון משיכה למטה לא עובדת - צריך לסגור את האפליקציה לגמרי (להחליק מלמטה למעלה, לעצור באמצע, ולהחליק את הכרטיס של האפליקציה כלפי מעלה), ואז לפתוח שוב מהאייקון. אם גם אחרי זה היא עדיין נראית ישנה, אפשר להסיר אותה ממסך הבית ולהוסיף מחדש - אבל שימי לב שזה מאפס את הנתונים במכשיר, אז כדאי לעשות קודם גיבוי במסך הפרופיל." },
   { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
