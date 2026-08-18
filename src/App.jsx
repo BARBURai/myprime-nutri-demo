@@ -544,7 +544,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.35";
+const VERSION = "5.37";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -910,8 +910,8 @@ function InstallGuideModal({ onClose }) {
 // ואז לא מוצג כלום והמסך זהה למה שהיה. אלה אינם סרטוני בונוס, ולכן api/bunny-token.js
 // חותם עליהם בלי לדרוש מייל, וזה חשוב: המסך הזה מוצג לפני שהיא בכלל הזינה מייל.
 const INSTALL_VIDEO = {
-  ios: "290cbc3b-56c1-4758-b31d-a8f38868e17f",
-  android: "c6971178-2f9b-4d68-a75f-22b2858758e0",
+  ios: "31e51696-6f76-4209-a8c9-cec1d1c3b3f8",
+  android: "a4580411-9255-4ef1-a862-b93554cc0c81",
 };
 const INSTALL_VIDEO_RATIO = "1080 / 2340";
 
