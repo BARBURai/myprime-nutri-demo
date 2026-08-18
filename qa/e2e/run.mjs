@@ -488,9 +488,16 @@ const CHECKS = [
       await page.waitForTimeout(3000);
       const intro = await page.locator("text=/סרטון קצר שמראה בדיוק איך/").count();
       const frame = await page.locator('iframe[title="סרטון התקנה"]').count();
-      const steps = await page.locator("text=/ואותם שלבים בכתב/").count();
+      const withVideo = await page.locator("text=/ואותם שלבים בכתב/").count();
+      const plain = await page.locator("text=/^אייפון \\(Safari\\)$|^אנדרואיד \\(Chrome\\)$/").count();
+      const list = await page.locator("ol li").count();
       await context.close();
-      return { ok: intro === 1 && frame === 1 && steps === 1, detail: `פתיח ${intro}, נגן ${frame}, הנחיות כתובות ${steps}` };
+      // מערכת הפעלה שאין לה עדיין מזהה סרטון חייבת להיראות בדיוק כמו לפני התוספת.
+      // הכלל שנבדק כאן הוא שאין חצי מסך: או פתיח ונגן וכותרת "ואותם שלבים", או
+      // אף אחד מהם והכותרת הרגילה. ובשני המקרים ההנחיות הכתובות קיימות.
+      const full = intro === 1 && frame === 1 && withVideo === 1 && plain === 0;
+      const none = intro === 0 && frame === 0 && withVideo === 0 && plain === 1;
+      return { ok: (full || none) && list >= 4, detail: full ? `עם סרטון, ${list} שלבים` : none ? `בלי סרטון (אין עדיין מזהה), ${list} שלבים` : `לא עקבי: פתיח ${intro}, נגן ${frame}, כותרת עם ${withVideo}, כותרת רגילה ${plain}` };
     },
   },
   {
