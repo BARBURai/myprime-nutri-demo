@@ -544,7 +544,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.29";
+const VERSION = "5.31";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
