@@ -84,6 +84,22 @@ check("כל עמודות החובה אותרו לפי כותרת",
   ["cancel", "start", "months", "phone", "group", "first", "last", "email"].every((k) => headers[k]),
   JSON.stringify(headers));
 check("עמודת האפליקציה אופציונלית ואינה נדרשת", headers.newapp === false);
+
+// The column Ron actually created is spelled "אפליקציית תזונה", and the sheet already
+// carries a "הורידה אפליקציה" column full of TRUE. Anything matched loosely would land on
+// that one and read as TRUE for almost everybody, so both halves are locked here.
+{
+  const H = 'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,הורידה אפליקציה,ביטלה,קבוצה,אפליקציית תזונה';
+  CSV2 = [H,
+    '972501111111,יפית,קורן,yafit@test.com,2026-06-14 0:00:00,TRUE,FALSE,ב,TRUE',
+    '972502222222,נילי,לביא,nili@test.com,2026-06-14 0:00:00,TRUE,FALSE,ב,',
+  ].join("\n");
+  const r = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
+  check('עמודת "אפליקציית תזונה" מאותרת', r.headers.newapp === true);
+  check("TRUE בעמודה מסמן אותה כאפליקציה החדשה", r.women.find((w) => w.email === "yafit@test.com").sheetNewApp === true);
+  check('"הורידה אפליקציה" אינה נקראת כעמודת האפליקציה', r.women.find((w) => w.email === "nili@test.com").sheetNewApp === false);
+  CSV2 = null;
+}
 check("חמש נשים נקראו", women.length === 5, "התקבל " + women.length);
 const yafit = women.find((w) => w.email === "yafit@test.com");
 check("שם פרטי ומשפחה נקראים מ-F_NAME ו-L_NAME", yafit.first === "יפית" && yafit.last === "קורן");
