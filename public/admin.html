@@ -234,6 +234,7 @@ function mcLoad(email){
 function mcWarn(r){
   if(!r || r.mc === "ok" || r.mc === "off" || !r.mc) return;
   if(String(r.mc).indexOf("ok:") === 0) return;
+  if(String(r.mc).indexOf("startfail:") === 0) return;   // has a message of its own
   alert(r.mc === "not_found"
     ? "נשמר אצלנו, אבל לא נמצאה רשומה במניצ'ט לפי הטלפון שלה, ולכן שם שום דבר לא השתנה."
     : "נשמר אצלנו, אבל העדכון במניצ'ט נכשל. שווה לנסות שוב.");
@@ -631,8 +632,11 @@ function render(){
       // What ManyChat actually stored, echoed back rather than assumed. A datetime field
       // there has a shape of its own, and this is the only way to see it for certain.
       if(r.mc && r.mc.indexOf("ok:")===0) alert("נשמר. במניצ'ט עכשיו: "+r.mc.slice(3));
+      else if(r.mc && r.mc.indexOf("startfail:")===0) alert("התאריך נשמר אצלנו וחל על האפליקציה, אבל במניצ'ט הוא לא נכתב.\n\nמניצ'ט אמר: "+r.mc.slice(10)+"\n\nכלומר הגיליון והאוטומציות שם לא יודעים על השינוי.");
       else mcWarn(r);
-      delete MC[em]; EDITING=""; return load().then(render);
+      // The panel stays open and the ManyChat line is re-read, so what is on screen is what
+      // is really there rather than what was there before the change.
+      delete MC[em]; return load().then(function(){ render(); mcLoad(em); });
     }).catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירת תאריך ההתחלה"; });
   }; });
   app.querySelectorAll("[data-clearstart]").forEach(function(el){ el.onclick=function(){
