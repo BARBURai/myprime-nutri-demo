@@ -233,6 +233,7 @@ function mcLoad(email){
 // that, otherwise she walks away believing the sheet will catch up on its own.
 function mcWarn(r){
   if(!r || r.mc === "ok" || r.mc === "off" || !r.mc) return;
+  if(String(r.mc).indexOf("ok:") === 0) return;
   alert(r.mc === "not_found"
     ? "נשמר אצלנו, אבל לא נמצאה רשומה במניצ'ט לפי הטלפון שלה, ולכן שם שום דבר לא השתנה."
     : "נשמר אצלנו, אבל העדכון במניצ'ט נכשל. שווה לנסות שוב.");
@@ -289,9 +290,23 @@ function mcBlock(w){
       '<button class="btn'+(on?" p":"")+'" data-mctag="'+key+'" data-on="1" data-for="'+esc(w.email)+'">יש</button>'+
       '<button class="btn'+(on?"":" p")+'" data-mctag="'+key+'" data-on="0" data-for="'+esc(w.email)+'">אין</button></div>';
   };
-  return line("קבוצה שם עכשיו <b>"+(s.group?esc(s.group):"ללא")+"</b>")+
+  return line("קבוצה שם עכשיו <b>"+(s.group?esc(s.group):"ללא")+"</b>"+
+      " · תאריך התחלה שם: <b>"+(s.start?esc(s.start):"ריק")+"</b>")+
     row("full","קורס האיפור המלא")+
     row("app","אפליקציה חדשה");
+}
+
+// The eight cohorts she can be moved to: the one already running this week, and the seven
+// after it. A cohort always begins on a Sunday, and the app leans on that in two separate
+// places, so the dates are computed here and never typed.
+function sundays(){
+  var out=[], base=new Date(DATA.today+"T00:00:00Z");
+  base.setUTCDate(base.getUTCDate()-base.getUTCDay());
+  for(var i=0;i<8;i++){
+    var d=new Date(base.getTime()); d.setUTCDate(d.getUTCDate()+i*7);
+    out.push(d.toISOString().slice(0,10));
+  }
+  return out;
 }
 
 function render(){
@@ -423,7 +438,8 @@ function render(){
       '<div class="meta">'+esc(w.phone||"אין טלפון")+
         (w.phone?' <button class="lnk" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+
         ' · '+esc(w.email)+' <button class="lnk" data-copy="'+esc(w.email)+'">העתקה</button></div>'+
-      '<div class="meta">מחזור '+il(w.start)+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
+      '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
+      (w.startOverride?'<div class="manual">תאריך ההתחלה שונה ידנית · בגיליון: '+(w.sheetStart?il(w.sheetStart):"לא ידוע")+'</div>':'')+
       (w.newApp
         ? '<div class="until">גישה עד: <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+
           (w.expired?" (הסתיימה)":"")+'</div>'
@@ -444,6 +460,10 @@ function render(){
           return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה'
                                      : 'הסירה את הסימון של האפליקציה החדשה');
         }
+        if(L.field === "start"){
+          return pre + (L.to ? 'העבירה אותה למחזור של '+il(L.to)+(L.from?' (הייתה ב-'+il(L.from)+')':'')
+                             : 'החזירה את תאריך ההתחלה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
+        }
         if(L.field === "group"){
           return pre + (L.to ? 'שינתה את הקבוצה מ-'+(L.from?esc(L.from):"ללא קבוצה")+' ל-'+esc(L.to)
                              : 'החזירה את הקבוצה לערך שבגיליון'+(L.from?' (הייתה '+esc(L.from)+')':''));
@@ -452,7 +472,17 @@ function render(){
                            : 'החזירה את תאריך הגישה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
       }).join('<br>')+'</div>':'')+
       (EDITING===w.email
-        ? '<div class="edit"><span>קבוצה:</span>'+
+        ? '<div class="edit"><span>תאריך תחילת המחזור:</span>'+
+            '<select class="field sm" style="width:210px" id="s_'+esc(w.email)+'">'+
+              sundays().map(function(d,i){
+                return '<option value="'+d+'"'+(w.start===d?" selected":"")+'>'+il(d)+(i===0?" · המחזור הנוכחי":i===1?" · המחזור הבא":"")+'</option>';
+              }).join("")+
+            '</select>'+
+            '<button class="btn" data-savestart="'+esc(w.email)+'">שמירת תאריך ההתחלה</button>'+
+            (w.startOverride?'<button class="btn" data-clearstart="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+          '</div>'+
+          '<div class="note">שינוי המחזור נכתב גם למניצ\'ט, בשעה 12:00, <b>ומשם הוא מגיע לגיליון לבד.</b> הוא משנה לה את היום בתוכנית, את התכנים שייפתחו לה ואת תאריך סיום הגישה.</div>'+
+          '<div class="edit"><span>קבוצה:</span>'+
             '<select class="field sm" id="g_'+esc(w.email)+'">'+
               '<option value=""'+(w.group?"":" selected")+'>ללא קבוצה</option>'+
               ["א","ב","ג","ד","ה"].map(function(L){ return '<option value="'+L+'"'+(w.group===L?" selected":"")+'>'+L+'</option>'; }).join("")+
@@ -559,6 +589,30 @@ function render(){
     el.disabled=true; el.textContent="שומרת...";
     save(em,{until:v}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
       .catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירה"; });
+  }; });
+  // Moving her cohort. It asks first on purpose: this is the widest change on the screen,
+  // it moves her day in the programme, what opens for her and when her access ends, and it
+  // is written into ManyChat where an automation may be listening.
+  app.querySelectorAll("[data-savestart]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-savestart"), v=document.getElementById("s_"+em).value;
+    if(!v){ alert("צריך לבחור תאריך"); return; }
+    if(!confirm("לשנות את תאריך ההתחלה?\n\nהיא תעבור למחזור של "+il(v)+".\nזה משנה לה את היום בתוכנית, את התכנים שייפתחו לה, ואת תאריך סיום הגישה.\nהשינוי נכתב גם למניצ'ט.")) return;
+    el.disabled=true; el.textContent="שומרת...";
+    save(em,{start:v}).then(function(r){
+      if(!r.ok) throw new Error();
+      // What ManyChat actually stored, echoed back rather than assumed. A datetime field
+      // there has a shape of its own, and this is the only way to see it for certain.
+      if(r.mc && r.mc.indexOf("ok:")===0) alert("נשמר. במניצ'ט עכשיו: "+r.mc.slice(3));
+      else mcWarn(r);
+      delete MC[em]; EDITING=""; return load().then(render);
+    }).catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירת תאריך ההתחלה"; });
+  }; });
+  app.querySelectorAll("[data-clearstart]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-clearstart");
+    if(!confirm("להחזיר את תאריך ההתחלה לערך שבגיליון?\n\nזה מבטל את השינוי אצלנו בלבד. מה שנכתב במניצ'ט נשאר שם.")) return;
+    el.disabled=true;
+    save(em,{start:""}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
+      .catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
   }; });
   app.querySelectorAll("[data-savegroup]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-savegroup"), g=document.getElementById("g_"+em).value;

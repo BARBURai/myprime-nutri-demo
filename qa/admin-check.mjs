@@ -272,6 +272,39 @@ console.log("\nנתוני שימוש");
   check("תאריך לא תקין אינו יוצר סימון", !store.kv["trk:not-a-date:nili@test.com"]);
 }
 
+console.log("\nהעברת מחזור");
+{
+  // Sundays only. A cohort that starts on any other day splits the two things the app
+  // derives from this date - the tracker card opens on days elapsed, its tasks open on the
+  // day of the week - and the card then renders with no tasks at all. See section 28.
+  check("תאריך שאינו יום ראשון נדחה",
+    (await callAdmin({ key: KEY }, "POST", { email: "nili@test.com", start: "2026-08-19" })).code === 400);
+  check("תאריך בפורמט שגוי נדחה",
+    (await callAdmin({ key: KEY }, "POST", { email: "nili@test.com", start: "16.08.2026" })).code === 400);
+
+  const before = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "nili@test.com");
+  check("לפני השינוי המחזור הוא זה שבגיליון", before.start === "2026-06-14", before.start);
+
+  await callAdmin({ key: KEY }, "POST", { email: "nili@test.com", start: "2026-08-16", by: "הפקידה" });
+  const after = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "nili@test.com");
+  check("המחזור החדש בתוקף במסך", after.start === "2026-08-16", after.start);
+  check("והערך שבגיליון ממשיך להיות מוצג לצידו", after.sheetStart === "2026-06-14", after.sheetStart);
+  check("מסומן כשינוי ידני", !!after.startOverride);
+  // 2026-08-16 + 70 days + 3 months = 2026-01-25 of the next year.
+  check("סיום הגישה מחושב מחדש מהמחזור החדש", after.until === "2027-01-25", after.until);
+  check("השינוי נרשם ביומן", (after.log || []).some((L) => L.field === "start" && L.to === "2026-08-16" && L.from === "2026-06-14"));
+
+  const acc = (await callAccess("nili@test.com")).body;
+  check("שער הגישה מחזיר לאפליקציה את המחזור החדש", acc.startDate === "2026-08-16", acc.startDate);
+  check("והיא עדיין נכנסת", acc.allowed === true);
+
+  await callAdmin({ key: KEY }, "POST", { email: "nili@test.com", start: "", by: "הפקידה" });
+  const back = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "nili@test.com");
+  check("חזרה לגיליון מחזירה את המחזור המקורי", back.start === "2026-06-14" && !back.startOverride);
+  check("וגם את סיום הגישה", back.until === "2026-11-23", back.until);
+  check("והיומן שומר גם את הביטול", (back.log || []).some((L) => L.field === "start" && L.to === ""));
+}
+
 console.log("\nחוסן");
 const hadFetch = globalThis.fetch;
 globalThis.fetch = async (url) => {
