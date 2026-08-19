@@ -189,6 +189,7 @@ export default async function handler(req, res) {
   // leave the sheet in charge rather than lock a paying woman out.
   let clerkUntil = "";
   let clerkStart = "";
+  let clerkBlocked = false;
   try {
     const raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", email);
     if (raw) {
@@ -199,6 +200,10 @@ export default async function handler(req, res) {
       // real on her next load. Read BEFORE the start date is parsed, so everything derived
       // from it - her day in the programme and the end of her access - follows along.
       clerkStart = ovr.start || "";
+      // "ביטול בתהליך" from the office screen. Ron's decision on 19 August 2026: the moment
+      // he marks it, she is out of the new app. Reversible in one click, and the screen says
+      // so. The sheet's own "ביטלה" column still blocks independently of this.
+      if (ovr.blocked === "1") clerkBlocked = true;
       // The Glow bonus, set from the office screen. "1" grants it and "0" takes it away even
       // when the sheet says TRUE; anything else leaves the sheet in charge. This is the fast
       // path: the sheet reaches us through Google's cache and lags by minutes.
@@ -206,6 +211,9 @@ export default async function handler(req, res) {
       else if (ovr.glow === "0") glow = false;
     }
   } catch (e) { /* fall through to the sheet */ }
+  // Same answer as the sheet's own cancellation, so she sees the one screen that already
+  // exists and points her at support, rather than a second wording for the same thing.
+  if (clerkBlocked) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
   const startSunday = parseDateToSunday(clerkStart || startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
   const pastWindow = clerkUntil
