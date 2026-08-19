@@ -501,6 +501,7 @@ function render(){
       '<div class="meta">'+esc(w.phone||"אין טלפון")+
         (w.phone?' <button class="lnk" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+
         ' · '+esc(w.email)+' <button class="lnk" data-copy="'+esc(w.email)+'">העתקה</button></div>'+
+      (w.pendingEmail?'<div class="manual">כתובת חדשה שכבר בתוקף: <b>'+esc(w.pendingEmail)+'</b> <button class="lnk" data-copy="'+esc(w.pendingEmail)+'">העתקה</button> · הגיליון עוד לא התעדכן, והיא נכנסת עם החדשה</div>':'')+
       '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
       (w.startOverride?'<div class="manual">תאריך ההתחלה שונה ידנית · בגיליון: '+(w.sheetStart?il(w.sheetStart):"לא ידוע")+'</div>':'')+
       (w.newApp
@@ -714,7 +715,7 @@ function render(){
       body:JSON.stringify({email:em, newEmail:to, phone:phoneOf(em), by:WHO})})
       .then(function(r){ return r.json(); })
       .then(function(d){
-        if(d && d.ok){ alert("הכתובת שונתה. מעכשיו היא נכנסת עם "+to+"."); EDITING=""; delete MC[em]; return load().then(render); }
+        if(d && d.ok){ alert("הכתובת שונתה. מעכשיו היא נכנסת עם "+to+" בלבד.\n\nהגיליון יתעדכן לבד בייצוא הבא של מניצ'ט, ועד אז הכרטיס יציג את שתי הכתובות."); EDITING=""; delete MC[em]; return load().then(render); }
         // Nothing was moved on our side when ManyChat refused, so the two never drift apart.
         var why = d && d.error === "email_taken" ? "הכתובת הזאת כבר קיימת אצל מישהי אחרת בגיליון."
                 : d && d.error === "mc_off" ? "החיבור למניצ'ט אינו מוגדר, ולכן לא שיניתי כלום."

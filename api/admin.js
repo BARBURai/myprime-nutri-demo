@@ -344,6 +344,13 @@ export default async function handler(req, res) {
     const mcState = await mcPush({ phone, newEmail: to });
     if (String(mcState).indexOf("ok") !== 0) return res.status(200).json({ ok: false, mc: mcState });
     const moved = await moveRecords(RU, RT, from, to);
+    // The bridge that carries her until the export catches up: the gate looks the new
+    // address up here and searches the file for the old one. Cleared automatically the
+    // moment the file itself carries the new address.
+    try {
+      await redis(RU, RT, "HSET", "admin:emailmap", to, from);
+      await redis(RU, RT, "HSET", "admin:emailold", from, to);
+    } catch (e) {}
     // The log travels with her, under the new address, so the history is not left behind.
     try {
       let cur = {};
@@ -474,7 +481,7 @@ export default async function handler(req, res) {
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
-  let overrides = {}, seen = {}, usage = {};
+  let overrides = {}, seen = {}, usage = {}, emailMap = {}, emailOld = {};
   const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
@@ -483,6 +490,8 @@ export default async function handler(req, res) {
       return v && typeof v === "object" ? v : out;
     };
     try { overrides = flat(await redis(RU, RT, "HGETALL", "admin:overrides")); } catch (e) {}
+    try { emailMap = flat(await redis(RU, RT, "HGETALL", "admin:emailmap")); } catch (e) {}
+    try { emailOld = flat(await redis(RU, RT, "HGETALL", "admin:emailold")); } catch (e) {}
     try { seen = flat(await redis(RU, RT, "HGETALL", "admin:seen")); } catch (e) {}
     try { usage = flat(await redis(RU, RT, "HGETALL", "admin:usage")); } catch (e) {}
 
@@ -510,6 +519,24 @@ export default async function handler(req, res) {
       });
     } catch (e) {}
   }
+
+  // A rename the export has already carried through needs no bridge, so it is dropped the
+  // first time the file itself shows the new address. Nothing here waits on that: this is
+  // only tidying, and a failure leaves the bridge in place, which is harmless.
+  const sheetEmails = new Set(sheet.women.map((w) => w.email));
+  for (const to of Object.keys(emailMap)) {
+    if (!sheetEmails.has(to)) continue;
+    const from = emailMap[to];
+    try {
+      await redis(RU, RT, "HDEL", "admin:emailmap", to);
+      await redis(RU, RT, "HDEL", "admin:emailold", from);
+      delete emailMap[to]; delete emailOld[from];
+    } catch (e) {}
+  }
+  // While it is still pending, the clerk sees both: the address in the file, and the one
+  // already in force. She must never have to guess which of the two she is looking at.
+  const pendingBySheetEmail = {};
+  for (const to of Object.keys(emailMap)) pendingBySheetEmail[emailMap[to]] = to;
 
   const today = israelDay(0);
   // A woman with no group letter cannot be placed in the partnership feature. Exactly two
@@ -547,6 +574,7 @@ export default async function handler(req, res) {
       sheetStart: w.start || "",
       sheetEnd,
       startOverride: (ovr && ovr.start) ? { start: ovr.start, by: ovr.by || "" } : null,
+      pendingEmail: pendingBySheetEmail[w.email] || "",
       blocked,
       seen: seenAt,
       // Opening the app at least once is what puts her on the new app. This only counts

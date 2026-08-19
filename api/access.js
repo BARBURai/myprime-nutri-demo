@@ -115,6 +115,27 @@ export default async function handler(req, res) {
   if (!sheetUrl) return res.status(200).json({ allowed: true, reason: "not_configured", configured: false });
   if (!email) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
 
+  // Her address may have just been changed from the office screen. ManyChat took it, but the
+  // sheet is exported from there on its own schedule, so for a while the file still carries
+  // the old one. Without this she would be told she is not registered while holding the
+  // address the office just gave her, which is exactly the state we were fixing.
+  //
+  // `lookFor` is the address to look for in the FILE. It is only different from the address
+  // she typed while the export has not caught up, and the moment it does, the map is no
+  // longer consulted and is cleared by the office screen.
+  let lookFor = email;
+  try {
+    const RUm = process.env.UPSTASH_REDIS_REST_URL, RTm = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (RUm && RTm) {
+      // The old address stops working the moment the new one is issued, so the two can never
+      // both be live and split her data in half.
+      const gone = await redis(RUm, RTm, "HGET", "admin:emailold", email);
+      if (gone) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
+      const was = await redis(RUm, RTm, "HGET", "admin:emailmap", email);
+      if (was) lookFor = String(was).trim().toLowerCase();
+    }
+  } catch (e) { /* the map is a bridge, never a gate: a Redis hiccup falls back to the file */ }
+
   let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false;
   try {
     // Cache-busting: Google's published CSV can serve a stale copy for a few minutes.
@@ -155,7 +176,7 @@ export default async function handler(req, res) {
       const EMAIL_IN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
       const em = ((emailCol !== -1 && cellsE[emailCol] ? String(cellsE[emailCol]).match(EMAIL_IN) : null) ||
         line.match(EMAIL_IN) || [])[0];
-      if (!em || em.toLowerCase() !== email) return;
+      if (!em || em.toLowerCase() !== lookFor) return;
       found = true;
       const cells = parseCsvLine(line);
 

@@ -353,6 +353,22 @@ console.log("\nשינוי כתובת מייל");
   check("רישום ההתראות מצביע על הכתובת החדשה", JSON.parse(store.hash["push:subs"]["endpoint-1"]).email === TO);
   const rec = JSON.parse(store.hash["admin:overrides"][TO]);
   check("השינוי נרשם ביומן, תחת הכתובת החדשה", (rec.log || []).some((L) => L.field === "email" && L.from === FROM && L.to === TO));
+
+  // The whole point: the sheet still carries the old address, because it is exported from
+  // ManyChat on its own schedule. She must be able to sign in with the new one at once.
+  check("היא נכנסת מיד עם הכתובת החדשה, בזמן שהגיליון עדיין עם הישנה",
+    (await callAccess(TO)).body.allowed === true);
+  check("והישנה מפסיקה לעבוד, כדי ששתיהן לא יחיו במקביל",
+    (await callAccess(FROM)).body.reason === "not_registered");
+  const card = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === FROM);
+  check("הכרטיס מציג את הכתובת החדשה לצד זו שבגיליון", card && card.pendingEmail === TO, JSON.stringify(card && card.pendingEmail));
+
+  // And once the export does catch up, the bridge clears itself.
+  CSV2 = CSV.replace(FROM, TO);
+  await callAdmin({ key: KEY });
+  check("כשהגיליון מתעדכן, הגשר נמחק לבד", !store.hash["admin:emailmap"][TO] && !store.hash["admin:emailold"][FROM]);
+  check("והיא ממשיכה להיכנס עם החדשה", (await callAccess(TO)).body.allowed === true);
+  CSV2 = null;
   delete process.env.MANYCHAT_TOKEN;
 }
 
