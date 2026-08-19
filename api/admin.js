@@ -25,6 +25,11 @@ async function redis(base, token, ...args) {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// The version this screen is served from. The office screen ships with the app, so without
+// it on screen there is no way to tell whether what you are looking at is the new code, and
+// Ron reported a change as missing when it was simply not deployed yet. Kept in step with
+// src/App.jsx by qa/version-check.mjs, which fails on any drift.
+const ADMIN_VERSION = "5.39";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -359,5 +364,5 @@ export default async function handler(req, res) {
     };
   });
 
-  return res.status(200).json({ ok: true, today, headers: sheet.headers, rawHeaders: sheet.rawHeaders, women });
+  return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women });
 }
