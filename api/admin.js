@@ -29,7 +29,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.44";
+const ADMIN_VERSION = "5.47";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -57,10 +57,13 @@ const MC_START_FIELD_ID = 11675348;
 // at all: the value was rejected, the answer was never read, and the screen reported success.
 // So the shapes are tried in order and each one is verified by reading the field back. The
 // first that actually lands wins, and if none does the clerk is told so.
+// The first one is the shape ManyChat actually accepted when this was tried against the
+// live account on 19 August 2026, so it is first and the rest are only a fallback. Verified
+// end to end: the field showed 09/06/2026 12:00 and the automation fired with the right date.
 const MC_START_FORMATS = (d) => [
+  `${d}T12:00:00+03:00`,
   `${d} 12:00:00`,
   `${d} 12:00`,
-  `${d}T12:00:00+03:00`,
   `${d}T12:00:00`,
 ];
 const MC_TAGS = {
@@ -146,16 +149,75 @@ async function mcPush({ phone, hasGroup, group, start, glow, tag, on }) {
   return startEcho ? "ok:" + startEcho : "ok";
 }
 
+// Codes the office holds, one per person, kept in the Redis hash `admin:codes`:
+//   code -> { name, by, at }
+// ADMIN_KEY stays the owner key and is the only one that can hand codes out or take them
+// back. It is also the way in when everything else is down, so it is never revocable.
+//
+// The gain beyond access: with an issued code the name comes from the code, so the line in
+// a woman's card saying who changed what is a fact rather than something somebody typed.
+const CODE_ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // no I, O, 0, 1: they are misread aloud
+function makeCode() {
+  let s = "";
+  for (let i = 0; i < 8; i++) { if (i === 4) s += "-"; s += CODE_ABC[Math.floor(Math.random() * CODE_ABC.length)]; }
+  return s;
+}
+
+async function whoIs(key, RU, RT) {
+  const owner = process.env.ADMIN_KEY || "";
+  // Constant work regardless of the guess, and never say which part was wrong.
+  if (owner && key.length === owner.length && key === owner) return { ok: true, owner: true, name: "" };
+  if (!key || !RU || !RT) return { ok: false };
+  // Fails closed on purpose: an issued code cannot be verified without Redis, and letting
+  // one through unverified would be worse than the owner having to step in.
+  try {
+    const raw = await redis(RU, RT, "HGET", "admin:codes", key);
+    if (!raw) return { ok: false };
+    const rec = JSON.parse(raw) || {};
+    return { ok: true, owner: false, name: String(rec.name || "") };
+  } catch (e) { return { ok: false }; }
+}
+
 export default async function handler(req, res) {
   const key = String(req.query.key || "");
-  const expected = process.env.ADMIN_KEY || "";
-  // Constant work regardless of the guess, and never say which part was wrong.
-  if (!expected || key.length !== expected.length || key !== expected) {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
-  }
-
   const RU = process.env.UPSTASH_REDIS_REST_URL;
   const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const me = await whoIs(key, RU, RT);
+  if (!me.ok) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  // The office codes. Only the owner key may see them or touch them, so a clerk cannot make
+  // herself another code or take away someone else's.
+  if (req.query.codes !== undefined || (req.method === "POST" && req.body && (req.body.newCode || req.body.dropCode))) {
+    if (!me.owner) return res.status(403).json({ ok: false, error: "owner_only" });
+    if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+    try {
+      if (req.method === "POST" && body && body.newCode) {
+        const name = String(body.newCode || "").trim().slice(0, 40);
+        if (!name) return res.status(400).json({ ok: false, error: "missing_name" });
+        const code = makeCode();
+        await redis(RU, RT, "HSET", "admin:codes", code, JSON.stringify({ name, by: String(body.by || "").slice(0, 40), at: new Date().toISOString() }));
+        return res.status(200).json({ ok: true, code, name });
+      }
+      if (req.method === "POST" && body && body.dropCode) {
+        await redis(RU, RT, "HDEL", "admin:codes", String(body.dropCode));
+        return res.status(200).json({ ok: true });
+      }
+      const flatH = (v) => {
+        const out = {};
+        if (Array.isArray(v)) { for (let i = 0; i < v.length; i += 2) out[v[i]] = v[i + 1]; return out; }
+        return v && typeof v === "object" ? v : out;
+      };
+      const all = flatH(await redis(RU, RT, "HGETALL", "admin:codes"));
+      const codes = Object.keys(all).map((code) => {
+        let r = {};
+        try { r = JSON.parse(all[code]) || {}; } catch (e) {}
+        return { code, name: r.name || "", at: r.at || "" };
+      }).sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
+      return res.status(200).json({ ok: true, codes });
+    } catch (e) { return res.status(500).json({ ok: false, error: "codes_failed" }); }
+  }
 
   // One woman's live state in ManyChat, read when the clerk opens her card. It is per-woman
   // and on demand on purpose: ManyChat has no endpoint that lists everyone carrying a tag,
@@ -186,7 +248,9 @@ export default async function handler(req, res) {
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
     const email = String((body && body.email) || "").trim().toLowerCase();
-    const by = String((body && body.by) || "").trim().slice(0, 40);
+    // With an issued code the name is the code's, not whatever was typed in the browser, so
+    // the line in her card saying who did this cannot be faked.
+    const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;
     // Each field is edited on its own, and an empty string means "back to the sheet". The
     // key being absent is what distinguishes "not touched" from "cleared".
     const hasUntil = body && Object.prototype.hasOwnProperty.call(body, "until");
@@ -389,5 +453,5 @@ export default async function handler(req, res) {
     };
   });
 
-  return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women });
+  return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women });
 }
