@@ -257,10 +257,11 @@ function load(){
 }
 
 function askKey(msg){
-  app.innerHTML = '<h1>ניהול משתתפות</h1><div class="sub">'+(msg||"הזיני את מפתח הכניסה")+'</div>'+
-    '<input class="field" id="k" type="password" placeholder="מפתח כניסה" autocomplete="off">'+
+  app.innerHTML = '<h1>ניהול משתתפות</h1><div class="sub">'+(msg||"הזיני את קוד הכניסה שלך")+'</div>'+
+    '<input class="field" id="k" type="password" placeholder="קוד כניסה" autocomplete="off">'+
     '<div style="height:10px"></div>'+
-    '<input class="field" id="w" placeholder="השם שלך (נרשם ליד כל שינוי)" value="'+esc(WHO)+'">'+
+    '<input class="field" id="w" placeholder="השם שלך" value="'+esc(WHO)+'">'+
+    '<div class="note">אם קיבלת קוד אישי, השם שלך כבר מחובר אליו ואין צורך למלא כאן.</div>'+
     '<div style="height:10px"></div>'+
     '<button class="btn p" id="go">כניסה</button>';
   document.getElementById("go").onclick = function(){
@@ -336,6 +337,35 @@ function appGap(){
   if(rest > 0) why.push(rest+' מסיבה אחרת');
   return '<div class="note">בגיליון מסומנות <b>'+marked+'</b> באפליקציית תזונה, ומוצגות <b>'+shown+'</b>. '+
     'ההפרש: '+why.join(" · ")+'. <b>מי שאין לה תאריך התחלה אינה משתתפת בתוכנית שרצה ולכן אינה מוצגת כאן.</b></div>';
+}
+
+var CODES = null, CODESOPEN = false;
+function loadCodes(){
+  return fetch("/api/admin?codes=1&key="+encodeURIComponent(KEY))
+    .then(function(r){ return r.json(); })
+    .then(function(d){ CODES = (d && d.codes) || []; });
+}
+// One code per person, handed out here. The point is not only access: with a code of her own
+// the name beside every change comes from the code and cannot be typed by hand.
+function teamBlock(){
+  if(!DATA.owner) return "";
+  if(!CODESOPEN) return '<div class="chips"><span class="chip" data-team="1">👥 צוות המשרד</span></div>';
+  var rows = (CODES||[]).map(function(c){
+    return '<div class="edit"><span><b>'+esc(c.name||"בלי שם")+'</b></span>'+
+      '<span style="direction:ltr;unicode-bidi:isolate;font-weight:700">'+esc(c.code)+'</span>'+
+      '<button class="lnk" data-copy="'+esc(c.code)+'">העתקה</button>'+
+      '<button class="btn" data-dropcode="'+esc(c.code)+'">ביטול הגישה</button></div>';
+  }).join("");
+  return '<div class="card">'+
+    '<div class="row1"><span class="nm">👥 צוות המשרד</span>'+
+      '<button class="lnk" data-team="0">סגירה</button></div>'+
+    (CODES === null ? '<div class="note">טוענת...</div>'
+      : (rows || '<div class="note">עוד לא נתת קוד לאף אחת.</div>'))+
+    '<div class="edit"><span>שם:</span>'+
+      '<input class="field sm" style="max-width:200px" id="newname" placeholder="למשל טלי">'+
+      '<button class="btn p" data-newcode="1">יצירת קוד</button></div>'+
+    '<div class="note">הקוד שלה מחליף את הקוד שלך אצלה בלבד. <b>היא יכולה לעשות כאן כל מה שאתה יכול, חוץ מלחלק קודים</b>, והשם שלה יופיע ליד כל שינוי שהיא תעשה. ביטול חל מיד.</div>'+
+  '</div>';
 }
 
 function render(){
@@ -418,7 +448,8 @@ function render(){
   list.sort(function(a,b){ return (a.first+" "+a.last).localeCompare(b.first+" "+b.last,"he"); });
 
   var html = '<h1>ניהול משתתפות</h1>'+
-    '<div class="sub">'+list.length+' משתתפות · מחוברת כ'+esc(WHO||"?")+(DATA.version?' · v'+esc(DATA.version):'')+'</div>'+
+    '<div class="sub">'+list.length+' משתתפות · מחוברת כ'+esc(DATA.me||WHO||"?")+(DATA.owner?" (מנהל)":"")+(DATA.version?' · v'+esc(DATA.version):'')+'</div>'+
+    teamBlock()+
     '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
     (searching ? '<div class="note">תוצאות חיפוש מכל הרשומות בגיליון, בלי סינון לפי מחזור, קבוצה או אפליקציה.</div>' :
       '<div class="chips"><span class="chip'+(missing.length?" warn":"")+(MISSING?" on":"")+'" data-m="1">'+
@@ -622,6 +653,34 @@ function render(){
   // Moving her cohort. It asks first on purpose: this is the widest change on the screen,
   // it moves her day in the programme, what opens for her and when her access ends, and it
   // is written into ManyChat where an automation may be listening.
+  app.querySelectorAll("[data-team]").forEach(function(el){ el.onclick=function(){
+    CODESOPEN = el.getAttribute("data-team")==="1";
+    if(CODESOPEN && CODES === null){ render(); loadCodes().then(render); return; }
+    render();
+  }; });
+  app.querySelectorAll("[data-newcode]").forEach(function(el){ el.onclick=function(){
+    var nameEl = document.getElementById("newname"), name = (nameEl?nameEl.value:"").trim();
+    if(!name){ alert("צריך להזין שם"); return; }
+    el.disabled=true; el.textContent="יוצרת...";
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({newCode:name, by:WHO})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d.ok) throw new Error();
+        alert("נוצר קוד ל"+name+":\n\n"+d.code+"\n\nשלחי לה אותו בוואטסאפ. היא מזינה אותו במסך הכניסה, והשם שלה יופיע ליד כל שינוי שהיא תעשה.");
+        return loadCodes().then(render);
+      }).catch(function(){ alert("היצירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="יצירת קוד"; });
+  }; });
+  app.querySelectorAll("[data-dropcode]").forEach(function(el){ el.onclick=function(){
+    var code = el.getAttribute("data-dropcode");
+    if(!confirm("לבטל את הגישה של הקוד הזה?\n\nהיא לא תוכל להיכנס יותר, החל מעכשיו.")) return;
+    el.disabled=true;
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({dropCode:code})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if(!d.ok) throw new Error(); return loadCodes().then(render); })
+      .catch(function(){ alert("הביטול נכשל. נסי שוב."); el.disabled=false; });
+  }; });
   app.querySelectorAll("[data-savestart]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-savestart"), v=document.getElementById("s_"+em).value;
     if(!v){ alert("צריך לבחור תאריך"); return; }
