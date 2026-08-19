@@ -567,16 +567,17 @@ function render(){
             (w.groupOverride?'<button class="btn" data-cleargroup="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
           '</div>'+
           '<div class="note">שיוך הקבוצה נשמר גם במניצ\'ט, ומשם הוא מגיע לגיליון לבד. <b>אין צורך לעדכן את הגיליון ידנית.</b></div>'+
-          (w.newApp
-            ? '<div class="edit"><span>שיעורי בונוס Glow'+(w.glowOverride?" ✎":"")+':</span>'+
-                '<span>'+(w.glow?"<b>יש גישה</b>":"<b>אין גישה</b>")+' · בגיליון: '+(w.sheetGlow?"יש גישה":"אין גישה")+'</span>'+
-                '<button class="btn'+(w.glow?" p":"")+'" data-glow="1" data-for="'+esc(w.email)+'">יש גישה</button>'+
-                '<button class="btn'+(w.glow?"":" p")+'" data-glow="0" data-for="'+esc(w.email)+'">אין גישה</button>'+
-                (w.glowOverride?'<button class="btn" data-glow="" data-for="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
-              '</div>'
-            : '')+
+          // Shown for everyone. The switch writes both the flag our app reads and the
+          // matching ManyChat tag, and the tag is a fact about her either way.
+          '<div class="edit"><span>שיעורי בונוס Glow'+(w.glowOverride?" ✎":"")+':</span>'+
+            '<span>'+(w.glow?"<b>יש גישה</b>":"<b>אין גישה</b>")+' · בגיליון: '+(w.sheetGlow?"יש גישה":"אין גישה")+'</span>'+
+            '<button class="btn'+(w.glow?" p":"")+'" data-glow="1" data-for="'+esc(w.email)+'">יש גישה</button>'+
+            '<button class="btn'+(w.glow?"":" p")+'" data-glow="0" data-for="'+esc(w.email)+'">אין גישה</button>'+
+            (w.glowOverride?'<button class="btn" data-glow="" data-for="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+          '</div>'+
           mcBlock(w)+
-          '<div class="edit"><span>גישה עד:</span><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
+          (w.newApp ? '' : '<div class="note">היא מנוהלת בקג\'אבי, ולכן <b>תאריך סיום הגישה ונתוני השימוש אינם רלוונטיים כאן</b> ואינם מוצגים. כל השאר נכון גם לגביה, כי הוא נשמר במניצ\'ט ובגיליון.</div>')+
+          (w.newApp ? '<div class="edit"><span>גישה עד:</span><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
           '<span class="adds">הוסיפי '+
             '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
             '<select class="field sm" style="width:100px" id="u_'+esc(w.email)+'">'+
@@ -586,15 +587,19 @@ function render(){
           '</span>'+
           '<button class="btn p" data-save="'+esc(w.email)+'">שמירה</button>'+
           (w.override?'<button class="btn" data-clear="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
-          '<button class="btn" data-cancel="1">ביטול</button></div>'
+          '</div>' : '')+
+          '<div class="edit"><button class="btn" data-cancel="1">סגירה</button></div>'
         : '<div class="acts">'+
           (w.phone?'<a class="btn" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
           (w.newApp
-            ? '<button class="btn" data-edit="'+esc(w.email)+'">עריכה</button>'+
-              '<button class="btn" data-stats="'+esc(w.email)+'">'+(STATS===w.email?"סגירת נתוני שימוש":"נתוני שימוש")+'</button>'
+            ? '<button class="btn" data-stats="'+esc(w.email)+'">'+(STATS===w.email?"סגירת נתוני שימוש":"נתוני שימוש")+'</button>'
             : '')+
-          '</div>'+
-          (w.newApp ? '' : '<div class="meta">מנוהלת בקג\'אבי. שינוי תאריך גישה ונתוני שימוש אינם רלוונטיים כאן.</div>'))+
+          // Editing is open to everyone. Almost everything in the panel is a fact about her
+          // in ManyChat and in the sheet - her cohort, her group, her address, her tags -
+          // and those are true whichever app she is on. Only the two things that exist in
+          // our app alone stay behind the flag: the end of her access here, and her usage.
+          '<button class="btn" data-edit="'+esc(w.email)+'">עריכה</button>'+
+          '</div>')+
       (STATS===w.email ? usagePanel(w) : '')+
       '</div>';
   });
