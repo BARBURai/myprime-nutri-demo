@@ -288,6 +288,39 @@ console.log("\nנתוני שימוש");
   check("תאריך לא תקין אינו יוצר סימון", !store.kv["trk:not-a-date:nili@test.com"]);
 }
 
+console.log("\nקודי גישה לצוות המשרד");
+{
+  check("קוד שלא קיים נחסם", (await callAdmin({ key: "made-up-code" })).code === 401);
+  check("בקשת קודים בלי מפתח המנהל נחסמת", (await callAdmin({ codes: "1" })).code === 401);
+
+  const made = await callAdmin({ key: KEY }, "POST", { newCode: "טלי", by: "רון" });
+  check("המנהל יוצר קוד", made.code === 200 && !!made.body.code, JSON.stringify(made.body));
+  const tali = made.body.code;
+  check("הקוד באורך ובצורה קבועים", /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(tali), tali);
+
+  const list = await callAdmin({ key: KEY, codes: "1" });
+  check("הקוד מופיע ברשימה עם השם", list.body.codes.some((c) => c.code === tali && c.name === "טלי"));
+
+  const asTali = await callAdmin({ key: tali });
+  check("טלי נכנסת עם הקוד שלה", asTali.code === 200);
+  check("והמסך יודע שהיא אינה המנהל", asTali.body.owner === false && asTali.body.me === "טלי");
+  check("המנהל מסומן כמנהל", (await callAdmin({ key: KEY })).body.owner === true);
+
+  // The whole point beyond access: the name on a change is the code's, not what was typed.
+  await callAdmin({ key: tali }, "POST", { email: "nili@test.com", group: "ד", by: "רון" });
+  const w = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === "nili@test.com");
+  check("השם ביומן מגיע מהקוד ולא ממה שהוקלד", (w.log || [])[0].by === "טלי", JSON.stringify((w.log || [])[0]));
+
+  check("טלי אינה יכולה לראות את הקודים", (await callAdmin({ key: tali, codes: "1" })).code === 403);
+  check("וגם לא ליצור קוד", (await callAdmin({ key: tali }, "POST", { newCode: "מישהי" })).code === 403);
+  check("וגם לא לבטל אחד", (await callAdmin({ key: tali }, "POST", { dropCode: tali })).code === 403);
+
+  await callAdmin({ key: KEY }, "POST", { dropCode: tali });
+  check("אחרי ביטול היא כבר לא נכנסת", (await callAdmin({ key: tali })).code === 401);
+  check("והמנהל ממשיך להיכנס", (await callAdmin({ key: KEY })).code === 200);
+  await callAdmin({ key: KEY }, "POST", { email: "nili@test.com", group: "" });
+}
+
 console.log("\nהכתיבה של תאריך ההתחלה למניצ'ט");
 {
   // The first build wrote nothing at all: the value shape was rejected, the answer was never
@@ -299,12 +332,14 @@ console.log("\nהכתיבה של תאריך ההתחלה למניצ'ט");
     return r.body;
   };
 
-  let b = await call("2026-08-16 12:00:00");
-  check("פורמט מקובל נכתב ומוחזר לפקידה", b.mc === "ok:2026-08-16 12:00:00", String(b.mc));
+  // The shape ManyChat really accepted on 19 August 2026, so it is the one tried first and
+  // the ordinary case must cost exactly one write.
+  let b = await call("2026-08-16T12:00:00+03:00");
+  check("הפורמט שנבדק מול מניצ'ט האמיתי הוא הראשון שנוסה", b.mc === "ok:2026-08-16T12:00:00+03:00", String(b.mc));
   check("ולא נוסו פורמטים נוספים אחרי שהראשון הצליח", MC.writes.length === 1, String(MC.writes.length));
 
-  b = await call("2026-08-16T12:00:00+03:00");
-  check("פורמט אחר מתגלה בניסיון ולא בניחוש", b.mc === "ok:2026-08-16T12:00:00+03:00", String(b.mc));
+  b = await call("2026-08-16 12:00:00");
+  check("ואם מניצ'ט ישנה דעה, הצורה הבאה מתגלה בניסיון ולא בניחוש", b.mc === "ok:2026-08-16 12:00:00", String(b.mc));
   check("והשעה תמיד 12:00", MC.writes.every((v) => String(v).includes("12:00")));
 
   b = await call("לא קיים");
