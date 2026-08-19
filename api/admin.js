@@ -14,7 +14,7 @@
 // GET  /api/admin?key=<ADMIN_KEY>              -> { ok, women[], headers, today }
 // POST /api/admin?key=<ADMIN_KEY>              -> { email, until, by }   ("" clears it)
 
-import { loadSheet, israelDay } from "./_sheet.js";
+import { loadSheet, israelDay, accessEnd, ymd } from "./_sheet.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -25,6 +25,11 @@ async function redis(base, token, ...args) {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// The version this screen is served from. The office screen ships with the app, so without
+// it on screen there is no way to tell whether what you are looking at is the new code, and
+// Ron reported a change as missing when it was simply not deployed yet. Kept in step with
+// src/App.jsx by qa/version-check.mjs, which fails on any drift.
+const ADMIN_VERSION = "5.40";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -38,6 +43,12 @@ const MC = "https://api.manychat.com";
 // is not even unique here, the same address was found sitting on two separate records.
 const MC_WA_PHONE_FIELD = 11510562;
 const MC_GROUP_FIELD = "קבוצה";
+// Her cohort start. Type datetime in ManyChat, and the name carries TWO spaces after FINAL,
+// exactly as the sheet column does. Ron decided that a change here is the same as making it
+// inside ManyChat: if an automation hangs off this field it is meant to fire.
+const MC_START_FIELD = "360 - FINAL  PERSONAL START";
+// Noon, by Ron. Every cohort begins on a Sunday at 12:00.
+const MC_START_TIME = "12:00";
 const MC_TAGS = {
   demo: "GLOW- DEMO 💄",                       // the three bonus lessons inside the app
   full: "GLOW-FULL💄💄💄",  // the paid Glow course
@@ -70,11 +81,25 @@ async function mcFind(phone) {
 // Push the same change into ManyChat. Runs after the local write and never blocks it: if
 // ManyChat is unreachable the clerk's change still takes effect in the app, which is the
 // thing she is looking at. The screen reports which of the two actually happened.
-async function mcPush({ phone, hasGroup, group, glow, tag, on }) {
+async function mcPush({ phone, hasGroup, group, start, glow, tag, on }) {
   let sub;
   try { sub = await mcFind(phone); } catch (e) { return "failed"; }
   if (!sub) return "not_found";
+  let startEcho = "";
   try {
+    if (start) {
+      await mc("/fb/subscriber/setCustomFieldByName", {
+        subscriber_id: sub.id, field_name: MC_START_FIELD, field_value: `${start} ${MC_START_TIME}`,
+      });
+      // Read it straight back and hand the clerk what ManyChat actually stored. The exact
+      // shape a datetime field keeps is not something to take on trust from documentation,
+      // and this way the first test shows it on screen instead of hiding a bad write.
+      try {
+        const again = await mcFind(phone);
+        const f = again && (again.custom_fields || []).find((x) => x.name === MC_START_FIELD);
+        startEcho = (f && f.value) || "";
+      } catch (e) {}
+    }
     if (hasGroup) {
       await mc("/fb/subscriber/setCustomFieldByName", {
         subscriber_id: sub.id, field_name: MC_GROUP_FIELD, field_value: group,
@@ -93,7 +118,7 @@ async function mcPush({ phone, hasGroup, group, glow, tag, on }) {
       });
     }
   } catch (e) { return "failed"; }
-  return "ok";
+  return startEcho ? "ok:" + startEcho : "ok";
 }
 
 export default async function handler(req, res) {
@@ -118,10 +143,12 @@ export default async function handler(req, res) {
     if (!sub) return res.status(200).json({ ok: true, found: false });
     const names = (sub.tags || []).map((t) => t.name);
     const gf = (sub.custom_fields || []).find((f) => f.name === MC_GROUP_FIELD);
+    const sf = (sub.custom_fields || []).find((f) => f.name === MC_START_FIELD);
     return res.status(200).json({
       ok: true,
       found: true,
       group: (gf && gf.value) || "",
+      start: (sf && sf.value) || "",
       tags: {
         demo: names.includes(MC_TAGS.demo),
         full: names.includes(MC_TAGS.full),
@@ -139,6 +166,12 @@ export default async function handler(req, res) {
     // key being absent is what distinguishes "not touched" from "cleared".
     const hasUntil = body && Object.prototype.hasOwnProperty.call(body, "until");
     const hasGroup = body && Object.prototype.hasOwnProperty.call(body, "group");
+    // Her cohort start. Approved by Ron on 19 August 2026, including the write into
+    // ManyChat: "it is the same as if she had done it in ManyChat, and if an automation is
+    // wired to it, that is as it should be." Always a Sunday, and the screen only ever
+    // offers Sundays, so anything else is a bug rather than a choice.
+    const hasStart = body && Object.prototype.hasOwnProperty.call(body, "start");
+    const start = String((body && body.start) || "").trim();
     // The מיי פריים Glow bonus. "" means back to the sheet, "1" grants it, "0" takes it away
     // even when the sheet says TRUE. Set here rather than in the sheet because Google serves
     // the published CSV from a cache and takes minutes; this takes effect on her next load.
@@ -153,11 +186,17 @@ export default async function handler(req, res) {
     const tag = String((body && body.tag) || "").trim();
     const on = !!(body && body.on);
     if (!email) return res.status(400).json({ ok: false, error: "missing_email" });
-    if (!hasUntil && !hasGroup && !hasGlow && !tag) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (!hasUntil && !hasGroup && !hasGlow && !hasStart && !tag) return res.status(400).json({ ok: false, error: "nothing_to_do" });
     if (tag && tag !== "full" && tag !== "app") return res.status(400).json({ ok: false, error: "bad_tag" });
     if (hasGlow && glow && glow !== "1" && glow !== "0") return res.status(400).json({ ok: false, error: "bad_glow" });
     if (hasUntil && until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
     if (hasGroup && group && !GROUP_RE.test(group)) return res.status(400).json({ ok: false, error: "bad_group" });
+    if (hasStart && start && !DATE_RE.test(start)) return res.status(400).json({ ok: false, error: "bad_date" });
+    // A cohort that does not begin on a Sunday splits the two things the app derives from
+    // this date: the tracker card opens on days elapsed, its tasks open on the day of the
+    // week. On a Sunday cohort they are the same day; on any other, the card renders with
+    // no tasks at all. See section 28.
+    if (hasStart && start && new Date(start + "T12:00:00Z").getUTCDay() !== 0) return res.status(400).json({ ok: false, error: "not_sunday" });
     if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
     try {
       // Every change is kept: who, when, and the exact move from one date to another. A
@@ -172,7 +211,7 @@ export default async function handler(req, res) {
       // What the value was before this edit. With no override in force that is the sheet's
       // own value, so read it rather than logging a blank.
       let sheetRow = null;
-      if ((hasUntil && !cur.until) || (hasGroup && !cur.group) || (hasGlow && !cur.glow)) {
+      if ((hasUntil && !cur.until) || (hasGroup && !cur.group) || (hasGlow && !cur.glow) || (hasStart && !cur.start)) {
         try {
           const sheet = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
           sheetRow = sheet.women.find((w) => w.email === email) || null;
@@ -187,6 +226,9 @@ export default async function handler(req, res) {
       if (hasGroup) {
         log.unshift({ at, by, field: "group", from: cur.group || (sheetRow ? sheetRow.group : "") || "", to: group });
       }
+      if (hasStart) {
+        log.unshift({ at, by, field: "start", from: cur.start || (sheetRow ? sheetRow.start : "") || "", to: start });
+      }
       if (hasGlow) {
         const was = cur.glow || (sheetRow ? (sheetRow.glow ? "1" : "0") : "");
         log.unshift({ at, by, field: "glow", from: was, to: glow });
@@ -199,6 +241,7 @@ export default async function handler(req, res) {
       const rec = JSON.stringify({
         until: hasUntil ? until : (cur.until || ""),
         group: hasGroup ? group : (cur.group || ""),
+        start: hasStart ? start : (cur.start || ""),
         glow: hasGlow ? glow : (cur.glow || ""),
         by, at, log: log.slice(0, 20),
       });
@@ -207,8 +250,8 @@ export default async function handler(req, res) {
       // the app reads within seconds; ManyChat is what makes the change permanent and
       // carries it to WhatsApp and to the sheet.
       let mcState = "off";
-      if (process.env.MANYCHAT_TOKEN && (hasGroup || glow === "1" || glow === "0" || tag)) {
-        mcState = await mcPush({ phone, hasGroup, group, glow: hasGlow ? glow : "", tag, on });
+      if (process.env.MANYCHAT_TOKEN && (hasGroup || start || glow === "1" || glow === "0" || tag)) {
+        mcState = await mcPush({ phone, hasGroup, group, start: hasStart ? start : "", glow: hasGlow ? glow : "", tag, on });
       }
       return res.status(200).json({ ok: true, mc: mcState });
     } catch (e) {
@@ -277,13 +320,26 @@ export default async function handler(req, res) {
     let ovr = null;
     const raw = overrides[w.email];
     if (raw) { try { ovr = JSON.parse(raw); } catch (e) {} }
-    const until = (ovr && ovr.until) || w.sheetEnd || "";
+    // Her cohort. Moving it moves everything that hangs off it, and the end of her access
+    // is the one that would otherwise be left behind: it is start plus 70 days plus her
+    // months, so it is recomputed here rather than carried over from the sheet.
+    const start = (ovr && ovr.start) || w.start || "";
+    const sheetEnd = (ovr && ovr.start && start)
+      ? ymd(accessEnd(new Date(start + "T00:00:00Z"), w.months))
+      : (w.sheetEnd || "");
+    const until = (ovr && ovr.until) || sheetEnd || "";
     const group = (ovr && ovr.group) || w.group || "";
     const seenAt = seen[w.email] || "";
     let use = null;
     if (usage[w.email]) { try { use = JSON.parse(usage[w.email]); } catch (e) {} }
     return {
       ...w,
+      // Both values travel, here as everywhere on this screen: what is in force, and what
+      // the sheet says. The clerk must never have to guess which one she is looking at.
+      start,
+      sheetStart: w.start || "",
+      sheetEnd,
+      startOverride: (ovr && ovr.start) ? { start: ovr.start, by: ovr.by || "" } : null,
       seen: seenAt,
       // Opening the app at least once is what puts her on the new app. This only counts
       // from the day admin:seen started being written, so the list fills in over a few days
@@ -304,9 +360,9 @@ export default async function handler(req, res) {
       override: (ovr && ovr.until) ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "" } : null,
       log: (ovr && Array.isArray(ovr.log)) ? ovr.log : [],
       expired: !!until && today > until,
-      needsGroup: !w.cancelled && !group && (w.start === thisWeek || w.start === nextWeek),
+      needsGroup: !w.cancelled && !group && (start === thisWeek || start === nextWeek),
     };
   });
 
-  return res.status(200).json({ ok: true, today, headers: sheet.headers, rawHeaders: sheet.rawHeaders, women });
+  return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women });
 }
