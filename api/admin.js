@@ -29,7 +29,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.47";
+const ADMIN_VERSION = "5.50";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -70,6 +70,13 @@ const MC_TAGS = {
   demo: "GLOW- DEMO 💄",                       // the three bonus lessons inside the app
   full: "GLOW-FULL💄💄💄",  // the paid Glow course
   app: "אפליקציה תזונה",  // on the new app, not Kajabi
+  // Cancellation in progress. Written by name like the others, and the name carries two ❌
+  // exactly as it is in the account (tag id 68345098). This one is the most consequential
+  // switch on the screen: the automation "תיוג בתהליך ביטול והקפאה 160725" hangs off it and
+  // messages a real participant, so the screen asks before it is touched in either
+  // direction. It deliberately does NOT take her access away here - it is a signal to
+  // ManyChat, and the "ביטלה" column in the sheet stays the only thing that blocks entry.
+  cancelproc: "ביטול בתהליך ❌❌",
 };
 
 async function mc(path, body) {
@@ -240,6 +247,7 @@ export default async function handler(req, res) {
         demo: names.includes(MC_TAGS.demo),
         full: names.includes(MC_TAGS.full),
         app: names.includes(MC_TAGS.app),
+        cancelproc: names.includes(MC_TAGS.cancelproc),
       },
     });
   }
@@ -276,7 +284,7 @@ export default async function handler(req, res) {
     const on = !!(body && body.on);
     if (!email) return res.status(400).json({ ok: false, error: "missing_email" });
     if (!hasUntil && !hasGroup && !hasGlow && !hasStart && !tag) return res.status(400).json({ ok: false, error: "nothing_to_do" });
-    if (tag && tag !== "full" && tag !== "app") return res.status(400).json({ ok: false, error: "bad_tag" });
+    if (tag && tag !== "full" && tag !== "app" && tag !== "cancelproc") return res.status(400).json({ ok: false, error: "bad_tag" });
     if (hasGlow && glow && glow !== "1" && glow !== "0") return res.status(400).json({ ok: false, error: "bad_glow" });
     if (hasUntil && until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
     if (hasGroup && group && !GROUP_RE.test(group)) return res.status(400).json({ ok: false, error: "bad_group" });
@@ -327,7 +335,11 @@ export default async function handler(req, res) {
       if (tag) {
         log.unshift({ at, by, field: "tag:" + tag, from: "", to: on ? "1" : "0" });
       }
+      // Marking her as cancelling also takes the new app away from her, by Ron's decision.
+      // It is one field, reversible by the same switch, and it is what api/access.js reads.
+      const blocked = tag === "cancelproc" ? (on ? "1" : "") : (cur.blocked || "");
       const rec = JSON.stringify({
+        blocked,
         until: hasUntil ? until : (cur.until || ""),
         group: hasGroup ? group : (cur.group || ""),
         start: hasStart ? start : (cur.start || ""),
@@ -417,6 +429,7 @@ export default async function handler(req, res) {
       ? ymd(accessEnd(new Date(start + "T00:00:00Z"), w.months))
       : (w.sheetEnd || "");
     const until = (ovr && ovr.until) || sheetEnd || "";
+    const blocked = !!(ovr && ovr.blocked === "1");
     const group = (ovr && ovr.group) || w.group || "";
     const seenAt = seen[w.email] || "";
     let use = null;
@@ -429,6 +442,7 @@ export default async function handler(req, res) {
       sheetStart: w.start || "",
       sheetEnd,
       startOverride: (ovr && ovr.start) ? { start: ovr.start, by: ovr.by || "" } : null,
+      blocked,
       seen: seenAt,
       // Opening the app at least once is what puts her on the new app. This only counts
       // from the day admin:seen started being written, so the list fills in over a few days
