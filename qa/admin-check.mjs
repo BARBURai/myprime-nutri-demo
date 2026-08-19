@@ -41,6 +41,11 @@ globalThis.fetch = async (url, opts) => {
     if (u.includes("findByCustomField")) {
       return { ok: true, json: async () => ({ status: "success", data: { id: 77, custom_fields: [{ id: 11675348, name: "360 - FINAL  PERSONAL START", value: MC.stored || null }], tags: [] } }) };
     }
+    if (u.includes("TagByName")) {
+      MC.tags = MC.tags || [];
+      MC.tags.push((u.includes("addTag") ? "+" : "-") + (body && body.tag_name));
+      return { ok: true, json: async () => ({ status: "success" }) };
+    }
     if (u.includes("setCustomField")) {
       MC.writes.push(body && body.field_value);
       if (MC.accept === null || body.field_value === MC.accept) { MC.stored = body.field_value; return { ok: true, json: async () => ({ status: "success" }) }; }
@@ -286,6 +291,27 @@ console.log("\nנתוני שימוש");
   check("עם doneToday נכתב סימון ליום הנוכחי", store.kv[`trk:${day}:yafit@test.com`] === "1");
   await callUsage({ email: "nili@test.com", days: {}, day: "not-a-date", doneToday: true });
   check("תאריך לא תקין אינו יוצר סימון", !store.kv["trk:not-a-date:nili@test.com"]);
+}
+
+console.log("\nסימון ביטול בתהליך");
+{
+  process.env.MANYCHAT_TOKEN = "test-token";
+  MC.tags = [];
+  const r = await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: true, phone: "972501111111", by: "רון" });
+  check("הסימון נשלח למניצ'ט", r.code === 200 && r.body.mc === "ok", JSON.stringify(r.body));
+  check("בשם התגית המדויק שבחשבון", MC.tags.includes("+ביטול בתהליך ❌❌"), JSON.stringify(MC.tags));
+
+  MC.tags = [];
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: false, phone: "972501111111", by: "רון" });
+  check("וההסרה מסירה את אותה תגית", MC.tags.includes("-ביטול בתהליך ❌❌"), JSON.stringify(MC.tags));
+
+  const w = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === "yafit@test.com");
+  check("שתי הפעולות נרשמו ביומן", (w.log || []).filter((L) => L.field === "tag:cancelproc").length === 2);
+  // A signal to ManyChat and nothing more: only the "ביטלה" column in the sheet blocks entry.
+  check("הסימון אינו חוסם לה את הגישה", (await callAccess("yafit@test.com")).body.allowed === true);
+  check("תגית שאינה ברשימה הסגורה נדחית",
+    (await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "whatever", on: true })).code === 400);
+  delete process.env.MANYCHAT_TOKEN;
 }
 
 console.log("\nקודי גישה לצוות המשרד");

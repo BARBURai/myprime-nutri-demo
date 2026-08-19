@@ -295,7 +295,9 @@ function mcBlock(w){
   return line("קבוצה שם עכשיו <b>"+(s.group?esc(s.group):"ללא")+"</b>"+
       " · תאריך התחלה שם: <b>"+(s.start?esc(s.start):"ריק")+"</b>")+
     row("full","קורס האיפור המלא")+
-    row("app","אפליקציה חדשה");
+    row("app","אפליקציה חדשה")+
+    row("cancelproc","ביטול בתהליך")+
+    '<div class="note">הסימון "ביטול בתהליך" נכתב במניצ\'ט ויכול להפעיל שם אוטומציה ששולחת לה הודעה. <b>הוא אינו חוסם לה את הגישה לאפליקציה.</b></div>';
 }
 
 // The eight cohorts she can be moved to: the one already running this week, and the seven
@@ -516,6 +518,10 @@ function render(){
           return pre + (L.to === "1" ? 'סימנה שיש לה את קורס האיפור המלא'
                                      : 'הסירה את הסימון של קורס האיפור המלא');
         }
+        if(L.field === "tag:cancelproc"){
+          return pre + (L.to === "1" ? 'סימנה אותה כביטול בתהליך'
+                                     : 'הסירה את הסימון של ביטול בתהליך');
+        }
         if(L.field === "tag:app"){
           return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה'
                                      : 'הסירה את הסימון של האפליקציה החדשה');
@@ -621,6 +627,13 @@ function render(){
   // for the write and then re-reads, rather than assuming it worked.
   app.querySelectorAll("[data-mctag]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-for"), t=el.getAttribute("data-mctag"), on=el.getAttribute("data-on")==="1";
+    // The one switch here that reaches a participant. Asked in both directions, because
+    // removing the tag can start an automation just as adding it can.
+    if(t === "cancelproc"){
+      if(!confirm(on
+        ? "לסמן אותה כביטול בתהליך?\n\nהתגית נכתבת במניצ'ט, ואם יש שם אוטומציה שמחוברת אליה היא תפעל, כולל הודעות שיישלחו אליה.\n\nהגישה שלה לאפליקציה לא נחסמת."
+        : "להסיר את הסימון \"ביטול בתהליך\"?\n\nגם ההסרה נכתבת במניצ'ט ויכולה להפעיל שם אוטומציה.")) return;
+    }
     el.disabled=true;
     save(em,{tag:t, on:on}).then(function(r){
       if(!r.ok) throw new Error();
