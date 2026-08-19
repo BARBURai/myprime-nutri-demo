@@ -335,7 +335,11 @@ export default async function handler(req, res) {
       if (tag) {
         log.unshift({ at, by, field: "tag:" + tag, from: "", to: on ? "1" : "0" });
       }
+      // Marking her as cancelling also takes the new app away from her, by Ron's decision.
+      // It is one field, reversible by the same switch, and it is what api/access.js reads.
+      const blocked = tag === "cancelproc" ? (on ? "1" : "") : (cur.blocked || "");
       const rec = JSON.stringify({
+        blocked,
         until: hasUntil ? until : (cur.until || ""),
         group: hasGroup ? group : (cur.group || ""),
         start: hasStart ? start : (cur.start || ""),
@@ -425,6 +429,7 @@ export default async function handler(req, res) {
       ? ymd(accessEnd(new Date(start + "T00:00:00Z"), w.months))
       : (w.sheetEnd || "");
     const until = (ovr && ovr.until) || sheetEnd || "";
+    const blocked = !!(ovr && ovr.blocked === "1");
     const group = (ovr && ovr.group) || w.group || "";
     const seenAt = seen[w.email] || "";
     let use = null;
@@ -437,6 +442,7 @@ export default async function handler(req, res) {
       sheetStart: w.start || "",
       sheetEnd,
       startOverride: (ovr && ovr.start) ? { start: ovr.start, by: ovr.by || "" } : null,
+      blocked,
       seen: seenAt,
       // Opening the app at least once is what puts her on the new app. This only counts
       // from the day admin:seen started being written, so the list fills in over a few days

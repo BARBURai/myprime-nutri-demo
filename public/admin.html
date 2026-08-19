@@ -297,7 +297,7 @@ function mcBlock(w){
     row("full","קורס האיפור המלא")+
     row("app","אפליקציה חדשה")+
     row("cancelproc","ביטול בתהליך")+
-    '<div class="note">הסימון "ביטול בתהליך" נכתב במניצ\'ט ויכול להפעיל שם אוטומציה ששולחת לה הודעה. <b>הוא אינו חוסם לה את הגישה לאפליקציה.</b></div>';
+    '<div class="note">הסימון "ביטול בתהליך" נכתב במניצ\'ט ויכול להפעיל שם אוטומציה ששולחת לה הודעה, <b>וגם חוסם לה את הכניסה לאפליקציה החדשה מהכניסה הבאה שלה.</b> הסרת הסימון מחזירה לה את הגישה.</div>';
 }
 
 // The eight cohorts she can be moved to: the one already running this week, and the seven
@@ -496,7 +496,8 @@ function render(){
       '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
       (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
-      (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+'</div>'+
+      (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+
+      (w.blocked?'<span class="grp" style="background:#fdecea;color:#b3261e">חסומה מהאפליקציה</span>':'')+'</div>'+
       '<div class="meta">'+esc(w.phone||"אין טלפון")+
         (w.phone?' <button class="lnk" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+
         ' · '+esc(w.email)+' <button class="lnk" data-copy="'+esc(w.email)+'">העתקה</button></div>'+
@@ -519,8 +520,8 @@ function render(){
                                      : 'הסירה את הסימון של קורס האיפור המלא');
         }
         if(L.field === "tag:cancelproc"){
-          return pre + (L.to === "1" ? 'סימנה אותה כביטול בתהליך'
-                                     : 'הסירה את הסימון של ביטול בתהליך');
+          return pre + (L.to === "1" ? 'סימנה אותה כביטול בתהליך וחסמה לה את האפליקציה'
+                                     : 'הסירה את הסימון של ביטול בתהליך והחזירה לה את הגישה');
         }
         if(L.field === "tag:app"){
           return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה'
@@ -631,8 +632,8 @@ function render(){
     // removing the tag can start an automation just as adding it can.
     if(t === "cancelproc"){
       if(!confirm(on
-        ? "לסמן אותה כביטול בתהליך?\n\nהתגית נכתבת במניצ'ט, ואם יש שם אוטומציה שמחוברת אליה היא תפעל, כולל הודעות שיישלחו אליה.\n\nהגישה שלה לאפליקציה לא נחסמת."
-        : "להסיר את הסימון \"ביטול בתהליך\"?\n\nגם ההסרה נכתבת במניצ'ט ויכולה להפעיל שם אוטומציה.")) return;
+        ? "לסמן אותה כביטול בתהליך?\n\nשני דברים יקרו:\n1. התגית תיכתב במניצ'ט, ואם יש שם אוטומציה שמחוברת אליה היא תפעל, כולל הודעות שיישלחו אליה.\n2. היא תיחסם מהאפליקציה החדשה בכניסה הבאה שלה.\n\nאפשר לבטל את זה באותו כפתור."
+        : "להסיר את הסימון \"ביטול בתהליך\"?\n\nהיא תחזור להיכנס לאפליקציה, וגם ההסרה נכתבת במניצ'ט ויכולה להפעיל שם אוטומציה.")) return;
     }
     el.disabled=true;
     save(em,{tag:t, on:on}).then(function(r){

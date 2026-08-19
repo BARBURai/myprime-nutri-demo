@@ -307,8 +307,24 @@ console.log("\nסימון ביטול בתהליך");
 
   const w = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === "yafit@test.com");
   check("שתי הפעולות נרשמו ביומן", (w.log || []).filter((L) => L.field === "tag:cancelproc").length === 2);
-  // A signal to ManyChat and nothing more: only the "ביטלה" column in the sheet blocks entry.
-  check("הסימון אינו חוסם לה את הגישה", (await callAccess("yafit@test.com")).body.allowed === true);
+  // Ron's decision on 19 August 2026: marking her also takes the new app away, and removing
+  // the mark gives it back. Both directions are locked here.
+  MC.tags = [];
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: true, phone: "972501111111", by: "רון" });
+  const acc = await callAccess("yafit@test.com");
+  check("הסימון חוסם לה את הכניסה לאפליקציה", acc.body.allowed === false && acc.body.reason === "cancelled", JSON.stringify(acc.body));
+  check("והכרטיס מציג אותה כחסומה", (await callAdmin({ key: KEY })).body.women.find((x) => x.email === "yafit@test.com").blocked === true);
+
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: false, phone: "972501111111", by: "רון" });
+  check("הסרת הסימון מחזירה לה את הגישה", (await callAccess("yafit@test.com")).body.allowed === true);
+  check("והכרטיס כבר לא מציג אותה כחסומה", (await callAdmin({ key: KEY })).body.women.find((x) => x.email === "yafit@test.com").blocked === false);
+
+  // A change to any other field must not quietly clear the block.
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: true, phone: "972501111111", by: "רון" });
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", group: "ג", by: "רון" });
+  check("שינוי בשדה אחר אינו מבטל את החסימה", (await callAccess("yafit@test.com")).body.allowed === false);
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: false, phone: "972501111111", by: "רון" });
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", group: "" });
   check("תגית שאינה ברשימה הסגורה נדחית",
     (await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "whatever", on: true })).code === 400);
   delete process.env.MANYCHAT_TOKEN;
