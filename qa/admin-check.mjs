@@ -84,6 +84,22 @@ check("כל עמודות החובה אותרו לפי כותרת",
   ["cancel", "start", "months", "phone", "group", "first", "last", "email"].every((k) => headers[k]),
   JSON.stringify(headers));
 check("עמודת האפליקציה אופציונלית ואינה נדרשת", headers.newapp === false);
+
+// The column Ron actually created is spelled "אפליקציית תזונה", and the sheet already
+// carries a "הורידה אפליקציה" column full of TRUE. Anything matched loosely would land on
+// that one and read as TRUE for almost everybody, so both halves are locked here.
+{
+  const H = 'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,הורידה אפליקציה,ביטלה,קבוצה,אפליקציית תזונה';
+  CSV2 = [H,
+    '972501111111,יפית,קורן,yafit@test.com,2026-06-14 0:00:00,TRUE,FALSE,ב,TRUE',
+    '972502222222,נילי,לביא,nili@test.com,2026-06-14 0:00:00,TRUE,FALSE,ב,',
+  ].join("\n");
+  const r = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
+  check('עמודת "אפליקציית תזונה" מאותרת', r.headers.newapp === true);
+  check("TRUE בעמודה מסמן אותה כאפליקציה החדשה", r.women.find((w) => w.email === "yafit@test.com").sheetNewApp === true);
+  check('"הורידה אפליקציה" אינה נקראת כעמודת האפליקציה', r.women.find((w) => w.email === "nili@test.com").sheetNewApp === false);
+  CSV2 = null;
+}
 check("חמש נשים נקראו", women.length === 5, "התקבל " + women.length);
 const yafit = women.find((w) => w.email === "yafit@test.com");
 check("שם פרטי ומשפחה נקראים מ-F_NAME ו-L_NAME", yafit.first === "יפית" && yafit.last === "קורן");
@@ -254,6 +270,39 @@ console.log("\nנתוני שימוש");
   check("עם doneToday נכתב סימון ליום הנוכחי", store.kv[`trk:${day}:yafit@test.com`] === "1");
   await callUsage({ email: "nili@test.com", days: {}, day: "not-a-date", doneToday: true });
   check("תאריך לא תקין אינו יוצר סימון", !store.kv["trk:not-a-date:nili@test.com"]);
+}
+
+console.log("\nהעברת מחזור");
+{
+  // Sundays only. A cohort that starts on any other day splits the two things the app
+  // derives from this date - the tracker card opens on days elapsed, its tasks open on the
+  // day of the week - and the card then renders with no tasks at all. See section 28.
+  check("תאריך שאינו יום ראשון נדחה",
+    (await callAdmin({ key: KEY }, "POST", { email: "nili@test.com", start: "2026-08-19" })).code === 400);
+  check("תאריך בפורמט שגוי נדחה",
+    (await callAdmin({ key: KEY }, "POST", { email: "nili@test.com", start: "16.08.2026" })).code === 400);
+
+  const before = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "nili@test.com");
+  check("לפני השינוי המחזור הוא זה שבגיליון", before.start === "2026-06-14", before.start);
+
+  await callAdmin({ key: KEY }, "POST", { email: "nili@test.com", start: "2026-08-16", by: "הפקידה" });
+  const after = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "nili@test.com");
+  check("המחזור החדש בתוקף במסך", after.start === "2026-08-16", after.start);
+  check("והערך שבגיליון ממשיך להיות מוצג לצידו", after.sheetStart === "2026-06-14", after.sheetStart);
+  check("מסומן כשינוי ידני", !!after.startOverride);
+  // 2026-08-16 + 70 days + 3 months = 2026-01-25 of the next year.
+  check("סיום הגישה מחושב מחדש מהמחזור החדש", after.until === "2027-01-25", after.until);
+  check("השינוי נרשם ביומן", (after.log || []).some((L) => L.field === "start" && L.to === "2026-08-16" && L.from === "2026-06-14"));
+
+  const acc = (await callAccess("nili@test.com")).body;
+  check("שער הגישה מחזיר לאפליקציה את המחזור החדש", acc.startDate === "2026-08-16", acc.startDate);
+  check("והיא עדיין נכנסת", acc.allowed === true);
+
+  await callAdmin({ key: KEY }, "POST", { email: "nili@test.com", start: "", by: "הפקידה" });
+  const back = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "nili@test.com");
+  check("חזרה לגיליון מחזירה את המחזור המקורי", back.start === "2026-06-14" && !back.startOverride);
+  check("וגם את סיום הגישה", back.until === "2026-11-23", back.until);
+  check("והיומן שומר גם את הביטול", (back.log || []).some((L) => L.field === "start" && L.to === ""));
 }
 
 console.log("\nחוסן");

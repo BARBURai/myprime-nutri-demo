@@ -183,18 +183,22 @@ export default async function handler(req, res) {
   if (cancelled) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
 
   // 2) usage window (only when a parseable start date exists for this participant)
-  const startSunday = parseDateToSunday(startStr);
-  const startDate = startSunday ? ymd(startSunday) : null;
   // A clerk can extend or end a woman's access from the admin screen. That decision is
   // stored on our side (admin:overrides) and wins over the sheet, so nothing ever writes
   // back into the file ManyChat and this gate both read. Never fatal: a Redis hiccup must
   // leave the sheet in charge rather than lock a paying woman out.
   let clerkUntil = "";
+  let clerkStart = "";
   try {
     const raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", email);
     if (raw) {
       const ovr = JSON.parse(raw) || {};
       clerkUntil = ovr.until || "";
+      // Her cohort, moved from the office screen. It is also written into ManyChat, which
+      // exports the sheet, but that trip takes minutes at best; this is what makes the move
+      // real on her next load. Read BEFORE the start date is parsed, so everything derived
+      // from it - her day in the programme and the end of her access - follows along.
+      clerkStart = ovr.start || "";
       // The Glow bonus, set from the office screen. "1" grants it and "0" takes it away even
       // when the sheet says TRUE; anything else leaves the sheet in charge. This is the fast
       // path: the sheet reaches us through Google's cache and lags by minutes.
@@ -202,6 +206,8 @@ export default async function handler(req, res) {
       else if (ovr.glow === "0") glow = false;
     }
   } catch (e) { /* fall through to the sheet */ }
+  const startSunday = parseDateToSunday(clerkStart || startStr);
+  const startDate = startSunday ? ymd(startSunday) : null;
   const pastWindow = clerkUntil
     ? israelDay(0) > clerkUntil
     : (startSunday && isExpired(startSunday, extraMonths));

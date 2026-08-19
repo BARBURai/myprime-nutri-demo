@@ -90,9 +90,11 @@ export async function loadSheet(csvUrl) {
     first: findCol(header, ["F_NAME", "שם פרטי", "first name", "firstname"]),
     last: findCol(header, ["L_NAME", "שם משפחה", "last name", "lastname"]),
     email: findCol(header, ["CF_EMAIL", "מייל", "email", "אימייל"]),
-    // Optional. Until Ron marks the new-app women in the sheet, membership is decided by
-    // whether we have ever seen her open the app, which is a fact rather than a tag.
-    newapp: findCol(header, ["אפליקציה חדשה", "אפליקציה"]),
+    // Optional, and Ron is filling it in. The names are matched exactly after whitespace is
+    // squeezed, so every spelling he might use is listed rather than matched loosely: the
+    // sheet also carries a "הורידה אפליקציה" column, and anything that merely looks for
+    // "אפליקצי" would land on that one and read as TRUE for almost everybody.
+    newapp: findCol(header, ["אפליקציית תזונה", "אפליקציה תזונה", "אפליקציה חדשה", "אפליקציה"]),
     glow: findCol(header, ["בונוס איפור"]),
   };
 
