@@ -29,7 +29,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.41";
+const ADMIN_VERSION = "5.44";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -47,8 +47,22 @@ const MC_GROUP_FIELD = "קבוצה";
 // exactly as the sheet column does. Ron decided that a change here is the same as making it
 // inside ManyChat: if an automation hangs off this field it is meant to fire.
 const MC_START_FIELD = "360 - FINAL  PERSONAL START";
+// Written by id and not by name. The name carries two spaces after FINAL, and a field that
+// is not resolved is not an error in ManyChat, it is simply a write that lands nowhere. The
+// id cannot be mistyped and cannot drift.
+const MC_START_FIELD_ID = 11675348;
 // Noon, by Ron. Every cohort begins on a Sunday at 12:00.
-const MC_START_TIME = "12:00";
+//
+// A datetime field there does not take just any shape, and the first attempt wrote nothing
+// at all: the value was rejected, the answer was never read, and the screen reported success.
+// So the shapes are tried in order and each one is verified by reading the field back. The
+// first that actually lands wins, and if none does the clerk is told so.
+const MC_START_FORMATS = (d) => [
+  `${d} 12:00:00`,
+  `${d} 12:00`,
+  `${d}T12:00:00+03:00`,
+  `${d}T12:00:00`,
+];
 const MC_TAGS = {
   demo: "GLOW- DEMO 💄",                       // the three bonus lessons inside the app
   full: "GLOW-FULL💄💄💄",  // the paid Glow course
@@ -65,7 +79,10 @@ async function mc(path, body) {
   });
   let j = null;
   try { j = await r.json(); } catch (e) {}
-  return { ok: r.ok, j };
+  // ManyChat answers 200 with a body that says it failed, so the HTTP code alone is not the
+  // answer. Not checking this is exactly what made a rejected write look like a success.
+  const said = j && typeof j.status === "string" ? j.status : "";
+  return { ok: r.ok && said !== "error", status: r.status, j, error: (j && (j.message || j.details)) || "" };
 }
 
 async function mcFind(phone) {
@@ -86,19 +103,27 @@ async function mcPush({ phone, hasGroup, group, start, glow, tag, on }) {
   try { sub = await mcFind(phone); } catch (e) { return "failed"; }
   if (!sub) return "not_found";
   let startEcho = "";
+  let startErr = "";
   try {
     if (start) {
-      await mc("/fb/subscriber/setCustomFieldByName", {
-        subscriber_id: sub.id, field_name: MC_START_FIELD, field_value: `${start} ${MC_START_TIME}`,
-      });
-      // Read it straight back and hand the clerk what ManyChat actually stored. The exact
-      // shape a datetime field keeps is not something to take on trust from documentation,
-      // and this way the first test shows it on screen instead of hiding a bad write.
-      try {
-        const again = await mcFind(phone);
-        const f = again && (again.custom_fields || []).find((x) => x.name === MC_START_FIELD);
-        startEcho = (f && f.value) || "";
-      } catch (e) {}
+      const readBack = async () => {
+        try {
+          const again = await mcFind(phone);
+          const f = again && (again.custom_fields || []).find((x) => x.name === MC_START_FIELD || x.id === MC_START_FIELD_ID);
+          return (f && f.value) || "";
+        } catch (e) { return ""; }
+      };
+      for (const value of MC_START_FORMATS(start)) {
+        const w = await mc("/fb/subscriber/setCustomField", {
+          subscriber_id: sub.id, field_id: MC_START_FIELD_ID, field_value: value,
+        });
+        if (!w.ok) { startErr = w.error || "נדחה"; continue; }
+        // Accepted is not the same as stored, so the field is read back every time.
+        startEcho = await readBack();
+        if (startEcho) { startErr = ""; break; }
+        startErr = "התקבל אבל השדה נשאר ריק";
+      }
+      if (!startEcho) return "startfail:" + (startErr || "לא נשמר");
     }
     if (hasGroup) {
       await mc("/fb/subscriber/setCustomFieldByName", {

@@ -28,10 +28,26 @@ const CSV = [
 ].join("\n");
 
 let CSV2 = null;   // lets a test swap the sheet for a few rows of its own
+// A stand-in ManyChat. `MC.accept` is the one value shape it is willing to store, so a test
+// can make it refuse everything and prove the screen says so instead of reporting success.
+const MC = { on: false, accept: null, stored: "", writes: [], calls: 0 };
 const store = { hash: {}, kv: {} };
-globalThis.fetch = async (url) => {
+globalThis.fetch = async (url, opts) => {
   const u = String(url);
   if (u.startsWith("https://sheet.test")) return { ok: true, text: async () => (CSV2 || CSV) };
+  if (u.startsWith("https://api.manychat.com")) {
+    MC.calls++;
+    const body = opts && opts.body ? JSON.parse(opts.body) : null;
+    if (u.includes("findByCustomField")) {
+      return { ok: true, json: async () => ({ status: "success", data: { id: 77, custom_fields: [{ id: 11675348, name: "360 - FINAL  PERSONAL START", value: MC.stored || null }], tags: [] } }) };
+    }
+    if (u.includes("setCustomField")) {
+      MC.writes.push(body && body.field_value);
+      if (MC.accept === null || body.field_value === MC.accept) { MC.stored = body.field_value; return { ok: true, json: async () => ({ status: "success" }) }; }
+      return { ok: true, json: async () => ({ status: "error", message: "wrong format" }) };
+    }
+    return { ok: true, json: async () => ({ status: "success" }) };
+  }
   const parts = u.replace("https://redis.test/", "").split("/").map(decodeURIComponent);
   const [cmd, a, b, c] = parts;
   const H = (k) => (store.hash[k] = store.hash[k] || {});
@@ -270,6 +286,37 @@ console.log("\nנתוני שימוש");
   check("עם doneToday נכתב סימון ליום הנוכחי", store.kv[`trk:${day}:yafit@test.com`] === "1");
   await callUsage({ email: "nili@test.com", days: {}, day: "not-a-date", doneToday: true });
   check("תאריך לא תקין אינו יוצר סימון", !store.kv["trk:not-a-date:nili@test.com"]);
+}
+
+console.log("\nהכתיבה של תאריך ההתחלה למניצ'ט");
+{
+  // The first build wrote nothing at all: the value shape was rejected, the answer was never
+  // read, and the screen said it had saved. Both halves are locked here.
+  process.env.MANYCHAT_TOKEN = "test-token";
+  const call = async (accept) => {
+    MC.accept = accept; MC.stored = ""; MC.writes = [];
+    const r = await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", start: "2026-08-16", phone: "972501111111", by: "הפקידה" });
+    return r.body;
+  };
+
+  let b = await call("2026-08-16 12:00:00");
+  check("פורמט מקובל נכתב ומוחזר לפקידה", b.mc === "ok:2026-08-16 12:00:00", String(b.mc));
+  check("ולא נוסו פורמטים נוספים אחרי שהראשון הצליח", MC.writes.length === 1, String(MC.writes.length));
+
+  b = await call("2026-08-16T12:00:00+03:00");
+  check("פורמט אחר מתגלה בניסיון ולא בניחוש", b.mc === "ok:2026-08-16T12:00:00+03:00", String(b.mc));
+  check("והשעה תמיד 12:00", MC.writes.every((v) => String(v).includes("12:00")));
+
+  b = await call("לא קיים");
+  check("כשמניצ'ט דוחה את כולם, נאמר שזה נכשל", String(b.mc).indexOf("startfail:") === 0, String(b.mc));
+  check("והשגיאה של מניצ'ט מועברת כמו שהיא", String(b.mc).includes("wrong format"), String(b.mc));
+  check("והשמירה אצלנו בכל זאת נשמרה", b.ok === true);
+  const still = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "yafit@test.com");
+  check("כלומר המחזור החדש חל על האפליקציה גם כשמניצ'ט נכשל", still.start === "2026-08-16", still.start);
+
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", start: "", by: "הפקידה" });
+  delete process.env.MANYCHAT_TOKEN;
+  MC.accept = null;
 }
 
 console.log("\nלמה מסומנת בגיליון ואינה מוצגת");
