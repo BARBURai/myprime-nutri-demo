@@ -100,17 +100,27 @@ export async function loadSheet(csvUrl) {
 
   const women = [];
   const seenEmail = new Set();
+  // Why a row in the file never reaches the screen. Ron marked 123 women in the sheet and
+  // the screen showed 103, and there was no way to see where the other twenty went. These
+  // counters are what the screen uses to say it out loud instead of leaving a silent gap.
+  const skipped = { noEmail: 0, duplicate: 0, newAppNoEmail: 0, newAppDuplicate: 0 };
+  let sheetNewAppRows = 0;
   lines.forEach((line, idx) => {
     if (idx === 0) return;
+    if (!line.trim()) return;
     const cells = parseCsvLine(line);
     const cell = (i) => (i !== -1 && cells[i] != null ? String(cells[i]).trim() : "");
     const DATE_IN = /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/;
+    const rowNewApp = col.newapp !== -1 ? isTrue(cells[col.newapp]) : false;
+    if (rowNewApp) sheetNewAppRows++;
 
     const email = (cell(col.email).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) ||
       line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0];
-    if (!email) return;
+    if (!email) { skipped.noEmail++; if (rowNewApp) skipped.newAppNoEmail++; return; }
     const em = email.toLowerCase();
-    if (seenEmail.has(em)) return;
+    // The same address really does sit on more than one row here, so the first one wins and
+    // the rest are dropped. Without counting them, a marked woman simply vanishes.
+    if (seenEmail.has(em)) { skipped.duplicate++; if (rowNewApp) skipped.newAppDuplicate++; return; }
     seenEmail.add(em);
 
     // The start cell carries a time ("2026-01-04 0:00:00"), so pull the date out of it
@@ -144,5 +154,5 @@ export async function loadSheet(csvUrl) {
   // The sheet's own header row, echoed back so a renamed column can be mapped from what the
   // file actually says instead of by guessing. Guessing is what put email addresses on the
   // admin screen where first and last names belong.
-  return { women, headers, rawHeaders: header.map((h) => String(h || "").trim()).filter(Boolean) };
+  return { women, headers, skipped, sheetNewAppRows, rawHeaders: header.map((h) => String(h || "").trim()).filter(Boolean) };
 }

@@ -309,6 +309,34 @@ function sundays(){
   return out;
 }
 
+// The sheet says one number and the screen shows another, and until now there was no way to
+// see where the difference went: Ron marked 123 women and the screen showed 103. Every row
+// that never became a woman on this screen is counted, so the gap is named out loud instead
+// of being read as a bug.
+function appGap(){
+  var marked = DATA.sheetNewAppRows || 0;
+  if(!marked) return "";
+  var shown = 0, noStart = 0, cancelled = 0;
+  DATA.women.forEach(function(w){
+    if(!w.sheetNewApp) return;
+    if(w.cancelled){ cancelled++; return; }
+    if(!w.start){ noStart++; return; }
+    shown++;
+  });
+  var sk = DATA.skipped || {};
+  var gap = marked - shown;
+  if(gap <= 0) return '<div class="note">בגיליון מסומנות '+marked+' באפליקציית תזונה, וכולן מוצגות.</div>';
+  var why = [];
+  if(noStart) why.push(noStart+' בלי תאריך התחלה');
+  if(cancelled) why.push(cancelled+' מסומנות שביטלו');
+  if(sk.newAppDuplicate) why.push(sk.newAppDuplicate+' עם מייל שכבר מופיע בשורה אחרת');
+  if(sk.newAppNoEmail) why.push(sk.newAppNoEmail+' בלי כתובת מייל');
+  var rest = gap - noStart - cancelled - (sk.newAppDuplicate||0) - (sk.newAppNoEmail||0);
+  if(rest > 0) why.push(rest+' מסיבה אחרת');
+  return '<div class="note">בגיליון מסומנות <b>'+marked+'</b> באפליקציית תזונה, ומוצגות <b>'+shown+'</b>. '+
+    'ההפרש: '+why.join(" · ")+'. <b>מי שאין לה תאריך התחלה אינה משתתפת בתוכנית שרצה ולכן אינה מוצגת כאן.</b></div>';
+}
+
 function render(){
   var q = (document.getElementById("q") ? document.getElementById("q").value : "").trim().toLowerCase();
 
@@ -389,7 +417,7 @@ function render(){
   list.sort(function(a,b){ return (a.first+" "+a.last).localeCompare(b.first+" "+b.last,"he"); });
 
   var html = '<h1>ניהול משתתפות</h1>'+
-    '<div class="sub">'+list.length+' משתתפות · מחוברת כ'+esc(WHO||"?")+'</div>'+
+    '<div class="sub">'+list.length+' משתתפות · מחוברת כ'+esc(WHO||"?")+(DATA.version?' · v'+esc(DATA.version):'')+'</div>'+
     '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
     (searching ? '<div class="note">תוצאות חיפוש מכל הרשומות בגיליון, בלי סינון לפי מחזור, קבוצה או אפליקציה.</div>' :
       '<div class="chips"><span class="chip'+(missing.length?" warn":"")+(MISSING?" on":"")+'" data-m="1">'+
@@ -400,7 +428,7 @@ function render(){
         '<span class="chip'+(APP==="new"?" on":"")+'" data-p="new">אפליקציה חדשה ('+nNew+')</span>'+
         '<span class="chip'+(APP==="old"?" on":"")+'" data-p="old">קג\'אבי ('+nOld+')</span>'+
         '<span class="chip'+(APP===""?" on":"")+'" data-p="">הכל</span>'+
-      '</div>')+
+      '</div>'+appGap())+
       '<div class="lbl">שנה</div><div class="chips">'+
         yearKeys.map(function(y){ return '<span class="chip'+(YEAR===y?" on":"")+'" data-y="'+esc(y)+'">'+esc(y)+' ('+years[y]+')</span>'; }).join("")+
       '</div>'+

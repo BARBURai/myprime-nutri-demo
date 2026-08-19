@@ -272,6 +272,26 @@ console.log("\nנתוני שימוש");
   check("תאריך לא תקין אינו יוצר סימון", !store.kv["trk:not-a-date:nili@test.com"]);
 }
 
+console.log("\nלמה מסומנת בגיליון ואינה מוצגת");
+{
+  // Ron marked 123 women and the screen showed 103. Every row that never becomes a woman is
+  // counted so the gap can be named on screen instead of read as a bug.
+  const H = 'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,אפליקציית תזונה';
+  CSV2 = [H,
+    '9721,א,א,dup@test.com,2026-06-14 0:00:00,FALSE,ב,TRUE',
+    '9722,ב,ב,dup@test.com,2026-06-14 0:00:00,FALSE,ב,TRUE',   // אותו מייל, נזרקת
+    '9723,ג,ג,,2026-06-14 0:00:00,FALSE,ב,TRUE',               // בלי מייל, נזרקת
+    '9724,ד,ד,nostart@test.com,,FALSE,ב,TRUE',                 // בלי תאריך התחלה
+    '9725,ה,ה,gone@test.com,2026-06-14 0:00:00,TRUE,ב,TRUE',   // ביטלה
+  ].join("\n");
+  const r = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
+  check("סך המסומנות בגיליון נספר מהשורות עצמן", r.sheetNewAppRows === 5, String(r.sheetNewAppRows));
+  check("מייל כפול נספר בנפרד", r.skipped.newAppDuplicate === 1, JSON.stringify(r.skipped));
+  check("שורה בלי מייל נספרת בנפרד", r.skipped.newAppNoEmail === 1, JSON.stringify(r.skipped));
+  check("ומי שנשארה היא רק זו שיש לה מייל ייחודי", r.women.length === 3, String(r.women.length));
+  CSV2 = null;
+}
+
 console.log("\nהעברת מחזור");
 {
   // Sundays only. A cohort that starts on any other day splits the two things the app
