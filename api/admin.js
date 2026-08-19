@@ -25,11 +25,12 @@ async function redis(base, token, ...args) {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // The version this screen is served from. The office screen ships with the app, so without
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.50";
+const ADMIN_VERSION = "5.51";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -51,6 +52,10 @@ const MC_START_FIELD = "360 - FINAL  PERSONAL START";
 // is not resolved is not an error in ManyChat, it is simply a write that lands nowhere. The
 // id cannot be mistyped and cannot drift.
 const MC_START_FIELD_ID = 11675348;
+// Her address, which is the one field the whole app is keyed on. Written by id for the same
+// reason as the date above.
+const MC_EMAIL_FIELD_ID = 11510555;
+const MC_EMAIL_FIELD = "CF_EMAIL";
 // Noon, by Ron. Every cohort begins on a Sunday at 12:00.
 //
 // A datetime field there does not take just any shape, and the first attempt wrote nothing
@@ -108,13 +113,29 @@ async function mcFind(phone) {
 // Push the same change into ManyChat. Runs after the local write and never blocks it: if
 // ManyChat is unreachable the clerk's change still takes effect in the app, which is the
 // thing she is looking at. The screen reports which of the two actually happened.
-async function mcPush({ phone, hasGroup, group, start, glow, tag, on }) {
+async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on }) {
   let sub;
   try { sub = await mcFind(phone); } catch (e) { return "failed"; }
   if (!sub) return "not_found";
   let startEcho = "";
   let startErr = "";
   try {
+    // The address itself. ManyChat is the source the sheet is exported from, so this is the
+    // only place a change survives; editing the sheet by hand is undone by the next export,
+    // which is exactly how a participant ended up unable to sign in with her own address.
+    if (newEmail) {
+      const w = await mc("/fb/subscriber/setCustomField", {
+        subscriber_id: sub.id, field_id: MC_EMAIL_FIELD_ID, field_value: newEmail,
+      });
+      if (!w.ok) return "emailfail:" + (w.error || "נדחה");
+      let back = "";
+      try {
+        const again = await mcFind(phone);
+        const f = again && (again.custom_fields || []).find((x) => x.id === MC_EMAIL_FIELD_ID || x.name === MC_EMAIL_FIELD);
+        back = (f && f.value) || "";
+      } catch (e) {}
+      if (String(back).trim().toLowerCase() !== newEmail) return "emailfail:" + (back ? "נשמר שם " + back : "השדה נשאר ריק");
+    }
     if (start) {
       const readBack = async () => {
         try {
@@ -185,6 +206,53 @@ async function whoIs(key, RU, RT) {
   } catch (e) { return { ok: false }; }
 }
 
+// Everything we hold about a woman is keyed by her address, so changing it without moving
+// these makes her a new person to us: no backup, no usage history, no clerk decisions. Her
+// diary itself is not here - it lives on her phone and is not keyed by address - so it
+// survives the change on the device she is already using.
+const MOVE_HASHES = ["admin:overrides", "admin:seen", "admin:usage"];
+async function moveRecords(RU, RT, from, to) {
+  const moved = [];
+  for (const h of MOVE_HASHES) {
+    try {
+      const v = await redis(RU, RT, "HGET", h, from);
+      if (v == null) continue;
+      await redis(RU, RT, "HSET", h, to, v);
+      await redis(RU, RT, "HDEL", h, from);
+      moved.push(h);
+    } catch (e) { /* one missing record must not abort the rest */ }
+  }
+  // The encrypted backup is the one that cannot be rebuilt, so it is moved by itself and
+  // reported by itself. The content stays encrypted with the code only she holds.
+  for (const pre of ["bk:", "glow:"]) {
+    try {
+      const v = await redis(RU, RT, "GET", pre + from);
+      if (v == null) continue;
+      await redis(RU, RT, "SET", pre + to, v);
+      await redis(RU, RT, "DEL", pre + from);
+      moved.push(pre);
+    } catch (e) {}
+  }
+  // Her registered devices for notifications carry the address inside each record, so they
+  // are rewritten rather than moved. Without this the evening reminder keeps going out
+  // under an address that no longer exists.
+  try {
+    const raw = await redis(RU, RT, "HGETALL", "push:subs");
+    const flat = {};
+    if (Array.isArray(raw)) { for (let i = 0; i < raw.length; i += 2) flat[raw[i]] = raw[i + 1]; }
+    else if (raw && typeof raw === "object") Object.assign(flat, raw);
+    for (const k of Object.keys(flat)) {
+      let j = null;
+      try { j = JSON.parse(flat[k]); } catch (e) { continue; }
+      if (!j || String(j.email || "").toLowerCase() !== from) continue;
+      j.email = to;
+      await redis(RU, RT, "HSET", "push:subs", k, JSON.stringify(j));
+      if (!moved.includes("push:subs")) moved.push("push:subs");
+    }
+  } catch (e) {}
+  return moved;
+}
+
 export default async function handler(req, res) {
   const key = String(req.query.key || "");
   const RU = process.env.UPSTASH_REDIS_REST_URL;
@@ -250,6 +318,43 @@ export default async function handler(req, res) {
         cancelproc: names.includes(MC_TAGS.cancelproc),
       },
     });
+  }
+
+  // Changing her address. Its own route, because it is not a field beside the others: it is
+  // the key everything else is filed under, so it writes to ManyChat FIRST and only moves
+  // our records once that has actually landed. The other way round would leave her records
+  // under an address the source never adopted.
+  if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("newEmail") : req.body.newEmail)) {
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+    const from = String((body && body.email) || "").trim().toLowerCase();
+    const to = String((body && body.newEmail) || "").trim().toLowerCase();
+    const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;
+    const phone = String((body && body.phone) || "").replace(/[^\d]/g, "");
+    if (!from || !EMAIL_RE.test(to)) return res.status(400).json({ ok: false, error: "bad_email" });
+    if (from === to) return res.status(400).json({ ok: false, error: "same_email" });
+    if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+    // The address must be free. Two rows on one address is a state the sheet reader silently
+    // drops one of, so it must never be created from here.
+    try {
+      const sheetNow = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
+      if (sheetNow.women.some((w) => w.email === to)) return res.status(409).json({ ok: false, error: "email_taken" });
+    } catch (e) { /* an unreadable sheet must not block a fix she is waiting for */ }
+    if (!process.env.MANYCHAT_TOKEN) return res.status(500).json({ ok: false, error: "mc_off" });
+    const mcState = await mcPush({ phone, newEmail: to });
+    if (String(mcState).indexOf("ok") !== 0) return res.status(200).json({ ok: false, mc: mcState });
+    const moved = await moveRecords(RU, RT, from, to);
+    // The log travels with her, under the new address, so the history is not left behind.
+    try {
+      let cur = {};
+      const old = await redis(RU, RT, "HGET", "admin:overrides", to);
+      if (old) cur = JSON.parse(old) || {};
+      const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
+      log.unshift({ at: new Date().toISOString(), by, field: "email", from, to });
+      cur.log = log.slice(0, 20);
+      await redis(RU, RT, "HSET", "admin:overrides", to, JSON.stringify(cur));
+    } catch (e) {}
+    return res.status(200).json({ ok: true, mc: "ok", moved });
   }
 
   if (req.method === "POST") {

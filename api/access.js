@@ -127,7 +127,7 @@ export default async function handler(req, res) {
     // Locate the "ביטלה" (cancellation) and start-date columns by header name.
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
-    let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, headerFound = false;
+    let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, emailCol = -1, headerFound = false;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
       cancelCol = findCol(header, ["ביטלה"]);
@@ -139,12 +139,22 @@ export default async function handler(req, res) {
       monthsCol = findCol(header, ["חודשי גישה נוספים"]);
       // Optional. Marks the women who also received the מיי פריים Glow bonus lessons.
       glowCol = findCol(header, ["בונוס איפור"]);
+      // Read the same column the office screen reads, so the two can never disagree about
+      // who a row belongs to.
+      emailCol = findCol(header, ["CF_EMAIL", "מייל", "email", "אימייל"]);
       headerFound = cancelCol !== -1 || startCol !== -1;
     }
 
     lines.forEach((line, idx) => {
       if (idx === 0 && headerFound) return; // skip header row
-      const em = (line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0];
+      // Her address is the CF_EMAIL column, and only if that cell holds nothing usable do we
+      // fall back to scanning the row. Scanning first is what made this a real hazard: any
+      // other address sitting anywhere in her row would win, and she would be refused entry
+      // with her own address while nothing on any screen said why.
+      const cellsE = parseCsvLine(line);
+      const EMAIL_IN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+      const em = ((emailCol !== -1 && cellsE[emailCol] ? String(cellsE[emailCol]).match(EMAIL_IN) : null) ||
+        line.match(EMAIL_IN) || [])[0];
       if (!em || em.toLowerCase() !== email) return;
       found = true;
       const cells = parseCsvLine(line);

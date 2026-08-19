@@ -39,11 +39,19 @@ globalThis.fetch = async (url, opts) => {
     MC.calls++;
     const body = opts && opts.body ? JSON.parse(opts.body) : null;
     if (u.includes("findByCustomField")) {
-      return { ok: true, json: async () => ({ status: "success", data: { id: 77, custom_fields: [{ id: 11675348, name: "360 - FINAL  PERSONAL START", value: MC.stored || null }], tags: [] } }) };
+      return { ok: true, json: async () => ({ status: "success", data: { id: 77, custom_fields: [
+        { id: 11675348, name: "360 - FINAL  PERSONAL START", value: MC.stored || null },
+        { id: 11510555, name: "CF_EMAIL", value: MC.email || null },
+      ], tags: [] } }) };
     }
     if (u.includes("TagByName")) {
       MC.tags = MC.tags || [];
       MC.tags.push((u.includes("addTag") ? "+" : "-") + (body && body.tag_name));
+      return { ok: true, json: async () => ({ status: "success" }) };
+    }
+    if (u.includes("setCustomField") && body && body.field_id === 11510555) {
+      if (MC.refuseEmail) return { ok: true, json: async () => ({ status: "error", message: "no" }) };
+      MC.email = body.field_value;
       return { ok: true, json: async () => ({ status: "success" }) };
     }
     if (u.includes("setCustomField")) {
@@ -64,6 +72,7 @@ globalThis.fetch = async (url, opts) => {
   else if (cmd === "KEYS") { const pre = String(a).replace(/\*$/, ""); result = Object.keys(store.kv).filter((k) => k.startsWith(pre)); }
   else if (cmd === "SET") { store.kv[a] = b; result = "OK"; }
   else if (cmd === "GET") result = store.kv[a] ?? null;
+  else if (cmd === "DEL") { const had = store.kv[a] !== undefined; delete store.kv[a]; result = had ? 1 : 0; }
   else result = 0; // ZADD / ZREM / ZCARD / ZRANGE etc.
   if (cmd === "ZRANGE" || cmd === "ZREVRANGE") result = [];
   return { ok: true, json: async () => ({ result }) };
@@ -133,6 +142,23 @@ check('רק "ביטלה" מסמנת ביטול, לא "הורידה אפליקצ�
 check("מי שביטלה מסומנת", women.find((w) => w.email === "ruti@test.com").cancelled === true);
 check("סיום גישה מחושב: 70 יום ועוד 3 חודשים", yafit.sheetEnd === "2026-11-23", yafit.sheetEnd);
 check("חודשים ריקים נופלים לברירת מחדל 3", women.find((w) => w.email === "nili@test.com").sheetEnd === "2026-11-23");
+
+console.log("\nהשער קורא את עמודת המייל");
+{
+  // The gate used to take the first address anywhere in the row, so any other address
+  // sitting in her row would win and she would be refused entry with her own. Both halves
+  // are locked: the right column wins, and the row scan still saves a sheet without one.
+  const H = 'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה';
+  const start = "2026-06-14 12:00:00";
+  CSV2 = [H,
+    `9721,שרה,other@old.com,real@new.com,${start},FALSE`,
+    `9722,רונית,.,solo@test.com,${start},FALSE`,
+  ].join("\n");
+  check("נכנסת עם הכתובת שבעמודת המייל", (await callAccess("real@new.com")).body.allowed === true);
+  check("וכתובת אחרת שיושבת בשורה אינה מזהה אותה", (await callAccess("other@old.com")).body.reason === "not_registered");
+  check("שורה רגילה ממשיכה לעבוד", (await callAccess("solo@test.com")).body.allowed === true);
+  CSV2 = null;
+}
 
 console.log("\nהרשאה");
 check("בלי מפתח נחסם", (await callAdmin({})).code === 401);
@@ -291,6 +317,43 @@ console.log("\nנתוני שימוש");
   check("עם doneToday נכתב סימון ליום הנוכחי", store.kv[`trk:${day}:yafit@test.com`] === "1");
   await callUsage({ email: "nili@test.com", days: {}, day: "not-a-date", doneToday: true });
   check("תאריך לא תקין אינו יוצר סימון", !store.kv["trk:not-a-date:nili@test.com"]);
+}
+
+console.log("\nשינוי כתובת מייל");
+{
+  process.env.MANYCHAT_TOKEN = "test-token";
+  MC.email = ""; MC.refuseEmail = false;
+  const FROM = "michal@test.com", TO = "michal.new@test.com";
+
+  // Something of hers under the old address, so the move can be proven rather than assumed.
+  await callAdmin({ key: KEY }, "POST", { email: FROM, group: "ה", by: "רון" });
+  store.kv["bk:" + FROM] = "encrypted-blob";
+  store.hash["admin:usage"] = store.hash["admin:usage"] || {};
+  store.hash["admin:usage"][FROM] = JSON.stringify({ days: {} });
+  store.hash["push:subs"] = { "endpoint-1": JSON.stringify({ email: FROM, sub: {} }) };
+
+  check("כתובת לא תקינה נדחית",
+    (await callAdmin({ key: KEY }, "POST", { email: FROM, newEmail: "לא-מייל", phone: "972504444444" })).code === 400);
+  check("אותה כתובת נדחית",
+    (await callAdmin({ key: KEY }, "POST", { email: FROM, newEmail: FROM, phone: "972504444444" })).code === 400);
+  check("כתובת שכבר קיימת בגיליון נדחית",
+    (await callAdmin({ key: KEY }, "POST", { email: FROM, newEmail: "yafit@test.com", phone: "972504444444" })).code === 409);
+
+  MC.refuseEmail = true;
+  const bad = await callAdmin({ key: KEY }, "POST", { email: FROM, newEmail: TO, phone: "972504444444" });
+  check("כשמניצ'ט מסרב, שום דבר אצלנו לא זז", bad.body.ok === false && store.kv["bk:" + FROM] === "encrypted-blob", JSON.stringify(bad.body));
+  MC.refuseEmail = false;
+
+  const good = await callAdmin({ key: KEY }, "POST", { email: FROM, newEmail: TO, phone: "972504444444", by: "רון" });
+  check("השינוי מצליח", good.body.ok === true, JSON.stringify(good.body));
+  check("והכתובת נכתבה למניצ'ט", MC.email === TO, String(MC.email));
+  check("הגיבוי המוצפן עבר לכתובת החדשה", store.kv["bk:" + TO] === "encrypted-blob" && !store.kv["bk:" + FROM]);
+  check("נתוני השימוש עברו", !!store.hash["admin:usage"][TO] && !store.hash["admin:usage"][FROM]);
+  check("החלטות הפקידה עברו", !!store.hash["admin:overrides"][TO] && !store.hash["admin:overrides"][FROM]);
+  check("רישום ההתראות מצביע על הכתובת החדשה", JSON.parse(store.hash["push:subs"]["endpoint-1"]).email === TO);
+  const rec = JSON.parse(store.hash["admin:overrides"][TO]);
+  check("השינוי נרשם ביומן, תחת הכתובת החדשה", (rec.log || []).some((L) => L.field === "email" && L.from === FROM && L.to === TO));
+  delete process.env.MANYCHAT_TOKEN;
 }
 
 console.log("\nסימון ביטול בתהליך");

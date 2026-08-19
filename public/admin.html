@@ -527,6 +527,9 @@ function render(){
           return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה'
                                      : 'הסירה את הסימון של האפליקציה החדשה');
         }
+        if(L.field === "email"){
+          return pre + 'שינתה לה את כתובת המייל מ-'+esc(L.from)+' ל-'+esc(L.to);
+        }
         if(L.field === "start"){
           return pre + (L.to ? 'העבירה אותה למחזור של '+il(L.to)+(L.from?' (הייתה ב-'+il(L.from)+')':'')
                              : 'החזירה את תאריך ההתחלה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
@@ -549,6 +552,11 @@ function render(){
             (w.startOverride?'<button class="btn" data-clearstart="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
           '</div>'+
           '<div class="note">שינוי המחזור נכתב גם למניצ\'ט, בשעה 12:00, <b>ומשם הוא מגיע לגיליון לבד.</b> הוא משנה לה את היום בתוכנית, את התכנים שייפתחו לה ואת תאריך סיום הגישה.</div>'+
+          '<div class="edit"><span>כתובת מייל:</span>'+
+            '<input class="field sm" style="max-width:240px;direction:ltr" id="e_'+esc(w.email)+'" placeholder="'+esc(w.email)+'">'+
+            '<button class="btn" data-saveemail="'+esc(w.email)+'">שינוי כתובת</button>'+
+          '</div>'+
+          '<div class="note">הכתובת נכתבת <b>למניצ\'ט</b>, שהוא המקור שממנו הגיליון מיוצא. <b>שינוי בגיליון עצמו נמחק בייצוא הבא</b>, ולכן זו הדרך היחידה שנשארת. כל מה ששמור אצלנו עליה עובר לכתובת החדשה, כולל הגיבוי המוצפן. <b>היומן שלה שמור על הטלפון ואינו מושפע.</b></div>'+
           '<div class="edit"><span>קבוצה:</span>'+
             '<select class="field sm" id="g_'+esc(w.email)+'">'+
               '<option value=""'+(w.group?"":" selected")+'>ללא קבוצה</option>'+
@@ -694,6 +702,28 @@ function render(){
       .then(function(r){ return r.json(); })
       .then(function(d){ if(!d.ok) throw new Error(); return loadCodes().then(render); })
       .catch(function(){ alert("הביטול נכשל. נסי שוב."); el.disabled=false; });
+  }; });
+  app.querySelectorAll("[data-saveemail]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-saveemail"), box=document.getElementById("e_"+em);
+    var to=(box?box.value:"").trim().toLowerCase();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)){ alert("צריך להזין כתובת מייל תקינה"); return; }
+    if(to===em){ alert("זו אותה כתובת."); return; }
+    if(!confirm("לשנות לה את כתובת המייל?\n\nמ: "+em+"\nל: "+to+"\n\nהכתובת תיכתב במניצ'ט, וכל מה ששמור אצלנו עליה יעבור לכתובת החדשה.\nמהכניסה הבאה היא נכנסת רק עם הכתובת החדשה.")) return;
+    el.disabled=true; el.textContent="משנה...";
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({email:em, newEmail:to, phone:phoneOf(em), by:WHO})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d && d.ok){ alert("הכתובת שונתה. מעכשיו היא נכנסת עם "+to+"."); EDITING=""; delete MC[em]; return load().then(render); }
+        // Nothing was moved on our side when ManyChat refused, so the two never drift apart.
+        var why = d && d.error === "email_taken" ? "הכתובת הזאת כבר קיימת אצל מישהי אחרת בגיליון."
+                : d && d.error === "mc_off" ? "החיבור למניצ'ט אינו מוגדר, ולכן לא שיניתי כלום."
+                : d && String(d.mc||"").indexOf("emailfail:")===0 ? "מניצ'ט לא קיבל את השינוי: "+String(d.mc).slice(10)
+                : d && d.mc === "not_found" ? "לא נמצאה רשומה במניצ'ט לפי הטלפון שלה."
+                : "השינוי נכשל.";
+        alert(why+"\n\nשום דבר לא שונה.");
+        el.disabled=false; el.textContent="שינוי כתובת";
+      }).catch(function(){ alert("השינוי נכשל. נסי שוב."); el.disabled=false; el.textContent="שינוי כתובת"; });
   }; });
   app.querySelectorAll("[data-savestart]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-savestart"), v=document.getElementById("s_"+em).value;
