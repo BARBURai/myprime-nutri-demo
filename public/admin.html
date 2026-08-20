@@ -292,8 +292,10 @@ function mcBlock(w){
       '<button class="btn'+(on?" p":"")+'" data-mctag="'+key+'" data-on="1" data-for="'+esc(w.email)+'">יש</button>'+
       '<button class="btn'+(on?"":" p")+'" data-mctag="'+key+'" data-on="0" data-for="'+esc(w.email)+'">אין</button></div>';
   };
+  var freezeOn = !!(s.tags && s.tags.freeze);
   return line("קבוצה שם עכשיו <b>"+(s.group?esc(s.group):"ללא")+"</b>"+
-      " · תאריך התחלה שם: <b>"+(s.start?esc(s.start):"ריק")+"</b>")+
+      " · תאריך התחלה שם: <b>"+(s.start?esc(s.start):"ריק")+"</b>"+
+      " · תגית הקפאה: <b>"+(freezeOn?"יש":"אין")+"</b>")+
     row("full","קורס האיפור המלא")+
     row("app","אפליקציה חדשה")+
     row("cancelproc","ביטול בתהליך")+
@@ -600,7 +602,7 @@ function render(){
                 '<button class="btn p" data-savefreeze="'+esc(w.email)+'">שמירה</button>'+
                 '<button class="btn quiet" data-nofreeze="1">ביטול</button>'+
               '</div>'+
-              '<div class="note">בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב נכתב גם למניצ\'ט</b>, כדי שהאוטומציות שם יקבלו את הערך הנכון.</div>'
+              '<div class="note">בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב והתגית "הקפאה" נכתבים גם למניצ\'ט</b>, וסיום ההקפאה מסיר את התגית.</div>'
             : '')+
           '<div class="edit"><span>כתובת מייל:</span>'+
             '<input class="field sm" style="max-width:240px;direction:ltr" id="e_'+esc(w.email)+'" placeholder="'+esc(w.email)+'">'+
@@ -766,22 +768,22 @@ function render(){
     // Either half may be unknown. Without both there is nothing to compute, so she simply
     // stays frozen and stays on the list until the office fills the rest in.
     if(!confirm((back && week)
-      ? "להכניס אותה להקפאה?\n\nהיא חוזרת ביום ראשון "+il(back)+", לשבוע "+week+".\nעד אז היא לא נכנסת לאפליקציה ולא מקבלת תזכורות.\nתאריך ההתחלה המחושב ייכתב גם במניצ'ט."
-      : "להכניס אותה להקפאה בלי כל הפרטים?\n\n"+(back?"יש תאריך חזרה, חסר השבוע.":week?"יש שבוע, חסר תאריך החזרה.":"חסרים גם תאריך החזרה וגם השבוע.")+"\n\nהיא לא נכנסת לאפליקציה ולא מקבלת תזכורות עד שתשלימי, והיא תופיע ברשימת \"הקפאה להשלמה\".")) return;
+      ? "להכניס אותה להקפאה?\n\nהיא חוזרת ביום ראשון "+il(back)+", לשבוע "+week+".\nעד אז היא לא נכנסת לאפליקציה ולא מקבלת תזכורות.\n\nבמניצ'ט ייכתבו תאריך ההתחלה המחושב והתגית \"הקפאה\", ואם יש שם אוטומציות שמחוברות אליהן הן יפעלו."
+      : "להכניס אותה להקפאה בלי כל הפרטים?\n\n"+(back?"יש תאריך חזרה, חסר השבוע.":week?"יש שבוע, חסר תאריך החזרה.":"חסרים גם תאריך החזרה וגם השבוע.")+"\n\nהיא לא נכנסת לאפליקציה ולא מקבלת תזכורות עד שתשלימי, והיא תופיע ברשימת \"הקפאה להשלמה\".\nהתגית \"הקפאה\" תיכתב במניצ'ט כבר עכשיו.")) return;
     el.disabled=true; el.textContent="שומרת...";
     save(em,{freeze:{back:back, week:week}}).then(function(r){
       if(!r.ok) throw new Error();
       if(back && week && r.mc && String(r.mc).indexOf("ok:")===0) alert("נשמר. במניצ'ט עכשיו: "+String(r.mc).slice(3));
       else if(String(r.mc||"").indexOf("startfail:")===0) alert("ההקפאה נשמרה אצלנו, אבל תאריך ההתחלה לא נכתב במניצ'ט.\n\nמניצ'ט אמר: "+String(r.mc).slice(10));
       else mcWarn(r);
-      FREEZING=""; delete MC[em]; return load().then(render);
+      FREEZING=""; delete MC[em]; return load().then(function(){ render(); mcLoad(em); });
     }).catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירה"; });
   }; });
   app.querySelectorAll("[data-unfreeze]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-unfreeze");
-    if(!confirm("לסיים לה את ההקפאה?\n\nהיא תחזור להיכנס לאפליקציה מיד.\nתאריך ההתחלה שנקבע לה נשאר כמו שהוא.")) return;
+    if(!confirm("לסיים לה את ההקפאה?\n\nהיא תחזור להיכנס לאפליקציה מיד.\nתאריך ההתחלה שנקבע לה נשאר כמו שהוא.\n\nהתגית \"הקפאה\" תוסר במניצ'ט, ואם יש שם אוטומציה שמחוברת להסרה היא תפעל.")) return;
     el.disabled=true;
-    save(em,{freeze:{off:true}}).then(function(r){ if(!r.ok) throw new Error(); FREEZING=""; return load().then(render); })
+    save(em,{freeze:{off:true}}).then(function(r){ if(!r.ok) throw new Error(); mcWarn(r); FREEZING=""; delete MC[em]; return load().then(function(){ render(); mcLoad(em); }); })
       .catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
   }; });
   app.querySelectorAll("[data-saveemail]").forEach(function(el){ el.onclick=function(){

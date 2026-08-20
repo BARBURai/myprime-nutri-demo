@@ -336,6 +336,7 @@ console.log("\nהקפאה");
   check("שבוע מחוץ לטווח נדחה",
     (await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-04", week: 11 } })).code === 400);
 
+  MC.tags = [];
   const r = await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-04", week: 3 }, phone: "9731", by: "רון" });
   check("ההקפאה נשמרת", r.code === 200 && r.body.ok === true, JSON.stringify(r.body));
   // Week 3 on 04.10 means she started two weeks earlier. This one number is both what the
@@ -347,6 +348,9 @@ console.log("\nהקפאה");
     String(MC.stored).startsWith("2026-09-20"), String(MC.stored));
   check("תאריך ההתחלה המקורי נשמר, כדי שההיסטוריה שלה לא תיעלם",
     JSON.parse(store.hash["admin:overrides"][EM]).freeze.origStart === "2026-06-14");
+  // Ron asked for the tag in both directions: freezing tags her, ending the freeze untags
+  // her. His automations hang off it, so each direction is a real event over there.
+  check("התגית הקפאה נוספת במניצ'ט", MC.tags.includes("+הקפאה"), JSON.stringify(MC.tags));
 
   const w = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
   check("הכרטיס מסמן אותה כמוקפאת", w.frozen === true);
@@ -371,7 +375,9 @@ console.log("\nהקפאה");
   check("ואינה נספרת כחוזרת השבוע, כי אין לאיזה מחזור לשייך אותה", w2b.backSoon === false && !w2b.backCohort);
   check("ולא נכנסת", (await callAccess(EM)).body.reason === "frozen");
 
-  await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { off: true }, by: "רון" });
+  MC.tags = [];
+  await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { off: true }, phone: "9731", by: "רון" });
+  check("וסיום ההקפאה מסיר אותה", MC.tags.includes("-הקפאה"), JSON.stringify(MC.tags));
   const w3 = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
   check("סיום ההקפאה מחזיר אותה פנימה", !w3.frozen && (await callAccess(EM)).body.allowed === true);
   check("ותאריך ההתחלה שנקבע לה נשאר", JSON.parse(store.hash["admin:overrides"][EM]).start === "2026-09-20");
