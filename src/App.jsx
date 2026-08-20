@@ -290,6 +290,13 @@ function listSundays() {
 // the label entirely and a week looked six days long. The programme is ten weeks of seven,
 // so show it as day 7. And past week 10 there is no week 11 to speak of: the guided phase
 // is over, she keeps her metrics and her content, so say that instead of counting on.
+// A date the way she reads it out loud: "ראשון, 4 באוקטובר".
+function ilDate(d) {
+  if (!d) return "";
+  const t = parseDay(d);
+  return `${HE_DAYS_FULL[t.getUTCDay()]}, ${t.getUTCDate()} ב${HE_MONTHS[t.getUTCMonth()]}`;
+}
+
 function phaseLabel(week, dow) {
   if (week > 10) return "שלב הליווי הסתיים";
   return `שבוע ${week}, יום ${dow === 0 ? 7 : dow}`;
@@ -544,7 +551,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.53";
+const VERSION = "5.57";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1391,7 +1398,7 @@ function PreStartScreen({ name, startDate, glow = false, onOpenGlow }) {
   );
 }
 
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onStepsHelp, onOpenContent, onOpenOnboard, catchupDue = false, onOpenCatchup, introLock = false, overlayOpen = false, glow = false }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onStepsHelp, onOpenContent, onOpenOnboard, catchupDue = false, onOpenCatchup, introLock = false, overlayOpen = false, glow = false, freeze = null }) {
   const dayLog = log.filter((e) => e.date === date);
   const consumed = dayLog.reduce((s, e) => s + (e.kcal || 0), 0);
   const dayAct = activityLog.filter((a) => a.date === date);
@@ -1449,8 +1456,15 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const ciAuto = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMlD, activityLog);
   const ciLocked = date === today && new Date().getHours() < CHECKIN_REVEAL_HOUR;
   useEffect(() => { if (selRef.current) selRef.current.scrollIntoView({ inline: "center", block: "nearest" }); }, [date]);
-  const backN = Math.min(74, Math.max(0, programDayNumber(profile.startDate, today) - 1));
-  const days = Array.from({ length: backN + 5 }, (_, i) => addDays(today, i - backN));
+  // After a freeze her start date sits later than her diary really began, so the strip is
+  // anchored on where she actually started and not on the computed date. Otherwise every day
+  // she filled before the freeze would fall behind the anchor and disappear from her own
+  // diary, and those days are hers.
+  const stripFrom = (freeze && freeze.origStart && freeze.origStart < profile.startDate) ? freeze.origStart : profile.startDate;
+  const backN = Math.min(200, Math.max(0, programDayNumber(stripFrom, today) - 1));
+  // The days she was away are simply not there. Not empty, not red, not labelled: absent.
+  const inFreeze = (d) => !!(freeze && freeze.from && freeze.back && d >= freeze.from && d < freeze.back);
+  const days = Array.from({ length: backN + 5 }, (_, i) => addDays(today, i - backN)).filter((d) => !inFreeze(d));
   const dayProgress = (d) => {
     if (!TRACKER_ENABLED) return 0;
     if (!unlockedOn(profile.startDate, d, CHECKIN_UNLOCK)) return 0;
@@ -1463,9 +1477,12 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   };
   const swipe = useRef({ x: 0, y: 0 });
   const goDay = (delta) => {
-    const minT = new Date(profile.startDate).getTime(), maxT = new Date(today).getTime();
+    const minT = new Date(stripFrom).getTime(), maxT = new Date(today).getTime();
     let d = addDays(date, delta);
     if (profile.keepShabbat && parseDay(d).getUTCDay() === 6) d = addDays(d, delta);
+    // Step straight over the frozen stretch, so swiping never lands on a day she was away.
+    let guard = 0;
+    while (inFreeze(d) && guard++ < 400) d = addDays(d, delta);
     const t = new Date(d).getTime();
     if (t < minT || t > maxT) return;
     setDate(d);
@@ -1596,7 +1613,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </div>
         )}
 
-        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} phaseWeek={week} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} hideRewards={!!profile.hideRewards} />}
+        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} phaseWeek={week} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} hideRewards={!!profile.hideRewards} freeze={freeze} startDate={profile.startDate} />}
 
         {dayAct.length > 0 && (
           <>
@@ -4016,7 +4033,25 @@ function CalorieGoalModal({ current, onClose, onAdd }) {
   );
 }
 
-function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg, notice, attempts = 0, agree, setAgree }) {
+function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, onRetry, msg, notice, attempts = 0, agree, setAgree, backDate = "" }) {
+  // A woman on a freeze is not refused, she is waiting, and the screen has to sound like it.
+  if (reason === "frozen") {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center", fontFamily: fontStack }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}><Clock size={28} color={C.brand} /></div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, marginBottom: 10 }}>התוכנית שלך בהקפאה 🌸</div>
+        <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", maxWidth: 340 }}>
+          {backDate
+            ? <>שמרנו לך את המקום, ואנחנו נתראה כאן ביום ראשון <b style={{ color: C.ink }}>{ilDate(backDate)}</b>. הכל ממשיך בדיוק מהמקום שסיכמנו.</>
+            : <>שמרנו לך את המקום, והתוכנית מחכה לך. כשתדעי מתי נוח לך לחזור, נעדכן ונמשיך מהמקום שסיכמנו.</>}
+        </p>
+        <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7, margin: 0, maxWidth: 340 }}>ענת</p>
+        <a href={`https://wa.me/972547304177?text=${encodeURIComponent("היי, יש לי שאלה על ההקפאה שלי")}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "13px 22px", fontSize: 15.5, fontWeight: 700, textDecoration: "none", marginTop: 22 }}>
+          <MessageCircle size={19} /> יש לי שאלה
+        </a>
+      </div>
+    );
+  }
   const deniedText = reason === "fetch_failed"
     ? "תקלה טכנית זמנית, נסי שוב בעוד רגע."
     : reason === "device_limit"
@@ -4437,7 +4472,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
 // week is clamped to 10 because that is as far as the tasks go; phaseWeek is the real one,
 // used only for the heading, which has to say the guided phase ended rather than repeat
 // week 10 for ever.
-function CheckinCard({ date, today, week, phaseWeek, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary, hideRewards }) {
+function CheckinCard({ date, today, week, phaseWeek, tasks, answers, auto, locked, onOpen, onOpenCollection, onOpenSummary, hideRewards, freeze = null, startDate = "" }) {
   const done = tasks.filter((t) => taskDone(t, answers, auto)).length;
   const hasManual = tasks.some((t) => !t.auto);
   const total = tasks.length;
@@ -4447,7 +4482,10 @@ function CheckinCard({ date, today, week, phaseWeek, tasks, answers, auto, locke
   const dn = dowOf(date);
   const dd = parseDay(date);
   const rel = relLabel(date);
-  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${phaseLabel(phaseWeek == null ? week : phaseWeek, dn)}`;
+  // A day from before a freeze belongs to a run that is over, and numbering it by the new
+  // start date would print "שבוע 0". It says what it is instead.
+  const preFreeze = !!(freeze && freeze.from && startDate && date < startDate);
+  const dateLine = `${rel ? rel + " · " : ""}${HE_DAYS_FULL[dd.getUTCDay()]}, ${dd.getUTCDate()} ב${HE_MONTHS[dd.getUTCMonth()]} · ${preFreeze ? "לפני ההקפאה" : phaseLabel(phaseWeek == null ? week : phaseWeek, dn)}`;
   return (
     <div className="no-textscale" style={{ border: `1px solid ${C.line}`, borderRadius: 14, margin: "0 0 16px", background: C.panel, overflow: "hidden", display: "flex", alignItems: "stretch" }}>
       <div data-tut="tracker" onClick={locked ? undefined : onOpen} style={{ flex: 1, minWidth: 0, padding: 14, cursor: locked ? "default" : "pointer" }}>
@@ -5763,6 +5801,8 @@ export default function App() {
   }, [gate, gateEmail, checkins]);
 
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
+  const [freeze, setFreeze] = useState(() => { try { return JSON.parse(localStorage.getItem("myprime_freeze") || "null"); } catch (e) { return null; } });
+  const [gateBack, setGateBack] = useState("");
   const gatePhone = (() => { try { return localStorage.getItem("myprime_phone") || ""; } catch (e) { return ""; } })();
   const [gateAttempts, setGateAttempts] = useState(0);
   const [gateAgree, setGateAgree] = useState(false);
@@ -5846,6 +5886,14 @@ export default function App() {
         // her next entry with nothing to install.
         try { localStorage.setItem("myprime_glow", d.glow ? "1" : "0"); } catch (e) {}
         setGlow(!!d.glow);
+        // A freeze she has already come back from. Kept so her day strip can leave out the
+        // days she was away, and still reach back to everything she really filled before
+        // them. Nothing of hers is deleted, ever.
+        try {
+          if (d.freeze) localStorage.setItem("myprime_freeze", JSON.stringify(d.freeze));
+          else localStorage.removeItem("myprime_freeze");
+        } catch (e) {}
+        setFreeze(d.freeze || null);
         setGateReason(""); setGate("ok");
       } else {
         const rsn = d.reason || "not_registered";
@@ -5857,6 +5905,7 @@ export default function App() {
           return;
         }
         if (rsn === "not_registered") setGateAttempts((n) => n + 1);
+        setGateBack(rsn === "frozen" ? (d.back || "") : "");
         setGateReason(rsn); setGate("denied");
       }
     } catch (e) { setGateMsg("תקלת תקשורת. נסי שוב."); setGate("form"); }
@@ -6425,7 +6474,7 @@ export default function App() {
         {showInstallGate ? (
           <InstallGate onSkip={skipInstall} />
         ) : gate !== "ok" ? (
-          <AccessGate status={gate} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} notice={gateNotice} attempts={gateAttempts} agree={gateAgree} setAgree={setGateAgree} />
+          <AccessGate status={gate} backDate={gateBack} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} notice={gateNotice} attempts={gateAttempts} agree={gateAgree} setAgree={setGateAgree} />
         ) : !onboarded ? (
           bkRestore === "offer" ? (
             <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={() => setBkRestore("none")} />
@@ -6437,7 +6486,7 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} overlayOpen={!!(sheet || modal || showIntro)} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
