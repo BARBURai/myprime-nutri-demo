@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.52";
+const ADMIN_VERSION = "5.56";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -381,6 +381,15 @@ export default async function handler(req, res) {
     // offers Sundays, so anything else is a bug rather than a choice.
     const hasStart = body && Object.prototype.hasOwnProperty.call(body, "start");
     const start = String((body && body.start) || "").trim();
+    // Freeze. Two fields the clerk sets: the Sunday she comes back on, and the week she
+    // comes back to. Everything else is derived from them, because the app reads one number
+    // - her start date - and week W on day D means she started (W-1) weeks before D.
+    //
+    // Deliberately not a scheduled job: nothing has to run at midnight for her to come back.
+    // The date simply passes, and the next time she opens the app the same arithmetic gives
+    // a different answer. There is no job to fail or to run late.
+    const hasFreeze = body && Object.prototype.hasOwnProperty.call(body, "freeze");
+    const fz = (body && body.freeze) || null;
     // The מיי פריים Glow bonus. "" means back to the sheet, "1" grants it, "0" takes it away
     // even when the sheet says TRUE. Set here rather than in the sheet because Google serves
     // the published CSV from a cache and takes minutes; this takes effect on her next load.
@@ -395,7 +404,7 @@ export default async function handler(req, res) {
     const tag = String((body && body.tag) || "").trim();
     const on = !!(body && body.on);
     if (!email) return res.status(400).json({ ok: false, error: "missing_email" });
-    if (!hasUntil && !hasGroup && !hasGlow && !hasStart && !tag) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (!hasUntil && !hasGroup && !hasGlow && !hasStart && !hasFreeze && !tag) return res.status(400).json({ ok: false, error: "nothing_to_do" });
     if (tag && tag !== "full" && tag !== "app" && tag !== "cancelproc") return res.status(400).json({ ok: false, error: "bad_tag" });
     if (hasGlow && glow && glow !== "1" && glow !== "0") return res.status(400).json({ ok: false, error: "bad_glow" });
     if (hasUntil && until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
@@ -406,6 +415,14 @@ export default async function handler(req, res) {
     // week. On a Sunday cohort they are the same day; on any other, the card renders with
     // no tasks at all. See section 28.
     if (hasStart && start && new Date(start + "T12:00:00Z").getUTCDay() !== 0) return res.status(400).json({ ok: false, error: "not_sunday" });
+    if (hasFreeze && fz) {
+      // "עוד לא יודעת" is a real answer and is stored as an empty return date, so she shows
+      // up on the chase list instead of quietly sitting frozen for ever.
+      if (fz.back && !DATE_RE.test(fz.back)) return res.status(400).json({ ok: false, error: "bad_date" });
+      if (fz.back && new Date(fz.back + "T12:00:00Z").getUTCDay() !== 0) return res.status(400).json({ ok: false, error: "not_sunday" });
+      const wk = parseInt(fz.week, 10);
+      if (fz.back && !(Number.isFinite(wk) && wk >= 1 && wk <= 10)) return res.status(400).json({ ok: false, error: "bad_week" });
+    }
     if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
     try {
       // Every change is kept: who, when, and the exact move from one date to another. A
@@ -420,7 +437,7 @@ export default async function handler(req, res) {
       // What the value was before this edit. With no override in force that is the sheet's
       // own value, so read it rather than logging a blank.
       let sheetRow = null;
-      if ((hasUntil && !cur.until) || (hasGroup && !cur.group) || (hasGlow && !cur.glow) || (hasStart && !cur.start)) {
+      if ((hasUntil && !cur.until) || (hasGroup && !cur.group) || (hasGlow && !cur.glow) || (hasStart && !cur.start) || (hasFreeze && !cur.start)) {
         try {
           const sheet = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
           sheetRow = sheet.women.find((w) => w.email === email) || null;
@@ -438,6 +455,34 @@ export default async function handler(req, res) {
       if (hasStart) {
         log.unshift({ at, by, field: "start", from: cur.start || (sheetRow ? sheetRow.start : "") || "", to: start });
       }
+      // The freeze writes the start date too, so the two can never disagree about which week
+      // she is in. `back` empty means she does not know yet: frozen, with no date.
+      let freeze = cur.freeze || null;
+      let freezeStart = "";
+      if (hasFreeze) {
+        if (!fz || fz.off) {
+          log.unshift({ at, by, field: "freeze", from: freeze ? (freeze.back || "ללא תאריך") : "", to: "" });
+          freeze = null;
+        } else {
+          const wk = parseInt(fz.week, 10);
+          freeze = {
+            from: (freeze && freeze.from) || israelDay(0),
+            // Where her diary really began, kept so the app can still show her every day she
+            // actually filled. Moving her start date forward would otherwise hide her own
+            // history behind it, which is the one thing that must not happen.
+            origStart: (freeze && freeze.origStart) || cur.start || (sheetRow ? sheetRow.start : "") || "",
+            back: fz.back || "",
+            week: fz.back ? wk : 0,
+            by, at,
+          };
+          if (fz.back) {
+            const d = new Date(fz.back + "T12:00:00Z");
+            d.setUTCDate(d.getUTCDate() - (wk - 1) * 7);
+            freezeStart = ymd(d);
+          }
+          log.unshift({ at, by, field: "freeze", from: "", to: fz.back ? `${fz.back} · שבוע ${wk}` : "ללא תאריך" });
+        }
+      }
       if (hasGlow) {
         const was = cur.glow || (sheetRow ? (sheetRow.glow ? "1" : "0") : "");
         log.unshift({ at, by, field: "glow", from: was, to: glow });
@@ -452,9 +497,10 @@ export default async function handler(req, res) {
       const blocked = tag === "cancelproc" ? (on ? "1" : "") : (cur.blocked || "");
       const rec = JSON.stringify({
         blocked,
+        freeze,
         until: hasUntil ? until : (cur.until || ""),
         group: hasGroup ? group : (cur.group || ""),
-        start: hasStart ? start : (cur.start || ""),
+        start: hasStart ? start : (freezeStart || cur.start || ""),
         glow: hasGlow ? glow : (cur.glow || ""),
         by, at, log: log.slice(0, 20),
       });
@@ -463,8 +509,11 @@ export default async function handler(req, res) {
       // the app reads within seconds; ManyChat is what makes the change permanent and
       // carries it to WhatsApp and to the sheet.
       let mcState = "off";
-      if (process.env.MANYCHAT_TOKEN && (hasGroup || start || glow === "1" || glow === "0" || tag)) {
-        mcState = await mcPush({ phone, hasGroup, group, start: hasStart ? start : "", glow: hasGlow ? glow : "", tag, on });
+      // The computed start date travels to ManyChat exactly like a cohort move, because the
+      // automations there hang off her start date and not off the day she comes back.
+      const mcStart = hasStart ? start : freezeStart;
+      if (process.env.MANYCHAT_TOKEN && (hasGroup || mcStart || glow === "1" || glow === "0" || tag)) {
+        mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", tag, on });
       }
       return res.status(200).json({ ok: true, mc: mcState });
     } catch (e) {
@@ -538,6 +587,7 @@ export default async function handler(req, res) {
   const pendingBySheetEmail = {};
   for (const to of Object.keys(emailMap)) pendingBySheetEmail[emailMap[to]] = to;
 
+  const addDaysStr = (d, n) => { const t = new Date(d + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return ymd(t); };
   const today = israelDay(0);
   // A woman with no group letter cannot be placed in the partnership feature. Exactly two
   // cohorts matter: the one running this week, and next week's, which Ron assigns on the
@@ -562,6 +612,14 @@ export default async function handler(req, res) {
       : (w.sheetEnd || "");
     const until = (ovr && ovr.until) || sheetEnd || "";
     const blocked = !!(ovr && ovr.blocked === "1");
+    // Frozen right now: she is on a freeze and either has no return date, or it has not
+    // arrived. From the return date on she is simply a participant again, and the record is
+    // kept only so the app knows which days to skip in her diary.
+    const freeze = (ovr && ovr.freeze) || null;
+    const frozen = !!freeze && (!freeze.back || today < freeze.back);
+    // Two work lists the office needs: who has no date and must be chased, and who comes
+    // back this coming week and has to be put in the right WhatsApp group.
+    const backSoon = !!freeze && !!freeze.back && freeze.back >= today && freeze.back <= addDaysStr(today, 7);
     const group = (ovr && ovr.group) || w.group || "";
     const seenAt = seen[w.email] || "";
     let use = null;
@@ -575,6 +633,12 @@ export default async function handler(req, res) {
       sheetEnd,
       startOverride: (ovr && ovr.start) ? { start: ovr.start, by: ovr.by || "" } : null,
       pendingEmail: pendingBySheetEmail[w.email] || "",
+      freeze,
+      frozen,
+      backSoon,
+      // The cohort she belongs to when she returns IS her computed start date, so the clerk
+      // is told the group to look for rather than being left to work it out.
+      backCohort: (freeze && freeze.back) ? start : "",
       blocked,
       seen: seenAt,
       // Opening the app at least once is what puts her on the new app. This only counts

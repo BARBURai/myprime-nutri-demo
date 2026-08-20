@@ -213,6 +213,23 @@ export default async function handler(req, res) {
     }
   }
 
+  // Women on a freeze hear nothing at all, morning or evening. A reminder to fill a tracker
+  // she cannot reach is the fastest way to make her switch notifications off for good. One
+  // read of the office overrides for everyone, not one per woman.
+  const frozen = new Set();
+  try {
+    const raw2 = await redisCmd(RU, RT, ["HGETALL", "admin:overrides"]);
+    const flat = {};
+    if (Array.isArray(raw2)) { for (let i = 0; i < raw2.length; i += 2) flat[raw2[i]] = raw2[i + 1]; }
+    else if (raw2 && typeof raw2 === "object") Object.assign(flat, raw2);
+    Object.keys(flat).forEach((em) => {
+      let o = null;
+      try { o = JSON.parse(flat[em]); } catch (e) { return; }
+      if (o && o.blocked === "1") { frozen.add(em.toLowerCase()); return; }
+      if (o && o.freeze && (!o.freeze.back || today < o.freeze.back)) frozen.add(em.toLowerCase());
+    });
+  } catch (e) { /* unreadable: send as usual rather than silence everyone */ }
+
   let sent = 0, pruned = 0, failed = 0, quiet = 0;
   for (const [endpoint, val] of entries) {
     let rec;
@@ -227,6 +244,7 @@ export default async function handler(req, res) {
     // here: it is on the celebration screen inside the app, the moment she closes the day.
     // That reaches her at any hour, including long after this reminder has gone out, and it
     // reaches her even if she has notifications turned off.
+    if (frozen.has((rec.email || "").trim().toLowerCase())) { quiet++; continue; }
     if (!morning && doneToday.has((rec.email || "").trim().toLowerCase())) { quiet++; continue; }
     if (!morning && !hasTracker(rec.startDate, today)) { quiet++; continue; }
     if (!morning && !serve.includes(reminderHourOf(rec, today))) { quiet++; continue; }
