@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.60";
+const ADMIN_VERSION = "5.61";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -83,6 +83,10 @@ const MC_TAGS = {
   // ManyChat, and the "ביטלה" column in the sheet stays the only thing that blocks entry.
   cancelproc: "ביטול בתהליך ❌❌",
 };
+// The freeze tag (id 68359172). Kept out of MC_TAGS on purpose: it is not a switch the clerk
+// flips on its own, it follows the freeze itself, so it can never be on while she is running
+// or off while she is frozen.
+const MC_FREEZE_TAG = "הקפאה";
 
 async function mc(path, body) {
   const token = process.env.MANYCHAT_TOKEN;
@@ -113,7 +117,7 @@ async function mcFind(phone) {
 // Push the same change into ManyChat. Runs after the local write and never blocks it: if
 // ManyChat is unreachable the clerk's change still takes effect in the app, which is the
 // thing she is looking at. The screen reports which of the two actually happened.
-async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on }) {
+async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on, freezeTag }) {
   let sub;
   try { sub = await mcFind(phone); } catch (e) { return "failed"; }
   if (!sub) return "not_found";
@@ -171,6 +175,13 @@ async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on }
     if (tag) {
       await mc(on ? "/fb/subscriber/addTagByName" : "/fb/subscriber/removeTagByName", {
         subscriber_id: sub.id, tag_name: MC_TAGS[tag],
+      });
+    }
+    // Freezing tags her, ending the freeze untags her. Ron asked for both directions, and
+    // his automations hang off this tag, so each one is a real event over there.
+    if (freezeTag === "on" || freezeTag === "off") {
+      await mc(freezeTag === "on" ? "/fb/subscriber/addTagByName" : "/fb/subscriber/removeTagByName", {
+        subscriber_id: sub.id, tag_name: MC_FREEZE_TAG,
       });
     }
   } catch (e) { return "failed"; }
@@ -316,6 +327,7 @@ export default async function handler(req, res) {
         full: names.includes(MC_TAGS.full),
         app: names.includes(MC_TAGS.app),
         cancelproc: names.includes(MC_TAGS.cancelproc),
+        freeze: names.includes(MC_FREEZE_TAG),
       },
     });
   }
@@ -515,8 +527,9 @@ export default async function handler(req, res) {
       // The computed start date travels to ManyChat exactly like a cohort move, because the
       // automations there hang off her start date and not off the day she comes back.
       const mcStart = hasStart ? start : freezeStart;
-      if (process.env.MANYCHAT_TOKEN && (hasGroup || mcStart || glow === "1" || glow === "0" || tag)) {
-        mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", tag, on });
+      const freezeTag = hasFreeze ? (freeze ? "on" : "off") : "";
+      if (process.env.MANYCHAT_TOKEN && (hasGroup || mcStart || glow === "1" || glow === "0" || tag || freezeTag)) {
+        mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", tag, on, freezeTag });
       }
       return res.status(200).json({ ok: true, mc: mcState });
     } catch (e) {
