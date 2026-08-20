@@ -7,52 +7,147 @@
 <title>ניהול · מיי פריים</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2937'/%3E%3Crect x='14' y='17' width='36' height='6' rx='3' fill='%23f472b6'/%3E%3Crect x='14' y='29' width='36' height='6' rx='3' fill='%23ffffff'/%3E%3Crect x='14' y='41' width='23' height='6' rx='3' fill='%23ffffff' opacity='.65'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2937'/%3E%3Crect x='14' y='17' width='36' height='6' rx='3' fill='%23f472b6'/%3E%3Crect x='14' y='29' width='36' height='6' rx='3' fill='%23ffffff'/%3E%3Crect x='14' y='41' width='23' height='6' rx='3' fill='%23ffffff' opacity='.65'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Heebo:wght@700;800&display=swap">
 <style>
-  :root{--bg:#faf7f8;--card:#fff;--ink:#2d2430;--soft:#2d2430;--line:#ece4ee;--pink:#c2185b;--pinkbg:#fce4ec;--ok:#2e7d32;--warn:#b26a00}
+  /* מסך עבודה למשרד. הוא נקרא כל היום, רובו במחשב, ולכן: ניגודיות אמיתית, כרטיסים
+     לבנים שמונחים מעל רקע כהה יותר, וצבע רק במקום שבו הוא אומר "יש כאן מה לעשות".
+     מכוון לאור בלבד, במכוון, כי זו הסביבה שבה הוא נפתח בפועל. */
+  :root{
+    --bg:#eceef3; --card:#ffffff; --card-2:#f5f6fa;
+    --line:#dde0e9; --line-2:#bfc3d2;
+    --ink:#12101a; --ink-2:#484556; --soft:#484556; --ink-3:#767488;
+    --bar:#241a2e; --bar-2:#3a2a49; --bar-ink:#fbf4f8; --bar-ink-2:#c4b3d1;
+    --pink:#bd1354; --pink-2:#9d0d45; --pinkbg:#fdeaf1; --pink-line:#f4bed4;
+    --ok:#0d7a41; --okbg:#e3f4ea; --ok-line:#b6e0c6;
+    --warn:#8a4c06; --warnbg:#fdf0dc; --warn-line:#f0d3a6;
+    --danger:#b01f19; --dangerbg:#fdeae8; --danger-line:#f3c3bf;
+    --cold:#17558f; --coldbg:#eff5fc; --cold-line:#a8c7e8;
+    --sh1:0 1px 2px rgba(18,16,26,.06);
+    --sh2:0 1px 3px rgba(18,16,26,.07), 0 10px 28px -14px rgba(18,16,26,.28);
+  }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Rubik,Arial,sans-serif;padding:env(safe-area-inset-top) 0 40px}
-  .wrap{max-width:760px;margin:0 auto;padding:16px}
-  h1{font-size:20px;margin:8px 0 4px}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.55 Assistant,"Segoe UI",Rubik,Arial,sans-serif;
+    padding:env(safe-area-inset-top) 0 60px; font-variant-numeric:tabular-nums;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,.nm,.kpin{font-family:Heebo,Assistant,"Segoe UI",Arial,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:16px}
+  input,select,button{font:inherit;color:inherit}
+  a{color:var(--pink)}
+
+  /* פס עליון כהה, כדי שלמסך יהיה עמוד שדרה ולא יתחיל באוויר */
+  .topbar{
+    background:linear-gradient(90deg,var(--bar) 0%,var(--bar-2) 100%);
+    color:var(--bar-ink); border-radius:14px; padding:14px 18px; margin-bottom:14px;
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap; box-shadow:var(--sh2);
+  }
+  h1{font-size:19px;margin:0;font-weight:800;letter-spacing:-.015em}
+  .topbar .cnt{color:var(--bar-ink-2);font-size:13.5px;margin-inline-end:auto}
+  .topbar .who{
+    font-size:13px;color:var(--bar-ink);background:rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.17);border-radius:999px;padding:4px 12px;
+  }
   .sub{color:var(--soft);font-size:14px;margin-bottom:16px}
-  input,select,button{font:inherit}
-  .field{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff}
-  .field:focus{outline:2px solid var(--pink);outline-offset:1px}
+
+  /* סרגל אחד, ובתוכו שני אזורים שאסור שייראו אותו דבר */
+  .toolbar{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    box-shadow:var(--sh2); padding:12px; margin-bottom:14px;
+  }
+  .zone{border-radius:11px; padding:9px 12px; margin-top:10px}
+  .zone.work{background:var(--card-2); border:1px solid var(--line); box-shadow:inset 3px 0 0 var(--pink)}
+  .zone.work.calm{box-shadow:inset 3px 0 0 var(--line-2)}
+  /* תווית ושורת הצ'יפים שלה על אותה שורה, אחרת האזור נפרש על חצי מסך ריק */
+  .zone.filt{
+    border:1px solid var(--line);
+    display:grid; grid-template-columns:max-content minmax(0,1fr); gap:3px 14px; align-items:center;
+  }
+  .zone.filt > .zlab, .zone.filt > .note{grid-column:1 / -1}
+  .zone.filt > .lbl{grid-column:1; margin:0; white-space:nowrap}
+  .zone.filt > .chips{grid-column:2; margin:3px 0}
+  .zlab{
+    display:block; font-size:11px; font-weight:700; letter-spacing:.09em;
+    text-transform:uppercase; color:var(--ink-3); margin-bottom:2px;
+  }
+  .zone.work .zlab{color:var(--pink)}
+  .zone.work.calm .zlab{color:var(--ink-3)}
+  .zone .chips{margin:6px 0 0}
+  .zone .lbl{margin-top:9px}
+  .zone .note{margin-top:8px}
+
+  .field{
+    width:100%;padding:12px 14px;border:1px solid var(--line-2);border-radius:11px;
+    background:var(--card);box-shadow:var(--sh1);
+  }
+  .field:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 3px var(--pinkbg)}
   .chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-  .chip{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--soft);cursor:pointer}
-  .chip.on{background:var(--pinkbg);border-color:var(--pink);color:var(--pink);font-weight:600}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
-  .row1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-  .nm{font-weight:700;font-size:17px}
-  .grp{background:var(--pinkbg);color:var(--pink);border-radius:999px;padding:2px 10px;font-size:13px;font-weight:600}
-  .meta{color:var(--soft);font-size:14px;margin-top:4px;word-break:break-word}
-  .until{margin-top:8px;font-size:15px}
-  .manual{color:var(--warn);font-size:13px;margin-top:2px}
-  .log{font-size:12.5px;margin-top:4px;line-height:1.6}
-  .lnk{background:none;border:none;padding:0 2px;color:var(--pink);cursor:pointer;font-size:13px;text-decoration:underline}
-  .expired{color:var(--pink);font-weight:600}
-  .acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-  .btn{padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink)}
-  .btn.p{background:var(--pink);border-color:var(--pink);color:#fff;font-weight:600}
-  .edit{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .note{color:var(--soft);font-size:13px;margin-top:14px}
-  .lbl{font-size:13px;color:var(--soft);margin-top:10px}
-  .chip.warn{border-color:var(--warn);color:var(--warn);font-weight:600}
-  .chip.warn.on{background:#fff4e5}
-  .warnpill{background:#fff4e5;color:var(--warn)}
-  .newpill{background:#e6f4ea;color:#1b5e20}
-  .oldpill{background:#eee;color:#555}
-  .btn.sm{padding:6px 10px;font-size:13px}
-  .field.sm{padding:6px 8px;font-size:14px;width:auto}
+  .chip{
+    padding:6px 13px;border-radius:999px;border:1px solid var(--line-2);background:var(--card);
+    color:var(--ink-2);cursor:pointer;font-size:14px;font-weight:600;box-shadow:var(--sh1);
+    transition:border-color .12s,background .12s,color .12s;
+  }
+  .chip:hover{border-color:var(--ink-3);background:var(--card-2)}
+  .chip.on{background:var(--pinkbg);border-color:var(--pink);color:var(--pink)}
+  .chip.warn{border-color:var(--warn-line);background:var(--warnbg);color:var(--warn)}
+  .chip.warn.on{background:var(--warn);border-color:var(--warn);color:#fff}
+
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:15px 16px;margin-bottom:11px;box-shadow:var(--sh2);
+  }
+  .row1{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .nm{font-weight:800;font-size:17.5px;letter-spacing:-.01em;margin-inline-end:3px}
+  /* עובדה רגילה היא אפורה. צבע נשמר למה שדורש טיפול. */
+  .grp{
+    background:var(--card-2);color:var(--ink-2);border:1px solid var(--line);
+    border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;white-space:nowrap;
+  }
+  .warnpill{background:var(--warnbg);color:var(--warn);border-color:transparent}
+  .newpill{background:var(--card-2);color:var(--ink-2);border-color:var(--line)}
+  .oldpill{background:var(--card-2);color:var(--ink-3);border-color:var(--line)}
+  .meta{color:var(--soft);font-size:14px;margin-top:5px;word-break:break-word}
+  .until{margin-top:9px;font-size:15px}
+  .manual{color:var(--warn);font-size:13.5px;margin-top:3px}
+  .log{font-size:12.5px;margin-top:6px;line-height:1.7;color:var(--ink-2)}
+  .lnk{background:none;border:none;padding:0 2px;color:var(--pink);cursor:pointer;font-size:13px;text-decoration:underline;font-weight:600}
+  .expired{color:var(--danger);font-weight:700}
+  .acts{display:flex;gap:8px;margin-top:13px;flex-wrap:wrap}
+
+  /* ארבעה משקלים, כדי ששני כפתורים לא ייראו אותו דבר כשהם עושים דברים שונים */
+  .btn{
+    padding:9px 15px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);
+    cursor:pointer;color:var(--ink);font-weight:600;box-shadow:var(--sh1);
+    display:inline-flex;align-items:center;gap:6px;text-decoration:none;
+    transition:border-color .12s,background .12s,color .12s;
+  }
+  .btn:hover{border-color:var(--ink-3);background:var(--card-2)}
+  .btn.p{background:var(--pink);border-color:var(--pink-2);color:#fff;font-weight:700}
+  .btn.p:hover{background:var(--pink-2);color:#fff}
+  .btn.wa{background:var(--okbg);border-color:var(--ok-line);color:var(--ok)}
+  .btn.wa:hover{background:var(--ok);border-color:var(--ok);color:#fff}
+  .btn.dng{background:var(--dangerbg);border-color:var(--danger-line);color:var(--danger)}
+  .btn.dng:hover{background:var(--danger);border-color:var(--danger);color:#fff}
+  .btn.sm{padding:6px 11px;font-size:13px}
+
+  .edit{margin-top:13px;padding-top:13px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .note{color:var(--soft);font-size:13.5px;margin-top:14px;line-height:1.6}
+  .lbl{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);margin-top:12px}
+  .field.sm{padding:7px 10px;font-size:14px;width:auto}
   .adds{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-  .stats{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  .stats{margin-top:13px;padding-top:13px;border-top:1px solid var(--line)}
   .statline{font-size:14px;margin-bottom:4px}
   .bars{display:flex;gap:3px;align-items:flex-end;overflow-x:auto;padding-bottom:4px}
   .bar{flex:0 0 auto;width:16px;text-align:center}
-  .barbox{height:90px;display:flex;align-items:flex-end;background:var(--line);border-radius:3px}
+  .barbox{height:90px;display:flex;align-items:flex-end;background:var(--card-2);border:1px solid var(--line);border-radius:4px}
   .barfill{width:100%;background:var(--pink);border-radius:3px}
-  .barlbl{font-size:10px;margin-top:2px}
-  .empty{text-align:center;color:var(--soft);padding:40px 0}
-  a{color:var(--pink)}
+  .barlbl{font-size:10px;margin-top:2px;color:var(--ink-3)}
+  .empty{text-align:center;color:var(--ink-3);padding:44px 0}
+  :focus-visible{outline:2px solid var(--pink);outline-offset:2px;border-radius:8px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
@@ -484,11 +579,18 @@ function render(){
   }
   list.sort(function(a,b){ return (a.first+" "+a.last).localeCompare(b.first+" "+b.last,"he"); });
 
-  var html = '<h1>ניהול משתתפות</h1>'+
-    '<div class="sub">'+list.length+' משתתפות · מחוברת כ'+esc(DATA.me||WHO||"?")+(DATA.owner?" (מנהל)":"")+(DATA.version?' · v'+esc(DATA.version):'')+'</div>'+
+  // הפס הכהה, אחר כך סרגל אחד שבתוכו שני אזורים נפרדים: מה שדורש טיפול, ומה שרק מצמצם
+  // את הרשימה. הם חולקים סרגל אבל לא נראים אותו דבר, כדי שאף אחת לא תחשוב שזה סינון.
+  var nWork = missing.length + noDate.length + backSoon.length;
+  var html = '<div class="topbar"><h1>ניהול משתתפות</h1>'+
+      '<span class="cnt">'+list.length+' משתתפות'+(DATA.version?' · v'+esc(DATA.version):'')+'</span>'+
+      '<span class="who">'+esc(DATA.me||WHO||"?")+(DATA.owner?" · מנהל":"")+'</span>'+
+    '</div>'+
     teamBlock()+
-    '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
+    '<div class="toolbar">'+
+    '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל. אפשר להדביק מספר עם + או עם רווחים" value="'+esc(q)+'">'+
     (searching ? '<div class="note">תוצאות חיפוש מכל הרשומות בגיליון, בלי סינון לפי מחזור, קבוצה או אפליקציה.</div>' :
+      '<div class="zone work'+(nWork?"":" calm")+'"><span class="zlab">לטיפול</span>'+
       '<div class="chips"><span class="chip'+(missing.length?" warn":"")+(MISSING?" on":"")+'" data-m="1">'+
         (missing.length?"⚠ ":"")+'חסרות קבוצה ('+missing.length+')</span>'+
         // Two work lists the freeze creates: who has no return date and must be chased, and
@@ -501,6 +603,8 @@ function render(){
       (MISSING ? '<div class="note">מוצגות רק נשים ללא אות קבוצה במחזור של השבוע ובמחזור של השבוע הבא.</div>' : '')+
       (VIEW==="nodate" ? '<div class="note">מוקפאות שחסר להן תאריך חזרה, שבוע חזרה או שניהם. <b>הן לא נכנסות לאפליקציה עד שיושלם.</b></div>' : '')+
       (VIEW==="backsoon" ? '<div class="note">חוזרות מהקפאה בשבוע הקרוב. <b>ליד כל אחת כתוב לאיזה מחזור להכניס אותה</b>, כדי שתדעי לאיזו קבוצת וואטסאפ היא שייכת.</div>' : '')+
+      '</div>'+
+      '<div class="zone filt"><span class="zlab">סינון</span>'+
       (MISSING ? '' : '<div class="lbl">אפליקציה</div><div class="chips">'+
         '<span class="chip'+(APP==="new"?" on":"")+'" data-p="new">אפליקציה חדשה ('+nNew+')</span>'+
         '<span class="chip'+(APP==="old"?" on":"")+'" data-p="old">קג\'אבי ('+nOld+')</span>'+
@@ -528,7 +632,9 @@ function render(){
           (noGroup ? '<span class="chip warn'+(GROUP==="-"?" on":"")+'" data-g="-">ללא קבוצה ('+noGroup+')</span>' : '')+
           '</div>'
         : '')+
-      '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>');
+      '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>'+
+      '</div>')+
+    '</div>';
 
   if(!list.length) html += '<div class="empty">'+
     (MISSING ? "אין כאן נשים ללא קבוצה. הכל משויך." : "לא נמצאה אף משתתפת")+'</div>';
@@ -669,7 +775,7 @@ function render(){
           '</div>' : '')+
           '<div class="edit"><button class="btn" data-cancel="1">סגירה</button></div>'
         : '<div class="acts">'+
-          (w.phone?'<a class="btn" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
+          (w.phone?'<a class="btn wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
           (w.newApp
             ? '<button class="btn" data-stats="'+esc(w.email)+'">'+(STATS===w.email?"סגירת נתוני שימוש":"נתוני שימוש")+'</button>'
             : '')+
