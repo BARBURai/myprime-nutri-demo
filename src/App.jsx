@@ -551,7 +551,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.57";
+const VERSION = "5.58";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4043,11 +4043,11 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
         <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", maxWidth: 340 }}>
           {backDate
             ? <>שמרנו לך את המקום, ואנחנו נתראה כאן ביום ראשון <b style={{ color: C.ink }}>{ilDate(backDate)}</b>. הכל ממשיך בדיוק מהמקום שסיכמנו.</>
-            : <>שמרנו לך את המקום, והתוכנית מחכה לך. כשתדעי מתי נוח לך לחזור, נעדכן ונמשיך מהמקום שסיכמנו.</>}
+            : <>שמרנו לך את המקום, והכל ממשיך בדיוק מהמקום שסיכמנו. <b style={{ color: C.ink }}>חשוב שתעדכני אותנו בהקדם מתי נוח לך לחזור</b>, כדי שנשמור לך מקום בקבוצה המתאימה.</>}
         </p>
         <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7, margin: 0, maxWidth: 340 }}>ענת</p>
-        <a href={`https://wa.me/972547304177?text=${encodeURIComponent("היי, יש לי שאלה על ההקפאה שלי")}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "13px 22px", fontSize: 15.5, fontWeight: 700, textDecoration: "none", marginTop: 22 }}>
-          <MessageCircle size={19} /> יש לי שאלה
+        <a href={`https://wa.me/972547304177?text=${encodeURIComponent(backDate ? "היי, יש לי שאלה על ההקפאה שלי" : "היי, אני רוצה לעדכן מתי אני חוזרת מההקפאה")}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "13px 22px", fontSize: 15.5, fontWeight: 700, textDecoration: "none", marginTop: 22 }}>
+          <MessageCircle size={19} /> {backDate ? "יש לי שאלה" : "לעדכן מתי אני חוזרת"}
         </a>
       </div>
     );

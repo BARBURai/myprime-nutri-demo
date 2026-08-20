@@ -226,7 +226,7 @@ export default async function handler(req, res) {
       let o = null;
       try { o = JSON.parse(flat[em]); } catch (e) { return; }
       if (o && o.blocked === "1") { frozen.add(em.toLowerCase()); return; }
-      if (o && o.freeze && (!o.freeze.back || today < o.freeze.back)) frozen.add(em.toLowerCase());
+      if (o && o.freeze && (!o.freeze.back || !o.freeze.week || today < o.freeze.back)) frozen.add(em.toLowerCase());
     });
   } catch (e) { /* unreadable: send as usual rather than silence everyone */ }
 
