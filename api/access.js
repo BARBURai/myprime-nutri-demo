@@ -251,7 +251,9 @@ export default async function handler(req, res) {
   // Same answer as the sheet's own cancellation, so she sees the one screen that already
   // exists and points her at support, rather than a second wording for the same thing.
   if (clerkBlocked) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
-  if (freeze && (!freeze.back || israelDay(0) < freeze.back)) {
+  // Missing either half means the freeze cannot resolve, and she waits rather than being let
+  // in with a week nobody chose for her.
+  if (freeze && (!freeze.back || !freeze.week || israelDay(0) < freeze.back)) {
     return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: freeze.back || "" });
   }
   const startSunday = parseDateToSunday(clerkStart || startStr);

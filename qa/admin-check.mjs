@@ -356,11 +356,20 @@ console.log("\nהקפאה");
   check("בזמן ההקפאה היא לא נכנסת", acc.body.allowed === false && acc.body.reason === "frozen", JSON.stringify(acc.body));
   check("והתאריך שהיא תראה על המסך מוחזר אליה", acc.body.back === "2026-10-04", acc.body.back);
 
-  // "עוד לא יודעת" is a real answer, and she has to stay visible.
-  await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "", week: 0 }, phone: "9731", by: "רון" });
+  // "עוד לא יודעת" is a real answer for either half, and she has to stay visible until both
+  // are filled in. A freeze that cannot resolve must never quietly let her in.
+  await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "", week: "" }, phone: "9731", by: "רון" });
   const w2 = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
-  check("הקפאה בלי תאריך נשמרת ככזאת", w2.frozen === true && !w2.freeze.back);
+  check("הקפאה בלי תאריך ובלי שבוע נשמרת ככזאת", w2.frozen === true && !w2.freeze.back && !w2.freeze.week);
+  check("והמסך אומר מה חסר", w2.freezeTodo === "חסרים תאריך חזרה ושבוע", w2.freezeTodo);
   check("וגם בלי תאריך היא לא נכנסת", (await callAccess(EM)).body.reason === "frozen");
+
+  // Date known, week not decided yet: still cannot resolve, so she waits.
+  await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-04", week: "" }, phone: "9731", by: "רון" });
+  const w2b = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
+  check("תאריך בלי שבוע עדיין מוקפאת", w2b.frozen === true && w2b.freezeTodo === "חסר שבוע חזרה", w2b.freezeTodo);
+  check("ואינה נספרת כחוזרת השבוע, כי אין לאיזה מחזור לשייך אותה", w2b.backSoon === false && !w2b.backCohort);
+  check("ולא נכנסת", (await callAccess(EM)).body.reason === "frozen");
 
   await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { off: true }, by: "רון" });
   const w3 = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);

@@ -397,7 +397,7 @@ function render(){
   // this week and has not opened the app yet reads as Kajabi, and she is exactly the one to
   // catch. Turning this on becomes an ordinary filter, not a separate screen.
   var missing = DATA.women.filter(function(w){ return w.needsGroup; });
-  var noDate = DATA.women.filter(function(w){ return w.frozen && (!w.freeze || !w.freeze.back); });
+  var noDate = DATA.women.filter(function(w){ return w.frozen && !!w.freezeTodo; });
   var backSoon = DATA.women.filter(function(w){ return w.backSoon; });
   var base = MISSING ? missing : (VIEW==="nodate" ? noDate : VIEW==="backsoon" ? backSoon : pool);
 
@@ -468,12 +468,12 @@ function render(){
         // Two work lists the freeze creates: who has no return date and must be chased, and
         // who comes back this week and has to be put in the right WhatsApp group.
         '<span class="chip'+(noDate.length?" warn":"")+(VIEW==="nodate"?" on":"")+'" data-v="nodate">'+
-          (noDate.length?"⚠ ":"")+'הקפאה בלי תאריך ('+noDate.length+')</span>'+
+          (noDate.length?"⚠ ":"")+'הקפאה להשלמה ('+noDate.length+')</span>'+
         '<span class="chip'+(VIEW==="backsoon"?" on":"")+'" data-v="backsoon">חוזרות מהקפאה השבוע ('+backSoon.length+')</span>'+
       '</div>'+
       // Say what the list covers, so a woman who is missing from it does not read as a bug.
       (MISSING ? '<div class="note">מוצגות רק נשים ללא אות קבוצה במחזור של השבוע ובמחזור של השבוע הבא.</div>' : '')+
-      (VIEW==="nodate" ? '<div class="note">מוקפאות שעוד לא נקבע להן תאריך חזרה. <b>הן לא נכנסות לאפליקציה עד שייקבע.</b></div>' : '')+
+      (VIEW==="nodate" ? '<div class="note">מוקפאות שחסר להן תאריך חזרה, שבוע חזרה או שניהם. <b>הן לא נכנסות לאפליקציה עד שיושלם.</b></div>' : '')+
       (VIEW==="backsoon" ? '<div class="note">חוזרות מהקפאה בשבוע הקרוב. <b>ליד כל אחת כתוב לאיזה מחזור להכניס אותה</b>, כדי שתדעי לאיזו קבוצת וואטסאפ היא שייכת.</div>' : '')+
       (MISSING ? '' : '<div class="lbl">אפליקציה</div><div class="chips">'+
         '<span class="chip'+(APP==="new"?" on":"")+'" data-p="new">אפליקציה חדשה ('+nNew+')</span>'+
@@ -520,7 +520,7 @@ function render(){
         (w.phone?' <button class="lnk" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+
         ' · '+esc(w.email)+' <button class="lnk" data-copy="'+esc(w.email)+'">העתקה</button></div>'+
       ((w.backSoon && w.backCohort)?'<div class="manual" style="font-size:15px">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></div>':'')+
-      ((w.frozen && (!w.freeze || !w.freeze.back))?'<div class="manual">בהקפאה, בלי תאריך חזרה</div>':'')+
+      ((w.frozen && w.freezeTodo)?'<div class="manual">בהקפאה · '+esc(w.freezeTodo)+'</div>':'')+
       (w.pendingEmail?'<div class="manual">כתובת חדשה שכבר בתוקף: <b>'+esc(w.pendingEmail)+'</b> <button class="lnk" data-copy="'+esc(w.pendingEmail)+'">העתקה</button> · הגיליון עוד לא התעדכן, והיא נכנסת עם החדשה</div>':'')+
       '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
       (w.startOverride?'<div class="manual">תאריך ההתחלה שונה ידנית · בגיליון: '+(w.sheetStart?il(w.sheetStart):"לא ידוע")+'</div>':'')+
@@ -578,7 +578,10 @@ function render(){
           '<div class="note">שינוי המחזור נכתב גם למניצ\'ט, בשעה 12:00, <b>ומשם הוא מגיע לגיליון לבד.</b> הוא משנה לה את היום בתוכנית, את התכנים שייפתחו לה ואת תאריך סיום הגישה.</div>'+
           '<div class="edit"><span>הקפאה:</span>'+
             (w.freeze
-              ? '<span><b>' + (w.freeze.back ? 'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week : 'מוקפאת · עוד לא ידוע מתי חוזרת') + '</b></span>'+
+              ? '<span><b>' + ((w.freeze.back && w.freeze.week) ? 'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week
+                    : w.freeze.back ? 'חוזרת '+il(w.freeze.back)+' · עוד לא ידוע לאיזה שבוע'
+                    : w.freeze.week ? 'לשבוע '+w.freeze.week+' · עוד לא ידוע מתי'
+                    : 'מוקפאת · עוד לא ידוע מתי חוזרת ולאיזה שבוע') + '</b></span>'+
                 '<button class="btn" data-unfreeze="'+esc(w.email)+'">סיום ההקפאה</button>'+
                 '<button class="btn" data-freeze="'+esc(w.email)+'">שינוי</button>'
               : '<button class="btn" data-freeze="'+esc(w.email)+'">הכנסה להקפאה</button>')+
@@ -590,8 +593,9 @@ function render(){
                   sundaysN(10).map(function(d){ return '<option value="'+d+'"'+((w.freeze&&w.freeze.back===d)?" selected":"")+'>'+il(d)+'</option>'; }).join("")+
                 '</select>'+
                 '<span>לשבוע</span>'+
-                '<select class="field sm" style="width:90px" id="fw_'+esc(w.email)+'">'+
-                  [1,2,3,4,5,6,7,8,9,10].map(function(n){ return '<option'+((w.freeze&&w.freeze.week===n)?" selected":"")+'>'+n+'</option>'; }).join("")+
+                '<select class="field sm" style="width:140px" id="fw_'+esc(w.email)+'">'+
+                  '<option value="">עוד לא יודעת</option>'+
+                  [1,2,3,4,5,6,7,8,9,10].map(function(n){ return '<option value="'+n+'"'+((w.freeze&&w.freeze.week===n)?" selected":"")+'>'+n+'</option>'; }).join("")+
                 '</select>'+
                 '<button class="btn p" data-savefreeze="'+esc(w.email)+'">שמירה</button>'+
                 '<button class="btn quiet" data-nofreeze="1">ביטול</button>'+
@@ -758,14 +762,16 @@ function render(){
   app.querySelectorAll("[data-savefreeze]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-savefreeze");
     var back=document.getElementById("fb_"+em).value;
-    var week=parseInt(document.getElementById("fw_"+em).value,10);
-    if(!confirm(back
+    var week=document.getElementById("fw_"+em).value;
+    // Either half may be unknown. Without both there is nothing to compute, so she simply
+    // stays frozen and stays on the list until the office fills the rest in.
+    if(!confirm((back && week)
       ? "להכניס אותה להקפאה?\n\nהיא חוזרת ביום ראשון "+il(back)+", לשבוע "+week+".\nעד אז היא לא נכנסת לאפליקציה ולא מקבלת תזכורות.\nתאריך ההתחלה המחושב ייכתב גם במניצ'ט."
-      : "להכניס אותה להקפאה בלי תאריך חזרה?\n\nהיא לא נכנסת לאפליקציה ולא מקבלת תזכורות, עד שתקבעי לה תאריך.\nהיא תופיע ברשימת \"הקפאה בלי תאריך\".")) return;
+      : "להכניס אותה להקפאה בלי כל הפרטים?\n\n"+(back?"יש תאריך חזרה, חסר השבוע.":week?"יש שבוע, חסר תאריך החזרה.":"חסרים גם תאריך החזרה וגם השבוע.")+"\n\nהיא לא נכנסת לאפליקציה ולא מקבלת תזכורות עד שתשלימי, והיא תופיע ברשימת \"הקפאה להשלמה\".")) return;
     el.disabled=true; el.textContent="שומרת...";
     save(em,{freeze:{back:back, week:week}}).then(function(r){
       if(!r.ok) throw new Error();
-      if(back && r.mc && String(r.mc).indexOf("ok:")===0) alert("נשמר. במניצ'ט עכשיו: "+String(r.mc).slice(3));
+      if(back && week && r.mc && String(r.mc).indexOf("ok:")===0) alert("נשמר. במניצ'ט עכשיו: "+String(r.mc).slice(3));
       else if(String(r.mc||"").indexOf("startfail:")===0) alert("ההקפאה נשמרה אצלנו, אבל תאריך ההתחלה לא נכתב במניצ'ט.\n\nמניצ'ט אמר: "+String(r.mc).slice(10));
       else mcWarn(r);
       FREEZING=""; delete MC[em]; return load().then(render);
