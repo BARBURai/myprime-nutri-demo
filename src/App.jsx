@@ -551,7 +551,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.66";
+const VERSION = "5.68";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3070,18 +3070,23 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [aiAsOne, setAiAsOne] = useState(true); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product (default = one product, recommended)
   const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
   const [mKcal, setMKcal] = useState(""); const [mProt, setMProt] = useState(""); const [mFat, setMFat] = useState(""); const [mCarb, setMCarb] = useState("");
+  // המספרים שהיא מחזיקה ביד הם או מהתווית, שהיא תמיד ל-100 גרם, או של המנה עצמה,
+  // כמו שהיא מקבלת ממנוע AI חיצוני. השדות זהים ורק החישוב משתנה, ולכן זה מתג ולא מסך.
+  const [mWhole, setMWhole] = useState(false);
   const mInput = { width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", background: C.panel };
   const mLbl = { display: "block", fontSize: 13, color: C.sub, marginBottom: 4 };
   const saveManual = () => {
     if (labelSaved) return; // the thank-you is showing and the entry is already on its way
     const name = mName.trim(); const amount = Math.round(Number(mAmount) || 0);
     if (!name || amount <= 0) return;
-    const k = amount / 100;
+    const k = mWhole ? 1 : amount / 100;
     const n = { kcal: Math.round((Number(mKcal) || 0) * k), p: Math.round((Number(mProt) || 0) * k), f: Math.round((Number(mFat) || 0) * k), c: Math.round((Number(mCarb) || 0) * k) };
     // Typed off a package she scanned: file it against the barcode too, so the next time
     // she meets this product it is simply right, and so a second woman can confirm it.
     const entry = { meal, name, g: amount, unit: mUnit, source: "manual", ...n };
-    if (scannedCode) {
+    // ערכים של מנה שלמה מתארים את הצלחת שלה ולא את המוצר, ולכן הם לעולם לא נכנסים
+    // למאגר המשותף. תווית היא ל-100 גרם, וזה מה שאפשר לשתף.
+    if (scannedCode && !mWhole) {
       catalogBarcodePut(scannedCode, name, { kcal: Number(mKcal) || 0, p: Number(mProt) || 0, f: Number(mFat) || 0, c: Number(mCarb) || 0 }, mUnit);
       // Still one tap: show the thank-you, then let the sheet close on its own. Committing
       // straight away closes the sheet and she would never see that it was saved.
@@ -3401,7 +3406,19 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               <div style={{ flex: 1 }}><label style={mLbl}>כמות שאכלת</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
             </div>
-            <div style={{ fontSize: 14, color: C.sub, margin: "16px 0 8px", fontWeight: 600 }}>מהתווית, ל-100 {mUnit === "ml" ? "מ\"ל" : "ג׳"}:</div>
+            <div style={{ margin: "16px 0 8px" }}>
+              <div style={{ fontSize: 14, color: C.sub, fontWeight: 600, marginBottom: 6 }}>הערכים שאת מזינה הם:</div>
+              <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>
+                {[{ v: false, t: `ל-100 ${mUnit === "ml" ? "מ\"ל" : "ג׳"}` }, { v: true, t: "לכל המנה" }].map((o) => (
+                  <div key={String(o.v)} onClick={() => setMWhole(o.v)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mWhole === o.v ? C.brand : "transparent", color: mWhole === o.v ? "#fff" : C.sub }}>{o.t}</div>
+                ))}
+              </div>
+              <div style={{ fontSize: 13, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>
+                {mWhole
+                  ? "המספרים ייכנסו ליומן בדיוק כמו שהם, בלי חישוב מחדש. מתאים כשקיבלת את הערכים של הצלחת עצמה."
+                  : "ככה כתוב על האריזה. נחשב לפי הכמות שרשמת למעלה."}
+              </div>
+            </div>
             <div style={{ display: "flex", gap: 10 }}>
               <div style={{ flex: 1 }}><label style={mLbl}>קלוריות</label><input value={mKcal} onChange={(e) => setMKcal(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ flex: 1 }}><label style={mLbl}>חלבון (ג׳)</label><input value={mProt} onChange={(e) => setMProt(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>

@@ -79,6 +79,17 @@
   .zone .lbl{margin-top:9px}
   .zone .note{margin-top:8px}
 
+  .frow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 0}
+  .sel{position:relative;display:inline-flex}
+  .sel select{
+    appearance:none;-webkit-appearance:none;font:inherit;color:inherit;font-weight:600;
+    background:var(--card);border:1px solid var(--line-2);border-radius:10px;
+    padding-block:9px;padding-inline:13px 30px;min-height:40px;cursor:pointer;box-shadow:var(--sh1);
+  }
+  .sel::after{content:"\25be";position:absolute;inset-inline-end:11px;top:10px;font-size:12px;color:var(--ink-3);pointer-events:none}
+  .sel select:hover{border-color:var(--ink-3)}
+  .btn.ghost{background:transparent;border-color:transparent;box-shadow:none;color:var(--ink-2);font-weight:500}
+  .btn.ghost:hover{background:var(--card-2)}
   .field{
     width:100%;padding:12px 14px;border:1px solid var(--line-2);border-radius:11px;
     background:var(--card);box-shadow:var(--sh1);
@@ -571,31 +582,14 @@ function render(){
   var backSoon = DATA.women.filter(function(w){ return w.backSoon; });
   var base = MISSING ? missing : (VIEW==="nodate" ? noDate : VIEW==="backsoon" ? backSoon : pool);
 
-  // Cohorts are chosen year, then month, then date. Every step is one tap on a chip: a
-  // dropdown of forty-odd cohorts saved no time, and a single row of chips going back years
-  // could not be read at all.
-  var years = {}, months = {}, cohorts = {};
-  base.forEach(function(w){ years[w.start.slice(0,4)] = (years[w.start.slice(0,4)]||0)+1; });
-  var yearKeys = Object.keys(years).sort().reverse();
-  if(YEAR === null || yearKeys.indexOf(YEAR) === -1) YEAR = yearKeys.length ? yearKeys[0] : "";
-
-  base.forEach(function(w){
-    if(w.start.slice(0,4) !== YEAR) return;
-    months[w.start.slice(5,7)] = (months[w.start.slice(5,7)]||0)+1;
-  });
-  var monthKeys = Object.keys(months).sort().reverse();
-  if(MONTH === null) MONTH = MISSING ? "" : (monthKeys.length ? monthKeys[0] : "");
-  if(MONTH && monthKeys.indexOf(MONTH) === -1) MONTH = "";
-
-  base.forEach(function(w){
-    if(w.start.slice(0,4) !== YEAR) return;
-    if(MONTH && w.start.slice(5,7) !== MONTH) return;
-    cohorts[w.start] = (cohorts[w.start]||0)+1;
-  });
+  // מחזור אחד ברשימה נפתחת, במקום שלוש שורות של צ'יפים לשנה, לחודש ולמחזור.
+  // ארבעים מחזורים הם בדיוק מה שרשימה נפתחת נועדה לו, ושלוש שורות הצ'יפים תפסו
+  // חצי מסך לפני שהגענו לשם הראשון ברשימה.
+  var cohorts = {};
+  base.forEach(function(w){ cohorts[w.start] = (cohorts[w.start]||0)+1; });
   var dates = Object.keys(cohorts).sort().reverse();
-  // In the missing-group view both cohorts are always drawn, even at zero. A cohort that
-  // simply vanishes leaves the clerk guessing whether it is fine or whether it was filtered
-  // out, and "(0)" answers that outright.
+  // בתצוגת "חסרות קבוצה" שני המחזורים מוצגים תמיד, גם באפס. מחזור שנעלם משאיר את
+  // הפקידה מנחשת אם הכל מסודר או שמשהו סינן אותו החוצה.
   if(MISSING){
     var wk = weekSundays();
     dates = [wk.next, wk.cur];
@@ -603,12 +597,7 @@ function render(){
   }
   if(COHORT && dates.indexOf(COHORT) === -1) COHORT = "";
 
-  var inCohort = base.filter(function(w){
-    if(w.start.slice(0,4) !== YEAR) return false;
-    if(MONTH && w.start.slice(5,7) !== MONTH) return false;
-    if(COHORT && w.start !== COHORT) return false;
-    return true;
-  });
+  var inCohort = base.filter(function(w){ return !COHORT || w.start === COHORT; });
   var groups = {}, noGroup = 0;
   inCohort.forEach(function(w){ if(w.group) groups[w.group]=(groups[w.group]||0)+1; else noGroup++; });
   var letters = Object.keys(groups).sort(function(a,b){ return a.localeCompare(b,"he"); });
@@ -656,35 +645,30 @@ function render(){
       (VIEW==="nodate" ? '<div class="note">מוקפאות שחסר להן תאריך חזרה, שבוע חזרה או שניהם. <b>הן לא נכנסות לאפליקציה עד שיושלם.</b></div>' : '')+
       (VIEW==="backsoon" ? '<div class="note">חוזרות מהקפאה בשבוע הקרוב. <b>ליד כל אחת כתוב לאיזה מחזור להכניס אותה</b>, כדי שתדעי לאיזו קבוצת וואטסאפ היא שייכת.</div>' : '')+
       '</div>'+
+      // שלוש רשימות נפתחות בשורה אחת, במקום חמש שורות של צ'יפים שתפסו חצי מסך
+      // לפני שהגענו לשם הראשון ברשימה.
       '<div class="zone filt"><span class="zlab">סינון</span>'+
-      (MISSING ? '' : '<div class="lbl">אפליקציה</div><div class="chips">'+
-        '<span class="chip'+(APP==="new"?" on":"")+'" data-p="new">אפליקציה חדשה ('+nNew+')</span>'+
-        '<span class="chip'+(APP==="old"?" on":"")+'" data-p="old">קג\'אבי ('+nOld+')</span>'+
-        '<span class="chip'+(APP===""?" on":"")+'" data-p="">הכל</span>'+
-      '</div>'+appGap())+
-      '<div class="lbl">שנה</div><div class="chips">'+
-        yearKeys.map(function(y){ return '<span class="chip'+(YEAR===y?" on":"")+'" data-y="'+esc(y)+'">'+esc(y)+' ('+years[y]+')</span>'; }).join("")+
+      '<div class="frow">'+
+        '<span class="sel"><select id="fCohort" aria-label="מחזור">'+
+          '<option value=""'+(COHORT?"":" selected")+'>כל המחזורים ('+base.length+')</option>'+
+          dates.map(function(d){
+            return '<option value="'+esc(d)+'"'+(COHORT===d?" selected":"")+'>'+esc(cohortLabel(d))+' ('+cohorts[d]+')</option>';
+          }).join("")+
+        '</select></span>'+
+        '<span class="sel"><select id="fGroup" aria-label="קבוצה">'+
+          '<option value=""'+(GROUP?"":" selected")+'>כל הקבוצות ('+inCohort.length+')</option>'+
+          letters.map(function(g){ return '<option value="'+esc(g)+'"'+(GROUP===g?" selected":"")+'>קבוצה '+esc(g)+' ('+groups[g]+')</option>'; }).join("")+
+          '<option value="-"'+(GROUP==="-"?" selected":"")+'>ללא קבוצה ('+noGroup+')</option>'+
+        '</select></span>'+
+        (MISSING ? '' : '<span class="sel"><select id="fApp" aria-label="אפליקציה">'+
+          '<option value="new"'+(APP==="new"?" selected":"")+'>אפליקציה חדשה ('+nNew+')</option>'+
+          '<option value="old"'+(APP==="old"?" selected":"")+'>קג\'אבי ('+nOld+')</option>'+
+          '<option value=""'+(APP===""?" selected":"")+'>כל האפליקציות ('+(nNew+nOld)+')</option>'+
+        '</select></span>')+
+        '<span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span>'+
+        ((COHORT||GROUP||APP!=="new") ? '<button class="btn sm ghost" data-fclear="1">ניקוי</button>' : '')+
       '</div>'+
-      '<div class="lbl">חודש</div><div class="chips">'+
-        '<span class="chip'+(MONTH?"":" on")+'" data-mo="">כל השנה</span>'+
-        monthKeys.map(function(mo){ return '<span class="chip'+(MONTH===mo?" on":"")+'" data-mo="'+esc(mo)+'">'+esc(HEB_MONTHS[parseInt(mo,10)-1])+' ('+months[mo]+')</span>'; }).join("")+
-      '</div>'+
-      // In the missing-group view the month is deliberately "whole year", but the cohorts
-      // still matter there: they are the two Ron is placing.
-      (MONTH || MISSING
-        ? '<div class="lbl">מחזור</div><div class="chips">'+
-          '<span class="chip'+(COHORT?"":" on")+'" data-d="">הכל</span>'+
-          dates.map(function(d){ return '<span class="chip'+(COHORT===d?" on":"")+'" data-d="'+esc(d)+'">'+esc(cohortLabel(d))+' ('+cohorts[d]+')</span>'; }).join("")+
-        '</div>'
-        : '')+
-      ((letters.length || noGroup)
-        ? '<div class="lbl">קבוצה</div><div class="chips">'+
-          '<span class="chip'+(GROUP?"":" on")+'" data-g="">הכל</span>'+
-          letters.map(function(g){ return '<span class="chip'+(GROUP===g?" on":"")+'" data-g="'+esc(g)+'">'+esc(g)+' ('+groups[g]+')</span>'; }).join("")+
-          (noGroup ? '<span class="chip warn'+(GROUP==="-"?" on":"")+'" data-g="-">ללא קבוצה ('+noGroup+')</span>' : '')+
-          '</div>'
-        : '')+
-      '<div class="chips"><span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span></div>'+
+      (MISSING ? '' : appGap())+
       '</div>')+
     '</div>';
 
@@ -855,7 +839,10 @@ function render(){
     '<div class="pane list">'+
       '<div class="phead"><span>'+list.length+' משתתפות</span><span>ממוינות לפי שם</span></div>'+
       (list.length
-        ? list.map(womanRow).join("")
+        // תקרה על הציור בלבד, כי הרשימה נבנית מחדש בכל הקשה בחיפוש. מה שנחתך נאמר
+        // במפורש, כי היעדר שורה אינו תשובה.
+        ? list.slice(0, 300).map(womanRow).join("")+
+          (list.length > 300 ? '<div class="note" style="padding:12px 15px;margin:0">מוצגות 300 הראשונות מתוך '+list.length+'. <b>אפשר לבחור מחזור או לחפש שם או טלפון</b> כדי להגיע לשאר.</div>' : '')
         : '<div class="empty">'+(MISSING ? "אין כאן נשים ללא קבוצה. הכל משויך." : searching ? searchMiss(q) : "לא נמצאה אף משתתפת")+'</div>')+
     '</div>'+
     '<div class="pane detail">'+
@@ -875,13 +862,14 @@ function render(){
     // matches what the chip promises without the clerk setting three filters by hand.
     YEAR = null; MONTH = MISSING ? "" : null; COHORT = ""; GROUP = MISSING ? "-" : "";
     render(); }; });
-  app.querySelectorAll("[data-y]").forEach(function(el){ el.onclick=function(){
-    YEAR = el.getAttribute("data-y"); MONTH = null; COHORT = ""; GROUP = ""; EDITING = ""; render(); }; });
-  app.querySelectorAll("[data-mo]").forEach(function(el){ el.onclick=function(){
-    MONTH = el.getAttribute("data-mo"); COHORT = ""; GROUP = ""; EDITING = ""; render(); }; });
-  app.querySelectorAll("[data-p]").forEach(function(el){ el.onclick=function(){ APP=el.getAttribute("data-p"); YEAR=null; MONTH=null; COHORT=""; GROUP=""; EDITING=""; render(); }; });
-  app.querySelectorAll("[data-d]").forEach(function(el){ el.onclick=function(){ COHORT=el.getAttribute("data-d"); GROUP=""; EDITING=""; render(); }; });
-  app.querySelectorAll("[data-g]").forEach(function(el){ el.onclick=function(){ GROUP=el.getAttribute("data-g"); EDITING=""; render(); }; });
+  var fc = document.getElementById("fCohort");
+  if(fc) fc.onchange = function(){ COHORT = this.value; GROUP = ""; SEL = ""; EDITING = ""; render(); };
+  var fg = document.getElementById("fGroup");
+  if(fg) fg.onchange = function(){ GROUP = this.value; SEL = ""; EDITING = ""; render(); };
+  var fa = document.getElementById("fApp");
+  if(fa) fa.onchange = function(){ APP = this.value; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); };
+  app.querySelectorAll("[data-fclear]").forEach(function(el){ el.onclick=function(){
+    APP = "new"; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-v]").forEach(function(el){ el.onclick=function(){
     var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; render(); }; });
