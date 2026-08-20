@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.57";
+const ADMIN_VERSION = "5.60";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -420,8 +420,10 @@ export default async function handler(req, res) {
       // up on the chase list instead of quietly sitting frozen for ever.
       if (fz.back && !DATE_RE.test(fz.back)) return res.status(400).json({ ok: false, error: "bad_date" });
       if (fz.back && new Date(fz.back + "T12:00:00Z").getUTCDay() !== 0) return res.status(400).json({ ok: false, error: "not_sunday" });
+      // Either half can be unknown. A freeze that is missing one of them cannot resolve, so
+      // she stays frozen and stays on the chase list until the office fills it in.
       const wk = parseInt(fz.week, 10);
-      if (fz.back && !(Number.isFinite(wk) && wk >= 1 && wk <= 10)) return res.status(400).json({ ok: false, error: "bad_week" });
+      if (fz.week !== "" && fz.week != null && !(Number.isFinite(wk) && wk >= 1 && wk <= 10)) return res.status(400).json({ ok: false, error: "bad_week" });
     }
     if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
     try {
@@ -464,7 +466,8 @@ export default async function handler(req, res) {
           log.unshift({ at, by, field: "freeze", from: freeze ? (freeze.back || "ללא תאריך") : "", to: "" });
           freeze = null;
         } else {
-          const wk = parseInt(fz.week, 10);
+          const wkRaw = parseInt(fz.week, 10);
+          const wk = Number.isFinite(wkRaw) && wkRaw >= 1 && wkRaw <= 10 ? wkRaw : 0;
           freeze = {
             from: (freeze && freeze.from) || israelDay(0),
             // Where her diary really began, kept so the app can still show her every day she
@@ -472,15 +475,15 @@ export default async function handler(req, res) {
             // history behind it, which is the one thing that must not happen.
             origStart: (freeze && freeze.origStart) || cur.start || (sheetRow ? sheetRow.start : "") || "",
             back: fz.back || "",
-            week: fz.back ? wk : 0,
+            week: wk,
             by, at,
           };
-          if (fz.back) {
+          if (fz.back && wk) {
             const d = new Date(fz.back + "T12:00:00Z");
             d.setUTCDate(d.getUTCDate() - (wk - 1) * 7);
             freezeStart = ymd(d);
           }
-          log.unshift({ at, by, field: "freeze", from: "", to: fz.back ? `${fz.back} · שבוע ${wk}` : "ללא תאריך" });
+          log.unshift({ at, by, field: "freeze", from: "", to: (fz.back ? fz.back : "בלי תאריך") + " · " + (wk ? `שבוע ${wk}` : "בלי שבוע") });
         }
       }
       if (hasGlow) {
@@ -616,10 +619,14 @@ export default async function handler(req, res) {
     // arrived. From the return date on she is simply a participant again, and the record is
     // kept only so the app knows which days to skip in her diary.
     const freeze = (ovr && ovr.freeze) || null;
-    const frozen = !!freeze && (!freeze.back || today < freeze.back);
+    const frozen = !!freeze && (!freeze.back || !freeze.week || today < freeze.back);
+    // What is still missing, so the clerk is told which half to chase rather than left to
+    // compare two fields herself.
+    const freezeTodo = !freeze ? "" : (!freeze.back && !freeze.week) ? "חסרים תאריך חזרה ושבוע"
+      : !freeze.back ? "חסר תאריך חזרה" : !freeze.week ? "חסר שבוע חזרה" : "";
     // Two work lists the office needs: who has no date and must be chased, and who comes
     // back this coming week and has to be put in the right WhatsApp group.
-    const backSoon = !!freeze && !!freeze.back && freeze.back >= today && freeze.back <= addDaysStr(today, 7);
+    const backSoon = !!freeze && !!freeze.back && !!freeze.week && freeze.back >= today && freeze.back <= addDaysStr(today, 7);
     const group = (ovr && ovr.group) || w.group || "";
     const seenAt = seen[w.email] || "";
     let use = null;
@@ -635,10 +642,11 @@ export default async function handler(req, res) {
       pendingEmail: pendingBySheetEmail[w.email] || "",
       freeze,
       frozen,
+      freezeTodo,
       backSoon,
       // The cohort she belongs to when she returns IS her computed start date, so the clerk
       // is told the group to look for rather than being left to work it out.
-      backCohort: (freeze && freeze.back) ? start : "",
+      backCohort: (freeze && freeze.back && freeze.week) ? start : "",
       blocked,
       seen: seenAt,
       // Opening the app at least once is what puts her on the new app. This only counts
