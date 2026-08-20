@@ -95,6 +95,43 @@
   .chip.warn{border-color:var(--warn-line);background:var(--warnbg);color:var(--warn)}
   .chip.warn.on{background:var(--warn);border-color:var(--warn);color:#fff}
 
+  /* שתי עמודות במחשב: הרשימה מימין, הכרטיס של מי שנבחרה משמאל ונשאר במקומו בגלילה.
+     מתחת ל-1000 פיקסלים זו עמודה אחת, והכרטיס הפתוח תופס את המסך כמו באפליקציה. */
+  .split{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+  @media (min-width:1000px){
+    .split{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);align-items:start}
+    /* הכרטיס נשאר במקומו בזמן שגוללים את הרשימה. כשהוא ארוך מהמסך הוא גולל בעצמו,
+       אחרת התחתית שלו הייתה בלתי נגישה. */
+    .pane.detail{position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto}
+  }
+  .pane.list{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh2);overflow:hidden}
+  .phead{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:10px 15px;border-bottom:1px solid var(--line);background:var(--card-2);
+    font-size:12.5px;color:var(--ink-2);font-weight:600;
+  }
+  .lrow{
+    width:100%;text-align:start;background:none;border:0;border-bottom:1px solid var(--line);
+    padding:12px 15px;cursor:pointer;display:grid;gap:4px;transition:background .1s;
+  }
+  .lrow:last-child{border-bottom:0}
+  .lrow:hover{background:var(--card-2)}
+  .lrow.on{background:var(--pinkbg);box-shadow:inset 3px 0 0 var(--pink)}
+  .lrow .row1{gap:6px}
+  .lrow .nm{font-size:16px}
+  .lrow .meta{margin-top:0;font-size:13.5px}
+  .workline{
+    font-size:13px;color:var(--warn);background:var(--warnbg);border-radius:7px;
+    padding:5px 9px;margin-top:2px;
+  }
+  .coldpill{background:var(--coldbg);color:var(--cold);border-color:var(--cold-line)}
+  .dngpill{background:var(--dangerbg);color:var(--danger);border-color:transparent}
+  .btn.back{display:none;margin-bottom:11px}
+  @media (max-width:999px){
+    .split.haspick .pane.list{display:none}
+    .btn.back{display:inline-flex}
+  }
+  .card.open{margin-bottom:0}
   .card{
     background:var(--card);border:1px solid var(--line);border-radius:14px;
     padding:15px 16px;margin-bottom:11px;box-shadow:var(--sh2);
@@ -133,7 +170,13 @@
   .btn.dng:hover{background:var(--danger);border-color:var(--danger);color:#fff}
   .btn.sm{padding:6px 11px;font-size:13px}
 
-  .edit{margin-top:13px;padding-top:13px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .edit{
+    margin-top:13px;padding-top:13px;border-top:1px solid var(--line);
+    display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-start;
+  }
+  /* התווית על שורה משלה, כדי שהפקדים יתחילו תמיד מאותו קו ולא יצופו באמצע */
+  .edit > span:first-child{width:100%;font-size:12px;font-weight:700;letter-spacing:.05em;color:var(--ink-2)}
+  .edit > span.adds{width:auto;font-size:inherit;font-weight:400;letter-spacing:0}
   .note{color:var(--soft);font-size:13.5px;margin-top:14px;line-height:1.6}
   .lbl{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);margin-top:12px}
   .field.sm{padding:7px 10px;font-size:14px;width:auto}
@@ -146,6 +189,8 @@
   .barfill{width:100%;background:var(--pink);border-radius:3px}
   .barlbl{font-size:10px;margin-top:2px;color:var(--ink-3)}
   .empty{text-align:center;color:var(--ink-3);padding:44px 0}
+  .empty .note{max-width:560px;margin:10px auto 0;text-align:center}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;direction:ltr;unicode-bidi:isolate}
   :focus-visible{outline:2px solid var(--pink);outline-offset:2px;border-radius:8px}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -173,6 +218,20 @@ function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){retur
 function il(d){ if(!d) return ""; var p=d.split("-"); return p[2]+"."+p[1]+"."+p[0]; }
 // מספר טלפון מנוקה: בלי פלוס, בלי רווחים, בלי מקפים, בלי 972 ובלי אפס מוביל.
 // כך "+972 54-767-6619", "054-7676619" ו-"547676619" נראים אותו דבר בחיפוש.
+// חיפוש שמחזיר ריק אינו תשובה. הוא חייב לומר מה בדיוק חיפש ובכמה רשומות, כדי
+// שיהיה ברור אם המספר לא הובן או שהיא פשוט לא שם.
+function searchMiss(q){
+  var n = (DATA && DATA.women || []).length;
+  var digits = q.replace(/[^0-9]/g, "");
+  var scanned = "נסרקו כל " + n + " הרשומות בגיליון.";
+  if(digits.length >= 3){
+    return "לא נמצאה אף משתתפת עם המספר הזה.<div class=\"note\">חיפשתי <b class=\"mono\">" +
+      esc(phoneKey(q)) + "</b>, בלי תלות בפלוס, ברווחים, במקפים, בקידומת 972 או באפס שבהתחלה. " +
+      scanned + " אם היא אמורה להיות שם, <b>המספר שרשום אצלה בגיליון שונה מזה.</b></div>";
+  }
+  return "לא נמצאה אף משתתפת." + "<div class=\"note\">חיפשתי \u201c" + esc(q) + "\u201d בשם, בשם המשפחה ובכתובת המייל. " + scanned + "</div>";
+}
+
 function phoneKey(s){
   var d = String(s == null ? "" : s).replace(/[^0-9]/g, "");
   if(d.indexOf("00") === 0) d = d.slice(2);
@@ -459,6 +518,7 @@ function appGap(){
 }
 
 var CODES = null, CODESOPEN = false, FREEZING = "", VIEW = "";
+var SEL = "";   // המשתתפת שהכרטיס שלה פתוח. במחשב הוא יושב בצד, בטלפון הוא תופס את המסך
 function loadCodes(){
   return fetch("/api/admin?codes=1&key="+encodeURIComponent(KEY))
     .then(function(r){ return r.json(); })
@@ -580,7 +640,7 @@ function render(){
     '</div>'+
     teamBlock()+
     '<div class="toolbar">'+
-    '<input class="field" id="q" placeholder="🔍 חיפוש לפי שם, טלפון או מייל. אפשר להדביק מספר עם + או עם רווחים" value="'+esc(q)+'">'+
+    '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל. אפשר להדביק מספר עם + או עם רווחים" value="'+esc(q)+'">'+
     (searching ? '<div class="note">תוצאות חיפוש מכל הרשומות בגיליון, בלי סינון לפי מחזור, קבוצה או אפליקציה.</div>' :
       '<div class="zone work'+(nWork?"":" calm")+'"><span class="zlab">לטיפול</span>'+
       '<div class="chips"><span class="chip'+(missing.length?" warn":"")+(MISSING?" on":"")+'" data-m="1">'+
@@ -628,12 +688,11 @@ function render(){
       '</div>')+
     '</div>';
 
-  if(!list.length) html += '<div class="empty">'+
-    (MISSING ? "אין כאן נשים ללא קבוצה. הכל משויך." : "לא נמצאה אף משתתפת")+'</div>';
-
-  list.forEach(function(w){
+  // הכרטיס המלא. הוא לא השתנה, הוא רק עבר לגור בצד במקום בתוך הרשימה.
+  function womanCard(w){
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
-    html += '<div class="card">'+
+    return '<div class="card open">'+
+      '<button class="btn back" data-back="1">\u2192 חזרה לרשימה</button>'+
       '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
       (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
@@ -770,7 +829,39 @@ function render(){
           (w.newApp ? '' : '<div class="meta">מנוהלת בקג\'אבי. שינוי תאריך גישה ונתוני שימוש אינם רלוונטיים כאן.</div>'))+
       (STATS===w.email ? usagePanel(w) : '')+
       '</div>';
-  });
+  }
+
+  // שורה ברשימה: השם, מה שדורש טיפול, ומספיק כדי לזהות אותה. הכל היתר בכרטיס.
+  function womanRow(w){
+    var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
+    return '<button class="lrow'+(SEL===w.email?" on":"")+'" data-open="'+esc(w.email)+'">'+
+      '<span class="row1"><span class="nm">'+esc(nm)+'</span>'+
+      (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+      (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
+      (w.cancelled?'<span class="grp">ביטלה</span>':'')+
+      (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
+      (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+
+      '</span>'+
+      '<span class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</span>'+
+      ((w.backSoon && w.backCohort)?'<span class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></span>':'')+
+      ((w.frozen && w.freezeTodo)?'<span class="workline">בהקפאה · '+esc(w.freezeTodo)+'</span>':'')+
+      '</button>';
+  }
+
+  var sel = list.filter(function(w){ return w.email === SEL; })[0]
+         || DATA.women.filter(function(w){ return w.email === SEL; })[0];
+
+  html += '<div class="split'+(sel?" haspick":"")+'">'+
+    '<div class="pane list">'+
+      '<div class="phead"><span>'+list.length+' משתתפות</span><span>ממוינות לפי שם</span></div>'+
+      (list.length
+        ? list.map(womanRow).join("")
+        : '<div class="empty">'+(MISSING ? "אין כאן נשים ללא קבוצה. הכל משויך." : searching ? searchMiss(q) : "לא נמצאה אף משתתפת")+'</div>')+
+    '</div>'+
+    '<div class="pane detail">'+
+      (sel ? womanCard(sel) : '<div class="empty">בחרי משתתפת מהרשימה כדי לראות את הכרטיס שלה.</div>')+
+    '</div>'+
+  '</div>';
 
   html += '<div class="note">שינוי כאן נשמר אצלנו וגובר על הגיליון. <b>הגיליון הראשי לא משתנה</b>, כי הוא הקובץ ש-ManyChat עובד איתו.</div>';
   app.innerHTML = html;
@@ -802,6 +893,15 @@ function render(){
     STATSMODE = el.getAttribute("data-sm"); render(); }; });
   // Opening her card is what triggers the single ManyChat lookup. Asked for once per card,
   // not on every redraw, so pressing a tag button does not fire a second one.
+  app.querySelectorAll("[data-open]").forEach(function(el){ el.onclick=function(){
+    var em = el.getAttribute("data-open");
+    if(SEL === em){ SEL = ""; } else { SEL = em; EDITING = ""; STATS = ""; FREEZING = ""; }
+    render();
+    if(SEL && innerWidth < 1000) window.scrollTo(0, 0);
+  }; });
+  app.querySelectorAll("[data-back]").forEach(function(el){ el.onclick=function(){
+    SEL = ""; EDITING = ""; STATS = ""; FREEZING = ""; render();
+  }; });
   app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-edit"); EDITING=em; render();
     if(!MC[em]) mcLoad(em);
@@ -840,7 +940,7 @@ function render(){
     else d.setUTCDate(d.getUTCDate() + n*(unit==="w"?7:1));
     inp.value = d.toISOString().slice(0,10);
   }; });
-  app.querySelectorAll("[data-cancel]").forEach(function(el){ el.onclick=function(){ EDITING=""; render(); }; });
+  app.querySelectorAll("[data-cancel]").forEach(function(el){ el.onclick=function(){ EDITING=""; FREEZING=""; render(); }; });
   app.querySelectorAll("[data-save]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-save"), v=document.getElementById("d_"+em).value;
     if(!v){ alert("צריך לבחור תאריך"); return; }
