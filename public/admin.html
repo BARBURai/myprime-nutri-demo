@@ -76,6 +76,15 @@ var app = document.getElementById("app");
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
 function il(d){ if(!d) return ""; var p=d.split("-"); return p[2]+"."+p[1]+"."+p[0]; }
+// מספר טלפון מנוקה: בלי פלוס, בלי רווחים, בלי מקפים, בלי 972 ובלי אפס מוביל.
+// כך "+972 54-767-6619", "054-7676619" ו-"547676619" נראים אותו דבר בחיפוש.
+function phoneKey(s){
+  var d = String(s == null ? "" : s).replace(/[^0-9]/g, "");
+  if(d.indexOf("00") === 0) d = d.slice(2);
+  if(d.indexOf("972") === 0) d = d.slice(3);
+  else if(d.charAt(0) === "0") d = d.slice(1);
+  return d;
+}
 // Cohorts start on a Sunday, so "this week's" cohort is the most recent Sunday and the next
 // one is seven days later. Naming them saves the clerk working it out from a date.
 function weekSundays(){
@@ -460,8 +469,11 @@ function render(){
   var searching = !!q;
   var list;
   if(searching){
+    var qDigits = q.replace(/[^0-9]/g, "");
+    var qPhone = phoneKey(q);
     list = DATA.women.filter(function(w){
-      return (w.first+" "+w.last+" "+w.email+" "+w.phone).toLowerCase().indexOf(q) !== -1;
+      if((w.first+" "+w.last+" "+w.email+" "+w.phone).toLowerCase().indexOf(q) !== -1) return true;
+      return qDigits.length >= 3 && phoneKey(w.phone).indexOf(qPhone) !== -1;
     });
   } else {
     list = inCohort.filter(function(w){

@@ -8,6 +8,7 @@ import adminHandler from "../api/admin.js";
 import usageHandler from "../api/usage.js";
 import accessHandler from "../api/access.js";
 import { loadSheet } from "../api/_sheet.js";
+import { readFileSync } from "node:fs";
 
 const KEY = "test-admin-key";
 process.env.ADMIN_KEY = KEY;
@@ -604,6 +605,24 @@ globalThis.fetch = async (url) => {
 };
 check("תקלת Redis לא נועלת משתתפת רשומה", (await callAccess("nili@test.com")).body.allowed === true);
 globalThis.fetch = hadFetch;
+
+console.log("\nחיפוש טלפון במסך הניהול");
+{
+  // נמשך מ-public/admin.html ולא מועתק, כדי שעריכה שם תישבר כאן ולא תעבור בשקט.
+  const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  const m = html.match(/function phoneKey\(s\)\{[\s\S]*?\n\}/);
+  check("phoneKey קיימת ב-admin.html", !!m);
+  const phoneKey = m ? new Function(m[0] + "; return phoneKey;")() : () => "";
+  const want = "547676619";
+  check("מספר כמו שהוא בגיליון", phoneKey("972547676619") === want);
+  check("העתקה מהוואטסאפ העסקי", phoneKey("+972 54-767-6619") === want);
+  check("עם רווחים ובלי מקפים", phoneKey("+972 54 767 6619") === want);
+  check("בצורה מקומית עם אפס", phoneKey("054-767-6619") === want);
+  check("בצורה מקומית בלי מקפים", phoneKey("0547676619") === want);
+  check("בלי אפס ובלי 972", phoneKey("547676619") === want);
+  check("עם 00 במקום פלוס", phoneKey("00972547676619") === want);
+  check("שם אינו מייצר מספר", phoneKey("רונית לוי") === "");
+}
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
