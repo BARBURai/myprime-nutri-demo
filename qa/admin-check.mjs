@@ -319,6 +319,59 @@ console.log("\nנתוני שימוש");
   check("תאריך לא תקין אינו יוצר סימון", !store.kv["trk:not-a-date:nili@test.com"]);
 }
 
+console.log("\nהקפאה");
+{
+  process.env.MANYCHAT_TOKEN = "test-token";
+  MC.email = ""; MC.stored = ""; MC.accept = null;
+  const EM = "sigal@test.com";
+  // A woman mid-programme. She freezes and comes back on a Sunday, to a week the office
+  // chooses - not necessarily the one she left.
+  CSV2 = [
+    'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה',
+    `9731,סיגל,גל,${EM},2026-06-14 12:00:00,FALSE,ב`,
+  ].join("\n");
+
+  check("תאריך חזרה שאינו יום ראשון נדחה",
+    (await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-05", week: 3 } })).code === 400);
+  check("שבוע מחוץ לטווח נדחה",
+    (await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-04", week: 11 } })).code === 400);
+
+  const r = await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-04", week: 3 }, phone: "9731", by: "רון" });
+  check("ההקפאה נשמרת", r.code === 200 && r.body.ok === true, JSON.stringify(r.body));
+  // Week 3 on 04.10 means she started two weeks earlier. This one number is both what the
+  // app reads and the cohort the clerk has to put her in.
+  check("תאריך ההתחלה מחושב שבועיים אחורה לשבוע 3",
+    JSON.parse(store.hash["admin:overrides"][EM]).start === "2026-09-20",
+    JSON.parse(store.hash["admin:overrides"][EM]).start);
+  check("ואותו תאריך הוא שנכתב למניצ'ט, ולא תאריך החזרה",
+    String(MC.stored).startsWith("2026-09-20"), String(MC.stored));
+  check("תאריך ההתחלה המקורי נשמר, כדי שההיסטוריה שלה לא תיעלם",
+    JSON.parse(store.hash["admin:overrides"][EM]).freeze.origStart === "2026-06-14");
+
+  const w = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
+  check("הכרטיס מסמן אותה כמוקפאת", w.frozen === true);
+  check("והמחזור שטלי צריכה הוא אותו תאריך מחושב", w.backCohort === "2026-09-20", w.backCohort);
+
+  const acc = await callAccess(EM);
+  check("בזמן ההקפאה היא לא נכנסת", acc.body.allowed === false && acc.body.reason === "frozen", JSON.stringify(acc.body));
+  check("והתאריך שהיא תראה על המסך מוחזר אליה", acc.body.back === "2026-10-04", acc.body.back);
+
+  // "עוד לא יודעת" is a real answer, and she has to stay visible.
+  await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "", week: 0 }, phone: "9731", by: "רון" });
+  const w2 = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
+  check("הקפאה בלי תאריך נשמרת ככזאת", w2.frozen === true && !w2.freeze.back);
+  check("וגם בלי תאריך היא לא נכנסת", (await callAccess(EM)).body.reason === "frozen");
+
+  await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { off: true }, by: "רון" });
+  const w3 = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
+  check("סיום ההקפאה מחזיר אותה פנימה", !w3.frozen && (await callAccess(EM)).body.allowed === true);
+  check("ותאריך ההתחלה שנקבע לה נשאר", JSON.parse(store.hash["admin:overrides"][EM]).start === "2026-09-20");
+  check("שתי הפעולות נרשמו ביומן", (w3.log || []).filter((L) => L.field === "freeze").length >= 2);
+  CSV2 = null;
+  delete process.env.MANYCHAT_TOKEN;
+  delete store.hash["admin:overrides"][EM];
+}
+
 console.log("\nשינוי כתובת מייל");
 {
   process.env.MANYCHAT_TOKEN = "test-token";

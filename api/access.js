@@ -221,6 +221,7 @@ export default async function handler(req, res) {
   let clerkUntil = "";
   let clerkStart = "";
   let clerkBlocked = false;
+  let freeze = null;
   try {
     const raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", email);
     if (raw) {
@@ -235,6 +236,11 @@ export default async function handler(req, res) {
       // he marks it, she is out of the new app. Reversible in one click, and the screen says
       // so. The sheet's own "ביטלה" column still blocks independently of this.
       if (ovr.blocked === "1") clerkBlocked = true;
+      // On a freeze. She stays out of the app until the Sunday she comes back on, and a
+      // freeze with no date yet keeps her out until the office sets one. Nothing runs at
+      // midnight to let her back in: the date passes, and this comparison answers
+      // differently on her next load.
+      if (ovr.freeze) freeze = ovr.freeze;
       // The Glow bonus, set from the office screen. "1" grants it and "0" takes it away even
       // when the sheet says TRUE; anything else leaves the sheet in charge. This is the fast
       // path: the sheet reaches us through Google's cache and lags by minutes.
@@ -245,6 +251,9 @@ export default async function handler(req, res) {
   // Same answer as the sheet's own cancellation, so she sees the one screen that already
   // exists and points her at support, rather than a second wording for the same thing.
   if (clerkBlocked) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
+  if (freeze && (!freeze.back || israelDay(0) < freeze.back)) {
+    return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: freeze.back || "" });
+  }
   const startSunday = parseDateToSunday(clerkStart || startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
   const pastWindow = clerkUntil
@@ -310,5 +319,7 @@ export default async function handler(req, res) {
     } catch (e) { /* the bonus is never worth failing a login over */ }
   }
 
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow });
+  // `freeze` travels on so the diary can leave the frozen days out of her day strip and
+  // label the days before them for what they are. Nothing of hers is deleted.
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
 }

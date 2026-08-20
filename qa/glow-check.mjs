@@ -123,7 +123,12 @@ check("הניהול מחזיר גם את מה שכתוב בגיליון", /sheet
 check("והשער מעדיף את הסימון הידני", /ovr\.glow === "1"\) glow = true/.test(access) && /ovr\.glow === "0"\) glow = false/.test(access));
 check("כל שינוי נרשם ביומן", /field: "glow"/.test(adminApi));
 check("המסך מציג את שני הערכים זה לצד זה", adminUi.includes("בגיליון: ") && adminUi.includes("שיעורי בונוס Glow"));
-check("השורה מוצגת רק למי שבאפליקציה החדשה", /w\.newApp\s*\?\s*'<div class="edit"><span>שיעורי בונוס Glow/.test(adminUi));
+// Ron, 19 August 2026: the bonus lessons of a woman on Kajabi are granted there, so for her
+// this is a read-out and not a control. The row still shows, because the state is true either
+// way; only the buttons are behind the flag.
+check("השורה מוצגת לכל אישה, גם למי שבקג'אבי", adminUi.includes("'<div class=\"edit\"><span>שיעורי בונוס Glow'"));
+check("אבל הכפתורים רק למי שבאפליקציה החדשה", /\(w\.newApp\s*\n?\s*\?\s*'<button class="btn'\+\(w\.glow\?" p":""\)\+'" data-glow="1"/.test(adminUi));
+check("ולמי שבקג'אבי נכתב שזה מוגדר שם", adminUi.includes("שיעורי הבונוס שלה <b>מוגדרים שם ולא כאן</b>"));
 check('"חזרה לגיליון" מופיע רק כשיש מה לבטל', /w\.glowOverride\?'<button class="btn" data-glow=""/.test(adminUi));
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
