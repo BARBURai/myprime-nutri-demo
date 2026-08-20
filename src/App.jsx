@@ -551,7 +551,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.69";
+const VERSION = "5.71";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3087,7 +3087,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const mLbl = { display: "block", fontSize: 13, color: C.sub, marginBottom: 4 };
   const saveManual = () => {
     if (labelSaved) return; // the thank-you is showing and the entry is already on its way
-    const name = mName.trim(); const amount = Math.round(Number(mAmount) || 0);
+    const name = mName.trim();
+    // בערכים של מנה שלמה המשקל אינו נתון שיש לה, ולכן הוא לא נדרש ואינו משפיע על החישוב.
+    const amount = Math.round(Number(mAmount) || 0) || (mWhole ? 1 : 0);
     if (!name || amount <= 0) return;
     const k = mWhole ? 1 : amount / 100;
     const n = { kcal: Math.round((Number(mKcal) || 0) * k), p: Math.round((Number(mProt) || 0) * k), f: Math.round((Number(mFat) || 0) * k), c: Math.round((Number(mCarb) || 0) * k) };
@@ -3405,7 +3407,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         {step === "manual" && (
           <>
             <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>{scannedCode ? "עדכון מהתווית" : "הזנה ידנית"}</div>
-            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.5, margin: "0 0 14px" }}>הקלידי את הערכים מהתווית של המוצר. הוא יישמר אצלך ויופיע בחיפוש בפעם הבאה.</p>
+            <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.5, margin: "0 0 14px" }}>{mWhole ? "הקלידי את הערכים של המנה שאכלת, כמו שקיבלת אותם. הם ייכנסו ליומן בדיוק כמו שהם." : "הקלידי את הערכים מהתווית של המוצר. הוא יישמר אצלך ויופיע בחיפוש בפעם הבאה."}</p>
             {labelSaved && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 12, marginBottom: 14, fontSize: 15.5, fontWeight: 600, textAlign: "center" }}>תודה 💜 עדכנתי את הערכים אצלך.</div>}
             <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
               {MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "4px 10px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
@@ -3413,7 +3415,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             <label style={mLbl}>שם המוצר</label>
             <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="לדוגמה: חטיף חלבון" style={mInput} />
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-              <div style={{ flex: 1 }}><label style={mLbl}>כמות שאכלת</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>{mWhole ? "כמות (לא חובה)" : "כמות שאכלת"}</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
             </div>
             <div style={{ margin: "16px 0 8px" }}>
@@ -3437,7 +3439,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               <div style={{ flex: 1 }}><label style={mLbl}>שומן (ג׳)</label><input value={mFat} onChange={(e) => setMFat(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ flex: 1 }}><label style={mLbl}>פחמימות (ג׳)</label><input value={mCarb} onChange={(e) => setMCarb(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
             </div>
-            <div style={{ marginTop: 18 }}><Btn onClick={saveManual} disabled={!mName.trim() || !(Number(mAmount) > 0)}>הוסיפי ליומן</Btn></div>
+            <div style={{ marginTop: 18 }}><Btn onClick={saveManual} disabled={!mName.trim() || !(mWhole || Number(mAmount) > 0)}>הוסיפי ליומן</Btn></div>
             <Btn variant="ghost" onClick={() => setStep("method")} style={{ marginTop: 8 }}>חזרה</Btn>
           </>
         )}
