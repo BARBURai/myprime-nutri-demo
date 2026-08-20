@@ -142,7 +142,61 @@
     .split.haspick .pane.list{display:none}
     .btn.back{display:inline-flex}
   }
-  .card.open{margin-bottom:0}
+  .card.open{margin-bottom:0;padding:0}
+  .dhead{padding:16px 17px 14px;border-bottom:1px solid var(--line);background:var(--card-2)}
+  .dhead .nm{font-size:20px}
+  .dhead .meta{margin-top:6px}
+  .dhead .workline{margin-top:8px}
+
+  /* ארבעה סוגים של פעולה, וכל אחד נראה אחרת: עריכה רגילה, מה שדורש טיפול,
+     פעולה הרסנית, ויצירת קשר. שורה של כפתורים זהים לא אומרת כלום. */
+  .dacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+  .qa{
+    background:var(--card);border:1px solid var(--line-2);border-radius:999px;
+    padding:7px 14px 7px 12px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:36px;
+    display:inline-flex;align-items:center;gap:7px;box-shadow:var(--sh1);color:var(--ink);
+    text-decoration:none;transition:border-color .12s,background .12s,color .12s;
+  }
+  .qa:hover{border-color:var(--ink-3);background:var(--card-2)}
+  .qa svg{opacity:.55;flex:none}
+  .qa:hover svg{opacity:.9}
+  .qa.need{background:var(--warnbg);border-color:var(--warn-line);color:var(--warn)}
+  .qa.need:hover{background:var(--warn);border-color:var(--warn);color:#fff}
+  .qa.cold{background:var(--coldbg);border-color:var(--cold-line);color:var(--cold)}
+  .qa.cold:hover{background:var(--cold);border-color:var(--cold);color:#fff}
+  .qa.kill{background:var(--dangerbg);border-color:var(--danger-line);color:var(--danger)}
+  .qa.kill:hover{background:var(--danger);border-color:var(--danger);color:#fff}
+  .qa.wa{background:var(--okbg);border-color:var(--ok-line);color:var(--ok)}
+  .qa.wa:hover{background:var(--ok);border-color:var(--ok);color:#fff}
+  .qa.need svg,.qa.kill svg,.qa.cold svg,.qa.wa svg{opacity:1}
+
+  .tabs{display:flex;gap:2px;padding:0 9px;border-bottom:1px solid var(--line);overflow-x:auto;background:var(--card)}
+  .tab{
+    background:none;border:0;border-bottom:2px solid transparent;padding:12px 12px 10px;
+    cursor:pointer;font-size:14px;color:var(--ink-2);white-space:nowrap;font-weight:600;
+  }
+  .tab:hover{color:var(--ink)}
+  .tab[aria-selected="true"]{color:var(--pink);border-bottom-color:var(--pink)}
+  .tabwrap{padding:15px 17px 18px;display:grid;gap:13px}
+  .tabwrap > .edit:first-child,.tabwrap > .pair:first-child{margin-top:0;padding-top:0;border-top:0}
+  .tabwrap .note{margin-top:0}
+
+  .pair{display:grid;gap:13px;grid-template-columns:minmax(0,1fr)}
+  @media (min-width:520px){ .pair{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr)} }
+  .fld{display:grid;gap:5px}
+  .flabel{font-size:12px;font-weight:700;letter-spacing:.05em;color:var(--ink-2)}
+  .fval{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .control{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:9px}
+
+  .frz{display:grid;gap:2px;padding:13px;border-radius:12px;border:1px solid var(--cold-line);background:var(--coldbg)}
+  .frz.todo{border-color:var(--warn-line);background:var(--warnbg)}
+  .frzhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;color:var(--cold)}
+  .frz.todo .frzhead{color:var(--warn)}
+  .frzhead span{color:var(--ink-2);font-size:13.5px}
+  .frz .note{margin-top:8px}
+
+  .lit{outline:2px solid var(--pink);outline-offset:6px;border-radius:9px}
+
   .card{
     background:var(--card);border:1px solid var(--line);border-radius:14px;
     padding:15px 16px;margin-bottom:11px;box-shadow:var(--sh2);
@@ -250,8 +304,6 @@ function phoneKey(s){
   else if(d.charAt(0) === "0") d = d.slice(1);
   return d;
 }
-// Cohorts start on a Sunday, so "this week's" cohort is the most recent Sunday and the next
-// one is seven days later. Naming them saves the clerk working it out from a date.
 // Cohorts start on a Sunday, so "this week's" cohort is the most recent Sunday and the next
 // one is seven days later. Naming them saves the clerk working it out from a date.
 function weekSundays(){
@@ -530,6 +582,7 @@ function appGap(){
 
 var CODES = null, CODESOPEN = false, FREEZING = "", VIEW = "";
 var SEL = "";   // המשתתפת שהכרטיס שלה פתוח. במחשב הוא יושב בצד, בטלפון הוא תופס את המסך
+var TAB = "info";   // הלשונית הפתוחה בכרטיס
 function loadCodes(){
   return fetch("/api/admin?codes=1&key="+encodeURIComponent(KEY))
     .then(function(r){ return r.json(); })
@@ -673,146 +726,159 @@ function render(){
     '</div>';
 
   // הכרטיס המלא. הוא לא השתנה, הוא רק עבר לגור בצד במקום בתוך הרשימה.
-  function womanCard(w){
-    var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
-    return '<div class="card open">'+
-      '<button class="btn back" data-back="1">\u2192 חזרה לרשימה</button>'+
-      '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
-      (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
-      (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
-      (w.cancelled?'<span class="grp" style="background:#eee;color:#777">ביטלה</span>':'')+
-      (w.frozen?'<span class="grp" style="background:#e8f0fb;color:#1a4b8c">בהקפאה</span>':'')+
-      (w.blocked?'<span class="grp" style="background:#fdecea;color:#b3261e">חסומה מהאפליקציה</span>':'')+'</div>'+
-      '<div class="meta">'+esc(w.phone||"אין טלפון")+
-        (w.phone?' <button class="lnk" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+
-        ' · '+esc(w.email)+' <button class="lnk" data-copy="'+esc(w.email)+'">העתקה</button></div>'+
-      ((w.backSoon && w.backCohort)?'<div class="manual" style="font-size:15px">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></div>':'')+
-      ((w.frozen && w.freezeTodo)?'<div class="manual">בהקפאה · '+esc(w.freezeTodo)+'</div>':'')+
-      (w.pendingEmail?'<div class="manual">כתובת חדשה שכבר בתוקף: <b>'+esc(w.pendingEmail)+'</b> <button class="lnk" data-copy="'+esc(w.pendingEmail)+'">העתקה</button> · הגיליון עוד לא התעדכן, והיא נכנסת עם החדשה</div>':'')+
-      '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</div>'+
-      (w.startOverride?'<div class="manual">תאריך ההתחלה שונה ידנית · בגיליון: '+(w.sheetStart?il(w.sheetStart):"לא ידוע")+'</div>':'')+
-      (w.newApp
-        ? '<div class="until">גישה עד: <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+
-          (w.expired?" (הסתיימה)":"")+'</div>'
-        : '')+
-      (w.override?'<div class="manual">שונה ידנית · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')+
-      ((w.log&&w.log.length)?'<div class="log">'+w.log.map(function(L){
-        var pre = esc(stamp(L.at))+' · '+esc(L.by||"לא ידוע")+' · ';
-        if(L.field === "glow"){
-          return pre + (L.to === "1" ? 'נתנה גישה לשיעורי הבונוס'
-                      : L.to === "0" ? 'הסירה גישה לשיעורי הבונוס'
-                      : 'החזירה את שיעורי הבונוס לערך שבגיליון');
-        }
-        if(L.field === "tag:full"){
-          return pre + (L.to === "1" ? 'סימנה שיש לה את קורס האיפור המלא'
-                                     : 'הסירה את הסימון של קורס האיפור המלא');
-        }
-        if(L.field === "tag:cancelproc"){
-          return pre + (L.to === "1" ? 'סימנה אותה כביטול בתהליך וחסמה לה את האפליקציה'
-                                     : 'הסירה את הסימון של ביטול בתהליך והחזירה לה את הגישה');
-        }
-        if(L.field === "tag:app"){
-          return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה'
-                                     : 'הסירה את הסימון של האפליקציה החדשה');
-        }
-        if(L.field === "freeze"){
-          return pre + (L.to ? 'הכניסה אותה להקפאה · '+esc(L.to) : 'סיימה לה את ההקפאה'+(L.from?' (הייתה '+esc(L.from)+')':''));
-        }
-        if(L.field === "email"){
-          return pre + 'שינתה לה את כתובת המייל מ-'+esc(L.from)+' ל-'+esc(L.to);
-        }
-        if(L.field === "start"){
-          return pre + (L.to ? 'העבירה אותה למחזור של '+il(L.to)+(L.from?' (הייתה ב-'+il(L.from)+')':'')
-                             : 'החזירה את תאריך ההתחלה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
-        }
-        if(L.field === "group"){
-          return pre + (L.to ? 'שינתה את הקבוצה מ-'+(L.from?esc(L.from):"ללא קבוצה")+' ל-'+esc(L.to)
-                             : 'החזירה את הקבוצה לערך שבגיליון'+(L.from?' (הייתה '+esc(L.from)+')':''));
-        }
-        return pre + (L.to ? 'שינתה את תאריך הגישה מ-'+(L.from?il(L.from):"לא ידוע")+' ל-'+il(L.to)
-                           : 'החזירה את תאריך הגישה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
-      }).join('<br>')+'</div>':'')+
-      (EDITING===w.email
-        ? '<div class="edit"><span>תאריך תחילת המחזור:</span>'+
-            '<select class="field sm" style="width:210px" id="s_'+esc(w.email)+'">'+
-              sundays().map(function(d,i){
-                return '<option value="'+d+'"'+(w.start===d?" selected":"")+'>'+il(d)+(i===0?" · המחזור הנוכחי":i===1?" · המחזור הבא":"")+'</option>';
-              }).join("")+
+  // הכרטיס: כותרת עם פעולות מהירות, ואז לשוניות. קודם הכל ישב בגלילה אחת ארוכה
+  // מאחורי כפתור "עריכה", ולכן כדי לשנות קבוצה היה צריך לפתוח ולגלול דרך הכל.
+  var TABS = [["info","פרטים"],["cohort","מחזור וקבוצה"],["perm","הרשאות"],["usage","שימוש"],["log","יומן"]];
+  var SV = function(d){ return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>'; };
+  var I_CAL   = SV('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 11h18"/>');
+  var I_USERS = SV('<circle cx="9" cy="9" r="3.2"/><path d="M3 20c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8"/><path d="M17 8.2a2.8 2.8 0 0 1 0 5.6M18.5 20c0-2-.7-3.3-2-4.2"/>');
+  var I_SNOW  = SV('<path d="M12 2.5v19M4.4 6.8l15.2 8.8M19.6 6.8L4.4 15.6"/><path d="m9.9 4.4 2.1-1.9 2.1 1.9M9.9 19.6l2.1 1.9 2.1-1.9"/>');
+  var I_CLOCK = SV('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>');
+  var I_BAN   = SV('<circle cx="12" cy="12" r="8.5"/><path d="m6.4 6.4 11.2 11.2"/>');
+  var I_WA    = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm5.1 14.1c-.2.6-1.2 1.2-1.7 1.2-.5.1-1 .1-3.1-.7-2.6-1-4.3-3.7-4.4-3.9-.1-.2-1-1.4-1-2.7s.6-1.9.9-2.1c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .5l-.4.5-.3.3c-.1.1-.2.3 0 .5.2.3.7 1.2 1.6 2 1.1.9 1.5 1 1.7 1.1.2.1.4.1.5-.1l.7-.8c.2-.2.3-.2.5-.1l2 .9c.2.1.4.2.4.3.1.1.1.6-.1 1.2Z"/></svg>';
+
+  function logLines(w){
+    if(!(w.log && w.log.length)) return '<div class="empty">עוד לא נעשה כאן שום שינוי.</div>';
+    return '<div class="log">'+w.log.map(function(L){
+      var pre = esc(stamp(L.at))+' · '+esc(L.by||"לא ידוע")+' · ';
+      if(L.field === "glow") return pre + (L.to === "1" ? 'נתנה גישה לשיעורי הבונוס' : L.to === "0" ? 'הסירה גישה לשיעורי הבונוס' : 'החזירה את שיעורי הבונוס לערך שבגיליון');
+      if(L.field === "tag:full") return pre + (L.to === "1" ? 'סימנה שיש לה את קורס האיפור המלא' : 'הסירה את הסימון של קורס האיפור המלא');
+      if(L.field === "tag:cancelproc") return pre + (L.to === "1" ? 'סימנה אותה כביטול בתהליך וחסמה לה את האפליקציה' : 'הסירה את הסימון של ביטול בתהליך והחזירה לה את הגישה');
+      if(L.field === "tag:app") return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה' : 'הסירה את הסימון של האפליקציה החדשה');
+      if(L.field === "freeze") return pre + (L.to ? 'הכניסה אותה להקפאה · '+esc(L.to) : 'סיימה לה את ההקפאה'+(L.from?' (הייתה '+esc(L.from)+')':''));
+      if(L.field === "email") return pre + 'שינתה לה את כתובת המייל מ-'+esc(L.from)+' ל-'+esc(L.to);
+      if(L.field === "start") return pre + (L.to ? 'העבירה אותה למחזור של '+il(L.to)+(L.from?' (הייתה ב-'+il(L.from)+')':'') : 'החזירה את תאריך ההתחלה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
+      if(L.field === "group") return pre + (L.to ? 'שינתה את הקבוצה מ-'+(L.from?esc(L.from):"ללא קבוצה")+' ל-'+esc(L.to) : 'החזירה את הקבוצה לערך שבגיליון'+(L.from?' (הייתה '+esc(L.from)+')':''));
+      return pre + (L.to ? 'שינתה את תאריך הגישה מ-'+(L.from?il(L.from):"לא ידוע")+' ל-'+il(L.to) : 'החזירה את תאריך הגישה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
+    }).join('<br>')+'</div>';
+  }
+
+  function tabInfo(w){
+    return '<div class="pair">'+
+      '<div class="fld"><span class="flabel">טלפון</span><span class="fval"><span class="mono">'+esc(w.phone||"אין טלפון")+'</span>'+
+        (w.phone?'<button class="btn sm" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+'</span></div>'+
+      '<div class="fld"><span class="flabel">כתובת מייל</span><span class="fval"><span class="mono">'+esc(w.email)+'</span>'+
+        '<button class="btn sm" data-copy="'+esc(w.email)+'">העתקה</button></span></div>'+
+    '</div>'+
+    (w.pendingEmail?'<div class="manual">כתובת חדשה שכבר בתוקף: <b>'+esc(w.pendingEmail)+'</b> <button class="lnk" data-copy="'+esc(w.pendingEmail)+'">העתקה</button> · הגיליון עוד לא התעדכן, והיא נכנסת עם החדשה</div>':'')+
+    '<div class="edit" id="fld-mail"><span>שינוי כתובת מייל</span>'+
+      '<input class="field sm" style="max-width:260px;direction:ltr" id="e_'+esc(w.email)+'" placeholder="'+esc(w.email)+'">'+
+      '<button class="btn" data-saveemail="'+esc(w.email)+'">שינוי כתובת</button>'+
+    '</div>'+
+    '<div class="note">הכתובת נכתבת <b>למניצ\'ט</b>, שהוא המקור שממנו הגיליון מיוצא. <b>שינוי בגיליון עצמו נמחק בייצוא הבא</b>, ולכן זו הדרך היחידה שנשארת. כל מה ששמור אצלנו עליה עובר לכתובת החדשה, כולל הגיבוי המוצפן. <b>היומן שלה שמור על הטלפון ואינו מושפע.</b></div>';
+  }
+
+  function tabCohort(w){
+    return '<div class="edit" id="fld-coh"><span>תאריך תחילת המחזור'+(w.startOverride?" ✎":"")+'</span>'+
+      '<select class="field sm" style="width:230px" id="s_'+esc(w.email)+'">'+
+        sundays().map(function(d,i){ return '<option value="'+d+'"'+(w.start===d?" selected":"")+'>'+il(d)+(i===0?" · המחזור הנוכחי":i===1?" · המחזור הבא":"")+'</option>'; }).join("")+
+      '</select>'+
+      '<button class="btn p" data-savestart="'+esc(w.email)+'">שמירה</button>'+
+      (w.startOverride?'<button class="btn ghost" data-clearstart="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+    '</div>'+
+    (w.startOverride?'<div class="manual">תאריך ההתחלה שונה ידנית · בגיליון: '+(w.sheetStart?il(w.sheetStart):"לא ידוע")+'</div>':'')+
+    '<div class="note">שינוי המחזור נכתב גם למניצ\'ט, בשעה 12:00, <b>ומשם הוא מגיע לגיליון לבד.</b> הוא משנה לה את היום בתוכנית, את התכנים שייפתחו לה ואת תאריך סיום הגישה.</div>'+
+    '<div class="edit" id="fld-grp"><span>קבוצה'+(w.groupOverride?" ✎":"")+'</span>'+
+      '<select class="field sm" id="g_'+esc(w.email)+'">'+
+        '<option value=""'+(w.group?"":" selected")+'>ללא קבוצה</option>'+
+        ["א","ב","ג","ד","ה"].map(function(L){ return '<option value="'+L+'"'+(w.group===L?" selected":"")+'>'+L+'</option>'; }).join("")+
+      '</select>'+
+      '<button class="btn p" data-savegroup="'+esc(w.email)+'">שמירה</button>'+
+      (w.groupOverride?'<button class="btn ghost" data-cleargroup="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+    '</div>'+
+    '<div class="note">שיוך הקבוצה נשמר גם במניצ\'ט, ומשם הוא מגיע לגיליון לבד. <b>אין צורך לעדכן את הגיליון ידנית.</b></div>'+
+    '<div class="frz'+((w.frozen && w.freezeTodo)?" todo":"")+'" id="fld-frz">'+
+      '<div class="frzhead">'+I_SNOW+'<b>'+(w.freeze ? ((w.frozen && w.freezeTodo) ? "הקפאה להשלמה" : "בהקפאה") : "הקפאה")+'</b><span>'+
+        (w.freeze
+          ? ((w.freeze.back && w.freeze.week)
+              ? 'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+(w.backCohort?' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b>':'')
+              : esc(w.freezeTodo||"עוד לא ידוע מתי חוזרת ולאיזה שבוע"))
+          : 'היא פעילה. אפשר להקפיא אותה ולבחור מתי היא חוזרת.')+
+      '</span></div>'+
+      (FREEZING===w.email
+        ? '<div class="control">'+
+            '<select class="field sm" style="width:200px" id="fb_'+esc(w.email)+'">'+
+              '<option value="">עוד לא יודעת</option>'+
+              sundaysN(10).map(function(d){ return '<option value="'+d+'"'+((w.freeze&&w.freeze.back===d)?" selected":"")+'>'+il(d)+'</option>'; }).join("")+
             '</select>'+
-            '<button class="btn" data-savestart="'+esc(w.email)+'">שמירת תאריך ההתחלה</button>'+
-            (w.startOverride?'<button class="btn" data-clearstart="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
-          '</div>'+
-          '<div class="note">שינוי המחזור נכתב גם למניצ\'ט, בשעה 12:00, <b>ומשם הוא מגיע לגיליון לבד.</b> הוא משנה לה את היום בתוכנית, את התכנים שייפתחו לה ואת תאריך סיום הגישה.</div>'+
-          '<div class="edit"><span>הקפאה:</span>'+
-            (w.freeze
-              ? '<span><b>' + ((w.freeze.back && w.freeze.week) ? 'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week
-                    : w.freeze.back ? 'חוזרת '+il(w.freeze.back)+' · עוד לא ידוע לאיזה שבוע'
-                    : w.freeze.week ? 'לשבוע '+w.freeze.week+' · עוד לא ידוע מתי'
-                    : 'מוקפאת · עוד לא ידוע מתי חוזרת ולאיזה שבוע') + '</b></span>'+
-                '<button class="btn" data-unfreeze="'+esc(w.email)+'">סיום ההקפאה</button>'+
-                '<button class="btn" data-freeze="'+esc(w.email)+'">שינוי</button>'
-              : '<button class="btn" data-freeze="'+esc(w.email)+'">הכנסה להקפאה</button>')+
-          '</div>'+
-          (FREEZING===w.email
-            ? '<div class="edit"><span>חוזרת ב:</span>'+
-                '<select class="field sm" style="width:210px" id="fb_'+esc(w.email)+'">'+
-                  '<option value="">עוד לא יודעת</option>'+
-                  sundaysN(10).map(function(d){ return '<option value="'+d+'"'+((w.freeze&&w.freeze.back===d)?" selected":"")+'>'+il(d)+'</option>'; }).join("")+
-                '</select>'+
-                '<span>לשבוע</span>'+
-                '<select class="field sm" style="width:140px" id="fw_'+esc(w.email)+'">'+
-                  '<option value="">עוד לא יודעת</option>'+
-                  [1,2,3,4,5,6,7,8,9,10].map(function(n){ return '<option value="'+n+'"'+((w.freeze&&w.freeze.week===n)?" selected":"")+'>'+n+'</option>'; }).join("")+
-                '</select>'+
-                '<button class="btn p" data-savefreeze="'+esc(w.email)+'">שמירה</button>'+
-                '<button class="btn quiet" data-nofreeze="1">ביטול</button>'+
-              '</div>'+
-              '<div class="note">בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב והתגית "הקפאה" נכתבים גם למניצ\'ט</b>, וסיום ההקפאה מסיר את התגית.</div>'
-            : '')+
-          '<div class="edit"><span>כתובת מייל:</span>'+
-            '<input class="field sm" style="max-width:240px;direction:ltr" id="e_'+esc(w.email)+'" placeholder="'+esc(w.email)+'">'+
-            '<button class="btn" data-saveemail="'+esc(w.email)+'">שינוי כתובת</button>'+
-          '</div>'+
-          '<div class="note">הכתובת נכתבת <b>למניצ\'ט</b>, שהוא המקור שממנו הגיליון מיוצא. <b>שינוי בגיליון עצמו נמחק בייצוא הבא</b>, ולכן זו הדרך היחידה שנשארת. כל מה ששמור אצלנו עליה עובר לכתובת החדשה, כולל הגיבוי המוצפן. <b>היומן שלה שמור על הטלפון ואינו מושפע.</b></div>'+
-          '<div class="edit"><span>קבוצה:</span>'+
-            '<select class="field sm" id="g_'+esc(w.email)+'">'+
-              '<option value=""'+(w.group?"":" selected")+'>ללא קבוצה</option>'+
-              ["א","ב","ג","ד","ה"].map(function(L){ return '<option value="'+L+'"'+(w.group===L?" selected":"")+'>'+L+'</option>'; }).join("")+
+            '<select class="field sm" style="width:150px" id="fw_'+esc(w.email)+'">'+
+              '<option value="">עוד לא יודעת</option>'+
+              [1,2,3,4,5,6,7,8,9,10].map(function(n){ return '<option value="'+n+'"'+((w.freeze&&w.freeze.week===n)?" selected":"")+'>שבוע '+n+'</option>'; }).join("")+
             '</select>'+
-            '<button class="btn" data-savegroup="'+esc(w.email)+'">שמירת קבוצה</button>'+
-            (w.groupOverride?'<button class="btn" data-cleargroup="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+            '<button class="btn p" data-savefreeze="'+esc(w.email)+'">שמירה</button>'+
+            '<button class="btn ghost" data-nofreeze="1">ביטול</button>'+
           '</div>'+
-          '<div class="note">שיוך הקבוצה נשמר גם במניצ\'ט, ומשם הוא מגיע לגיליון לבד. <b>אין צורך לעדכן את הגיליון ידנית.</b></div>'+
-          (w.newApp
-            ? '<div class="edit"><span>שיעורי בונוס Glow'+(w.glowOverride?" ✎":"")+':</span>'+
-                '<span>'+(w.glow?"<b>יש גישה</b>":"<b>אין גישה</b>")+' · בגיליון: '+(w.sheetGlow?"יש גישה":"אין גישה")+'</span>'+
-                '<button class="btn'+(w.glow?" p":"")+'" data-glow="1" data-for="'+esc(w.email)+'">יש גישה</button>'+
-                '<button class="btn'+(w.glow?"":" p")+'" data-glow="0" data-for="'+esc(w.email)+'">אין גישה</button>'+
-                (w.glowOverride?'<button class="btn" data-glow="" data-for="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
-              '</div>'
-            : '')+
-          mcBlock(w)+
-          '<div class="edit"><span>גישה עד:</span><input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
+          '<div class="note">בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב והתגית "הקפאה" נכתבים גם למניצ\'ט</b>, וסיום ההקפאה מסיר את התגית.</div>'
+        : '<div class="control">'+
+            '<button class="btn" data-freeze="'+esc(w.email)+'">'+(w.freeze?"שינוי ההקפאה":"הכנסה להקפאה")+'</button>'+
+            (w.freeze?'<button class="btn dng" data-unfreeze="'+esc(w.email)+'">סיום ההקפאה</button>':'')+
+          '</div>')+
+    '</div>';
+  }
+
+  function tabPerm(w){
+    return (w.newApp
+      ? '<div class="edit" id="fld-glow"><span>שיעורי בונוס Glow'+(w.glowOverride?" ✎":"")+'</span>'+
+          '<span>'+(w.glow?"<b>יש גישה</b>":"<b>אין גישה</b>")+' · בגיליון: '+(w.sheetGlow?"יש גישה":"אין גישה")+'</span>'+
+          '<button class="btn'+(w.glow?" p":"")+'" data-glow="1" data-for="'+esc(w.email)+'">יש גישה</button>'+
+          '<button class="btn'+(w.glow?"":" p")+'" data-glow="0" data-for="'+esc(w.email)+'">אין גישה</button>'+
+          (w.glowOverride?'<button class="btn ghost" data-glow="" data-for="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+        '</div>'
+      : '')+
+    '<div id="fld-cancel">'+mcBlock(w)+'</div>'+
+    (w.newApp
+      ? '<div class="edit" id="fld-until"><span>גישה עד</span>'+
+          '<input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
           '<span class="adds">הוסיפי '+
             '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
-            '<select class="field sm" style="width:100px" id="u_'+esc(w.email)+'">'+
-              '<option value="d">ימים</option><option value="w">שבועות</option><option value="m">חודשים</option>'+
-            '</select>'+
+            '<select class="field sm" style="width:100px" id="u_'+esc(w.email)+'"><option value="d">ימים</option><option value="w">שבועות</option><option value="m">חודשים</option></select>'+
             '<button class="btn sm" data-add="1" data-for="'+esc(w.email)+'">הוסיפי</button>'+
           '</span>'+
           '<button class="btn p" data-save="'+esc(w.email)+'">שמירה</button>'+
-          (w.override?'<button class="btn" data-clear="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
-          '<button class="btn" data-cancel="1">ביטול</button></div>'
-        : '<div class="acts">'+
-          (w.phone?'<a class="btn wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
-          (w.newApp
-            ? '<button class="btn" data-edit="'+esc(w.email)+'">עריכה</button>'+
-              '<button class="btn" data-stats="'+esc(w.email)+'">'+(STATS===w.email?"סגירת נתוני שימוש":"נתוני שימוש")+'</button>'
-            : '')+
-          '</div>'+
-          (w.newApp ? '' : '<div class="meta">מנוהלת בקג\'אבי. שינוי תאריך גישה ונתוני שימוש אינם רלוונטיים כאן.</div>'))+
-      (STATS===w.email ? usagePanel(w) : '')+
-      '</div>';
+          (w.override?'<button class="btn ghost" data-clear="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+        '</div>'+
+        (w.override?'<div class="manual">שונה ידנית · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')
+      : '<div class="note">היא מנוהלת בקג\'אבי, ולכן <b>תאריך סיום הגישה ונתוני השימוש אינם רלוונטיים כאן</b> ואינם מוצגים. כל השאר נכון גם לגביה, כי הוא נשמר במניצ\'ט ובגיליון.</div>');
+  }
+
+  function quickActs(w){
+    var b = function(jump, icon, label, cls){ return '<button class="qa'+(cls?" "+cls:"")+'" data-jump="'+jump+'">'+icon+label+'</button>'; };
+    return '<div class="dacts">'+
+      b("fld-coh", I_CAL, "העברת מחזור", "")+
+      b("fld-grp", I_USERS, "שיוך קבוצה", (!w.group && !w.frozen) ? "need" : "")+
+      b("fld-frz", I_SNOW, w.freeze ? ((w.frozen && w.freezeTodo) ? "השלמת ההקפאה" : "עדכון ההקפאה") : "הכנסה להקפאה", (w.frozen && w.freezeTodo) ? "need" : "cold")+
+      (w.newApp ? b("fld-until", I_CLOCK, "הארכת גישה", "") : "")+
+      b("fld-cancel", I_BAN, w.blocked ? "ביטול הסימון" : "ביטול בתהליך", "kill")+
+      (w.phone?'<a class="qa wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">'+I_WA+'וואטסאפ</a>':'')+
+    '</div>';
+  }
+
+  function womanCard(w){
+    var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
+    var body = TAB==="cohort" ? tabCohort(w)
+             : TAB==="perm"   ? tabPerm(w)
+             : TAB==="usage"  ? (w.newApp ? usagePanel(w) : '<div class="empty">היא מנוהלת בקג\'אבי, ואין לנו נתוני שימוש עליה.</div>')
+             : TAB==="log"    ? logLines(w)
+             : tabInfo(w);
+    return '<div class="card open">'+
+      '<button class="btn back" data-back="1">→ חזרה לרשימה</button>'+
+      '<div class="dhead">'+
+        '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
+        (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+        (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
+        (w.cancelled?'<span class="grp">ביטלה</span>':'')+
+        (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
+        (w.blocked?'<span class="grp dngpill">חסומה מהאפליקציה</span>':'')+'</div>'+
+        '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+
+          (w.newApp?' · גישה עד <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+(w.expired?" (הסתיימה)":""):"")+'</div>'+
+        ((w.backSoon && w.backCohort)?'<div class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></div>':'')+
+        quickActs(w)+
+      '</div>'+
+      '<div class="tabs" role="tablist">'+TABS.map(function(t){
+        return '<button class="tab" data-tab="'+t[0]+'" aria-selected="'+(TAB===t[0])+'" role="tab">'+t[1]+'</button>';
+      }).join("")+'</div>'+
+      '<div class="tabwrap">'+body+'</div>'+
+    '</div>';
   }
 
   // שורה ברשימה: השם, מה שדורש טיפול, ומספיק כדי לזהות אותה. הכל היתר בכרטיס.
@@ -824,7 +890,7 @@ function render(){
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
       (w.cancelled?'<span class="grp">ביטלה</span>':'')+
       (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
-      (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+
+      (w.blocked?'<span class="grp dngpill">חסומה מהאפליקציה</span>':'')+
       '</span>'+
       '<span class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</span>'+
       ((w.backSoon && w.backCohort)?'<span class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></span>':'')+
@@ -877,18 +943,32 @@ function render(){
     copyText(el.getAttribute("data-copy"), el); }; });
   app.querySelectorAll("[data-stats]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-stats"); STATS = (STATS===em ? "" : em); render(); }; });
+  // usagePanel נשען על STATS כדי לדעת שהוא פתוח. עכשיו הוא לשונית, ולכן זה נקבע כאן.
   app.querySelectorAll("[data-sm]").forEach(function(el){ el.onclick=function(){
     STATSMODE = el.getAttribute("data-sm"); render(); }; });
   // Opening her card is what triggers the single ManyChat lookup. Asked for once per card,
   // not on every redraw, so pressing a tag button does not fire a second one.
   app.querySelectorAll("[data-open]").forEach(function(el){ el.onclick=function(){
     var em = el.getAttribute("data-open");
-    if(SEL === em){ SEL = ""; } else { SEL = em; EDITING = ""; STATS = ""; FREEZING = ""; }
+    if(SEL === em){ SEL = ""; } else { SEL = em; TAB = "info"; EDITING = ""; STATS = ""; FREEZING = ""; }
     render();
     if(SEL && innerWidth < 1000) window.scrollTo(0, 0);
   }; });
   app.querySelectorAll("[data-back]").forEach(function(el){ el.onclick=function(){
     SEL = ""; EDITING = ""; STATS = ""; FREEZING = ""; render();
+  }; });
+  app.querySelectorAll("[data-tab]").forEach(function(el){ el.onclick=function(){
+    TAB = el.getAttribute("data-tab"); render(); }; });
+  // קיצור דרך: פותח את הלשונית הנכונה, גולל אל השדה ומדגיש אותו לרגע.
+  app.querySelectorAll("[data-jump]").forEach(function(el){ el.onclick=function(){
+    var id = el.getAttribute("data-jump");
+    TAB = (id==="fld-mail") ? "info" : (id==="fld-until"||id==="fld-cancel"||id==="fld-glow") ? "perm" : "cohort";
+    render();
+    var t = document.getElementById(id);
+    if(!t) return;
+    t.scrollIntoView({ block:"center", behavior:"smooth" });
+    t.classList.add("lit");
+    setTimeout(function(){ t.classList.remove("lit"); }, 1500);
   }; });
   app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-edit"); EDITING=em; render();
