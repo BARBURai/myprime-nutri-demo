@@ -242,6 +242,19 @@
     margin-top:7px;padding:10px 12px;border-radius:10px;background:var(--pinkbg);
     color:var(--ink);font-size:15px;line-height:1.6;white-space:pre-wrap;
   }
+  .sugbox{margin-top:11px;display:grid;gap:6px}
+  .sug{
+    display:grid;gap:3px;text-align:start;width:100%;cursor:pointer;
+    background:var(--coldbg);border:1px solid var(--cold-line);border-radius:10px;padding:9px 11px;
+  }
+  .sug:hover{border-color:var(--cold)}
+  .sug b{font-size:13.5px;color:var(--cold);font-weight:700}
+  .sug span{font-size:13.5px;color:var(--ink-2);line-height:1.55}
+  .bankadd{
+    display:flex;align-items:center;gap:7px;margin-top:10px;
+    font-size:13px;color:var(--ink-2);cursor:pointer;
+  }
+  .bankadd input{width:16px;height:16px;accent-color:var(--pink);cursor:pointer}
   .note-card textarea.field{margin-top:5px;resize:vertical;font-family:inherit}
   .lit{outline:2px solid var(--pink);outline-offset:6px;border-radius:9px}
 
@@ -490,6 +503,36 @@ function phoneOf(email){
 // What ManyChat says about one woman right now, keyed by email. Read only when her card is
 // opened: ManyChat cannot list everyone carrying a tag, so there is no bulk version of this.
 var MC = {};
+function bankLoad(then){
+  fetch("/api/admin?key="+encodeURIComponent(KEY)+"&bank=1")
+    .then(function(r){ return r.json(); })
+    .then(function(d){ BANK = (d && d.ok && d.bank && d.bank.length) ? d.bank : BANK_SEED.slice(); if(then) then(); render(); })
+    .catch(function(){ BANK = BANK_SEED.slice(); if(then) then(); render(); });
+}
+
+// דירוג פשוט לפי מילים משותפות, בלי AI ובלי עלות: הבנק קטן, וההצעה היא נקודת פתיחה
+// לניסוח ולא תשובה שנשלחת לבד. מילות קישור מדולגות, כי הן מופיעות בכל משפט ומייצרות
+// התאמות שווא, והתאמה בשאלה שוקלת כפול מהתאמה בגוף התשובה.
+var STOP = ["איפה","איך","למה","מתי","מה","זה","זאת","אני","את","של","עם","לא","כן","יש","אין","על","אבל","גם","כמה","הוא","היא","הזה","הזאת","שלי","אפשר","צריך","צריכה","רוצה","תודה","היי","שלום","אחלה","ממש","מאוד","בבקשה"];
+function bankSuggest(text){
+  if(!BANK) return [];
+  var clean = String(text||"").replace(/^\[נכתב [^\]]*\]\s*/, "").toLowerCase();
+  var words = clean.replace(/[^\u0590-\u05ea0-9a-z ]/g," ").split(/\s+/)
+    .filter(function(w){ return w.length >= 3 && STOP.indexOf(w) === -1; });
+  if(words.length < 2) return [];
+  return BANK.map(function(e){
+    var q = String(e.q||"").toLowerCase(), a = String(e.a||"").toLowerCase();
+    var score = 0;
+    words.forEach(function(w){
+      if(q.indexOf(w) !== -1) score += 2;
+      else if(a.indexOf(w) !== -1) score += 1;
+    });
+    return { e:e, score: score / (words.length * 2) };
+  }).filter(function(x){ return x.score >= 0.34; })
+    .sort(function(a,b){ return b.score - a.score; })
+    .slice(0, 3).map(function(x){ return x.e; });
+}
+
 function notesLoad(email){
   NOTES[email] = { state:"loading" };
   fetch("/api/admin?key="+encodeURIComponent(KEY)+"&notes="+encodeURIComponent(email))
@@ -644,7 +687,23 @@ var SEL = "";   // המשתתפת שהכרטיס שלה פתוח. במחשב ה�
 var TAB = "info";   // הלשונית הפתוחה בכרטיס
 // ההערות של אישה אחת, נקראות בפתיחת הלשונית שלה בלבד. הרשימה הראשית מקבלת מספר
 // בלבד, ולכן אין כאן קריאה אחת לכל שורה.
-var NOTES = {}, DRAFT = {};
+var NOTES = {}, DRAFT = {}, NOTE_TEXT = {};
+// בנק התשובות. נטען פעם אחת, ומשמש להצעת ניסוח להערה חדשה.
+var BANK = null;
+// עשר התשובות שכבר קיימות במסך "שאלות ותשובות" שבאפליקציה. הן מוצעות כבסיס כשהבנק
+// ריק, כדי שלא צריך יהיה להקליד מחדש מה שכבר כתוב שם.
+var BANK_SEED = [
+  { id:"s1", q:"איך מתקינים את האפליקציה בטלפון?", a:"אפשר להתקין אותה למסך הבית כמו כל אפליקציה, וההנחיות המדויקות למכשיר שלך נמצאות בפרופיל, תחת \"התקנת האפליקציה\" 🌸" },
+  { id:"s2", q:"האפליקציה נראית ישנה או לא מתעדכנת, איך מרעננים?", a:"סוגרים את האפליקציה לגמרי ופותחים אותה מחדש. אם היא פתוחה בדפדפן, אפשר לרענן את העמוד 💜" },
+  { id:"s3", q:"איך אני יודעת כמה צעדים עשיתי?", a:"פותחים את אפליקציית הבריאות של הטלפון, רואים כמה צעדים נצברו היום, ומזינים את המספר באפליקציה. ההנחיות המדויקות למכשיר שלך נמצאות בשיעור של יום 2 🌸" },
+  { id:"s4", q:"מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a:"הן נוספות לך ליעד היומי, כלומר ביום שבו התאמנת יש לך קצת יותר מקום בצלחת 💜" },
+  { id:"s5", q:"למה אני לא ממלאת את החלבון בעצמי?", a:"החלבון מחושב לבד מכל מה שרשמת ביומן, ולכן אין צורך למלא אותו בנפרד 🌸" },
+  { id:"s6", q:"כמה קלוריות מותר לי לאכול היום?", a:"היעד היומי שלך מופיע בטבעת שבמסך היומן, והוא מחושב לפי הנתונים שהזנת בפרופיל 💜" },
+  { id:"s7", q:"שכחתי להזין יום שלם, מה עושים?", a:"אפשר לחזור אחורה בסרגל הימים שלמעלה, לבחור את היום שפספסת ולהזין אותו. שום דבר לא נסגר 🌸" },
+  { id:"s8", q:"איך עורכים או מוחקים פריט שהוספתי?", a:"לוחצים על הפריט ברשימה של אותו יום, ומשם אפשר לשנות את הכמות או למחוק אותו 💜" },
+  { id:"s9", q:"מה זה המדליות והגביעים?", a:"מדליה מתקבלת על יום שבו השלמת את כל המשימות, וגביע על שבוע שלם. הם נאספים לך בארון ההישגים 🌸" },
+  { id:"s10", q:"למה משימות חדשות מופיעות לאורך התוכנית?", a:"התוכנית נבנתה בהדרגה: כל שבוע נפתחת משימה נוספת, כדי שלא הכל ייפול עלייך בבת אחת 💜" },
+];
 function loadCodes(){
   return fetch("/api/admin?codes=1&key="+encodeURIComponent(KEY))
     .then(function(r){ return r.json(); })
@@ -895,6 +954,7 @@ function render(){
     st.replies.forEach(function(r){ byNote[r.to] = r; });
     return st.notes.map(function(n){
       var r = byNote[n.id];
+      NOTE_TEXT[n.id] = n.text;
       var head = '<div class="nhead">'+esc(stamp(n.at))+(n.screen?' · מהמסך "'+esc(n.screen)+'"':'')+'</div>'+
                  '<div class="ntext">'+esc(n.text)+'</div>';
       if(r && r.text){
@@ -905,7 +965,14 @@ function render(){
         '</div>';
       }
       if(r) return '<div class="note-card done">'+head+'<div class="nsent">סומנה כטופלה '+esc(stamp(r.at))+(r.by?' · '+esc(r.by):'')+', בלי תשובה אליה.</div></div>';
+      var sug = bankSuggest(n.text);
       return '<div class="note-card">'+head+
+        (BANK === null ? '<div class="nhint" style="margin-top:10px">טוען תשובות מוכנות...</div>' :
+         sug.length ? '<div class="sugbox"><div class="flabel">תשובות מוכנות שמתאימות לשאלה הזאת</div>'+
+            sug.map(function(e){
+              return '<button class="sug" data-usebank="'+esc(e.id)+'" data-note="'+esc(n.id)+'">'+
+                '<b>'+esc(e.q)+'</b><span>'+esc(e.a)+'</span></button>';
+            }).join("")+'</div>' : '')+
         '<div class="flabel" style="margin-top:10px">התשובה שהיא תראה באפליקציה</div>'+
         '<textarea class="field" rows="3" id="rp_'+esc(n.id)+'" placeholder="כתבי כאן...">'+esc(DRAFT[n.id]||"")+'</textarea>'+
         '<div class="nhint">היא תראה את הטקסט הזה בדיוק כמו שכתבת, בתוך בועת ההערות באפליקציה. <b>אחרי השליחה אי אפשר לבטל.</b></div>'+
@@ -913,6 +980,7 @@ function render(){
           '<button class="btn p" data-sendreply="'+esc(n.id)+'" data-for="'+esc(w.email)+'">שלחי לה</button>'+
           '<button class="btn ghost" data-notedone="'+esc(n.id)+'" data-for="'+esc(w.email)+'">סימון כטופל בלי תשובה</button>'+
         '</div>'+
+        '<label class="bankadd"><input type="checkbox" id="bk_'+esc(n.id)+'" checked> לשמור את השאלה והתשובה בבנק, כדי שיוצעו בפעם הבאה</label>'+
       '</div>';
     }).join("");
   }
@@ -1059,6 +1127,7 @@ function render(){
       // מי שנבחרה מתוך "הערות ממתינות" נפתחת ישר על ההערה שלה, כי זו הסיבה שנכנסו אליה.
       TAB = (VIEW === "notes") ? "notes" : "info";
       if(TAB === "notes" && !NOTES[em]) notesLoad(em);
+      if(TAB === "notes" && BANK === null) bankLoad();
     }
     render();
     if(SEL && innerWidth < 1000) window.scrollTo(0, 0);
@@ -1069,11 +1138,18 @@ function render(){
   app.querySelectorAll("[data-tab]").forEach(function(el){ el.onclick=function(){
     TAB = el.getAttribute("data-tab");
     if(TAB==="notes" && SEL && !NOTES[SEL]) notesLoad(SEL);
+    if(TAB==="notes" && BANK === null) bankLoad();
     render(); }; });
   app.querySelectorAll("[data-notesretry]").forEach(function(el){ el.onclick=function(){
     var em = el.getAttribute("data-notesretry"); delete NOTES[em]; notesLoad(em); }; });
   app.querySelectorAll("textarea[id^=rp_]").forEach(function(el){ el.oninput=function(){
     DRAFT[el.id.slice(3)] = el.value; }; });
+  app.querySelectorAll("[data-usebank]").forEach(function(el){ el.onclick=function(){
+    var e = (BANK||[]).filter(function(x){ return x.id === el.getAttribute("data-usebank"); })[0];
+    if(!e) return;
+    var id = el.getAttribute("data-note"), box = document.getElementById("rp_"+id);
+    if(box){ box.value = e.a; DRAFT[id] = e.a; box.focus(); }
+  }; });
   // הפעולה היחידה במסך שמגיעה למשתתפת עצמה, ולכן היא שואלת לפני.
   app.querySelectorAll("[data-sendreply]").forEach(function(el){ el.onclick=function(){
     var id = el.getAttribute("data-sendreply"), em = el.getAttribute("data-for");
@@ -1088,6 +1164,17 @@ function render(){
       .then(function(d){
         if(!d || !d.ok) throw new Error();
         delete DRAFT[id]; delete NOTES[em];
+        // השאלה והתשובה נכנסות לבנק רק אם התיבה מסומנת. תגית התאריך שהוספנו בהעברה
+        // מהקובץ יורדת, כי היא לא חלק מהשאלה.
+        var keep = document.getElementById("bk_"+id);
+        var q = (NOTE_TEXT[id] || "").replace(/^\[נכתב [^\]]*\]\s*/, "");
+        if(keep && keep.checked && q){
+          fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+            body:JSON.stringify({ email:em, by:WHO, bankAdd:{ q:q, a:txt } })})
+            .then(function(r){ return r.json(); })
+            .then(function(b){ if(b && b.ok && b.bank) BANK = b.bank; })
+            .catch(function(){});
+        }
         return load().then(function(){ notesLoad(em); });
       })
       .catch(function(){ el.disabled = false; alert("השליחה נכשלה. נסי שוב."); });

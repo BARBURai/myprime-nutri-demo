@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.76";
+const ADMIN_VERSION = "5.78";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -305,6 +305,15 @@ export default async function handler(req, res) {
     } catch (e) { return res.status(500).json({ ok: false, error: "codes_failed" }); }
   }
 
+  // בנק התשובות. שאלה ותשובה שאושרו, שמהן המסך מציע ניסוח להערה חדשה. הבנק יושב
+  // ב-Redis ולא בקוד, כדי שתוספת של רון תיכנס לתוקף מיד בלי העלאת גרסה.
+  if (req.method === "GET" && req.query.bank !== undefined) {
+    try {
+      const raw = await redis(RU, RT, "GET", "admin:faq");
+      return res.status(200).json({ ok: true, bank: raw ? JSON.parse(raw) : [] });
+    } catch (e) { return res.status(200).json({ ok: false, error: "bank_failed" }); }
+  }
+
   // The notes one woman wrote, and the answers already sent to her. Read on demand when
   // her card is opened, like the ManyChat block: the list screen only needs the count.
   if (req.method === "GET" && req.query.notes) {
@@ -398,6 +407,25 @@ export default async function handler(req, res) {
     // With an issued code the name is the code's, not whatever was typed in the browser, so
     // the line in her card saying who did this cannot be faked.
     const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;
+    // Adding to, or removing from, the answer bank. Nothing here reaches a participant:
+    // the bank only supplies wording for the clerk to send herself.
+    if (body && (body.bankAdd || body.bankDrop)) {
+      try {
+        const raw = await redis(RU, RT, "GET", "admin:faq");
+        let bank = raw ? JSON.parse(raw) : [];
+        if (body.bankDrop) {
+          bank = bank.filter((e) => e.id !== String(body.bankDrop));
+        } else {
+          const q = String(body.bankAdd.q || "").trim().slice(0, 400);
+          const a = String(body.bankAdd.a || "").trim().slice(0, 1500);
+          if (!q || !a) return res.status(400).json({ ok: false, error: "bank_empty" });
+          bank.push({ id: "b" + Date.now().toString(36), q, a, by, at: new Date().toISOString() });
+        }
+        await redis(RU, RT, "SET", "admin:faq", JSON.stringify(bank.slice(-200)));
+        return res.status(200).json({ ok: true, bank });
+      } catch (e) { return res.status(500).json({ ok: false, error: "bank_failed" }); }
+    }
+
     // An answer to a note she wrote. It is the one thing on this screen that reaches the
     // participant herself, so it is deliberately its own route and returns straight away:
     // nothing else about her is touched by it.
