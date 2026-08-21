@@ -344,7 +344,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -880,6 +880,15 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **זה בדיוק מה שנאמר לרון ולא מומש: המעבר לשמירה הוא היחיד שקורה לבד, והחזרה היא תמיד לחיצה שלה.** מצב שנקבע פעם אחת לא יכול להתבטל מעצמו כשהמחט זזה חצי קילו.
 
 **`qa/bmi-check.mjs` עלתה מ-71 ל-76**, וארבע מהחדשות עוסקות בטווח שבין הקווים. **ובשכבה 3 התרחיש בודק עכשיו גם ב-48 שהרשימה נשארה נעולה ושאין שורת משקל יעד**, ולא רק שאין כרטיס חזרה. **55 מתוך 55.**
+
+### ונוספה סימולציית מסע, אחרי בקשה של רון
+**`qa/bmi-journey.mjs` מריצה את מה שרון עשה ידנית בטלפון, על 16,504 הזנות משקל ב-56 גבהים.** בניגוד ל-`qa/bmi-sim.mjs` שסורק את הכלל בנקודת זמן אחת, כאן מריצים **רצף**: נרשמת, מדווחת משקל שוב ושוב, חוצה למטה, מקבלת את המסך, עולה בחזרה, ולוחצת לחזור.
+
+**שבע חוקות נבדקות בכל צעד**, וביניהן: לעולם לא גירעון מתחת לקו · בשמירה הרשימה נעולה, אין שורת יעד, והיעד אינו נמוך מהתחזוקה · החזרה מוצעת אך ורק מעל הקו השני · **לעולם לא יוצאים משמירה בלי לחיצה** · המסך מוצג פעם אחת לחצייה ולא בכל הזנה · וחצייה שנייה אחרי חזרה כן מפעילה אותו שוב.
+
+**ומה שמגן עליה מלהתיישן: תשעת מעברי המצב שהיא מסמלצת מאומתים מול שורות הקוד האמיתיות שמבצעות אותם**, והיא נופלת מיד אם אחת מהן השתנתה. זו אותה מלכודת ש-`qa/prompt-sync-check.mjs` קיימת כדי למנוע.
+
+**היא מדפיסה גם את המסלול של רון צעד-צעד**, בגובה ובגיל שלו, **והיעד הקלורי שיוצא בה ב-50 ק״ג הוא 1,239, בדיוק המספר שהוא ראה על המסך.**
 
 **v5.99** - **מסך המעבר לשמירה: כפתור אחד, וההמלצה כטקסט. והמשרד אינו מקבל כלום, אחרי סבב שלם.**
 
