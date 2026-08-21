@@ -551,7 +551,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.75";
+const VERSION = "5.77";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3021,7 +3021,11 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, on
           }).catch(() => {});
         });
       }
-      setSent(true); setTimeout(() => setSent(false), 2500); setNotes([]);
+      setNotes([]);
+      setSent(true);
+      // The bubble closes on its own: leaving it open on an empty form reads as if nothing
+      // happened. Long enough to read the line, short enough not to feel stuck.
+      setTimeout(() => { setSent(false); setOpen(false); }, 1700);
     } catch (e) { alert("השליחה נכשלה - בדקי חיבור לאינטרנט ונסי שוב."); }
     finally { setSending(false); }
   };
@@ -3048,6 +3052,11 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, on
             <div style={{ fontSize: 13.5, color: C.sub, lineHeight: 1.6, marginBottom: 12 }}>כל הערה תעזור לנו לשפר 💜 ואם תרצי שנחזור אלייך, אנא הוסיפי בהודעה את מספר הטלפון שלך</div>
             <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={4} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
             <Btn onClick={add}>הוסיפי הערה</Btn>
+            {sent && (
+              <div style={{ marginTop: 12, background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 12, padding: "12px 14px", fontSize: 16, fontWeight: 600, color: C.brand, textAlign: "center" }}>
+                קיבלנו, תודה 💜
+              </div>
+            )}
             {notes.length > 0 && (
               <div style={{ marginTop: 14 }}>
                 {notes.map((n, i) => (
@@ -3057,7 +3066,7 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, on
                   </div>
                 ))}
                 <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                  {FEEDBACK_URL && <Btn onClick={sendFeedback} disabled={sending}><Send size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {sent ? "קיבלנו, תודה 💜" : sending ? "שולחת…" : "שלחי משוב לצוות MyPrime"}</Btn>}
+                  {FEEDBACK_URL && <Btn onClick={sendFeedback} disabled={sending}><Send size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {sending ? "שולחת…" : "שלחי משוב לצוות MyPrime"}</Btn>}
                   <Btn variant="ghost" onClick={copyAll}><Copy size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {copied ? "הועתק!" : "העתיקי הכל"}</Btn>
                 </div>
               </div>
