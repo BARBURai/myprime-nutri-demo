@@ -649,15 +649,13 @@ function mcBlock(w){
   if(s.state==="nophone")  return line("אין לה טלפון, ולכן אי אפשר למצוא אותה שם.");
   if(s.state==="notfound") return line("לא נמצאה רשומה לפי הטלפון הזה.");
   if(s.state!=="ok")       return line('לא הצלחתי להגיע. <button class="lnk" data-mcretry="'+esc(w.email)+'">נסי שוב</button>');
-  var kaj = w.newApp ? "" : "1";
   var row = function(key, label){
     var on = !!(s.tags && s.tags[key]);
     return '<div class="edit"><span>'+label+':</span>'+
       '<span>'+(on?"<b>יש</b>":"<b>אין</b>")+'</span>'+
-      '<button class="btn'+(on?" p":"")+'" data-mctag="'+key+'" data-on="1" data-kaj="'+kaj+'" data-for="'+esc(w.email)+'">יש</button>'+
-      '<button class="btn'+(on?"":" p")+'" data-mctag="'+key+'" data-on="0" data-kaj="'+kaj+'" data-for="'+esc(w.email)+'">אין</button></div>';
+      '<button class="btn'+(on?" p":"")+'" data-mctag="'+key+'" data-on="1" data-for="'+esc(w.email)+'">יש</button>'+
+      '<button class="btn'+(on?"":" p")+'" data-mctag="'+key+'" data-on="0" data-for="'+esc(w.email)+'">אין</button></div>';
   };
-  var cancelOn = !!(s.tags && s.tags.cancelproc);
   var freezeOn = !!(s.tags && s.tags.freeze);
   return line("קבוצה שם עכשיו <b>"+(s.group?esc(s.group):"ללא")+"</b>"+
       " · תאריך התחלה שם: <b>"+(s.start?esc(s.start):"ריק")+"</b>"+
@@ -665,15 +663,7 @@ function mcBlock(w){
     row("full","קורס האיפור המלא")+
     row("app","אפליקציה חדשה")+
     row("cancelproc","ביטול בתהליך")+
-    (w.newApp
-      ? '<div class="note">הסימון "ביטול בתהליך" נכתב במניצ\'ט ויכול להפעיל שם אוטומציה ששולחת לה הודעה, <b>וגם חוסם לה את הכניסה לאפליקציה החדשה מהכניסה הבאה שלה.</b> הסרת הסימון מחזירה לה את הגישה.</div>'
-      // She is on Kajabi, so blocking her here changes nothing she can feel. The only thing
-      // that actually ends her access is done there, and the screen has to say it plainly
-      // rather than let a green tick suggest the job is finished.
-      : '<div class="note">הסימון "ביטול בתהליך" נכתב במניצ\'ט ויכול להפעיל שם אוטומציה ששולחת לה הודעה. <b>היא מנוהלת בקג\'אבי, ולכן החסימה מהאפליקציה החדשה אינה משנה לה כלום בפועל.</b></div>')+
-    ((cancelOn && !w.newApp)
-      ? '<div class="manual" style="font-size:15px">⚠ היא בביטול והיא בקג\'אבי. <b>יש לבטל לה את כל ההרשאות בקג\'אבי.</b> זה לא קורה מכאן.</div>'
-      : '');
+    '<div class="note">הסימון "ביטול בתהליך" נכתב במניצ\'ט ויכול להפעיל שם אוטומציה ששולחת לה הודעה, <b>וגם חוסם לה את הכניסה לאפליקציה החדשה מהכניסה הבאה שלה.</b> הסרת הסימון מחזירה לה את הגישה.</div>';
 }
 
 // The eight cohorts she can be moved to: the one already running this week, and the seven
@@ -768,12 +758,6 @@ var BANK_SEED = [
     a:"כפתור ההשתקה כבר קיים בנגן. כתוביות ומהירות ניגון עדיין לא, וזו בקשה שרשמנו והיא על השולחן. תודה שכתבת, זה בדיוק סוג ההערה שעוזרת לנו 💜" },
   { id:"s16", q:"תאריך ההתחלה לא נכון, ביקשתי מועד אחר",
     a:"תיקנו לך את תאריך ההתחלה. בפתיחה הבאה של האפליקציה הכל יתעדכן לבד 💜" },
-  { id:"s18", q:"אין התחשבות בשינוי היעד היומי בהתאם לפעילות הגופנית שביצעתי, ההתייחסות לעמידה ביעד היא ליעד הראשוני",
-    a:"תודה שכתבת 🌸 ביומן היעד כן מתעדכן: הקלוריות של האימון ושל הצעדים מתווספות לתקציב היומי שלך באותו יום. בדוח הבדיקה נעשתה מול היעד המקורי, וזה לא נכון. מצאנו את זה בזכותך ואנחנו מתקנים 💜" },
-  { id:"s19", q:"כשניסיתי לשנות את הכמות בגרמים המספר לא התאפס לי, המספר 1 נשאר ולא יכולתי לרשום 70 אלא רק 71",
-    a:"את צודקת לגמרי, וזו תקלה אצלנו: השדה הגיע עם 1 בפנים, וההקלדה נוספה לו במקום להחליף אותו. תיקנו, ומעכשיו לחיצה על השדה מסמנת את מה שכתוב בו וההקלדה מחליפה אותו. תודה שדיווחת 🌸" },
-  { id:"s20", q:"לא מצליחה להזין את המשקל שלי, האפליקציה לא מקבלת אותו",
-    a:"מצאנו את התקלה ואת צודקת: האפליקציה לא קיבלה משקל נמוך מ-50 קילו, וזו הייתה טעות שלנו. תיקנו, ועכשיו אפשר להזין את המשקל שלך כרגיל. מצטערים על העיכוב, ותודה שכתבת 💜" },
   { id:"s21", q:"ברגע ששמרתי ארוחה ורציתי להוסיף עוד ארוחה הוא לא נותן לי שוב את הרשימה של איך להוסיף, וגם נמחקה לי רשימת מזונות",
     a:"תודה שכתבת 🌸 להוספת ארוחה נוספת לוחצים שוב על הפלוס שבמרכז הסרגל התחתון, והרשימה המלאה נפתחת מחדש: צילום, סריקת ברקוד, חיפוש והזנה ידנית. לגבי רשימת המזונות שנעלמה, אנחנו בודקים את זה, וזה בדיוק סוג הדיווח שעוזר לנו לתפוס דברים כאלה 💜" },
   { id:"s17", q:"הייתי שמחה למלא רק את כמות הקלוריות משום שאני משתמשת בג'מיני, האם אפשרי?",
@@ -1069,15 +1053,14 @@ function render(){
   }
 
   function tabPerm(w){
-    return '<div class="edit" id="fld-glow"><span>שיעורי בונוס Glow'+(w.newApp&&w.glowOverride?" ✎":"")+'</span>'+
-      '<span>'+(w.glow?"<b>יש גישה</b>":"<b>אין גישה</b>")+' · בגיליון: '+(w.sheetGlow?"יש גישה":"אין גישה")+'</span>'+
-      (w.newApp
-        ? '<button class="btn'+(w.glow?" p":"")+'" data-glow="1" data-for="'+esc(w.email)+'">יש גישה</button>'+
+    return (w.newApp
+      ? '<div class="edit" id="fld-glow"><span>שיעורי בונוס Glow'+(w.glowOverride?" ✎":"")+'</span>'+
+          '<span>'+(w.glow?"<b>יש גישה</b>":"<b>אין גישה</b>")+' · בגיליון: '+(w.sheetGlow?"יש גישה":"אין גישה")+'</span>'+
+          '<button class="btn'+(w.glow?" p":"")+'" data-glow="1" data-for="'+esc(w.email)+'">יש גישה</button>'+
           '<button class="btn'+(w.glow?"":" p")+'" data-glow="0" data-for="'+esc(w.email)+'">אין גישה</button>'+
-          (w.glowOverride?'<button class="btn ghost" data-glow="" data-for="'+esc(w.email)+'">חזרה לגיליון</button>':'')
-        : '')+
-    '</div>'+
-    (w.newApp ? '' : '<div class="note">היא מנוהלת בקג\'אבי, ולכן שיעורי הבונוס שלה <b>מוגדרים שם ולא כאן</b>. השורה הזאת היא חיווי בלבד.</div>')+
+          (w.glowOverride?'<button class="btn ghost" data-glow="" data-for="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+        '</div>'
+      : '')+
     '<div id="fld-cancel">'+mcBlock(w)+'</div>'+
     (w.newApp
       ? '<div class="edit" id="fld-until"><span>גישה עד</span>'+
@@ -1167,7 +1150,7 @@ function render(){
         (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
         (w.cancelled?'<span class="grp">ביטלה</span>':'')+
         (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
-        (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+'</div>'+
+        (w.blocked?'<span class="grp dngpill">חסומה מהאפליקציה</span>':'')+'</div>'+
         '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+
           (w.newApp?' · גישה עד <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+(w.expired?" (הסתיימה)":""):"")+'</div>'+
         ((w.backSoon && w.backCohort)?'<div class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></div>':'')+
@@ -1190,7 +1173,7 @@ function render(){
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
       (w.cancelled?'<span class="grp">ביטלה</span>':'')+
       (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
-      (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+
+      (w.blocked?'<span class="grp dngpill">חסומה מהאפליקציה</span>':'')+
       (w.notes?'<span class="grp notepill">'+(w.notes>1?w.notes+' הערות ממתינות':'הערה ממתינה')+'</span>':'')+
       '</span>'+
       '<span class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</span>'+
@@ -1264,6 +1247,9 @@ function render(){
     var em = el.getAttribute("data-open");
     if(SEL === em){ SEL = ""; } else {
       SEL = em; EDITING = ""; STATS = ""; FREEZING = "";
+      // מתוך התור: פתיחת אישה חייבת לצאת מהתור, אחרת render מצייר את התור מחדש
+      // והלחיצה נראית כאילו לא עשתה כלום. דווח על ידי רון.
+      if(VIEW === "notes"){ VIEW = ""; TAB = "notes"; if(!NOTES[em]) notesLoad(em); render(); return; }
       // מי שנבחרה מתוך "הערות ממתינות" נפתחת ישר על ההערה שלה, כי זו הסיבה שנכנסו אליה.
       TAB = (VIEW === "notes") ? "notes" : "info";
       if(TAB === "notes" && !NOTES[em]) notesLoad(em);
@@ -1383,13 +1369,9 @@ function render(){
     // The one switch here that reaches a participant. Asked in both directions, because
     // removing the tag can start an automation just as adding it can.
     if(t === "cancelproc"){
-      var kajabi = el.getAttribute("data-kaj")==="1";
-      var msg = on
-        ? (kajabi
-          ? "לסמן אותה כביטול בתהליך?\n\nהתגית תיכתב במניצ'ט, ואם יש שם אוטומציה שמחוברת אליה היא תפעל, כולל הודעות שיישלחו אליה.\n\nשימי לב: היא מנוהלת בקג'אבי, ולכן החסימה מהאפליקציה החדשה לא משנה לה כלום.\nצריך לבטל לה את כל ההרשאות בקג'אבי, וזה לא קורה מכאן."
-          : "לסמן אותה כביטול בתהליך?\n\nשני דברים יקרו:\n1. התגית תיכתב במניצ'ט, ואם יש שם אוטומציה שמחוברת אליה היא תפעל, כולל הודעות שיישלחו אליה.\n2. היא תיחסם מהאפליקציה החדשה בכניסה הבאה שלה.\n\nאפשר לבטל את זה באותו כפתור.")
-        : "להסיר את הסימון \"ביטול בתהליך\"?\n\nהיא תחזור להיכנס לאפליקציה, וגם ההסרה נכתבת במניצ'ט ויכולה להפעיל שם אוטומציה.";
-      if(!confirm(msg)) return;
+      if(!confirm(on
+        ? "לסמן אותה כביטול בתהליך?\n\nשני דברים יקרו:\n1. התגית תיכתב במניצ'ט, ואם יש שם אוטומציה שמחוברת אליה היא תפעל, כולל הודעות שיישלחו אליה.\n2. היא תיחסם מהאפליקציה החדשה בכניסה הבאה שלה.\n\nאפשר לבטל את זה באותו כפתור."
+        : "להסיר את הסימון \"ביטול בתהליך\"?\n\nהיא תחזור להיכנס לאפליקציה, וגם ההסרה נכתבת במניצ'ט ויכולה להפעיל שם אוטומציה.")) return;
     }
     el.disabled=true;
     save(em,{tag:t, on:on}).then(function(r){
