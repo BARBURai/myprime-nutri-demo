@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.85";
+const ADMIN_VERSION = "5.87";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -316,6 +316,31 @@ export default async function handler(req, res) {
 
   // The notes one woman wrote, and the answers already sent to her. Read on demand when
   // her card is opened, like the ManyChat block: the list screen only needs the count.
+  // כל ההערות הפתוחות בבת אחת, לתור המענה. הרשימה קטנה כי היא רק מי שממתינה,
+  // ולכן זה נשאר קריאה אחת ולא אחת לכל שורה.
+  if (req.method === "GET" && req.query.notes === "all") {
+    try {
+      let pend = (await redis(RU, RT, "HGETALL", "notes:pending")) || {};
+      if (Array.isArray(pend)) {
+        const flat = pend; pend = {};
+        for (let i = 0; i < flat.length; i += 2) pend[flat[i]] = flat[i + 1];
+      }
+      const mails = Object.keys(pend).filter((e) => parseInt(pend[e], 10) > 0).slice(0, 60);
+      const out = {};
+      for (const em of mails) {
+        const [rawNotes, rawReplies] = await Promise.all([
+          redis(RU, RT, "LRANGE", `notes:${em}`, "0", "40"),
+          redis(RU, RT, "HGET", "notes:replies", em),
+        ]);
+        out[em] = {
+          notes: (rawNotes || []).map((x) => { try { return JSON.parse(x); } catch (e) { return null; } }).filter(Boolean),
+          replies: rawReplies ? JSON.parse(rawReplies) : [],
+        };
+      }
+      return res.status(200).json({ ok: true, all: out });
+    } catch (e) { return res.status(200).json({ ok: false, error: "notes_failed" }); }
+  }
+
   if (req.method === "GET" && req.query.notes) {
     const em = String(req.query.notes).trim().toLowerCase();
     try {
