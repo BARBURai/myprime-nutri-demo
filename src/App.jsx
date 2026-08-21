@@ -1073,7 +1073,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const heightOk = heightN >= 120 && heightN <= 210;
   // בדיקת טעות הקלדה בלבד. הבריאות נשמרת על ידי כלל ה-BMI במסך היעד ולא על ידי
   // מספר שרירותי כאן, שחסם נשים בריאות והכניס בשקט נשים בתת-משקל.
-  const weightOk = weightN >= 30 && weightN <= 250;
+  const weightOk = weightN >= 40 && weightN <= 200;
   // אין לה לאן לרדת. הקצב נכפה לשמירה, כי המסך מציג לה שמירה בלבד ואסור שהטיוטה
   // תישאר עם 250 שנבחר כברירת מחדל לפני שהיא הזינה גובה ומשקל.
   const noLoss = noLossRoom(weightN, heightN);
@@ -1118,7 +1118,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
             <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !heightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
             {err0 && !heightOk && errNote(heightCm === "" ? "יש למלא את הנתון" : "יש להזין גובה תקין בסנטימטרים")}
             <Field label="משקל נוכחי"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="decimal" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="" style={numStyle(err0 && !weightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></span></Field>
-            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "אפשר להזין משקל בין 30 ל-250 ק״ג")}
+            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "אפשר להזין משקל בין 40 ל-200 ק״ג")}
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
               {fixedStart ? (
@@ -2118,7 +2118,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
           <div style={{ paddingBottom: 4 }}>
             <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
             <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
-            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: 30, suffix: "ק״ג", init: profile.weightKg })} />
+            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: 40, suffix: "ק״ג", init: profile.weightKg })} />
             <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
             <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
             {maxStart ? (
