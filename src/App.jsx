@@ -588,7 +588,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.98";
+const VERSION = "5.99";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -6487,17 +6487,12 @@ export default function App() {
   };
   // החזרה לירידה היא לחיצה שלה ולעולם לא חישוב שלנו, ולכן אין יו-יו: בלי הלחיצה
   // שום דבר לא זז. המעבר לשמירה הוא היחיד שקורה לבד, כי שם אנחנו מגינים עליה.
-  // היא קראה ואישרה. נוסע על api/usage.js שנקרא ממילא, כי וורסל על 12 פונקציות
-  // מתוך 12 וקובץ חדש בתיקיית api מפיל את כל הדיפלוי. אם השליחה נכשלת המסך
-  // נסגר בכל מקרה: אישור שלה לעולם לא תלוי ברשת.
+  // היא קראה ואישרה. **נשמר על המכשיר שלה בלבד ואינו עוזב אותו.** רון ביקש
+  // תגית במסך הניהול, נשאלה שאלת הפרטיות, והוא ויתר עליה: מי שרואה תגית כזאת
+  // יודע שה-BMI שלה מתחת ל-20, וזו עובדה בריאותית שמסכי ההסכמה אינם מכסים.
   const ackLossStop = () => {
     setSheet(null);
     setProfile((pr) => ({ ...pr, lossAckAt: TODAY }));
-    if (!gateEmail) return;
-    fetch("/api/usage", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: gateEmail, bmiAck: 1 }),
-    }).catch(() => {});
   };
   const resumeLoss = () => setProfile((pr) => ({ ...pr, lossStopAt: null, weeklyRateG: 250, goalWeightKg: Math.max(minHealthyKg(pr.heightCm), curWeight - 0.5) }));
   const reportAddWeight = () => setSheet("weight");

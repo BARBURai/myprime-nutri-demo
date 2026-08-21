@@ -140,23 +140,24 @@ check('ובלי "הורדה", שאינה עברית תקנית כאן', !src.inc
 check("ומסך הרישום נשאר בנוסח שלו, בלי נוספת", src.includes("לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל."));
 check("יש לה דרך להגיע לצוות משני המסכים", (src.match(/wa\.me\/972547304177/g) || []).length >= 4);
 
-console.log("\nמה שעוזב את המכשיר שלה, ומה שלעולם לא\n");
-// רון שינה את ההחלטה ב-21 באוגוסט וביקש חיווי אחד: מי אישרה שקראה. **ורק זה.**
+console.log("\nשום דבר לא עוזב את המכשיר שלה\n");
+// רון ביקש תגית "אישרה BMI" במסך הניהול, נשאלה שאלת הפרטיות, והוא ויתר עליה:
+// מי שרואה תגית כזאת יודע שה-BMI שלה מתחת ל-20, ומסכי ההסכמה אינם מכסים את זה.
 const usage = readFileSync(new URL("../api/usage.js", import.meta.url), "utf8");
 const admin = readFileSync(new URL("../api/admin.js", import.meta.url), "utf8");
+const adminHtml = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
 check("שרת השימוש אינו יודע מה זה משקל או גובה", !/weightKg|heightCm|\bkg\b/i.test(usage));
-check("ואינו שומר שום ערך של BMI, אלא סימון בלבד", !/bmiValue|bmiOf|MIN_LOSS_BMI/.test(usage) && /HSET", "bmi:ack"/.test(usage));
-check("מה שנשמר הוא התאריך ולא מספר שלה", /new Date\(\)\.toISOString\(\)\);? \} catch \(e\) \{\}\n\s*\}/.test(usage.slice(usage.indexOf("bmi:ack") - 200, usage.indexOf("bmi:ack") + 200)) || usage.includes('"bmi:ack", email, new Date().toISOString()'));
-check("מסך הניהול אינו יודע לחשב BMI בעצמו", !/noLossRoom|minHealthyKg|MIN_LOSS_BMI/.test(admin));
-check("והאפליקציה שולחת סימון ולא מספר", src.includes("bmiAck: 1") && !/body:[^;]*weightKg/.test(src));
+check("ואינו יודע דבר על כלל ה-BMI", !/bmi/i.test(usage));
+check("מסך הניהול אינו קורא ואינו מציג שום דבר מזה", !/bmi/i.test(admin) && !/bmiAck|אישרה BMI/.test(adminHtml));
+check("והאפליקציה אינה שולחת את האישור לשום מקום", !/bmiAck/.test(src));
 check("היא לא שולחת את מצב השמירה עצמו", !/body:[^;]*lossStopAt/.test(src));
 
-console.log("\nמסך המעבר: כפתור אחד, והאישור נרשם\n");
+console.log("\nמסך המעבר: כפתור אחד, והאישור נשמר אצלה\n");
 check("ההמלצה על הדיאטנית היא טקסט ולא כפתור", src.includes("אנחנו ממליצים לך ליצור קשר עם הדיאטנית לקבלת הנחיות.") && !/LossStopSheet[\s\S]{0,1200}wa\.me/.test(src));
 check("ומעל הכפתור כתוב שהלחיצה היא אישור", src.includes('בלחיצה על "הבנתי" את מאשרת שקראת את ההודעה הזאת.'));
 check("יש בו כפתור אחד בלבד", (src.slice(src.indexOf("function LossStopSheet("), src.indexOf("function FastLossSheet(")).match(/<Btn |<a href=/g) || []).length === 1);
 check("הלחיצה נרשמת גם אצלה, כדי שלא תלוי ברשת", src.includes("lossAckAt: TODAY"));
-check("ומסך הניהול מציג תגית", /bmipill">אישרה BMI/.test(readFileSync(new URL("../public/admin.html", import.meta.url), "utf8")));
+check("והאישור נשאר אצלה בלבד", src.includes("setProfile((pr) => ({ ...pr, lossAckAt: TODAY }));"));
 
 console.log("\nשורת משקל היעד\n");
 check("אינה מוצגת למי שבשמירה, כי אין לה יעד", src.includes('{!noLoss && <EditRow label="משקל יעד"'));
