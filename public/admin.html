@@ -258,6 +258,21 @@
     background:var(--card-2);border:1px solid var(--line);font-size:14px;
   }
   .qinfo .flabel{display:inline}
+  .qprev{display:grid;gap:9px;margin-top:4px}
+  .qprev-none{color:var(--ink-3);font-size:13.5px}
+  .qprev-i{border-inline-start:3px solid var(--line-2);padding-inline-start:10px}
+  .qprev-q{font-size:13.5px;color:var(--ink-2)}
+  .qprev-a{
+    margin-top:5px;padding:9px 11px;border-radius:9px;background:var(--pinkbg);
+    color:var(--ink);font-size:14.5px;line-height:1.6;white-space:pre-wrap;
+  }
+  .qprev-m{font-size:12.5px;color:var(--ink-3);margin-top:4px}
+  .whybox{
+    margin-top:11px;display:grid;gap:4px;padding:11px 13px;border-radius:11px;
+    background:var(--warnbg);border:1px solid var(--warn-line);
+  }
+  .whybox b{font-size:13.5px;color:var(--warn)}
+  .whybox span{font-size:13.5px;color:var(--ink-2);line-height:1.55}
   .qitem .note-card{border:0;padding:0;box-shadow:none;background:none}
   .sugbox{margin-top:11px;display:grid;gap:6px}
   .sug{
@@ -723,6 +738,25 @@ var NOTES = {}, DRAFT = {}, NOTE_TEXT = {}, NOTE_AT = {}, NOTE_SCREEN = {};
 // תור המענה: כל ההערות הפתוחות במסך אחד, אחת מתחת לשנייה. עונים, היא נעלמת, והבאה
 // כבר שם. בלי להיכנס לכל אישה בנפרד ובלי לחזור לרשימה בין אחת לשנייה.
 var QUEUE = null, QINFO = {};
+// הערות שאין להן ניסוח מוכן, ולמה. בלי השורה הזאת נראה כאילו המסך פשוט לא מצא כלום,
+// ובפועל יש סיבה: או שזו החלטה של רון ולא תקלה, או שחסר מידע מהמשתתפת עצמה.
+var TALK = [
+  { re: /(לא מצליחה|לא מקבל|לא נותן).{0,25}(להזין|להכניס).{0,20}משקל|משקל\s*\d{2}\b/,
+    why: "זו החלטה שלך ולא תקלה: האפליקציה מקבלת משקל בין 50 ל-150 ק״ג, וההחלטה אם להרחיב את הטווח פתוחה אצלך. עד שתחליט אין מה להבטיח לה." },
+  { re: /יעד.{0,30}(פעילות|אימון)|פעילות.{0,30}יעד/,
+    why: "מצאתי את הסיבה בקוד: ביומן היעד כן מתעדכן לפי האימון והצעדים, ובדוח הבדיקה נעשית מול היעד הבסיסי. התיקון מוכן וממתין להחלטה שלך." },
+  { re: /(כמות|גרם|הגר).{0,40}(לא התאפס|נשאר|1 נשאר)/,
+    why: "מצאתי את הסיבה בקוד: שדה הכמות מגיע עם ערך בפנים וההקלדה נוספת לו במקום להחליף אותו. התיקון מוכן וממתין להחלטה שלך." },
+  { re: /^.{0,25}(שגוי|לא נכון|לא עובד).{0,15}$/,
+    why: "ההערה קצרה מדי כדי לדעת למה היא מתכוונת. שווה לשאול אותה בוואטסאפ מה בדיוק הוצג לה, ואז אפשר לענות לגופו של עניין." },
+  { re: /(נמחק|נעלמ|מחק לי)/,
+    why: "צריך לברר איתה מה בדיוק נעלם ומתי, כדי שאפשר יהיה לבדוק את זה בקוד. אין כאן עדיין תשובה שאפשר לתת." },
+];
+function talkWhy(text){
+  var t = String(text||"").replace(/^\[נכתב [^\]]*\]\s*/, "");
+  for(var i = 0; i < TALK.length; i++) if(TALK[i].re.test(t)) return TALK[i].why;
+  return "";
+}
 // "נכתבה ב-" בלשון אחת לשני המקורות: הערה שהועברה מהקובץ נושאת את התאריך שלה
 // בתגית שבתחילת הטקסט, וחדשה מוחתמת בזמן אמת.
 function noteWhen(n){
@@ -1033,12 +1067,16 @@ function render(){
       var sug = bankSuggest(n.text);
       return '<div class="note-card">'+head+
         (BANK === null ? '<div class="nhint" style="margin-top:10px">טוען תשובות מוכנות...</div>' :
-         sug.length ? '<div class="sugbox"><div class="flabel">תשובות מוכנות שמתאימות לשאלה הזאת</div>'+
+         !sug.length ? '<div class="whybox"><b>אין ניסוח מוכן להערה הזאת</b>'+
+            (talkWhy(n.text) ? '<span>'+esc(talkWhy(n.text))+'</span>'
+                             : '<span>אפשר לכתוב תשובה כאן, או ללחוץ "העתקה לצ\'אט" כדי לדון בה איתי.</span>')+
+          '</div>' :
+         '<div class="sugbox"><div class="flabel">תשובות מוכנות שמתאימות לשאלה הזאת</div>'+
             sug.map(function(e){
               return '<button class="sug" data-usebank="'+esc(e.id)+'" data-note="'+esc(n.id)+'">'+
                 '<b>'+esc(e.q)+'</b><span>'+esc(e.a)+'</span>'+
                 '<i class="use">\u2190 להשתמש בתשובה הזאת</i></button>';
-            }).join("")+'</div>' : '')+
+            }).join("")+'</div>')+
         '<div class="flabel" style="margin-top:10px">התשובה שהיא תראה באפליקציה</div>'+
         '<textarea class="field" rows="3" id="rp_'+esc(n.id)+'" placeholder="כתבי כאן...">'+esc(DRAFT[n.id]||"")+'</textarea>'+
         '<div class="nhint">היא תראה את הטקסט הזה בדיוק כמו שכתבת, בתוך בועת ההערות באפליקציה. <b>אחרי השליחה אי אפשר לבטל.</b></div>'+
@@ -1110,7 +1148,23 @@ function render(){
               '<div><span class="flabel">מייל</span> <span class="mono">'+esc(w.email||"")+'</span>'+
                 ' <button class="btn sm" data-copy="'+esc(w.email||"")+'">העתקה</button></div>'+
               '<div><span class="flabel">מחזור</span> '+esc(il(w.start||""))+' · '+esc(dayInProgram(w))+' · '+esc(lastSeen(w))+'</div>'+
-              '<div><button class="btn sm" data-open="'+esc(em)+'">פתיחת הכרטיס המלא שלה</button></div>'+
+              (function(){
+                // כל מה שכבר נענה לה, כאן ולא בכרטיס: רון ביקש שהכל יהיה נגיש מהמסך הזה.
+                var prev = (QUEUE[em].notes || []).map(function(x){ return { n:x, r: (QUEUE[em].replies||[]).filter(function(y){ return y.to === x.id; })[0] }; })
+                  .filter(function(x){ return x.r; });
+                if(!prev.length) return '<div class="qprev-none">אין עדיין התכתבות קודמת איתה.</div>';
+                return '<div class="qprev"><span class="flabel">ההתכתבות עד היום ('+prev.length+')</span>'+
+                  prev.map(function(x){
+                    return '<div class="qprev-i">'+
+                      '<div class="qprev-q">'+esc(noteWhen(x.n))+' · '+esc(String(x.n.text||"").replace(/^\[נכתב [^\]]*\]\s*/, ""))+'</div>'+
+                      (x.r.text
+                        ? '<div class="qprev-a">'+esc(x.r.text)+'</div>'+
+                          '<div class="qprev-m">נשלח '+esc(stamp(x.r.at))+(x.r.by?' · '+esc(x.r.by):'')+
+                            (x.r.read ? ' · <span class="okread">נקראה '+esc(stamp(x.r.read))+'</span>' : ' · ממתין שהיא תפתח את האפליקציה')+'</div>'
+                        : '<div class="qprev-m">סומנה כטופלה '+esc(stamp(x.r.at))+(x.r.by?' · '+esc(x.r.by):'')+', בלי תשובה אליה.</div>')+
+                    '</div>';
+                  }).join("")+'</div>';
+              })()+
             '</div>' : '')+
             tabNotes(w, { state:"ok", notes:[n], replies: st.replies }, true)+
           '</div>' });
