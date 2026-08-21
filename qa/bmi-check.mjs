@@ -55,9 +55,9 @@ check("בלי גובה או בלי משקל אין חסימה", noLossRoom(60, 0
 
 console.log("\nשדה המשקל ברישום הוא בדיקת טעות הקלדה בלבד\n");
 const wOk = line("  const weightOk =");
-check("הטווח הוא 30 עד 250", /weightN >= 30 && weightN <= 250/.test(wOk), wOk.trim());
+check("הטווח הוא 40 עד 200", /weightN >= 40 && weightN <= 200/.test(wOk), wOk.trim());
 check("הוא כבר לא 50 עד 150, שחסם משתתפת אמיתית", !/>= 50/.test(wOk));
-check("וההודעה אומרת את הטווח במקום להכריז שהמספר שגוי", src.includes("אפשר להזין משקל בין 30 ל-250 ק״ג") && !src.includes("יש להזין משקל תקין בק״ג"));
+check("וההודעה אומרת את הטווח במקום להכריז שהמספר שגוי", src.includes("אפשר להזין משקל בין 40 ל-200 ק״ג") && !src.includes("יש להזין משקל תקין בק״ג"));
 
 console.log("\nמסך היעד\n");
 check("הדגל מחושב מהגובה ומהמשקל שהיא הזינה", src.includes("const noLoss = noLossRoom(weightN, heightN);"));
@@ -69,7 +69,7 @@ check("ונאמר לה ששאר התוכנית פתוחה", src.includes("כל �
 check("וגם גרף התחזית שטוח, ולא מצייר לה ירידה", src.includes("const proj = projection(weightN, rateEff === 0 ? weightN : goalEff, rateEff);"));
 
 console.log("\nמה שלא נסגר בפניה\n");
-check("המשקל הנוכחי בפרופיל אינו כבול לרף, כי הוא עובדה ולא יעד", /key: "weightKg"[^}]*min: 30,/.test(src));
+check("המשקל הנוכחי בפרופיל אינו כבול לרף, כי הוא עובדה ולא יעד", /key: "weightKg"[^}]*min: 40,/.test(src));
 check("היעד בפרופיל כן כבול לרף", /key: "goalWeightKg"[^}]*min: minHealthyKg\(profile\.heightCm\)/.test(src));
 check("הזנת משקל יומית ממשיכה לקבל כל ערך סביר ורק מזהירה", src.includes("num >= 30 && num <= 400") && src.includes("bmiOf(num, heightCm) < UNDERWEIGHT_BMI"));
 
