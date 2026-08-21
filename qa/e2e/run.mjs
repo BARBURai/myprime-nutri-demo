@@ -237,9 +237,18 @@ const CHECKS = [
       await page.waitForTimeout(400);
 
       // 48 ק״ג עדיין מתחת לקו השני, שהוא 49 ק״ג בגובה הזה
+      // 48 בגובה 152 יושב בין שני הקווים: מעל 46.5 ומתחת ל-49. שם נשבר הכל פעם
+      // אחת, כי הנעילה נשענה על המשקל של הרגע ולא על המצב.
       await logWeight(48);
       await openBase();
-      const tooEarly = !(await page.locator("body").innerText()).includes("אפשר לחזור לירידה במשקל");
+      body = await page.locator("body").innerText();
+      const tooEarly = !body.includes("אפשר לחזור לירידה במשקל") && !body.includes("משקל יעד");
+      await page.locator("text=קצב ירידה").first().click();
+      await page.waitForTimeout(400);
+      body = await page.locator("body").innerText();
+      const stillLocked = !body.includes("ירידה 250 ג׳ בשבוע") && !body.includes("ירידה 500 ג׳ בשבוע");
+      await page.mouse.click(8, 8);
+      await page.waitForTimeout(400);
 
       await logWeight(49.5);
       await openBase();
@@ -251,8 +260,8 @@ const CHECKS = [
       const back = st2.weeklyRateG === 250 && !st2.lossStopAt;
 
       await context.close();
-      const ok = shown && moved && acked && locked && noGoalRow && tooEarly && offered && back && !errors.length;
-      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · אישרה ${acked} · הקצבים נעלמו ${locked} · אין משקל יעד ${noGoalRow} · ב-48 לא מוצע ${tooEarly} · ב-49.5 מוצע ${offered} · חזרה ${back} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
+      const ok = shown && moved && acked && locked && noGoalRow && tooEarly && stillLocked && offered && back && !errors.length;
+      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · אישרה ${acked} · הקצבים נעלמו ${locked} · אין משקל יעד ${noGoalRow} · ב-48 לא מוצע ${tooEarly} · ונשאר נעול ${stillLocked} · ב-49.5 מוצע ${offered} · חזרה ${back} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
     },
   },
   {

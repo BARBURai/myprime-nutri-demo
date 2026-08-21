@@ -118,8 +118,11 @@ check("מי שנרשמת כשאין לה לאן לרדת מסומנת כבר ב�
 console.log("\nשתי הדלתות בפרופיל\n");
 check("עריכת המשקל בפרופיל עוברת דרך אותו כלל", src.includes('if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(pendingWeight.value, profile.heightCm))'));
 check("ומציגה לה את אותו מסך", src.includes("setShowLossStop(true)"));
-check("קצב הירידה מתחת לקו מציג שמירה בלבד", src.includes("{(noLoss ? [0] : RATE_OPTIONS).map((r) => {"));
-check("הכלל בפרופיל נקרא מהמשקל האחרון שדיווחה", src.includes("const noLoss = noLossRoom(curWeight != null ? curWeight : profile.weightKg, profile.heightCm);"));
+check("קצב הירידה בשמירה מציג שמירה בלבד", src.includes("{(inMaintain ? [0] : RATE_OPTIONS).map((r) => {"));
+// הבאג שרון תפס: הנעילה נשענה על "היא מתחת לקו עכשיו" ולא על "העברנו אותה
+// לשמירה", ולכן בטווח שבין שני הקווים הרשימה נפתחה והיא יכלה לבחור 250 לבד.
+check("והנעילה נשענת על המצב ולא על המשקל של הרגע", src.includes("const inMaintain = !!profile.lossStopAt;") && !/const noLoss = noLossRoom\(curWeight/.test(src));
+check("שלושת המסכים בפרופיל שואלים את אותו דגל", (src.match(/inMaintain/g) || []).length >= 5);
 
 console.log("\nהקצב, ולא רק המספר\n");
 const wk = (n, kg) => ({ date: addDays("2026-08-21", -n), kg });
@@ -160,7 +163,14 @@ check("הלחיצה נרשמת גם אצלה, כדי שלא תלוי ברשת", 
 check("והאישור נשאר אצלה בלבד", src.includes("setProfile((pr) => ({ ...pr, lossAckAt: TODAY }));"));
 
 console.log("\nשורת משקל היעד\n");
-check("אינה מוצגת למי שבשמירה, כי אין לה יעד", src.includes('{!noLoss && <EditRow label="משקל יעד"'));
+check("אינה מוצגת למי שבשמירה, כי אין לה יעד", src.includes('{!inMaintain && <EditRow label="משקל יעד"'));
+
+console.log("\nהטווח שבין שני הקווים, וזה מה שנשבר\n");
+// בגובה 155: הקו התחתון 48.5, הקו לחזרה 50.5. ב-50 היא בין שניהם.
+check("ב-50 ק״ג בגובה 155 היא כבר לא מתחת לקו", noLossRoom(50, 155) === false);
+check("ועדיין לא רשאית לחזור", canResumeLoss(50, 155) === false);
+check("ולכן המסכים חייבים להישאר נעולים, כי הם נשענים על lossStopAt", src.includes("const inMaintain = !!profile.lossStopAt;"));
+check("והחזרה נבדקת מול הקו השני ולא מול הראשון", src.includes("canResume = inMaintain && canResumeLoss("));
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.\n");
 process.exit(fail ? 1 : 0);
