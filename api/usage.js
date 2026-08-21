@@ -8,8 +8,17 @@
 //
 // POST /api/usage   { email, days: {"1-1":[2,3], ...}, videosDone, videosTotal, views, trackerDays }
 // Stored in the Redis HASH `admin:usage`, field = email.
+//
+// The same call also carries two small things about the notes bubble, because Vercel Hobby
+// allows twelve serverless functions and we are on twelve. A file of its own would fail the
+// whole deploy, so these ride here rather than becoming an endpoint:
+//   note:     { screen, text }  - what she just wrote, filed under her address so the office
+//                                 screen can answer it. It still goes to the Google Sheet too.
+//   noteRead: "<id>"            - she read the answer and tapped "תודה, הבנתי".
 
 const MAX_DAYS = 70;
+const MAX_NOTES = 40;        // per woman, oldest dropped
+const NOTE_CHARS = 1500;
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -62,6 +71,39 @@ export default async function handler(req, res) {
     await redis(RU, RT, "HSET", "admin:usage", email, JSON.stringify(rec));
     // "She finished today's tasks", so tonight's reminder can skip her. One day only: it
     // expires on its own, and tomorrow she is back in the list unless she finishes again.
+    // A note she just wrote. Bounded and rebuilt here like everything else, because this
+    // endpoint is unauthenticated. The sheet stays the record; this copy exists so the
+    // office screen can reply to her inside the app.
+    const note = body && body.note;
+    if (note && String(note.text || "").trim()) {
+      const one = {
+        id: "n" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36),
+        screen: String(note.screen || "").slice(0, 40),
+        text: String(note.text).trim().slice(0, NOTE_CHARS),
+        at: new Date().toISOString(),
+      };
+      try {
+        await redis(RU, RT, "LPUSH", `notes:${email}`, JSON.stringify(one));
+        await redis(RU, RT, "LTRIM", `notes:${email}`, "0", String(MAX_NOTES - 1));
+        // One counter per woman, so the office screen learns who is waiting in a single
+        // read instead of one call per name.
+        await redis(RU, RT, "HINCRBY", "notes:pending", email, "1");
+      } catch (e) {}
+    }
+
+    // She opened the bubble and tapped "תודה, הבנתי". Marking it read is what takes the dot
+    // off her bubble and tells the office she saw it.
+    const readId = String((body && body.noteRead) || "").slice(0, 40);
+    if (readId) {
+      try {
+        const raw = await redis(RU, RT, "HGET", "notes:replies", email);
+        const list = raw ? JSON.parse(raw) : [];
+        let hit = false;
+        list.forEach((r) => { if (r.id === readId && !r.read) { r.read = new Date().toISOString(); hit = true; } });
+        if (hit) await redis(RU, RT, "HSET", "notes:replies", email, JSON.stringify(list));
+      } catch (e) {}
+    }
+
     if (body && body.doneToday) {
       const day = String(body.day || "").match(/^\d{4}-\d{2}-\d{2}$/) ? body.day : null;
       if (day) { try { await redis(RU, RT, "SET", `trk:${day}:${email}`, "1", "EX", 172800); } catch (e) {} }

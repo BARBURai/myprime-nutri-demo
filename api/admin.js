@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.72";
+const ADMIN_VERSION = "5.74";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -305,6 +305,21 @@ export default async function handler(req, res) {
     } catch (e) { return res.status(500).json({ ok: false, error: "codes_failed" }); }
   }
 
+  // The notes one woman wrote, and the answers already sent to her. Read on demand when
+  // her card is opened, like the ManyChat block: the list screen only needs the count.
+  if (req.method === "GET" && req.query.notes) {
+    const em = String(req.query.notes).trim().toLowerCase();
+    try {
+      const [rawNotes, rawReplies] = await Promise.all([
+        redis(RU, RT, "LRANGE", `notes:${em}`, "0", "40"),
+        redis(RU, RT, "HGET", "notes:replies", em),
+      ]);
+      const notes = (rawNotes || []).map((x) => { try { return JSON.parse(x); } catch (e) { return null; } }).filter(Boolean);
+      const replies = rawReplies ? JSON.parse(rawReplies) : [];
+      return res.status(200).json({ ok: true, notes, replies });
+    } catch (e) { return res.status(200).json({ ok: false, error: "notes_failed" }); }
+  }
+
   // One woman's live state in ManyChat, read when the clerk opens her card. It is per-woman
   // and on demand on purpose: ManyChat has no endpoint that lists everyone carrying a tag,
   // so the only alternative would be one call per row, and the screen would never load.
@@ -383,6 +398,38 @@ export default async function handler(req, res) {
     // With an issued code the name is the code's, not whatever was typed in the browser, so
     // the line in her card saying who did this cannot be faked.
     const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;
+    // An answer to a note she wrote. It is the one thing on this screen that reaches the
+    // participant herself, so it is deliberately its own route and returns straight away:
+    // nothing else about her is touched by it.
+    if (body && (body.reply || body.noteDone)) {
+      if (!EMAIL_RE.test(email)) return res.status(400).json({ ok: false, error: "bad_email" });
+      const noteId = String((body.reply && body.reply.to) || body.noteDone || "").slice(0, 40);
+      if (!noteId) return res.status(400).json({ ok: false, error: "no_note" });
+      const text = String((body.reply && body.reply.text) || "").trim().slice(0, 1500);
+      if (body.reply && !text) return res.status(400).json({ ok: false, error: "no_text" });
+      try {
+        const raw = await redis(RU, RT, "HGET", "notes:replies", email);
+        const list = raw ? JSON.parse(raw) : [];
+        if (list.some((r) => r && r.to === noteId)) return res.status(200).json({ ok: false, error: "already" });
+        list.push({
+          id: "r" + Date.now().toString(36),
+          to: noteId,
+          // No text means the clerk marked it handled without answering: a bug report gets a
+          // fix, not a message, and nothing lights up on her bubble.
+          text,
+          by,
+          at: new Date().toISOString(),
+          read: "",
+        });
+        await redis(RU, RT, "HSET", "notes:replies", email, JSON.stringify(list.slice(-60)));
+        try {
+          const left = await redis(RU, RT, "HINCRBY", "notes:pending", email, "-1");
+          if (Number(left) <= 0) await redis(RU, RT, "HDEL", "notes:pending", email);
+        } catch (e) {}
+        return res.status(200).json({ ok: true, sent: !!text });
+      } catch (e) { return res.status(500).json({ ok: false, error: "reply_failed" }); }
+    }
+
     // Each field is edited on its own, and an empty string means "back to the sheet". The
     // key being absent is what distinguishes "not touched" from "cleared".
     const hasUntil = body && Object.prototype.hasOwnProperty.call(body, "until");
@@ -684,6 +731,18 @@ export default async function handler(req, res) {
       needsGroup: !w.cancelled && !group && (start === thisWeek || start === nextWeek),
     };
   });
+
+  // Who is waiting for an answer. One read of a small hash, and the number rides on each
+  // woman so the list can mark her without a second call.
+  let pending = {};
+  if (RU && RT) {
+    try { pending = (await redis(RU, RT, "HGETALL", "notes:pending")) || {}; } catch (e) { pending = {}; }
+    if (Array.isArray(pending)) {
+      const flat = pending; pending = {};
+      for (let i = 0; i < flat.length; i += 2) pending[flat[i]] = flat[i + 1];
+    }
+  }
+  women.forEach((w) => { const n = parseInt(pending[w.email], 10); if (n > 0) w.notes = n; });
 
   return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women });
 }

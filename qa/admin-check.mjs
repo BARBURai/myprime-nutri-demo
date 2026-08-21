@@ -32,7 +32,7 @@ let CSV2 = null;   // lets a test swap the sheet for a few rows of its own
 // A stand-in ManyChat. `MC.accept` is the one value shape it is willing to store, so a test
 // can make it refuse everything and prove the screen says so instead of reporting success.
 const MC = { on: false, accept: null, stored: "", writes: [], calls: 0 };
-const store = { hash: {}, kv: {} };
+const store = { hash: {}, kv: {}, list: {} };
 globalThis.fetch = async (url, opts) => {
   const u = String(url);
   if (u.startsWith("https://sheet.test")) return { ok: true, text: async () => (CSV2 || CSV) };
@@ -74,6 +74,10 @@ globalThis.fetch = async (url, opts) => {
   else if (cmd === "SET") { store.kv[a] = b; result = "OK"; }
   else if (cmd === "GET") result = store.kv[a] ?? null;
   else if (cmd === "DEL") { const had = store.kv[a] !== undefined; delete store.kv[a]; result = had ? 1 : 0; }
+  else if (cmd === "HINCRBY") { const h = H(a); h[b] = String((parseInt(h[b], 10) || 0) + parseInt(c, 10)); result = Number(h[b]); }
+  else if (cmd === "LPUSH") { store.list[a] = store.list[a] || []; store.list[a].unshift(c ?? b); result = store.list[a].length; }
+  else if (cmd === "LTRIM") { const L = store.list[a] || []; store.list[a] = L.slice(Number(b), Number(c) + 1); result = "OK"; }
+  else if (cmd === "LRANGE") { const L = store.list[a] || []; result = L.slice(Number(b), Number(c) + 1); }
   else result = 0; // ZADD / ZREM / ZCARD / ZRANGE etc.
   if (cmd === "ZRANGE" || cmd === "ZREVRANGE") result = [];
   return { ok: true, json: async () => ({ result }) };
@@ -622,6 +626,49 @@ console.log("\nחיפוש טלפון במסך הניהול");
   check("בלי אפס ובלי 972", phoneKey("547676619") === want);
   check("עם 00 במקום פלוס", phoneKey("00972547676619") === want);
   check("שם אינו מייצר מספר", phoneKey("רונית לוי") === "");
+}
+
+console.log("\nהערות ותשובות");
+{
+  const EM = "yafit@test.com";
+  await callUsage({ email: EM, note: { screen: "יומן", text: "איפה מזינים מים?" } });
+  const list = (await callAdmin({ key: KEY, notes: EM })).body;
+  check("הערה שנכתבה באפליקציה נשמרת אצלנו", list.ok && list.notes.length === 1 && list.notes[0].text === "איפה מזינים מים?");
+  check("ועם המסך שממנו נכתבה", list.notes[0].screen === "יומן");
+
+  const women = () => callAdmin({ key: KEY }).then((r) => r.body.women.find((w) => w.email === EM));
+  check("היא מסומנת ברשימה כממתינה לתשובה", (await women()).notes === 1);
+
+  const id = list.notes[0].id;
+  const bad = await callAdmin({ key: KEY }, "POST", { email: EM, by: "רון", reply: { to: id, text: "   " } });
+  check("תשובה ריקה נדחית", bad.body.ok === false);
+
+  // עד שהתשובה נשלחת, אין לה שום דבר לקרוא
+  const before = await callAccess(EM);
+  check("לפני שנשלחה תשובה, השער לא מחזיר כלום", (before.body.replies || []).length === 0);
+
+  await callAdmin({ key: KEY }, "POST", { email: EM, by: "רון", reply: { to: id, text: "לוחצים על טבעת המים 💜" } });
+  const after = await callAccess(EM);
+  check("אחרי השליחה השער מחזיר לה את התשובה", (after.body.replies || []).length === 1);
+  check("והטקסט הוא בדיוק מה שנכתב", after.body.replies[0].text === "לוחצים על טבעת המים 💜");
+  check("והיא כבר לא מסומנת כממתינה", !(await women()).notes);
+
+  const twice = await callAdmin({ key: KEY }, "POST", { email: EM, by: "רון", reply: { to: id, text: "עוד אחת" } });
+  check("אי אפשר לענות פעמיים לאותה הערה", twice.body.ok === false);
+
+  await callUsage({ email: EM, noteRead: after.body.replies[0].id });
+  check("אחרי שהיא לחצה 'תודה, הבנתי' התשובה לא חוזרת", ((await callAccess(EM)).body.replies || []).length === 0);
+  const seen = (await callAdmin({ key: KEY, notes: EM })).body.replies[0];
+  check("והמשרד רואה שהיא נקראה", !!seen.read);
+
+  // סימון כטופל בלי תשובה: יורד מהרשימה של המשרד, ואצלה לא נדלק כלום
+  await callUsage({ email: EM, note: { screen: "יומן", text: "לא מצליחה להזין משקל 44" } });
+  const two = (await callAdmin({ key: KEY, notes: EM })).body.notes;
+  const bugId = two.find((n) => n.text.includes("44")).id;
+  check("הערה שנייה מצטרפת לראשונה", two.length === 2);
+  await callAdmin({ key: KEY }, "POST", { email: EM, by: "רון", noteDone: bugId });
+  check("סימון כטופל מוריד אותה מהרשימה", !(await women()).notes);
+  check("ואצלה לא נדלק שום דבר", ((await callAccess(EM)).body.replies || []).length === 0);
 }
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");

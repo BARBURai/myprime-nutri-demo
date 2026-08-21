@@ -226,6 +226,23 @@
   .frzhead span{color:var(--ink-2);font-size:13.5px}
   .frz .note{margin-top:8px}
 
+  .tbadge{
+    display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;
+    border-radius:999px;background:var(--warn);color:#fff;font-size:11px;font-weight:700;
+    font-style:normal;padding:0 5px;margin-inline-start:6px;
+  }
+  .note-card{border:1px solid var(--line);border-radius:12px;padding:13px;background:var(--card)}
+  .note-card.done{background:var(--card-2)}
+  .nhead{font-size:12.5px;color:var(--ink-3);font-weight:600}
+  .ntext{font-size:15.5px;color:var(--ink);margin-top:5px;line-height:1.6;white-space:pre-wrap}
+  .nhint{font-size:12.5px;color:var(--ink-3);margin-top:6px;line-height:1.55}
+  .nsent{font-size:12.5px;color:var(--ink-2);margin-top:9px}
+  .okread{color:var(--ok);font-weight:700}
+  .nreply{
+    margin-top:7px;padding:10px 12px;border-radius:10px;background:var(--pinkbg);
+    color:var(--ink);font-size:15px;line-height:1.6;white-space:pre-wrap;
+  }
+  .note-card textarea.field{margin-top:5px;resize:vertical;font-family:inherit}
   .lit{outline:2px solid var(--pink);outline-offset:6px;border-radius:9px}
 
   .card{
@@ -473,6 +490,17 @@ function phoneOf(email){
 // What ManyChat says about one woman right now, keyed by email. Read only when her card is
 // opened: ManyChat cannot list everyone carrying a tag, so there is no bulk version of this.
 var MC = {};
+function notesLoad(email){
+  NOTES[email] = { state:"loading" };
+  fetch("/api/admin?key="+encodeURIComponent(KEY)+"&notes="+encodeURIComponent(email))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      NOTES[email] = (d && d.ok) ? { state:"ok", notes:d.notes||[], replies:d.replies||[] } : { state:"failed" };
+      render();
+    })
+    .catch(function(){ NOTES[email] = { state:"failed" }; render(); });
+}
+
 function mcLoad(email){
   var ph = phoneOf(email);
   if(!ph){ MC[email] = { state:"nophone" }; render(); return; }
@@ -614,6 +642,9 @@ function appGap(){
 var CODES = null, CODESOPEN = false, FREEZING = "", VIEW = "";
 var SEL = "";   // המשתתפת שהכרטיס שלה פתוח. במחשב הוא יושב בצד, בטלפון הוא תופס את המסך
 var TAB = "info";   // הלשונית הפתוחה בכרטיס
+// ההערות של אישה אחת, נקראות בפתיחת הלשונית שלה בלבד. הרשימה הראשית מקבלת מספר
+// בלבד, ולכן אין כאן קריאה אחת לכל שורה.
+var NOTES = {}, DRAFT = {};
 function loadCodes(){
   return fetch("/api/admin?codes=1&key="+encodeURIComponent(KEY))
     .then(function(r){ return r.json(); })
@@ -664,7 +695,8 @@ function render(){
   var missing = DATA.women.filter(function(w){ return w.needsGroup; });
   var noDate = DATA.women.filter(function(w){ return w.frozen && !!w.freezeTodo; });
   var backSoon = DATA.women.filter(function(w){ return w.backSoon; });
-  var base = MISSING ? missing : (VIEW==="nodate" ? noDate : VIEW==="backsoon" ? backSoon : pool);
+  var notesWaiting = DATA.women.filter(function(w){ return w.notes > 0; });
+  var base = MISSING ? missing : (VIEW==="nodate" ? noDate : VIEW==="backsoon" ? backSoon : VIEW==="notes" ? notesWaiting : pool);
 
   // מחזור אחד ברשימה נפתחת, במקום שלוש שורות של צ'יפים לשנה, לחודש ולמחזור.
   // ארבעים מחזורים הם בדיוק מה שרשימה נפתחת נועדה לו, ושלוש שורות הצ'יפים תפסו
@@ -724,10 +756,13 @@ function render(){
         '<span class="chip'+(noDate.length?" warn":"")+(VIEW==="nodate"?" on":"")+'" data-v="nodate">'+
           (noDate.length?"⚠ ":"")+'הקפאה להשלמה ('+noDate.length+')</span>'+
         '<span class="chip'+(VIEW==="backsoon"?" on":"")+'" data-v="backsoon">חוזרות מהקפאה השבוע ('+backSoon.length+')</span>'+
+        '<span class="chip'+(notesWaiting.length?" warn":"")+(VIEW==="notes"?" on":"")+'" data-v="notes">'+
+          (notesWaiting.length?"⚠ ":"")+'הערות ממתינות ('+notesWaiting.length+')</span>'+
       '</div>'+
       // Say what the list covers, so a woman who is missing from it does not read as a bug.
       (MISSING ? '<div class="note">מוצגות רק נשים ללא אות קבוצה במחזור של השבוע ובמחזור של השבוע הבא.</div>' : '')+
       (VIEW==="nodate" ? '<div class="note">מוקפאות שחסר להן תאריך חזרה, שבוע חזרה או שניהם. <b>הן לא נכנסות לאפליקציה עד שיושלם.</b></div>' : '')+
+      (VIEW==="notes" ? '<div class="note">נשים שכתבו הערה מתוך האפליקציה ועוד לא קיבלו תשובה. <b>הכרטיס שלהן נפתח בלשונית "הערות".</b></div>' : '')+
       (VIEW==="backsoon" ? '<div class="note">חוזרות מהקפאה בשבוע הקרוב. <b>ליד כל אחת כתוב לאיזה מחזור להכניס אותה</b>, כדי שתדעי לאיזו קבוצת וואטסאפ היא שייכת.</div>' : '')+
       '</div>'+
       // שלוש רשימות נפתחות בשורה אחת, במקום חמש שורות של צ'יפים שתפסו חצי מסך
@@ -760,7 +795,7 @@ function render(){
   // הכרטיס המלא. הוא לא השתנה, הוא רק עבר לגור בצד במקום בתוך הרשימה.
   // הכרטיס: כותרת עם פעולות מהירות, ואז לשוניות. קודם הכל ישב בגלילה אחת ארוכה
   // מאחורי כפתור "עריכה", ולכן כדי לשנות קבוצה היה צריך לפתוח ולגלול דרך הכל.
-  var TABS = [["info","פרטים"],["cohort","מחזור וקבוצה"],["perm","הרשאות"],["usage","שימוש"],["log","יומן"]];
+  var TABS = [["info","פרטים"],["cohort","מחזור וקבוצה"],["perm","הרשאות"],["notes","הערות"],["usage","שימוש"],["log","יומן"]];
   var SV = function(d){ return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>'; };
   var I_CAL   = SV('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 11h18"/>');
   var I_USERS = SV('<circle cx="9" cy="9" r="3.2"/><path d="M3 20c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8"/><path d="M17 8.2a2.8 2.8 0 0 1 0 5.6M18.5 20c0-2-.7-3.3-2-4.2"/>');
@@ -848,6 +883,40 @@ function render(){
     '</div>';
   }
 
+  // הערות שהיא כתבה מתוך האפליקציה, והתשובות שכבר נשלחו אליה. זו הפעולה היחידה
+  // במסך הזה שמגיעה למשתתפת עצמה, ולכן היא נפרדת מכל שאר השדות.
+  function tabNotes(w){
+    var st = NOTES[w.email];
+    if(!st) return '<div class="empty">טוען...</div>';
+    if(st.state==="loading") return '<div class="empty">טוען...</div>';
+    if(st.state!=="ok") return '<div class="empty">לא הצלחתי להגיע להערות. <button class="lnk" data-notesretry="'+esc(w.email)+'">נסי שוב</button></div>';
+    if(!st.notes.length) return '<div class="empty">היא לא כתבה שום הערה מתוך האפליקציה.</div>';
+    var byNote = {};
+    st.replies.forEach(function(r){ byNote[r.to] = r; });
+    return st.notes.map(function(n){
+      var r = byNote[n.id];
+      var head = '<div class="nhead">'+esc(stamp(n.at))+(n.screen?' · מהמסך "'+esc(n.screen)+'"':'')+'</div>'+
+                 '<div class="ntext">'+esc(n.text)+'</div>';
+      if(r && r.text){
+        return '<div class="note-card done">'+head+
+          '<div class="nsent"><b>נשלח '+esc(stamp(r.at))+(r.by?' · '+esc(r.by):'')+'</b>'+
+            (r.read ? ' · <span class="okread">נקראה '+esc(stamp(r.read))+'</span>' : ' · ממתין שהיא תפתח את האפליקציה')+'</div>'+
+          '<div class="nreply">'+esc(r.text)+'</div>'+
+        '</div>';
+      }
+      if(r) return '<div class="note-card done">'+head+'<div class="nsent">סומנה כטופלה '+esc(stamp(r.at))+(r.by?' · '+esc(r.by):'')+', בלי תשובה אליה.</div></div>';
+      return '<div class="note-card">'+head+
+        '<div class="flabel" style="margin-top:10px">התשובה שהיא תראה באפליקציה</div>'+
+        '<textarea class="field" rows="3" id="rp_'+esc(n.id)+'" placeholder="כתבי כאן...">'+esc(DRAFT[n.id]||"")+'</textarea>'+
+        '<div class="nhint">היא תראה את הטקסט הזה בדיוק כמו שכתבת, בתוך בועת ההערות באפליקציה. <b>אחרי השליחה אי אפשר לבטל.</b></div>'+
+        '<div class="control">'+
+          '<button class="btn p" data-sendreply="'+esc(n.id)+'" data-for="'+esc(w.email)+'">שלחי לה</button>'+
+          '<button class="btn ghost" data-notedone="'+esc(n.id)+'" data-for="'+esc(w.email)+'">סימון כטופל בלי תשובה</button>'+
+        '</div>'+
+      '</div>';
+    }).join("");
+  }
+
   function tabPerm(w){
     return (w.newApp
       ? '<div class="edit" id="fld-glow"><span>שיעורי בונוס Glow'+(w.glowOverride?" ✎":"")+'</span>'+
@@ -887,7 +956,8 @@ function render(){
 
   function womanCard(w){
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
-    var body = TAB==="cohort" ? tabCohort(w)
+    var body = TAB==="notes"  ? tabNotes(w)
+             : TAB==="cohort" ? tabCohort(w)
              : TAB==="perm"   ? tabPerm(w)
              : TAB==="usage"  ? (w.newApp ? usagePanel(w) : '<div class="empty">היא מנוהלת בקג\'אבי, ואין לנו נתוני שימוש עליה.</div>')
              : TAB==="log"    ? logLines(w)
@@ -907,7 +977,8 @@ function render(){
         quickActs(w)+
       '</div>'+
       '<div class="tabs" role="tablist">'+TABS.map(function(t){
-        return '<button class="tab" data-tab="'+t[0]+'" aria-selected="'+(TAB===t[0])+'" role="tab">'+t[1]+'</button>';
+        var badge = (t[0]==="notes" && w.notes) ? '<i class="tbadge">'+w.notes+'</i>' : '';
+        return '<button class="tab" data-tab="'+t[0]+'" aria-selected="'+(TAB===t[0])+'" role="tab">'+t[1]+badge+'</button>';
       }).join("")+'</div>'+
       '<div class="tabwrap">'+body+'</div>'+
     '</div>';
@@ -923,6 +994,7 @@ function render(){
       (w.cancelled?'<span class="grp">ביטלה</span>':'')+
       (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
       (w.blocked?'<span class="grp dngpill">חסומה מהאפליקציה</span>':'')+
+      (w.notes?'<span class="grp warnpill">'+w.notes+' הערות ממתינות</span>':'')+
       '</span>'+
       '<span class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</span>'+
       ((w.backSoon && w.backCohort)?'<span class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></span>':'')+
@@ -982,7 +1054,12 @@ function render(){
   // not on every redraw, so pressing a tag button does not fire a second one.
   app.querySelectorAll("[data-open]").forEach(function(el){ el.onclick=function(){
     var em = el.getAttribute("data-open");
-    if(SEL === em){ SEL = ""; } else { SEL = em; TAB = "info"; EDITING = ""; STATS = ""; FREEZING = ""; }
+    if(SEL === em){ SEL = ""; } else {
+      SEL = em; EDITING = ""; STATS = ""; FREEZING = "";
+      // מי שנבחרה מתוך "הערות ממתינות" נפתחת ישר על ההערה שלה, כי זו הסיבה שנכנסו אליה.
+      TAB = (VIEW === "notes") ? "notes" : "info";
+      if(TAB === "notes" && !NOTES[em]) notesLoad(em);
+    }
     render();
     if(SEL && innerWidth < 1000) window.scrollTo(0, 0);
   }; });
@@ -990,7 +1067,45 @@ function render(){
     SEL = ""; EDITING = ""; STATS = ""; FREEZING = ""; render();
   }; });
   app.querySelectorAll("[data-tab]").forEach(function(el){ el.onclick=function(){
-    TAB = el.getAttribute("data-tab"); render(); }; });
+    TAB = el.getAttribute("data-tab");
+    if(TAB==="notes" && SEL && !NOTES[SEL]) notesLoad(SEL);
+    render(); }; });
+  app.querySelectorAll("[data-notesretry]").forEach(function(el){ el.onclick=function(){
+    var em = el.getAttribute("data-notesretry"); delete NOTES[em]; notesLoad(em); }; });
+  app.querySelectorAll("textarea[id^=rp_]").forEach(function(el){ el.oninput=function(){
+    DRAFT[el.id.slice(3)] = el.value; }; });
+  // הפעולה היחידה במסך שמגיעה למשתתפת עצמה, ולכן היא שואלת לפני.
+  app.querySelectorAll("[data-sendreply]").forEach(function(el){ el.onclick=function(){
+    var id = el.getAttribute("data-sendreply"), em = el.getAttribute("data-for");
+    var box = document.getElementById("rp_"+id);
+    var txt = (box ? box.value : "").trim();
+    if(!txt){ alert("צריך לכתוב תשובה לפני השליחה."); return; }
+    if(!confirm("לשלוח לה את התשובה?\n\nהיא תראה אותה בתוך האפליקציה בפתיחה הבאה שלה, בדיוק כמו שכתבת. אי אפשר לבטל.")) return;
+    el.disabled = true;
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({ email:em, by:WHO, reply:{ to:id, text:txt } })})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok) throw new Error();
+        delete DRAFT[id]; delete NOTES[em];
+        return load().then(function(){ notesLoad(em); });
+      })
+      .catch(function(){ el.disabled = false; alert("השליחה נכשלה. נסי שוב."); });
+  }; });
+  app.querySelectorAll("[data-notedone]").forEach(function(el){ el.onclick=function(){
+    var id = el.getAttribute("data-notedone"), em = el.getAttribute("data-for");
+    if(!confirm("לסמן כטופל בלי לשלוח לה כלום?\n\nההערה תרד מהרשימה שלך, ואצלה לא ישתנה שום דבר.")) return;
+    el.disabled = true;
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({ email:em, by:WHO, noteDone:id })})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok) throw new Error();
+        delete NOTES[em];
+        return load().then(function(){ notesLoad(em); });
+      })
+      .catch(function(){ el.disabled = false; alert("הפעולה נכשלה. נסי שוב."); });
+  }; });
   // קיצור דרך: פותח את הלשונית הנכונה, גולל אל השדה ומדגיש אותו לרגע.
   app.querySelectorAll("[data-jump]").forEach(function(el){ el.onclick=function(){
     var id = el.getAttribute("data-jump");
