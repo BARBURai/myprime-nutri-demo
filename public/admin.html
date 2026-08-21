@@ -61,14 +61,23 @@
   .zone{border-radius:11px; padding:9px 12px; margin-top:10px}
   .zone.work{background:var(--card-2); border:1px solid var(--line); box-shadow:inset 3px 0 0 var(--pink)}
   .zone.work.calm{box-shadow:inset 3px 0 0 var(--line-2)}
-  /* תווית ושורת הצ'יפים שלה על אותה שורה, אחרת האזור נפרש על חצי מסך ריק */
-  .zone.filt{
-    border:1px solid var(--line);
-    display:grid; grid-template-columns:max-content minmax(0,1fr); gap:3px 14px; align-items:center;
+  .qhint{font-size:12.5px;color:var(--ink-3);margin:6px 2px 0}
+  .zone.filt{border:1px solid var(--line);display:flex;flex-direction:column;gap:8px;align-items:stretch}
+  .zone.filt > .chips{margin:0}
+  /* שלוש רשימות נפתחות בשורה אחת. כל אחת מתכווצת ונשברת לשורה משלה בטלפון,
+     אחרת רוחב האפשרות הארוכה ביותר דוחף את כל העמוד מעבר למסך. */
+  .frow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .sel{position:relative;display:flex;flex:1 1 170px;min-width:0}
+  .sel select{
+    width:100%;min-width:0;appearance:none;-webkit-appearance:none;font:inherit;color:inherit;
+    background:var(--card);border:1px solid var(--line-2);border-radius:10px;
+    padding-block:9px;padding-inline:12px 30px;font-size:14.5px;font-weight:600;
+    min-height:42px;cursor:pointer;box-shadow:var(--sh1);
   }
-  .zone.filt > .zlab, .zone.filt > .note{grid-column:1 / -1}
-  .zone.filt > .lbl{grid-column:1; margin:0; white-space:nowrap}
-  .zone.filt > .chips{grid-column:2; margin:3px 0}
+  .sel::after{content:"\25be";position:absolute;inset-inline-end:11px;top:11px;font-size:12px;color:var(--ink-3);pointer-events:none}
+  .sel select:hover{border-color:var(--ink-3)}
+  .sel select:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 3px var(--pinkbg)}
+  input,select,textarea{max-width:100%}
   .zlab{
     display:block; font-size:11px; font-weight:700; letter-spacing:.09em;
     text-transform:uppercase; color:var(--ink-3); margin-bottom:2px;
@@ -138,6 +147,28 @@
   .coldpill{background:var(--coldbg);color:var(--cold);border-color:var(--cold-line)}
   .dngpill{background:var(--dangerbg);color:var(--danger);border-color:transparent}
   .btn.back{display:none;margin-bottom:11px}
+  /* טלפון: פחות ריווח, ובלי הכרטיס הריק שתופס חצי מסך כשלא נבחרה אף אחת. */
+  @media (max-width:640px){
+    .wrap{padding:10px}
+    .topbar{padding:12px 14px;border-radius:12px;gap:8px}
+    h1{font-size:17px}
+    .topbar .cnt{font-size:12.5px}
+    .toolbar{padding:10px;border-radius:12px}
+    .zone{padding:8px 10px}
+    .split:not(.haspick) .pane.detail{display:none}
+    /* כרטיס פתוח בטלפון: החיפוש והסינון רק דוחפים אותו למטה. */
+    .toolbar.picked{display:none}
+    .pane.list,.card{border-radius:12px}
+    .lrow{padding:11px 12px}
+    .lrow .nm{font-size:15.5px}
+    .grp{font-size:11px;padding:2px 8px}
+    .dhead{padding:13px 13px 12px}
+    .dhead .nm{font-size:18px}
+    .tabwrap{padding:13px 13px 16px}
+    .qa{font-size:13px;padding:6px 12px 6px 10px;min-height:34px}
+    .field{padding:11px 12px}
+    .edit{margin-top:11px;padding-top:11px}
+  }
   @media (max-width:999px){
     .split.haspick .pane.list{display:none}
     .btn.back{display:inline-flex}
@@ -691,8 +722,9 @@ function render(){
       '<span class="who">'+esc(DATA.me||WHO||"?")+(DATA.owner?" · מנהל":"")+'</span>'+
     '</div>'+
     teamBlock()+
-    '<div class="toolbar">'+
-    '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל. אפשר להדביק מספר עם + או עם רווחים" value="'+esc(q)+'">'+
+    '<div class="toolbar'+(SEL?" picked":"")+'">'+
+    '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
+    '<div class="qhint">אפשר להדביק מספר טלפון בכל צורה, עם + עם רווחים או עם מקפים.</div>'+
     (searching ? '<div class="note">תוצאות חיפוש מכל הרשומות בגיליון, בלי סינון לפי מחזור, קבוצה או אפליקציה.</div>' :
       '<div class="zone work'+(nWork?"":" calm")+'"><span class="zlab">לטיפול</span>'+
       '<div class="chips"><span class="chip'+(missing.length?" warn":"")+(MISSING?" on":"")+'" data-m="1">'+
