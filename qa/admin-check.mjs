@@ -676,5 +676,39 @@ console.log("\nהערות ותשובות");
   check("ואצלה לא נדלק שום דבר", ((await callAccess(EM)).body.replies || []).length === 0);
 }
 
+console.log("\nבנק התשובות");
+{
+  const empty = await callAdmin({ key: KEY, bank: "1" });
+  check("בנק ריק מוחזר כרשימה ריקה", empty.body.ok === true && Array.isArray(empty.body.bank) && empty.body.bank.length === 0);
+
+  const half = await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", by: "רון", bankAdd: { q: "איפה מזינים מים?", a: "" } });
+  check("תשובה ריקה לא נכנסת לבנק", half.body.ok === false);
+
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", by: "רון", bankAdd: { q: "איפה מזינים מים?", a: "לוחצים על טבעת המים 💜" } });
+  const one = (await callAdmin({ key: KEY, bank: "1" })).body.bank;
+  check("שאלה ותשובה נשמרות", one.length === 1 && one[0].q === "איפה מזינים מים?");
+  check("ונרשם מי הוסיף אותה", one[0].by === "רון");
+
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", by: "רון", bankDrop: one[0].id });
+  check("אפשר להסיר מהבנק", (await callAdmin({ key: KEY, bank: "1" })).body.bank.length === 0);
+
+  // הדירוג עצמו נמשך מ-public/admin.html ולא מועתק, כדי שעריכה שם תישבר כאן
+  const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  const m = html.match(/var STOP = \[[\s\S]*?function bankSuggest\(text\)\{[\s\S]*?\n\}/);
+  check("bankSuggest קיימת ב-admin.html", !!m);
+  const fn = new Function("BANK", m[0] + "; return bankSuggest;");
+  const bank = [
+    { id: "a", q: "איפה מזינים שתיית מים?", a: "לוחצים על טבעת המים במסך היומן" },
+    { id: "b", q: "מה זה המדליות והגביעים?", a: "מדליה על יום שהושלם" },
+    { id: "c", q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות ומזינים את המספר באפליקציה" },
+  ];
+  const sug = fn(bank);
+  check("שאלה על מים מציעה את התשובה על מים", (sug("אחלה אפליקציה, איפה מזינים שתיית מים?")[0] || {}).id === "a");
+  // הדירוג הרופף הקודם החזיר כאן דווקא את התשובה על הצעדים, על סמך "מזינים" ו"אפליקציה"
+  check("ולא את התשובה על הצעדים, שחולקת איתה מילים נפוצות", sug("אחלה אפליקציה, איפה מזינים שתיית מים?").every((e) => e.id !== "c"));
+  check("ושאלה רחוקה לא מציעה כלום", sug("סרקתי ברקוד של nature valley והקלוריות שגויות").length === 0);
+  check("ומשפט קצר מדי לא מציע כלום", sug("המשקל שגוי").length === 0);
+}
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
