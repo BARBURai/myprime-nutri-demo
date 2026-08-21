@@ -227,10 +227,13 @@
   .frz .note{margin-top:8px}
 
   .tbadge{
-    display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;
-    border-radius:999px;background:var(--warn);color:#fff;font-size:11px;font-weight:700;
-    font-style:normal;padding:0 5px;margin-inline-start:6px;
+    display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;
+    border-radius:999px;background:#d97706;color:#fff;font-size:12px;font-weight:800;
+    font-style:normal;padding:0 6px;margin-inline-start:7px;
+    box-shadow:0 0 0 3px rgba(217,119,6,.18);
   }
+  /* "יש כאן מה לענות" הוא הדבר היחיד בשורה שדורש פעולה, ולכן הוא מלא ולא רך */
+  .grp.notepill{background:#d97706;color:#fff;border-color:#b45309;font-weight:800}
   .note-card{border:1px solid var(--line);border-radius:12px;padding:13px;background:var(--card)}
   .note-card.done{background:var(--card-2)}
   .nhead{font-size:12.5px;color:var(--ink-3);font-weight:600}
@@ -965,8 +968,11 @@ function render(){
     return st.notes.map(function(n){
       var r = byNote[n.id];
       NOTE_TEXT[n.id] = n.text;
-      var head = '<div class="nhead">'+esc(stamp(n.at))+(n.screen?' · מהמסך "'+esc(n.screen)+'"':'')+'</div>'+
-                 '<div class="ntext">'+esc(n.text)+'</div>';
+      var tag = String(n.text||"").match(/^\[נכתב ([0-9.]+)\]\s*/);
+      var body = tag ? n.text.slice(tag[0].length) : n.text;
+      var when = tag ? 'נכתבה ב-'+esc(tag[1])+' · הועברה מהקובץ' : 'נכתבה ב-'+esc(stamp(n.at));
+      var head = '<div class="nhead">'+when+(n.screen?' · מהמסך "'+esc(n.screen)+'"':'')+'</div>'+
+                 '<div class="ntext">'+esc(body)+'</div>';
       if(r && r.text){
         return '<div class="note-card done">'+head+
           '<div class="nsent"><b>נשלח '+esc(stamp(r.at))+(r.by?' · '+esc(r.by):'')+'</b>'+
@@ -1073,7 +1079,7 @@ function render(){
       (w.cancelled?'<span class="grp">ביטלה</span>':'')+
       (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
       (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+
-      (w.notes?'<span class="grp warnpill">'+w.notes+' הערות ממתינות</span>':'')+
+      (w.notes?'<span class="grp notepill">'+(w.notes>1?w.notes+' הערות ממתינות':'הערה ממתינה')+'</span>':'')+
       '</span>'+
       '<span class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</span>'+
       ((w.backSoon && w.backCohort)?'<span class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></span>':'')+
