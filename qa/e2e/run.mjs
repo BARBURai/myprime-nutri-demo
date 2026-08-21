@@ -180,6 +180,75 @@ const CHECKS = [
     },
   },
   {
+    // The whole journey in one scenario, because the halves are meaningless apart: a rule
+    // that only ever fires looks exactly like a rule that never fires. She crosses the line
+    // on a weight she reports, gets the screen, lands in maintenance with the rate list
+    // gone, then gains back past the second line and is offered the way back.
+    name: "חצייה של הקו מעבירה לשמירה, ועלייה חזרה פותחת את הדרך בחזרה",
+    async run(browser, device) {
+      const start = sundayWeeksAgo(1);
+      const prof = { age: 50, heightCm: 152, weightKg: 55, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 50, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done", lossStopAt: null };
+      const { context, page, errors } = await openApp(browser, device, { startDate: start, seed: { profile: prof, weights: [{ date: start, kg: 55 }] } });
+      // בלי טעינה מחדש לאורך כל התרחיש: addInitScript רץ בכל ניווט ומחזיר את
+      // האחסון לזרע, כלומר טעינה מחדש הייתה מוחקת בדיוק את מה שאנחנו בודקים.
+      const logWeight = async (kg) => {
+        await page.locator("text=דוח").last().click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הזיני משקל").first().click();
+        await page.waitForTimeout(400);
+        await page.locator('input[inputmode="decimal"]').last().fill(String(kg));
+        await page.locator("text=שמור").first().click();
+        await page.waitForTimeout(700);
+      };
+      // "נתוני בסיס" מגיע מקופל, וכל שורות המשקל והקצב יושבות בתוכו
+      const openBase = async () => {
+        await page.locator("text=פרופיל").last().click();
+        await page.waitForTimeout(500);
+        if (!(await page.locator("text=קצב ירידה").count())) {
+          await page.locator("text=נתוני בסיס").first().click();
+          await page.waitForTimeout(400);
+        }
+      };
+      const state = () => page.evaluate(() => JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").profile || {});
+
+      // 45 ק״ג בגובה 152 הוא BMI 19.5, מתחת לקו של BMI 20 שהוא 46.5 ק״ג
+      await logWeight(45);
+      let body = await page.locator("body").innerText();
+      const shown = body.includes("לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית") && body.includes("הודעה לצוות בוואטסאפ");
+      const st1 = await state();
+      const moved = st1.weeklyRateG === 0 && !!st1.lossStopAt;
+      await page.locator("text=הבנתי").first().click();
+      await page.waitForTimeout(400);
+
+      // ברשימת הקצבים נשארה שמירה בלבד
+      await openBase();
+      await page.locator("text=קצב ירידה").first().click();
+      await page.waitForTimeout(400);
+      body = await page.locator("body").innerText();
+      const locked = !body.includes("ירידה 250 ג׳ בשבוע") && !body.includes("ירידה 500 ג׳ בשבוע") && body.includes("שמירה על המשקל");
+      await page.mouse.click(8, 8);   // הרקע של החלון סוגר אותו
+      await page.waitForTimeout(400);
+
+      // 48 ק״ג עדיין מתחת לקו השני, שהוא 49 ק״ג בגובה הזה
+      await logWeight(48);
+      await openBase();
+      const tooEarly = !(await page.locator("body").innerText()).includes("אפשר לחזור לירידה במשקל");
+
+      await logWeight(49.5);
+      await openBase();
+      body = await page.locator("body").innerText();
+      const offered = body.includes("אפשר לחזור לירידה במשקל") && body.includes("כדאי להתייעץ עם דיאטנית קלינית לפני שחוזרים.");
+      await page.locator("text=חזרה לירידה במשקל").first().click();
+      await page.waitForTimeout(500);
+      const st2 = await state();
+      const back = st2.weeklyRateG === 250 && !st2.lossStopAt;
+
+      await context.close();
+      const ok = shown && moved && locked && tooEarly && offered && back && !errors.length;
+      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · הקצבים נעלמו ${locked} · ב-48 לא מוצע ${tooEarly} · ב-49.5 מוצע ${offered} · חזרה ${back} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
+    },
+  },
+  {
     name: "המסך הראשי נטען ואין שגיאת JavaScript",
     async run(browser, device) {
       const { context, page, errors } = await openApp(browser, device);
