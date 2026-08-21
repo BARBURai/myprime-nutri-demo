@@ -588,7 +588,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.97";
+const VERSION = "5.98";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2076,7 +2076,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, hasFutureEntries, onClearFuture }) {
+function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, onLossAck, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, hasFutureEntries, onClearFuture }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const [showLossStop, setShowLossStop] = useState(false);
@@ -2167,7 +2167,10 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, 
             <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
             <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
             <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: 35, suffix: "ק״ג", init: profile.weightKg })} />
-            <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
+            {/* למי שבשמירה אין משקל יעד, ולכן אין מה להציג ואין מה לערוך. השורה גם
+                נשברה שם: המינימום של השדה גבוה מהערך שבתוכו, ולכן לחיצה על מינוס
+                הקפיצה את המספר למעלה. חוזרת מעצמה ברגע שהיא חוזרת לירידה. */}
+            {!noLoss && <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />}
             <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
             {noLoss && !canResume && (
               <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", margin: "8px 0 4px", fontSize: 14, color: C.sub, lineHeight: 1.6 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית.</div>
@@ -2405,7 +2408,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, 
           </div>
         </div>
       )}
-      {showLossStop && <LossStopSheet onClose={() => setShowLossStop(false)} />}
+      {showLossStop && <LossStopSheet onAck={() => { setShowLossStop(false); onLossAck && onLossAck(); }} />}
       {pendingWeight && (
         <div onClick={() => setPendingWeight(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
@@ -4767,15 +4770,17 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
 const CHEER_SEEN_KEY = "mp_cheer_seen_v1";
 // מוצג פעם אחת בלבד, ברגע שמשקל שהיא דיווחה מביא אותה מתחת לקו. אחריו היא בשמירה.
 // הקופי של רון, 21 באוגוסט 2026. בלי חתימה של ענת, כי זו הודעת מערכת ולא מכתב ממנה.
-function LossStopSheet({ onClose }) {
-  const waText = "היי, קיבלתי הודעה על היעד שלי באפליקציה ורציתי לשאול על זה";
+function LossStopSheet({ onAck }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
       <div style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(58,43,48,0.28)" }}>
         <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.65 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית.</div>
         <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>המערכת לא יכולה לתת ערכים של ירידה נוספת במשקל.</div>
-        <a href={`https://wa.me/972547304177?text=${encodeURIComponent(waText)}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "12px 20px", fontSize: 15, fontWeight: 700, textDecoration: "none", marginTop: 12 }}>הודעה לצוות בוואטסאפ</a>
-        <div style={{ marginTop: 14 }}><Btn onClick={onClose}>הבנתי</Btn></div>
+        {/* המלצה בטקסט ולא בכפתור, לפי רון: כפתור וואטסאפ לצד "הבנתי" נותן לה שתי
+            דרכים לצאת, ואז הלחיצה על "הבנתי" מפסיקה להיות אישור ונעשית בריחה. */}
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>אנחנו ממליצים לך ליצור קשר עם הדיאטנית לקבלת הנחיות.</div>
+        <div style={{ fontSize: 13.5, color: C.faint, lineHeight: 1.55, marginTop: 16 }}>בלחיצה על "הבנתי" את מאשרת שקראת את ההודעה הזאת.</div>
+        <div style={{ marginTop: 8 }}><Btn onClick={onAck}>הבנתי</Btn></div>
       </div>
     </div>
   );
@@ -6482,6 +6487,18 @@ export default function App() {
   };
   // החזרה לירידה היא לחיצה שלה ולעולם לא חישוב שלנו, ולכן אין יו-יו: בלי הלחיצה
   // שום דבר לא זז. המעבר לשמירה הוא היחיד שקורה לבד, כי שם אנחנו מגינים עליה.
+  // היא קראה ואישרה. נוסע על api/usage.js שנקרא ממילא, כי וורסל על 12 פונקציות
+  // מתוך 12 וקובץ חדש בתיקיית api מפיל את כל הדיפלוי. אם השליחה נכשלת המסך
+  // נסגר בכל מקרה: אישור שלה לעולם לא תלוי ברשת.
+  const ackLossStop = () => {
+    setSheet(null);
+    setProfile((pr) => ({ ...pr, lossAckAt: TODAY }));
+    if (!gateEmail) return;
+    fetch("/api/usage", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: gateEmail, bmiAck: 1 }),
+    }).catch(() => {});
+  };
   const resumeLoss = () => setProfile((pr) => ({ ...pr, lossStopAt: null, weeklyRateG: 250, goalWeightKg: Math.max(minHealthyKg(pr.heightCm), curWeight - 0.5) }));
   const reportAddWeight = () => setSheet("weight");
   const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
@@ -6717,7 +6734,7 @@ export default function App() {
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} onResumeLoss={resumeLoss} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
             </div>
             {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
                 stayed tappable, rode up with the keyboard eating the space above it, and
@@ -6770,7 +6787,7 @@ export default function App() {
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
-            {sheet === "lossStop" && <LossStopSheet onClose={() => setSheet(null)} />}
+            {sheet === "lossStop" && <LossStopSheet onAck={ackLossStop} />}
             {sheet === "fastLoss" && <FastLossSheet pct={fastLossPct(weights, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
