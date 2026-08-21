@@ -67,8 +67,14 @@ export default async function handler(req, res) {
   const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!RU || !RT) return res.status(200).json({ ok: true, stored: false });
 
+  // The bubble posts a note on its own, with no counters in it. Writing the record anyway
+  // would overwrite her real progress with a row of zeros until her next app load rebuilt
+  // it. `days` is present on every genuine usage call and on none of the note-only ones,
+  // so its presence is what decides.
+  const hasUsage = !!(body && body.days && typeof body.days === "object");
+
   try {
-    await redis(RU, RT, "HSET", "admin:usage", email, JSON.stringify(rec));
+    if (hasUsage) await redis(RU, RT, "HSET", "admin:usage", email, JSON.stringify(rec));
     // "She finished today's tasks", so tonight's reminder can skip her. One day only: it
     // expires on its own, and tomorrow she is back in the list unless she finishes again.
     // A note she just wrote. Bounded and rebuilt here like everything else, because this

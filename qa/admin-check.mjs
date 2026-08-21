@@ -631,7 +631,12 @@ console.log("\nחיפוש טלפון במסך הניהול");
 console.log("\nהערות ותשובות");
 {
   const EM = "yafit@test.com";
+  // A note must never overwrite her progress: the bubble sends it on its own, with no
+  // counters in it, and a blind write would blank her usage row until the next app load.
+  await callUsage({ email: EM, days: { "1-1": [2, 3] }, trackerDays: 5 });
   await callUsage({ email: EM, note: { screen: "יומן", text: "איפה מזינים מים?" } });
+  const kept = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === EM);
+  check("הערה אינה מוחקת את נתוני השימוש שלה", kept.usage && kept.usage.trackerDays === 5, JSON.stringify(kept.usage));
   const list = (await callAdmin({ key: KEY, notes: EM })).body;
   check("הערה שנכתבה באפליקציה נשמרת אצלנו", list.ok && list.notes.length === 1 && list.notes[0].text === "איפה מזינים מים?");
   check("ועם המסך שממנו נכתבה", list.notes[0].screen === "יומן");
