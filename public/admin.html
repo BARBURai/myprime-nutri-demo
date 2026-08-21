@@ -245,6 +245,14 @@
     margin-top:7px;padding:10px 12px;border-radius:10px;background:var(--pinkbg);
     color:var(--ink);font-size:15px;line-height:1.6;white-space:pre-wrap;
   }
+  .qhead{font-size:14px;color:var(--ink-2);font-weight:600;margin:0 2px 12px}
+  .qitem{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    box-shadow:var(--sh2);padding:14px;margin-bottom:12px;
+  }
+  .qwho{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px}
+  .qwho .lnk{font-size:17px;font-weight:800;text-decoration:none;font-family:Heebo,Assistant,sans-serif}
+  .qitem .note-card{border:0;padding:0;box-shadow:none;background:none}
   .sugbox{margin-top:11px;display:grid;gap:6px}
   .sug{
     display:grid;gap:3px;text-align:start;width:100%;cursor:pointer;
@@ -252,6 +260,11 @@
   }
   .sug:hover{border-color:var(--cold)}
   .sug b{font-size:13.5px;color:var(--cold);font-weight:700}
+  .sug .use{
+    font-style:normal;font-size:12.5px;font-weight:700;color:#fff;background:var(--cold);
+    border-radius:999px;padding:4px 10px;justify-self:start;margin-top:3px;
+  }
+  .sug:hover .use{filter:brightness(1.1)}
   .sug span{font-size:13.5px;color:var(--ink-2);line-height:1.55}
   .bankadd{
     display:flex;align-items:center;gap:7px;margin-top:10px;
@@ -538,6 +551,14 @@ function bankSuggest(text){
     .slice(0, 3).map(function(x){ return x.e; });
 }
 
+function queueLoad(){
+  QUEUE = "loading";
+  fetch("/api/admin?key="+encodeURIComponent(KEY)+"&notes=all")
+    .then(function(r){ return r.json(); })
+    .then(function(d){ QUEUE = (d && d.ok) ? d.all : "failed"; render(); })
+    .catch(function(){ QUEUE = "failed"; render(); });
+}
+
 function notesLoad(email){
   NOTES[email] = { state:"loading" };
   fetch("/api/admin?key="+encodeURIComponent(KEY)+"&notes="+encodeURIComponent(email))
@@ -693,6 +714,9 @@ var TAB = "info";   // הלשונית הפתוחה בכרטיס
 // ההערות של אישה אחת, נקראות בפתיחת הלשונית שלה בלבד. הרשימה הראשית מקבלת מספר
 // בלבד, ולכן אין כאן קריאה אחת לכל שורה.
 var NOTES = {}, DRAFT = {}, NOTE_TEXT = {}, NOTE_AT = {}, NOTE_SCREEN = {};
+// תור המענה: כל ההערות הפתוחות במסך אחד, אחת מתחת לשנייה. עונים, היא נעלמת, והבאה
+// כבר שם. בלי להיכנס לכל אישה בנפרד ובלי לחזור לרשימה בין אחת לשנייה.
+var QUEUE = null;
 // בנק התשובות. נטען פעם אחת, ומשמש להצעת ניסוח להערה חדשה.
 var BANK = null;
 // עשר התשובות שכבר קיימות במסך "שאלות ותשובות" שבאפליקציה. הן מוצעות כבסיס כשהבנק
@@ -965,15 +989,15 @@ function render(){
 
   // הערות שהיא כתבה מתוך האפליקציה, והתשובות שכבר נשלחו אליה. זו הפעולה היחידה
   // במסך הזה שמגיעה למשתתפת עצמה, ולכן היא נפרדת מכל שאר השדות.
-  function tabNotes(w){
-    var st = NOTES[w.email];
+  function tabNotes(w, st, openOnly){
+    st = st || NOTES[w.email];
     if(!st) return '<div class="empty">טוען...</div>';
     if(st.state==="loading") return '<div class="empty">טוען...</div>';
     if(st.state!=="ok") return '<div class="empty">לא הצלחתי להגיע להערות. <button class="lnk" data-notesretry="'+esc(w.email)+'">נסי שוב</button></div>';
     if(!st.notes.length) return '<div class="empty">היא לא כתבה שום הערה מתוך האפליקציה.</div>';
     var byNote = {};
     st.replies.forEach(function(r){ byNote[r.to] = r; });
-    return st.notes.map(function(n){
+    return st.notes.filter(function(n){ return !openOnly || !byNote[n.id]; }).map(function(n){
       var r = byNote[n.id];
       NOTE_TEXT[n.id] = n.text; NOTE_AT[n.id] = n.at; NOTE_SCREEN[n.id] = n.screen || "";
       var tag = String(n.text||"").match(/^\[נכתב ([0-9.]+)\]\s*/);
@@ -995,7 +1019,8 @@ function render(){
          sug.length ? '<div class="sugbox"><div class="flabel">תשובות מוכנות שמתאימות לשאלה הזאת</div>'+
             sug.map(function(e){
               return '<button class="sug" data-usebank="'+esc(e.id)+'" data-note="'+esc(n.id)+'">'+
-                '<b>'+esc(e.q)+'</b><span>'+esc(e.a)+'</span></button>';
+                '<b>'+esc(e.q)+'</b><span>'+esc(e.a)+'</span>'+
+                '<i class="use">\u2190 להשתמש בתשובה הזאת</i></button>';
             }).join("")+'</div>' : '')+
         '<div class="flabel" style="margin-top:10px">התשובה שהיא תראה באפליקציה</div>'+
         '<textarea class="field" rows="3" id="rp_'+esc(n.id)+'" placeholder="כתבי כאן...">'+esc(DRAFT[n.id]||"")+'</textarea>'+
@@ -1033,6 +1058,40 @@ function render(){
         '</div>'+
         (w.override?'<div class="manual">שונה ידנית · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')
       : '<div class="note">היא מנוהלת בקג\'אבי, ולכן <b>תאריך סיום הגישה ונתוני השימוש אינם רלוונטיים כאן</b> ואינם מוצגים. כל השאר נכון גם לגביה, כי הוא נשמר במניצ\'ט ובגיליון.</div>');
+  }
+
+  // תור המענה. כל הערה פתוחה, עם שם האישה מעליה, אחת מתחת לשנייה. עונים לאחת והיא
+  // נעלמת מהתור, והבאה כבר על המסך. אין חזרה לרשימה ואין כניסה לכרטיס.
+  function queueScreen(){
+    if(BANK === null) bankLoad();
+    if(QUEUE === null){ queueLoad(); return '<div class="empty">טוען...</div>'; }
+    if(QUEUE === "loading") return '<div class="empty">טוען...</div>';
+    if(QUEUE === "failed") return '<div class="empty">לא הצלחתי להגיע להערות. <button class="lnk" data-queueretry="1">נסי שוב</button></div>';
+    var byMail = {};
+    (DATA.women||[]).forEach(function(w){ byMail[w.email] = w; });
+    var rows = [];
+    Object.keys(QUEUE).forEach(function(em){
+      var w = byMail[em] || { email: em, first: "", last: "" };
+      var st = { state:"ok", notes: QUEUE[em].notes || [], replies: QUEUE[em].replies || [] };
+      var answered = {};
+      st.replies.forEach(function(r){ answered[r.to] = 1; });
+      (st.notes || []).forEach(function(n){
+        if(answered[n.id]) return;
+        rows.push({ at: n.at || "", html:
+          '<div class="qitem">'+
+            '<div class="qwho">'+
+              '<button class="lnk" data-open="'+esc(em)+'">'+esc(((w.first||"")+" "+(w.last||"")).trim() || em)+'</button>'+
+              (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+              (w.phone?'<a class="btn sm wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
+            '</div>'+
+            tabNotes(w, { state:"ok", notes:[n], replies: st.replies }, true)+
+          '</div>' });
+      });
+    });
+    if(!rows.length) return '<div class="empty">אין הערות שממתינות לתשובה. הכל טופל 🌸</div>';
+    rows.sort(function(a,b){ return String(b.at).localeCompare(String(a.at)); });
+    return '<div class="qhead">'+rows.length+' הערות ממתינות לתשובה. עונים לאחת, היא יורדת מהתור, והבאה כאן.</div>'+
+      rows.map(function(r){ return r.html; }).join("");
   }
 
   function quickActs(w){
@@ -1098,6 +1157,14 @@ function render(){
   var sel = list.filter(function(w){ return w.email === SEL; })[0]
          || DATA.women.filter(function(w){ return w.email === SEL; })[0];
 
+  if(VIEW === "notes" && !searching){
+    html += queueScreen();
+    html += '<div class="note">שינוי כאן נשמר אצלנו וגובר על הגיליון. <b>הגיליון הראשי לא משתנה</b>, כי הוא הקובץ ש-ManyChat עובד איתו.</div>';
+    app.innerHTML = html;
+    wire();
+    return;
+  }
+
   html += '<div class="split'+(sel?" haspick":"")+'">'+
     '<div class="pane list">'+
       '<div class="phead"><span>'+list.length+' משתתפות</span><span>ממוינות לפי שם</span></div>'+
@@ -1115,7 +1182,10 @@ function render(){
 
   html += '<div class="note">שינוי כאן נשמר אצלנו וגובר על הגיליון. <b>הגיליון הראשי לא משתנה</b>, כי הוא הקובץ ש-ManyChat עובד איתו.</div>';
   app.innerHTML = html;
+  wire();
+  }
 
+  function wire(){
   var qEl = document.getElementById("q");
   qEl.oninput = function(){ var v=this.selectionStart; render(); var n=document.getElementById("q"); n.focus(); n.setSelectionRange(v,v); };
 
@@ -1167,6 +1237,8 @@ function render(){
     render(); }; });
   app.querySelectorAll("[data-notesretry]").forEach(function(el){ el.onclick=function(){
     var em = el.getAttribute("data-notesretry"); delete NOTES[em]; notesLoad(em); }; });
+  app.querySelectorAll("[data-queueretry]").forEach(function(el){ el.onclick=function(){
+    QUEUE = null; render(); }; });
   app.querySelectorAll("textarea[id^=rp_]").forEach(function(el){ el.oninput=function(){
     DRAFT[el.id.slice(3)] = el.value; }; });
   // המסך רץ בדפדפן ואין לו דרך לדבר עם הצ'אט, ולכן הגשר הוא העתקה מוכנה להדבקה.
@@ -1208,7 +1280,7 @@ function render(){
       .then(function(r){ return r.json(); })
       .then(function(d){
         if(!d || !d.ok) throw new Error();
-        delete DRAFT[id]; delete NOTES[em];
+        delete DRAFT[id]; delete NOTES[em]; QUEUE = null;
         // השאלה והתשובה נכנסות לבנק רק אם התיבה מסומנת. תגית התאריך שהוספנו בהעברה
         // מהקובץ יורדת, כי היא לא חלק מהשאלה.
         var keep = document.getElementById("bk_"+id);
@@ -1220,7 +1292,7 @@ function render(){
             .then(function(b){ if(b && b.ok && b.bank) BANK = b.bank; })
             .catch(function(){});
         }
-        return load().then(function(){ notesLoad(em); });
+        return load().then(function(){ if(VIEW !== "notes") notesLoad(em); else render(); });
       })
       .catch(function(){ el.disabled = false; alert("השליחה נכשלה. נסי שוב."); });
   }; });
@@ -1233,8 +1305,8 @@ function render(){
       .then(function(r){ return r.json(); })
       .then(function(d){
         if(!d || !d.ok) throw new Error();
-        delete NOTES[em];
-        return load().then(function(){ notesLoad(em); });
+        delete NOTES[em]; QUEUE = null;
+        return load().then(function(){ if(VIEW !== "notes") notesLoad(em); else render(); });
       })
       .catch(function(){ el.disabled = false; alert("הפעולה נכשלה. נסי שוב."); });
   }; });

@@ -551,7 +551,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.84";
+const VERSION = "5.86";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3029,7 +3029,16 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, on
     <>
       <button data-tut="notesfab" onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 420, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
         <MessageCircle size={20} />
-        {(notes.length + (replies || []).length) > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: (replies || []).length ? C.brand : C.ink, color: "#fff", fontSize: 13, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length + (replies || []).length}</span>}
+        {(notes.length + (replies || []).length) > 0 && (
+          <span style={{
+            position: "absolute", top: -3, insetInlineEnd: -3, color: "#fff", fontSize: 13, fontWeight: 700,
+            minWidth: 20, height: 20, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px",
+            // ירוק, ולא עוד גוון של ורוד: התראה שנצבעת בצבע המותג נבלעת בו. הטבעת הלבנה
+            // מפרידה אותה מהבועה שמתחתיה כדי שהיא תיתפס במבט אחד.
+            background: (replies || []).length ? "#16a34a" : C.ink,
+            boxShadow: (replies || []).length ? "0 0 0 2.5px #fff, 0 2px 6px rgba(22,163,74,.45)" : "0 0 0 2px #fff",
+          }}>{notes.length + (replies || []).length}</span>
+        )}
       </button>
       {open && (
         <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 45 }} onClick={() => setOpen(false)}>
