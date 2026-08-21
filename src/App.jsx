@@ -551,7 +551,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.73";
+const VERSION = "5.75";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2987,7 +2987,7 @@ function IntroOverlay({ onClose, name }) {
   );
 }
 
-function NotesFab({ notes, setNotes, screen, userName, email, phone }) {
+function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, onReadReply }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
@@ -3010,6 +3010,17 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone }) {
         // time; nobody could see it. Nothing here may ever depend on a formula again.
         body: JSON.stringify({ device, name: [userName || "", email || "", phone || ""].filter(Boolean).join(" · "), version: VERSION, ts: new Date().toISOString(), notes: notes.map((n) => ({ screen: n.screen, text: n.text, t: n.t })) }),
       });
+      // The sheet stays the record. This second copy is filed under her address so the
+      // office screen can answer her inside the app, and it rides the endpoint that already
+      // runs on every load rather than becoming a thirteenth serverless function.
+      if (email) {
+        notes.forEach((n) => {
+          fetch("/api/usage", {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ email, note: { screen: n.screen, text: n.text } }),
+          }).catch(() => {});
+        });
+      }
       setSent(true); setTimeout(() => setSent(false), 2500); setNotes([]);
     } catch (e) { alert("השליחה נכשלה - בדקי חיבור לאינטרנט ונסי שוב."); }
     finally { setSending(false); }
@@ -3018,7 +3029,7 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone }) {
     <>
       <button data-tut="notesfab" onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 420, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
         <MessageCircle size={20} />
-        {notes.length > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: C.ink, color: "#fff", fontSize: 13, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length}</span>}
+        {(notes.length + (replies || []).length) > 0 && <span style={{ position: "absolute", top: -2, insetInlineEnd: -2, background: (replies || []).length ? C.brand : C.ink, color: "#fff", fontSize: 13, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{notes.length + (replies || []).length}</span>}
       </button>
       {open && (
         <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 45 }} onClick={() => setOpen(false)}>
@@ -3027,6 +3038,13 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone }) {
               <span style={{ fontSize: 20, fontWeight: 600, color: C.ink }}>הערות לאפליקציה</span>
               <button onClick={() => setOpen(false)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
             </div>
+            {(replies || []).map((r) => (
+              <div key={r.id} style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 14, padding: "13px 15px", marginBottom: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: C.brand, marginBottom: 6 }}>תשובה מהצוות 💜</div>
+                <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{r.text}</div>
+                <div style={{ marginTop: 11 }}><Btn onClick={() => onReadReply && onReadReply(r.id)}>תודה, הבנתי</Btn></div>
+              </div>
+            ))}
             <div style={{ fontSize: 13.5, color: C.sub, lineHeight: 1.6, marginBottom: 12 }}>כל הערה תעזור לנו לשפר 💜 ואם תרצי שנחזור אלייך, אנא הוסיפי בהודעה את מספר הטלפון שלך</div>
             <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={`הערה על מסך "${screen}"…`} rows={4} style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", resize: "none", marginBottom: 8, boxSizing: "border-box" }} />
             <Btn onClick={add}>הוסיפי הערה</Btn>
@@ -3039,7 +3057,7 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone }) {
                   </div>
                 ))}
                 <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                  {FEEDBACK_URL && <Btn onClick={sendFeedback} disabled={sending}><Send size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {sent ? "נשלח, תודה!" : sending ? "שולחת…" : "שלחי משוב לצוות MyPrime"}</Btn>}
+                  {FEEDBACK_URL && <Btn onClick={sendFeedback} disabled={sending}><Send size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {sent ? "קיבלנו, תודה 💜" : sending ? "שולחת…" : "שלחי משוב לצוות MyPrime"}</Btn>}
                   <Btn variant="ghost" onClick={copyAll}><Copy size={14} style={{ verticalAlign: -2, marginLeft: 4 }} /> {copied ? "הועתק!" : "העתיקי הכל"}</Btn>
                 </div>
               </div>
@@ -5823,6 +5841,17 @@ export default function App() {
   const [freeze, setFreeze] = useState(() => { try { return JSON.parse(localStorage.getItem("myprime_freeze") || "null"); } catch (e) { return null; } });
   const [gateBack, setGateBack] = useState("");
   const gatePhone = (() => { try { return localStorage.getItem("myprime_phone") || ""; } catch (e) { return ""; } })();
+  const [replies, setReplies] = useState([]);
+  // Reading one takes it off her bubble here and tells the office she saw it. If the call
+  // fails it simply comes back on the next load; nothing of hers depends on it.
+  const readReply = (id) => {
+    setReplies((rs) => rs.filter((r) => r.id !== id));
+    if (!gateEmail) return;
+    fetch("/api/usage", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: gateEmail, noteRead: id }),
+    }).catch(() => {});
+  };
   const [gateAttempts, setGateAttempts] = useState(0);
   const [gateAgree, setGateAgree] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -5905,6 +5934,9 @@ export default function App() {
         // her next entry with nothing to install.
         try { localStorage.setItem("myprime_glow", d.glow ? "1" : "0"); } catch (e) {}
         setGlow(!!d.glow);
+        // Answers the office wrote to notes she left, that she has not read yet. They light
+        // the dot on the notes bubble and sit at the top of it until she taps "תודה, הבנתי".
+        setReplies(Array.isArray(d.replies) ? d.replies : []);
         // A freeze she has already come back from. Kept so her day strip can leave out the
         // days she was away, and still reach back to everything she really filled before
         // them. Nothing of hers is deleted, ever.
@@ -6614,7 +6646,7 @@ export default function App() {
             is not rendered anywhere, so nothing can ever set showIntro back to false, and
             keeping the condition would hide the bubble from every woman for the whole of
             her first session. The condition is dropped until IntroOverlay comes back. */}
-        {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} email={gateEmail} phone={gatePhone} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
+        {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} email={gateEmail} phone={gatePhone} replies={replies} onReadReply={readReply} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {favPrompt && (
           <div onClick={() => setFavPrompt(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>

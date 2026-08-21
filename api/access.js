@@ -321,7 +321,21 @@ export default async function handler(req, res) {
     } catch (e) { /* the bonus is never worth failing a login over */ }
   }
 
+  // Answers the office wrote to her notes, and which she has not read yet. They ride the
+  // gate because it already runs on every load: no new endpoint, and Vercel Hobby is on
+  // twelve functions out of twelve.
+  let replies = [];
+  if (RU && RT) {
+    try {
+      const raw = await redis(RU, RT, "HGET", "notes:replies", email);
+      const list = raw ? JSON.parse(raw) : [];
+      replies = list.filter((r) => r && r.text && !r.read)
+        .map((r) => ({ id: r.id, text: r.text, at: r.at }))
+        .slice(-5);
+    } catch (e) { /* an answer is never worth failing a login over */ }
+  }
+
   // `freeze` travels on so the diary can leave the frozen days out of her day strip and
   // label the days before them for what they are. Nothing of hers is deleted.
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
 }
