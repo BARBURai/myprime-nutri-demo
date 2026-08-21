@@ -551,7 +551,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.91";
+const VERSION = "5.93";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1064,9 +1064,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const goalEff = goalKg == null ? weightN : goalKg;
   const ageOk = ageN >= 33 && ageN <= 80;
   const heightOk = heightN >= 120 && heightN <= 210;
-  // 44 הוא משקל אמיתי, והרף הקודם, 50, חסם משתתפת מהאפליקציה לגמרי ואמר לה שהמשקל
-  // שלה אינו תקין. הרף קיים כדי לתפוס טעות הקלדה, ולכן הוא רחב ולא צר.
-  const weightOk = weightN >= 35 && weightN <= 250;
+  const weightOk = weightN >= 50 && weightN <= 150;
   const step0Valid = ageOk && heightOk && weightOk && keepShabbat !== null;
   const next = () => {
     if (step === 0 && !step0Valid) { setErr0(true); return; }
@@ -1107,7 +1105,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
             <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !heightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
             {err0 && !heightOk && errNote(heightCm === "" ? "יש למלא את הנתון" : "יש להזין גובה תקין בסנטימטרים")}
             <Field label="משקל נוכחי"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="decimal" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="" style={numStyle(err0 && !weightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></span></Field>
-            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "אפשר להזין משקל בין 35 ל-250 ק״ג")}
+            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "יש להזין משקל תקין בק״ג")}
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
               {fixedStart ? (
@@ -1673,7 +1671,7 @@ function WeighInTips({ style }) {
   );
 }
 
-function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDate = {}, startDate, stepGoalStored, stepsOpen, today = TODAY, onEditSteps, activityLog = [], weightKg = 0 }) {
+function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDate = {}, startDate, stepGoalStored, stepsOpen, today = TODAY, onEditSteps }) {
   const data = weights.map((w) => ({ ...w, label: `${parseDay(w.date).getUTCDate()}/${parseDay(w.date).getUTCMonth() + 1}` }));
   const change = Math.round((weights[weights.length - 1].kg - weights[0].kg) * 10) / 10;
   const current = weights[weights.length - 1].kg;
@@ -1685,19 +1683,15 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
   const calSeries = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(TODAY, i - 6);
     const dd = parseDay(d);
-    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, date: d, kcal: Math.round(calByDate[d] || 0) };
+    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
   });
   const loggedDays = calSeries.filter((x) => x.kcal > 0);
   // A day counts as "met the calorie goal" only if she ate CLOSE to the target. Trivial/partial logging
   // (e.g. a single item, far below target) or strong under-eating does not count as meeting the goal.
-  // היעד של יום מסוים אינו היעד הבסיסי: ביומן מתווספות אליו הקלוריות של האימון ושל
-  // הצעדים של אותו יום, ולכן ביום שהיא התאמנה מותר לה יותר. הדוח בדק מול הבסיס בלבד
-  // ולכן הציג אותה כמי שחרגה ביום שבו היא דווקא עמדה ביעד. דווח על ידי משתתפת.
-  const actByDate = {};
-  activityLog.forEach((a) => { actByDate[a.date] = (actByDate[a.date] || 0) + (a.kcal || 0); });
-  const goalOn = (d) => goalKcal + (actByDate[d] || 0) + (stepsOpen ? stepsKcal(stepsByDate[d] || 0, weightKg) : 0);
-  const calMet = (kc, d) => { const g = goalOn(d); return g > 0 && kc >= g * 0.8 && kc <= g * 1.05; };
-  const metDays = loggedDays.filter((x) => calMet(x.kcal, x.date)).length;
+  // A day counts as "met the calorie goal" only if she ate CLOSE to the target. Trivial/partial logging
+  // (e.g. a single item, far below target) or strong under-eating does not count as meeting the goal.
+  const calMet = (kc) => goalKcal > 0 && kc >= goalKcal * 0.8 && kc <= goalKcal * 1.05;
+  const metDays = loggedDays.filter((x) => calMet(x.kcal)).length;
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
   const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
   // The protein task opens on week 3 DAY 4, not on day 1 of week 3. Reading the week alone
@@ -1781,7 +1775,7 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
                 <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
                 <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 12, fill: C.brandD }} />
                 <Bar dataKey="kcal" radius={[6, 6, 0, 0]}>
-                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal, d.date) ? C.brand : C.amber} />))}
+                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal) ? C.brand : C.amber} />))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -3465,7 +3459,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             <label style={mLbl}>שם המוצר</label>
             <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="לדוגמה: חטיף חלבון" style={mInput} />
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-              <div style={{ flex: 1 }}><label style={mLbl}>{mWhole ? "כמות (לא חובה)" : "כמות שאכלת"}</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>{mWhole ? "כמות (לא חובה)" : "כמות שאכלת"}</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
             </div>
             <div style={{ margin: "16px 0 8px" }}>
@@ -3793,7 +3787,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
                     <button onClick={() => setGrams(Math.max(au.g, grams - au.g))} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                      <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                      <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                       <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                     </div>
                     <button onClick={() => setGrams(grams + au.g)} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
@@ -4509,7 +4503,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
                       <button onClick={() => setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g) })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                         <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                       </div>
                       <button onClick={() => setChosen({ ...chosen, grams: chosen.grams + au.g })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
@@ -6570,7 +6564,7 @@ export default function App() {
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
-              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} activityLog={activityLog} weightKg={profile.weightKg} />}
+              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
             </div>
