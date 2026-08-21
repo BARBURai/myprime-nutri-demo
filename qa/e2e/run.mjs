@@ -258,10 +258,17 @@ const CHECKS = [
       await page.waitForTimeout(500);
       const st2 = await state();
       const back = st2.weeklyRateG === 250 && !st2.lossStopAt;
+      // מי שכבר ירדה מתחת לקו פעם אחת לא רואה 500 שוב, בשום משקל
+      await page.locator("text=קצב ירידה").first().click();
+      await page.waitForTimeout(400);
+      body = await page.locator("body").innerText();
+      const noFast = body.includes("ירידה 250 ג׳ בשבוע") && !body.includes("ירידה 500 ג׳ בשבוע");
+      await page.mouse.click(8, 8);
+      await page.waitForTimeout(300);
 
       await context.close();
-      const ok = shown && moved && acked && locked && noGoalRow && tooEarly && stillLocked && offered && back && !errors.length;
-      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · אישרה ${acked} · הקצבים נעלמו ${locked} · אין משקל יעד ${noGoalRow} · ב-48 לא מוצע ${tooEarly} · ונשאר נעול ${stillLocked} · ב-49.5 מוצע ${offered} · חזרה ${back} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
+      const ok = shown && moved && acked && locked && noGoalRow && tooEarly && stillLocked && offered && back && noFast && !errors.length;
+      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · אישרה ${acked} · הקצבים נעלמו ${locked} · אין משקל יעד ${noGoalRow} · ב-48 לא מוצע ${tooEarly} · ונשאר נעול ${stillLocked} · ב-49.5 מוצע ${offered} · חזרה ${back} · בלי 500 ${noFast} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
     },
   },
   {
@@ -379,6 +386,12 @@ const CHECKS = [
       // Straight into today's lessons. Going through "כל התוכנית" would work too, but the
       // shortest path to an open lesson is the one least likely to break for an unrelated
       // reason and hide what this scenario is actually about.
+      // **התרחיש הזה נכשל בשבת, וזו מגבלה שלו ולא באג באפליקציה.** הוא נכנס דרך
+      // "התכנים שלך היום", ובשבת אין תוכן חדש ולכן `data-tut="contentcard"`
+      // אינו קיים כלל והכרטיס מציג "כל התוכנית פתוחה לך". אומת ב-22 באוגוסט
+      // 2026: אין שגיאת ריצה, מסך התוכן תקין, והכניסה בלבד היא שלא נמצאת.
+      // התיקון הנכון הוא להיכנס דרך "כל התוכנית" ולפתוח שבוע, כי מ-v5.16 שום
+      // יום אינו נפתח מעצמו. ראה סעיף 28.
       await page.locator('[data-tut="contentcard"], [aria-label="כל התוכנית"]').first().click();
       await page.waitForTimeout(700);
       const tabs = page.locator('[data-tut^="content-tab-"]');
