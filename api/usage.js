@@ -16,6 +16,8 @@
 //   note:     { screen, text }  - what she just wrote, filed under her address so the office
 //                                 screen can answer it. It still goes to the Google Sheet too.
 //   noteRead: "<id>"            - she read the answer and tapped "תודה, הבנתי".
+//   bmiAck:   1                  - she read and acknowledged the weight message. The DATE
+//                                  only: no weight, no height, no BMI ever leaves her device.
 
 const MAX_DAYS = 70;
 const MAX_NOTES = 40;        // per woman, oldest dropped
@@ -117,6 +119,12 @@ export default async function handler(req, res) {
         list.forEach((r) => { if (r.id === readId && !r.read) { r.read = new Date().toISOString(); hit = true; } });
         if (hit) await redis(RU, RT, "HSET", "notes:replies", email, JSON.stringify(list));
       } catch (e) {}
+    }
+
+    // היא קראה ואישרה את ההודעה על המשקל. **מה שנשמר הוא התאריך בלבד**: לא משקל,
+    // לא גובה ולא BMI. די בו כדי שהמשרד ידע שהיא ראתה, וזה כל מה שרון ביקש.
+    if (body && body.bmiAck) {
+      try { await redis(RU, RT, "HSET", "bmi:ack", email, new Date().toISOString()); } catch (e) {}
     }
 
     if (body && body.doneToday) {

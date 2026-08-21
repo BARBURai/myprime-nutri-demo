@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "5.97";
+const ADMIN_VERSION = "5.98";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -796,6 +796,18 @@ export default async function handler(req, res) {
     }
   }
   women.forEach((w) => { const n = parseInt(pending[w.email], 10); if (n > 0) w.notes = n; });
+
+  // מי אישרה את ההודעה על המשקל. **התאריך בלבד**: המשקל, הגובה וה-BMI לעולם
+  // אינם עוזבים את המכשיר שלה, וזו הבטחת פרטיות ולא פרט טכני. ראה סעיף 23.
+  let bmiAck = {};
+  if (RU && RT) {
+    try { bmiAck = (await redis(RU, RT, "HGETALL", "bmi:ack")) || {}; } catch (e) { bmiAck = {}; }
+    if (Array.isArray(bmiAck)) {
+      const flat = bmiAck; bmiAck = {};
+      for (let i = 0; i < flat.length; i += 2) bmiAck[flat[i]] = flat[i + 1];
+    }
+  }
+  women.forEach((w) => { if (bmiAck[w.email]) w.bmiAck = bmiAck[w.email]; });
 
   return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women });
 }

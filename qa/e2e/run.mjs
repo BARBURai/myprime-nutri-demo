@@ -214,11 +214,16 @@ const CHECKS = [
       // 45 ק״ג בגובה 152 הוא BMI 19.5, מתחת לקו של BMI 20 שהוא 46.5 ק״ג
       await logWeight(45);
       let body = await page.locator("body").innerText();
-      const shown = body.includes("לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית") && body.includes("הודעה לצוות בוואטסאפ");
+      const shown = body.includes("לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית")
+        && body.includes("אנחנו ממליצים לך ליצור קשר עם הדיאטנית לקבלת הנחיות")
+        && body.includes('בלחיצה על "הבנתי" את מאשרת שקראת את ההודעה הזאת')
+        && !body.includes("הודעה לצוות בוואטסאפ");
       const st1 = await state();
       const moved = st1.weeklyRateG === 0 && !!st1.lossStopAt;
-      await page.locator("text=הבנתי").first().click();
-      await page.waitForTimeout(400);
+      // הכפתור ולא הטקסט: שורת האישור שמעליו מכילה את המילה "הבנתי" בתוכה
+      await page.getByRole("button", { name: "הבנתי" }).first().click();
+      await page.waitForTimeout(500);
+      const acked = !!(await state()).lossAckAt;
 
       // ברשימת הקצבים נשארה שמירה בלבד
       await openBase();
@@ -226,6 +231,8 @@ const CHECKS = [
       await page.waitForTimeout(400);
       body = await page.locator("body").innerText();
       const locked = !body.includes("ירידה 250 ג׳ בשבוע") && !body.includes("ירידה 500 ג׳ בשבוע") && body.includes("שמירה על המשקל");
+      // שורת משקל היעד נעלמת בשמירה: אין לה יעד, והמינימום של השדה היה גבוה מהערך שבתוכו
+      const noGoalRow = !body.includes("משקל יעד");
       await page.mouse.click(8, 8);   // הרקע של החלון סוגר אותו
       await page.waitForTimeout(400);
 
@@ -244,8 +251,8 @@ const CHECKS = [
       const back = st2.weeklyRateG === 250 && !st2.lossStopAt;
 
       await context.close();
-      const ok = shown && moved && locked && tooEarly && offered && back && !errors.length;
-      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · הקצבים נעלמו ${locked} · ב-48 לא מוצע ${tooEarly} · ב-49.5 מוצע ${offered} · חזרה ${back} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
+      const ok = shown && moved && acked && locked && noGoalRow && tooEarly && offered && back && !errors.length;
+      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · אישרה ${acked} · הקצבים נעלמו ${locked} · אין משקל יעד ${noGoalRow} · ב-48 לא מוצע ${tooEarly} · ב-49.5 מוצע ${offered} · חזרה ${back} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
     },
   },
   {
