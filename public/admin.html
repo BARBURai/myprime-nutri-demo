@@ -252,6 +252,12 @@
   }
   .qwho{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px}
   .qwho .lnk{font-size:17px;font-weight:800;text-decoration:none;font-family:Heebo,Assistant,sans-serif}
+  .qwhen{font-size:13px;color:var(--ink-2);font-weight:600}
+  .qinfo{
+    display:grid;gap:7px;margin:0 0 12px;padding:11px 13px;border-radius:11px;
+    background:var(--card-2);border:1px solid var(--line);font-size:14px;
+  }
+  .qinfo .flabel{display:inline}
   .qitem .note-card{border:0;padding:0;box-shadow:none;background:none}
   .sugbox{margin-top:11px;display:grid;gap:6px}
   .sug{
@@ -716,7 +722,13 @@ var TAB = "info";   // הלשונית הפתוחה בכרטיס
 var NOTES = {}, DRAFT = {}, NOTE_TEXT = {}, NOTE_AT = {}, NOTE_SCREEN = {};
 // תור המענה: כל ההערות הפתוחות במסך אחד, אחת מתחת לשנייה. עונים, היא נעלמת, והבאה
 // כבר שם. בלי להיכנס לכל אישה בנפרד ובלי לחזור לרשימה בין אחת לשנייה.
-var QUEUE = null;
+var QUEUE = null, QINFO = {};
+// "נכתבה ב-" בלשון אחת לשני המקורות: הערה שהועברה מהקובץ נושאת את התאריך שלה
+// בתגית שבתחילת הטקסט, וחדשה מוחתמת בזמן אמת.
+function noteWhen(n){
+  var tag = String((n && n.text) || "").match(/^\[נכתב ([0-9.]+)\]\s*/);
+  return tag ? "נכתבה ב-" + tag[1] : "נכתבה ב-" + stamp(n && n.at);
+}
 // בנק התשובות. נטען פעם אחת, ומשמש להצעת ניסוח להערה חדשה.
 var BANK = null;
 // עשר התשובות שכבר קיימות במסך "שאלות ותשובות" שבאפליקציה. הן מוצעות כבסיס כשהבנק
@@ -746,6 +758,14 @@ var BANK_SEED = [
     a:"כפתור ההשתקה כבר קיים בנגן. כתוביות ומהירות ניגון עדיין לא, וזו בקשה שרשמנו והיא על השולחן. תודה שכתבת, זה בדיוק סוג ההערה שעוזרת לנו 💜" },
   { id:"s16", q:"תאריך ההתחלה לא נכון, ביקשתי מועד אחר",
     a:"תיקנו לך את תאריך ההתחלה. בפתיחה הבאה של האפליקציה הכל יתעדכן לבד 💜" },
+  { id:"s18", q:"אין התחשבות בשינוי היעד היומי בהתאם לפעילות הגופנית שביצעתי, ההתייחסות לעמידה ביעד היא ליעד הראשוני",
+    a:"תודה שכתבת 🌸 ביומן היעד כן מתעדכן: הקלוריות של האימון ושל הצעדים מתווספות לתקציב היומי שלך באותו יום. בדוח הבדיקה נעשתה מול היעד המקורי, וזה לא נכון. מצאנו את זה בזכותך ואנחנו מתקנים 💜" },
+  { id:"s19", q:"כשניסיתי לשנות את הכמות בגרמים המספר לא התאפס לי, המספר 1 נשאר ולא יכולתי לרשום 70 אלא רק 71",
+    a:"את צודקת לגמרי, וזו תקלה אצלנו: השדה הגיע עם 1 בפנים, וההקלדה נוספה לו במקום להחליף אותו. תיקנו, ומעכשיו לחיצה על השדה מסמנת את מה שכתוב בו וההקלדה מחליפה אותו. תודה שדיווחת 🌸" },
+  { id:"s20", q:"לא מצליחה להזין את המשקל שלי, האפליקציה לא מקבלת אותו",
+    a:"מצאנו את התקלה ואת צודקת: האפליקציה לא קיבלה משקל נמוך מ-50 קילו, וזו הייתה טעות שלנו. תיקנו, ועכשיו אפשר להזין את המשקל שלך כרגיל. מצטערים על העיכוב, ותודה שכתבת 💜" },
+  { id:"s21", q:"ברגע ששמרתי ארוחה ורציתי להוסיף עוד ארוחה הוא לא נותן לי שוב את הרשימה של איך להוסיף, וגם נמחקה לי רשימת מזונות",
+    a:"תודה שכתבת 🌸 להוספת ארוחה נוספת לוחצים שוב על הפלוס שבמרכז הסרגל התחתון, והרשימה המלאה נפתחת מחדש: צילום, סריקת ברקוד, חיפוש והזנה ידנית. לגבי רשימת המזונות שנעלמה, אנחנו בודקים את זה, וזה בדיוק סוג הדיווח שעוזר לנו לתפוס דברים כאלה 💜" },
   { id:"s17", q:"הייתי שמחה למלא רק את כמות הקלוריות משום שאני משתמשת בג'מיני, האם אפשרי?",
     a:"כן, ועכשיו זה גם קל. לוחצים על הפלוס, בוחרים \"הזנה ידנית\" (האייקון של העיפרון), ושם יש מתג: \"ל-100 ג׳\" מול \"לכל המנה\". בוחרים \"לכל המנה\" ומקלידים את המספרים שקיבלת בדיוק כמו שהם, בלי חישוב. את שדה הכמות אפשר להשאיר ריק 💜" },
 ];
@@ -1084,9 +1104,20 @@ function render(){
           '<div class="qitem">'+
             '<div class="qwho">'+
               '<button class="lnk" data-open="'+esc(em)+'">'+esc(((w.first||"")+" "+(w.last||"")).trim() || em)+'</button>'+
+              // מתי היא כתבה, על השורה של השם ולפני שפותחים כלום: זה מה שאומר מי קדמה למי.
+              '<span class="qwhen">'+esc(noteWhen(n))+'</span>'+
               (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+              '<button class="btn sm" data-qinfo="'+esc(em)+'">'+(QINFO[em]?"סגירת הפרטים":"פרטים")+'</button>'+
               (w.phone?'<a class="btn sm wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
             '</div>'+
+            (QINFO[em] ? '<div class="qinfo">'+
+              '<div><span class="flabel">טלפון</span> <span class="mono">'+esc(w.phone||"אין")+'</span>'+
+                (w.phone?' <button class="btn sm" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+'</div>'+
+              '<div><span class="flabel">מייל</span> <span class="mono">'+esc(w.email||"")+'</span>'+
+                ' <button class="btn sm" data-copy="'+esc(w.email||"")+'">העתקה</button></div>'+
+              '<div><span class="flabel">מחזור</span> '+esc(il(w.start||""))+' · '+esc(dayInProgram(w))+' · '+esc(lastSeen(w))+'</div>'+
+              '<div><button class="btn sm" data-open="'+esc(em)+'">פתיחת הכרטיס המלא שלה</button></div>'+
+            '</div>' : '')+
             tabNotes(w, { state:"ok", notes:[n], replies: st.replies }, true)+
           '</div>' });
       });
@@ -1242,6 +1273,10 @@ function render(){
     var em = el.getAttribute("data-notesretry"); delete NOTES[em]; notesLoad(em); }; });
   app.querySelectorAll("[data-queueretry]").forEach(function(el){ el.onclick=function(){
     QUEUE = null; render(); }; });
+  app.querySelectorAll("[data-qinfo]").forEach(function(el){ el.onclick=function(){
+    var em = el.getAttribute("data-qinfo");
+    if(QINFO[em]) delete QINFO[em]; else QINFO[em] = 1;
+    render(); }; });
   app.querySelectorAll("textarea[id^=rp_]").forEach(function(el){ el.oninput=function(){
     DRAFT[el.id.slice(3)] = el.value; }; });
   // המסך רץ בדפדפן ואין לו דרך לדבר עם הצ'אט, ולכן הגשר הוא העתקה מוכנה להדבקה.
