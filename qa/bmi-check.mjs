@@ -36,11 +36,13 @@ const code = [
   line("function noLossRoom("),
   line("function resumeLossKg("),
   line("function canResumeLoss("),
+  line("const RATE_OPTIONS ="), line("const FAST_RATE_ROOM_KG ="),
+  grab("function rateOptionsFor(", "\n}\n") + "\n}\n",
   grab("function currentWeightOf(", "// ירידה מהירה מדי"),
   grab("function fastLossPct(", "\n}\n") + "\n}\n",
-  "return { UNDERWEIGHT_BMI, MIN_LOSS_BMI, RESUME_LOSS_BMI, FAST_LOSS_PCT, bmiOf, minHealthyKg, noLossRoom, resumeLossKg, canResumeLoss, currentWeightOf, fastLossPct, addDays };",
+  "return { UNDERWEIGHT_BMI, MIN_LOSS_BMI, RESUME_LOSS_BMI, FAST_LOSS_PCT, FAST_RATE_ROOM_KG, bmiOf, minHealthyKg, noLossRoom, resumeLossKg, canResumeLoss, currentWeightOf, fastLossPct, rateOptionsFor, addDays };",
 ].join("\n");
-const { UNDERWEIGHT_BMI, MIN_LOSS_BMI, RESUME_LOSS_BMI, bmiOf, minHealthyKg, noLossRoom, resumeLossKg, canResumeLoss, currentWeightOf, fastLossPct, addDays } = new Function(code)();
+const { UNDERWEIGHT_BMI, MIN_LOSS_BMI, RESUME_LOSS_BMI, FAST_RATE_ROOM_KG, bmiOf, minHealthyKg, noLossRoom, resumeLossKg, canResumeLoss, currentWeightOf, fastLossPct, rateOptionsFor, addDays } = new Function(code)();
 
 let pass = 0, fail = 0;
 const check = (n, c, extra) => { if (c) { pass++; console.log("  ✓ " + n); } else { fail++; console.log("  ✗ " + n + (extra ? "  → " + extra : "")); } };
@@ -76,10 +78,10 @@ check("וההודעה אומרת את הטווח במקום להכריז שהמ�
 
 console.log("\nמסך היעד\n");
 check("הדגל מחושב מהגובה ומהמשקל שהיא הזינה", src.includes("const noLoss = noLossRoom(weightN, heightN);"));
-check("והקצב נכפה לשמירה, כך ש-250 שנבחר כברירת מחדל לא נשמר בטיוטה", src.includes("const rateEff = noLoss ? 0 : rate;") && src.includes("weeklyRateG: rateEff") && src.includes("goalWeightKg: rateEff === 0 ? weightN"));
+check("והקצב נכפה לשמירה, כך ש-250 שנבחר כברירת מחדל לא נשמר בטיוטה", src.includes("const rateEff = noLoss ? 0 : (rateChoices.indexOf(rate) === -1 ? 250 : rate);") && src.includes("weeklyRateG: rateEff") && src.includes("goalWeightKg: rateEff === 0 ? weightN"));
 check("הקופי של רון, מילה במילה", src.includes("לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל.") && src.includes("אם המספרים לא נכונים, אפשר לחזור אחורה ולתקן. ואם את רוצה לדבר איתנו על זה, אנא שלחי הודעה לצוות בוואטסאפ."));
 check("ויש לה כפתור לצוות, ולא רק משפט", /noLoss \? \([\s\S]{0,1400}wa\.me\/972547304177/.test(src));
-check("ארבע אפשרויות הקצב אינן מוצגות לה", /noLoss \? \([\s\S]{0,1800}\) : \(<>[\s\S]{0,400}RATE_OPTIONS\.map/.test(src));
+check("אפשרויות הקצב אינן מוצגות לה", /noLoss \? \([\s\S]{0,1800}\) : \(<>[\s\S]{0,400}rateChoices\.map/.test(src));
 check("ונאמר לה ששאר התוכנית פתוחה", src.includes("כל שאר התוכנית פתוחה לך כרגיל"));
 check("וגם גרף התחזית שטוח, ולא מצייר לה ירידה", src.includes("const proj = projection(weightN, rateEff === 0 ? weightN : goalEff, rateEff);"));
 
@@ -118,7 +120,7 @@ check("מי שנרשמת כשאין לה לאן לרדת מסומנת כבר ב�
 console.log("\nשתי הדלתות בפרופיל\n");
 check("עריכת המשקל בפרופיל עוברת דרך אותו כלל", src.includes('if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(pendingWeight.value, profile.heightCm))'));
 check("ומציגה לה את אותו מסך", src.includes("setShowLossStop(true)"));
-check("קצב הירידה בשמירה מציג שמירה בלבד", src.includes("{(inMaintain ? [0] : RATE_OPTIONS).map((r) => {"));
+check("קצב הירידה בשמירה מציג שמירה בלבד", src.includes("{(inMaintain ? [0] : rateOptionsFor("));
 // הבאג שרון תפס: הנעילה נשענה על "היא מתחת לקו עכשיו" ולא על "העברנו אותה
 // לשמירה", ולכן בטווח שבין שני הקווים הרשימה נפתחה והיא יכלה לבחור 250 לבד.
 check("והנעילה נשענת על המצב ולא על המשקל של הרגע", src.includes("const inMaintain = !!profile.lossStopAt;") && !/const noLoss = noLossRoom\(curWeight/.test(src));
@@ -164,6 +166,23 @@ check("והאישור נשאר אצלה בלבד", src.includes("setProfile((pr)
 
 console.log("\nשורת משקל היעד\n");
 check("אינה מוצגת למי שבשמירה, כי אין לה יעד", src.includes('{!inMaintain && <EditRow label="משקל יעד"'));
+
+console.log("\nאילו קצבים מוצעים לה\n");
+const opts = (w, h, ever) => JSON.stringify(rateOptionsFor(w, h, ever));
+check("500 מוצע רק כשיש לה חמישה קילו עד הקו", FAST_RATE_ROOM_KG === 5);
+check("בגובה 155, ב-53.5 ק״ג היא מקבלת גם 500", opts(53.5, 155, false) === "[0,250,500]");
+check("וב-53 כבר לא, כי הקצב הזה היה מביא אותה לקו לפני סוף התוכנית", opts(53, 155, false) === "[0,250]");
+check("מי שכבר ירדה מתחת לקו פעם אחת נשארת על 250, בכל משקל", opts(80, 155, true) === "[0,250]" && opts(60, 175, true) === "[0,250]");
+check("ושמירה תמיד מוצעת", [ [44,155], [60,155], [90,175] ].every((c) => rateOptionsFor(c[0], c[1], false).indexOf(0) === 0));
+check("הרשימה נגזרת מ-RATE_OPTIONS ואינה מועתקת", src.includes("RATE_OPTIONS.filter((g) => g !== 500 || fastOk)"));
+check("הסימון שנשאר לתמיד נכתב בכל שלוש נקודות החצייה", (src.match(/lossStopEver/g) || []).length >= 4);
+check("והפרופיל שואל אותו", src.includes("rateOptionsFor(curWeight != null ? curWeight : profile.weightKg, profile.heightCm, !!profile.lossStopEver)"));
+check("ברישום, בחירה שנעלמה מתחתיה אינה נשמרת בטיוטה", src.includes("rateChoices.indexOf(rate) === -1 ? 250 : rate"));
+
+console.log("\nשני באגים שרון תפס בבדיקה\n");
+check("עריכת המשקל בפרופיל מזיזה גם את נקודת הפתיחה", src.includes("if (pendingWeight.key === \"weightKg\" && onBaseWeight) onBaseWeight(pendingWeight.value);") && src.includes("const setBaseWeight = (kg) => setWeights("));
+check("וכל דיווח שהיא עשתה מאז נשאר במקומו", src.includes("const rest = (w || []).filter((x) => x.date !== start);"));
+check("האזהרה על קצב מהיר אינה מוצגת למי שבשמירה", src.includes("{targets.floored && rateEff !== 0 && ("));
 
 console.log("\nהטווח שבין שני הקווים, וזה מה שנשבר\n");
 // בגובה 155: הקו התחתון 48.5, הקו לחזרה 50.5. ב-50 היא בין שניהם.

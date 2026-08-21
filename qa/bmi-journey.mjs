@@ -24,23 +24,26 @@ const A = new Function([
   line("const PROTEIN_PER_KG ="), line("const FAT_PER_KG ="), line("const RATE_OPTIONS ="),
   line("const UNDERWEIGHT_BMI ="), line("const MIN_LOSS_BMI ="), line("const RESUME_LOSS_BMI ="),
   line("function bmiOf("), line("function minHealthyKg("), line("function noLossRoom("),
-  line("function resumeLossKg("), line("function canResumeLoss("),
+  line("function resumeLossKg("), line("function canResumeLoss("), line("const FAST_RATE_ROOM_KG ="),
+  src.slice(src.indexOf("function rateOptionsFor("), src.indexOf("\n}\n", src.indexOf("function rateOptionsFor("))) + "\n}\n",
   // אלה רב-שורתיות, ולכן נחתכות בטווח ולא בשורה אחת
   src.slice(src.indexOf("function bmrMifflinWoman("), src.indexOf("function projection(")),
   src.slice(src.indexOf("function computeTargets("), src.indexOf("\n}\n", src.indexOf("function computeTargets("))) + "\n}\n",
-  "return { KCAL_FLOOR, MIN_LOSS_BMI, RESUME_LOSS_BMI, bmiOf, minHealthyKg, noLossRoom, resumeLossKg, canResumeLoss, computeTargets };",
+  "return { KCAL_FLOOR, MIN_LOSS_BMI, RESUME_LOSS_BMI, bmiOf, minHealthyKg, noLossRoom, resumeLossKg, canResumeLoss, rateOptionsFor, computeTargets };",
 ].join("\n"))();
 
 /* ---------- כל מעבר מצב מאומת מול הקוד שמבצע אותו ---------- */
 const TRANSITIONS = [
   ["המעבר לשמירה נורה מהזנת משקל", "if (!profile.lossStopAt && profile.weeklyRateG !== 0 && noLossRoom(cur, profile.heightCm))"],
-  ["ומה שהוא כותב", "setProfile((pr) => ({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date }));"],
+  ["ומה שהוא כותב", "setProfile((pr) => ({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true }));"],
   ["הבדיקה היא על המשקל העדכני ולא על מה שהוקלד", "const cur = next[next.length - 1].kg;"],
   ["נעילת המסכים לפי המצב", "const inMaintain = !!profile.lossStopAt;"],
   ["והחזרה מול הקו השני", "const canResume = inMaintain && canResumeLoss("],
   ["מה שהחזרה כותבת", "lossStopAt: null, weeklyRateG: 250"],
   ["היעד בשמירה מחושב מהמשקל האמיתי", "const effProfile = lossStopped"],
-  ["רשימת הקצבים נעולה לפי המצב", "{(inMaintain ? [0] : RATE_OPTIONS).map((r) => {"],
+  ["רשימת הקצבים נעולה לפי המצב", "{(inMaintain ? [0] : rateOptionsFor("],
+  ["ותקרת ה-500", "RATE_OPTIONS.filter((g) => g !== 500 || fastOk)"],
+  ["והסימון שנשאר לתמיד", "lossStopEver: true"],
   ["ושורת משקל היעד מוסתרת לפיו", '{!inMaintain && <EditRow label="משקל יעד"'],
 ];
 let drift = 0;
@@ -58,6 +61,7 @@ function newWoman(heightCm, startKg, age = 50) {
     weeklyRateG: noLoss ? 0 : 250,
     goalWeightKg: noLoss ? startKg : Math.max(A.minHealthyKg(heightCm), startKg - 0.5),
     lossStopAt: noLoss ? "start" : null,
+    lossStopEver: noLoss,
     weights: [startKg],
     screensShown: noLoss ? 1 : 0,            // מסך הרישום נחשב
   };
@@ -67,7 +71,7 @@ const cur = (w) => w.weights[w.weights.length - 1];
 function logWeight(w, kg, day) {
   w.weights.push(kg);
   if (!w.lossStopAt && w.weeklyRateG !== 0 && A.noLossRoom(cur(w), w.heightCm)) {
-    w.weeklyRateG = 0; w.goalWeightKg = cur(w); w.lossStopAt = day; w.screensShown++;
+    w.weeklyRateG = 0; w.goalWeightKg = cur(w); w.lossStopAt = day; w.lossStopEver = true; w.screensShown++;
     return "moved";
   }
   return "none";
@@ -77,7 +81,7 @@ const view = (w) => {
   const inMaintain = !!w.lossStopAt;
   return {
     inMaintain,
-    rateChoices: inMaintain ? [0] : [0, 250, 500],
+    rateChoices: inMaintain ? [0] : A.rateOptionsFor(cur(w), w.heightCm, !!w.lossStopEver),
     goalRow: !inMaintain,
     resumeCard: inMaintain && A.canResumeLoss(cur(w), w.heightCm),
     target: A.computeTargets(inMaintain
@@ -125,6 +129,9 @@ for (let h = 140; h <= 195; h++) {
         const tdee = A.computeTargets({ age: 50, heightCm: h, weightKg: kg, weeklyRateG: 0 }).targetKcal;
         if (v.target.targetKcal < tdee) fail(`${h}/${kg}: יעד ${v.target.targetKcal} נמוך מהתחזוקה ${tdee}`);
       }
+      // 2ב. מי שכבר ירדה מתחת לקו פעם אחת לעולם לא תראה 500 שוב
+      if (w.lossStopEver && v.rateChoices.indexOf(500) !== -1) fail(`${h}/${kg}: 500 מוצע למי שכבר ירדה מתחת לקו`);
+      if (!v.inMaintain && v.rateChoices.indexOf(500) !== -1 && kg - floor < 5) fail(`${h}/${kg}: 500 מוצע ופחות מ-5 ק״ג עד הקו`);
       // 3. החזרה מוצעת אך ורק מעל הקו השני
       if (v.resumeCard && kg < back) fail(`${h}/${kg}: הוצע לחזור מתחת ל-${back}`);
       if (v.inMaintain && kg >= back && !v.resumeCard) fail(`${h}/${kg}: לא הוצע לחזור אף שהיא מעל ${back}`);
