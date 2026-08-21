@@ -702,7 +702,7 @@ var SEL = "";   // המשתתפת שהכרטיס שלה פתוח. במחשב ה�
 var TAB = "info";   // הלשונית הפתוחה בכרטיס
 // ההערות של אישה אחת, נקראות בפתיחת הלשונית שלה בלבד. הרשימה הראשית מקבלת מספר
 // בלבד, ולכן אין כאן קריאה אחת לכל שורה.
-var NOTES = {}, DRAFT = {}, NOTE_TEXT = {};
+var NOTES = {}, DRAFT = {}, NOTE_TEXT = {}, NOTE_AT = {}, NOTE_SCREEN = {};
 // בנק התשובות. נטען פעם אחת, ומשמש להצעת ניסוח להערה חדשה.
 var BANK = null;
 // עשר התשובות שכבר קיימות במסך "שאלות ותשובות" שבאפליקציה. הן מוצעות כבסיס כשהבנק
@@ -985,7 +985,7 @@ function render(){
     st.replies.forEach(function(r){ byNote[r.to] = r; });
     return st.notes.map(function(n){
       var r = byNote[n.id];
-      NOTE_TEXT[n.id] = n.text;
+      NOTE_TEXT[n.id] = n.text; NOTE_AT[n.id] = n.at; NOTE_SCREEN[n.id] = n.screen || "";
       var tag = String(n.text||"").match(/^\[נכתב ([0-9.]+)\]\s*/);
       var body = tag ? n.text.slice(tag[0].length) : n.text;
       var when = tag ? 'נכתבה ב-'+esc(tag[1])+' · הועברה מהקובץ' : 'נכתבה ב-'+esc(stamp(n.at));
@@ -1013,6 +1013,7 @@ function render(){
         '<div class="control">'+
           '<button class="btn p" data-sendreply="'+esc(n.id)+'" data-for="'+esc(w.email)+'">שלחי לה</button>'+
           '<button class="btn ghost" data-notedone="'+esc(n.id)+'" data-for="'+esc(w.email)+'">סימון כטופל בלי תשובה</button>'+
+          '<button class="btn ghost" data-toclaude="'+esc(n.id)+'" data-for="'+esc(w.email)+'">העתקה לצ\'אט</button>'+
         '</div>'+
         '<label class="bankadd"><input type="checkbox" id="bk_'+esc(n.id)+'" checked> לשמור את השאלה והתשובה בבנק, כדי שיוצעו בפעם הבאה</label>'+
       '</div>';
@@ -1179,6 +1180,26 @@ function render(){
     var em = el.getAttribute("data-notesretry"); delete NOTES[em]; notesLoad(em); }; });
   app.querySelectorAll("textarea[id^=rp_]").forEach(function(el){ el.oninput=function(){
     DRAFT[el.id.slice(3)] = el.value; }; });
+  // המסך רץ בדפדפן ואין לו דרך לדבר עם הצ'אט, ולכן הגשר הוא העתקה מוכנה להדבקה.
+  // ההערה נשארת פתוחה: העברה לדיון אינה טיפול.
+  app.querySelectorAll("[data-toclaude]").forEach(function(el){ el.onclick=function(){
+    var id = el.getAttribute("data-toclaude"), em = el.getAttribute("data-for");
+    var w = (DATA.women||[]).filter(function(x){ return x.email === em; })[0] || {};
+    var raw = NOTE_TEXT[id] || "";
+    var tag = raw.match(/^\[נכתב ([0-9.]+)\]\s*/);
+    var when = tag ? tag[1] : (NOTE_AT[id] ? stamp(NOTE_AT[id]) : "");
+    var box = document.getElementById("rp_"+id);
+    var draft = (box ? box.value : "").trim();
+    var out = "הערה ממסך הניהול\n" +
+      "שם: " + ((w.first||"")+" "+(w.last||"")).trim() + "\n" +
+      "מייל: " + (w.email||"") + (w.phone ? "\nטלפון: " + w.phone : "") + "\n" +
+      "נכתבה: " + when + (NOTE_SCREEN[id] ? ' \u00b7 \u05de\u05d4\u05de\u05e1\u05da "'+NOTE_SCREEN[id]+'"' : "") + "\n" +
+      "מחזור: " + il(w.start||"") + " \u00b7 " + dayInProgram(w) + "\n\n" +
+      "מה שהיא כתבה:\n" + (tag ? raw.slice(tag[0].length) : raw) +
+      (draft ? "\n\nהניסוח שיש לי כרגע בתיבה:\n" + draft : "") +
+      "\n\nמה לענות לה?";
+    copyText(out, el);
+  }; });
   app.querySelectorAll("[data-usebank]").forEach(function(el){ el.onclick=function(){
     var e = (BANK||[]).filter(function(x){ return x.id === el.getAttribute("data-usebank"); })[0];
     if(!e) return;
