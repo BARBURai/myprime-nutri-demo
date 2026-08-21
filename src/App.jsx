@@ -85,8 +85,15 @@ const PROTEIN_PER_KG = 1.6;        // טווח מומלץ 1.5-1.7
 const FAT_PER_KG = 0.9;
 const RATE_OPTIONS = [0, 250, 500];
 const UNDERWEIGHT_BMI = 18.5; // WHO: BMI<18.5 = תת-משקל
+// הרצפה לירידה במשקל, החלטה של רון מ-21 באוגוסט 2026. היא גבוהה מקו תת-המשקל
+// בכוונה: 18.5 הוא קו האבחון עצמו, ואישה שמתחילה מעליו עם גירעון קלורי חוצה אותו
+// תוך שבועיים. התוכניות המסחריות עוצרות סביב 20 מאותה סיבה.
+const MIN_LOSS_BMI = 20;
 function bmiOf(kg, heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? kg / (h * h) : 0; }
-function minHealthyKg(heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? Math.ceil(UNDERWEIGHT_BMI * h * h * 2) / 2 : 0; } // משקל מינימלי שעדיין BMI>=18.5, מעוגל ל-0.5 כלפי מעלה
+function minHealthyKg(heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? Math.ceil(MIN_LOSS_BMI * h * h * 2) / 2 : 0; } // המשקל הנמוך ביותר שמותר לכוון אליו, BMI 20, מעוגל ל-0.5 כלפי מעלה
+// אין לה לאן לרדת: המשקל שלה כבר בטווח שאנחנו לא ממליצים לרדת מתחתיו, ולכן מסך
+// היעד מציג לה שמירה בלבד. הכלל אחד, ומתוכו נגזרות שתי ההתנהגויות.
+function noLossRoom(weightKg, heightCm) { return heightCm > 0 && weightKg > 0 && weightKg <= minHealthyKg(heightCm); }
 const WATER_TARGET_GLASSES = 8;    // 8 כוסות = 2 ליטר
 const WATER_MIN_GLASSES = 6;       // 6 כוסות = 1.5 ליטר
 const WATER_TARGET_ML = 2000;      // יעד מים קבוע: 2 ליטר
@@ -551,7 +558,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.95";
+const VERSION = "5.96";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1064,7 +1071,13 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const goalEff = goalKg == null ? weightN : goalKg;
   const ageOk = ageN >= 33 && ageN <= 80;
   const heightOk = heightN >= 120 && heightN <= 210;
-  const weightOk = weightN >= 50 && weightN <= 150;
+  // בדיקת טעות הקלדה בלבד. הבריאות נשמרת על ידי כלל ה-BMI במסך היעד ולא על ידי
+  // מספר שרירותי כאן, שחסם נשים בריאות והכניס בשקט נשים בתת-משקל.
+  const weightOk = weightN >= 30 && weightN <= 250;
+  // אין לה לאן לרדת. הקצב נכפה לשמירה, כי המסך מציג לה שמירה בלבד ואסור שהטיוטה
+  // תישאר עם 250 שנבחר כברירת מחדל לפני שהיא הזינה גובה ומשקל.
+  const noLoss = noLossRoom(weightN, heightN);
+  const rateEff = noLoss ? 0 : rate;
   const step0Valid = ageOk && heightOk && weightOk && keepShabbat !== null;
   const next = () => {
     if (step === 0 && !step0Valid) { setErr0(true); return; }
@@ -1072,9 +1085,9 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
     setStep(step + 1);
   };
 
-  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightN : Math.max(minHealthyKg(heightN), goalEff), returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
+  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rateEff, goalWeightKg: rateEff === 0 ? weightN : Math.max(minHealthyKg(heightN), goalEff), returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
   const targets = computeTargets(draft);
-  const proj = projection(weightN, rate === 0 ? weightN : goalEff, rate);
+  const proj = projection(weightN, rateEff === 0 ? weightN : goalEff, rateEff);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
   const backupSetup = wantBackup ? { enabled: true, email: bkEmail.trim().toLowerCase(), code: bkCode } : { enabled: false };
 
@@ -1105,7 +1118,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
             <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !heightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
             {err0 && !heightOk && errNote(heightCm === "" ? "יש למלא את הנתון" : "יש להזין גובה תקין בסנטימטרים")}
             <Field label="משקל נוכחי"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="decimal" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="" style={numStyle(err0 && !weightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></span></Field>
-            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "יש להזין משקל תקין בק״ג")}
+            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "אפשר להזין משקל בין 30 ל-250 ק״ג")}
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
               {fixedStart ? (
@@ -1140,6 +1153,20 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
         {step === 1 && (
           <>
             <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>מה המטרה שלך?</span>
+            {noLoss ? (
+              <>
+                <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 14, padding: "14px 16px", margin: "12px 0 14px" }}>
+                  <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.6 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל.</div>
+                  <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>אם המספרים לא נכונים, אפשר לחזור אחורה ולתקן. ואם את רוצה לדבר איתנו על זה, אנא שלחי הודעה לצוות בוואטסאפ.</div>
+                  <a href={`https://wa.me/972547304177?text=${encodeURIComponent("היי, יש לי שאלה על היעד שלי בתוכנית")}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#25D366", color: "#fff", borderRadius: 12, padding: "10px 18px", fontSize: 15, fontWeight: 700, textDecoration: "none", marginTop: 12 }}>הודעה לצוות בוואטסאפ</a>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, border: `2px solid ${C.brand}`, background: C.brandBg, borderRadius: 14, padding: 14 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${C.brand}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><div style={{ width: 10, height: 10, borderRadius: "50%", background: C.brand }} /></div>
+                  <span style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{rateLabel(0)}</span>
+                </div>
+                <p style={{ fontSize: 14, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>כל שאר התוכנית פתוחה לך כרגיל: התכנים, המעקב היומי, התנועה והשיעורים.</p>
+              </>
+            ) : (<>
             <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 14 }}>בחרי קצב ירידה שבועי. קצב מתון נשמר לאורך זמן וטוב יותר לשמירה על מסת שריר.</p>
             {RATE_OPTIONS.map((g) => {
               const sel = rate === g;
@@ -1155,7 +1182,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
                 </div>
               );
             })}
-            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalEff} set={(v) => setGoalKg(Math.max(minHealthyKg(heightN), Math.min(weightN - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightN)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
+            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalEff} set={(v) => setGoalKg(Math.max(minHealthyKg(heightN), Math.min(weightN - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightN)} ק״ג, שהוא הטווח שאנחנו ממליצים עליו לגובה שלך.</div></div>)}
+            </>)}
           </>
         )}
 
@@ -2090,7 +2118,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
           <div style={{ paddingBottom: 4 }}>
             <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
             <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
-            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.weightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
+            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: 30, suffix: "ק״ג", init: profile.weightKg })} />
             <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
             <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
             {maxStart ? (

@@ -138,6 +138,48 @@ const record = (device, name, ok, detail, skip) => {
 
 const CHECKS = [
   {
+    // The lower bound for weight loss is BMI 20, and it is read off her height. A fixed
+    // number in kilograms cannot do this job: 50kg blocked a real participant at 152cm who
+    // is perfectly healthy, and waved through 51kg at 175cm, which is severe underweight.
+    // Both halves are asserted from the same screen, because a rule that only ever fires
+    // would be indistinguishable from a rule that never fires.
+    name: "מי שאין לה לאן לרדת מקבלת שמירה בלבד, ומי שכן מקבלת את הקצבים",
+    async run(browser, device) {
+      const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+      await stubApi(context, { startDate: startForDay(1) });
+      await context.addInitScript(([sd]) => {
+        localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
+        localStorage.setItem("myprime_access_name", "בדיקה");
+        localStorage.setItem("myprime_start_date", sd);
+        localStorage.setItem("myprime_install_ack", "1");
+      }, [startForDay(1)]);
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(String(e.message || e)));
+      const goalStep = async (heightCm, weightKg) => {
+        await page.goto(BASE, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(2600);
+        await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
+        const nums = page.locator("input[type=number]");
+        await nums.nth(0).fill("50");
+        await nums.nth(1).fill(String(heightCm));
+        await nums.nth(2).fill(String(weightKg));
+        await page.locator("text=כן, כל השבוע").first().click();
+        await page.locator("text=המשך").first().click();
+        await page.waitForTimeout(600);
+        return page.locator("body").innerText();
+      };
+      // 152cm and 44kg is BMI 19.0 - inside the normal range, and blocked outright before this.
+      const low = await goalStep(152, 44);
+      const lowOk = low.includes("לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל") && !low.includes("ירידה 250 ג׳ בשבוע") && low.includes("שמירה על המשקל");
+      // The same height at 60kg is BMI 26.0, and nothing about her screen may change.
+      const norm = await goalStep(152, 60);
+      const normOk = norm.includes("ירידה 250 ג׳ בשבוע") && norm.includes("משקל רצוי") && !norm.includes("אנו לא ממליצים על ירידה במשקל");
+      await context.close();
+      return { ok: lowOk && normOk && !errors.length, detail: `BMI 19 שמירה בלבד ${lowOk} · BMI 26 קצבים ${normOk} · שגיאות ${errors.length ? errors[0].slice(0, 80) : "אין"}` };
+    },
+  },
+  {
     name: "המסך הראשי נטען ואין שגיאת JavaScript",
     async run(browser, device) {
       const { context, page, errors } = await openApp(browser, device);
