@@ -17,15 +17,30 @@ const line = (prefix) => {
   return hit;
 };
 
+const grab = (from, to) => {
+  const a = src.indexOf(from), b = src.indexOf(to, a);
+  if (a < 0 || b < 0) { console.log("✗ לא נמצא בקוד: " + from); process.exit(1); }
+  return src.slice(a, b);
+};
+
 const code = [
   line("const UNDERWEIGHT_BMI ="),
   line("const MIN_LOSS_BMI ="),
+  line("const RESUME_LOSS_BMI ="),
+  line("const FAST_LOSS_PCT ="),
+  line("const FAST_LOSS_DAYS ="),
+  "const pad2 = (n) => String(n).padStart(2, '0');",
+  line("function parseDay("), line("function fmtDay("), line("function addDays("),
   line("function bmiOf("),
   line("function minHealthyKg("),
   line("function noLossRoom("),
-  "return { UNDERWEIGHT_BMI, MIN_LOSS_BMI, bmiOf, minHealthyKg, noLossRoom };",
+  line("function resumeLossKg("),
+  line("function canResumeLoss("),
+  grab("function currentWeightOf(", "// ירידה מהירה מדי"),
+  grab("function fastLossPct(", "\n}\n") + "\n}\n",
+  "return { UNDERWEIGHT_BMI, MIN_LOSS_BMI, RESUME_LOSS_BMI, FAST_LOSS_PCT, bmiOf, minHealthyKg, noLossRoom, resumeLossKg, canResumeLoss, currentWeightOf, fastLossPct, addDays };",
 ].join("\n");
-const { UNDERWEIGHT_BMI, MIN_LOSS_BMI, bmiOf, minHealthyKg, noLossRoom } = new Function(code)();
+const { UNDERWEIGHT_BMI, MIN_LOSS_BMI, RESUME_LOSS_BMI, bmiOf, minHealthyKg, noLossRoom, resumeLossKg, canResumeLoss, currentWeightOf, fastLossPct, addDays } = new Function(code)();
 
 let pass = 0, fail = 0;
 const check = (n, c, extra) => { if (c) { pass++; console.log("  ✓ " + n); } else { fail++; console.log("  ✗ " + n + (extra ? "  → " + extra : "")); } };
@@ -55,9 +70,9 @@ check("בלי גובה או בלי משקל אין חסימה", noLossRoom(60, 0
 
 console.log("\nשדה המשקל ברישום הוא בדיקת טעות הקלדה בלבד\n");
 const wOk = line("  const weightOk =");
-check("הטווח הוא 40 עד 200", /weightN >= 40 && weightN <= 200/.test(wOk), wOk.trim());
+check("הטווח הוא 35 עד 200, ומתחתיו כלל ה-BMI עושה את העבודה", /weightN >= 35 && weightN <= 200/.test(wOk), wOk.trim());
 check("הוא כבר לא 50 עד 150, שחסם משתתפת אמיתית", !/>= 50/.test(wOk));
-check("וההודעה אומרת את הטווח במקום להכריז שהמספר שגוי", src.includes("אפשר להזין משקל בין 40 ל-200 ק״ג") && !src.includes("יש להזין משקל תקין בק״ג"));
+check("וההודעה אומרת את הטווח במקום להכריז שהמספר שגוי", src.includes("אפשר להזין משקל בין 35 ל-200 ק״ג") && !src.includes("יש להזין משקל תקין בק״ג"));
 
 console.log("\nמסך היעד\n");
 check("הדגל מחושב מהגובה ומהמשקל שהיא הזינה", src.includes("const noLoss = noLossRoom(weightN, heightN);"));
@@ -69,9 +84,69 @@ check("ונאמר לה ששאר התוכנית פתוחה", src.includes("כל �
 check("וגם גרף התחזית שטוח, ולא מצייר לה ירידה", src.includes("const proj = projection(weightN, rateEff === 0 ? weightN : goalEff, rateEff);"));
 
 console.log("\nמה שלא נסגר בפניה\n");
-check("המשקל הנוכחי בפרופיל אינו כבול לרף, כי הוא עובדה ולא יעד", /key: "weightKg"[^}]*min: 40,/.test(src));
+check("המשקל הנוכחי בפרופיל אינו כבול לרף, כי הוא עובדה ולא יעד", /key: "weightKg"[^}]*min: 35,/.test(src));
 check("היעד בפרופיל כן כבול לרף", /key: "goalWeightKg"[^}]*min: minHealthyKg\(profile\.heightCm\)/.test(src));
 check("הזנת משקל יומית ממשיכה לקבל כל ערך סביר ורק מזהירה", src.includes("num >= 30 && num <= 400") && src.includes("bmiOf(num, heightCm) < UNDERWEIGHT_BMI"));
+
+console.log("\nהקו השני: איך היא חוזרת, ולמה אין יו-יו\n");
+check("החזרה היא ב-BMI 21 ולא באותו קו שממנו יצאה", RESUME_LOSS_BMI === 21 && RESUME_LOSS_BMI > MIN_LOSS_BMI);
+// הפער הוא כל מנגנון ההגנה מפני תנודה, ולכן הוא חייב להיות גדול מתנודה יומית
+let minGap = Infinity, gapWhere = "";
+for (let h = 140; h <= 200; h++) { const g = resumeLossKg(h) - minHealthyKg(h); if (g < minGap) { minGap = g; gapWhere = h + " ס״מ"; } }
+check("הפער בין הקווים לפחות 2 ק״ג בכל גובה, מעבר לתנודה יומית", minGap >= 2, "המינימום " + minGap + " ב-" + gapWhere);
+check("בגובה 152 היא יוצאת ב-46.5 וחוזרת ב-49", near(minHealthyKg(152), 46.5) && near(resumeLossKg(152), 49));
+check("בגובה 175 היא יוצאת ב-61.5 וחוזרת ב-64.5", near(minHealthyKg(175), 61.5) && near(resumeLossKg(175), 64.5));
+// שני המצבים לא יכולים לחיות יחד באף נקודה, אחרת המסך היה סותר את עצמו
+let overlap = 0;
+for (let h = 140; h <= 200; h++) for (let w2 = 70; w2 <= 400; w2++) { const w = w2 / 2; if (noLossRoom(w, h) && canResumeLoss(w, h)) overlap++; }
+check("אין אף נקודה שבה היא גם מתחת לקו וגם רשאית לחזור", overlap === 0, overlap + " נקודות");
+check("בדיוק על הקו השני אפשר לחזור", canResumeLoss(49, 152) === true);
+check("חצי קילו מתחתיו עדיין לא", canResumeLoss(48.5, 152) === false);
+check("החזרה היא לחיצה שלה ולא חישוב שלנו", src.includes("const resumeLoss = () => setProfile(") && src.includes("חזרה לירידה במשקל"));
+check("ולידה נכתבת שורת ההתייעצות שרון ביקש", src.includes("כדאי להתייעץ עם דיאטנית קלינית לפני שחוזרים."));
+check("והמעבר לשמירה הוא היחיד שקורה לבד", src.includes('setSheet("lossStop")'));
+
+console.log("\nהמשקל החי: הכלל קורא את מה שהיא דיווחה, לא את הרישום\n");
+check("בלי דיווח נופלים חזרה למשקל הרישום", currentWeightOf({ weightKg: 72 }, []) === 72 && currentWeightOf({ weightKg: 72 }, null) === 72);
+check("ועם דיווח נלקח האחרון", currentWeightOf({ weightKg: 72 }, [{ date: "2026-08-01", kg: 70 }, { date: "2026-08-15", kg: 66 }]) === 66);
+check("הזנת משקל בדוח בודקת את הכלל", src.includes("if (!profile.lossStopAt && profile.weeklyRateG !== 0 && noLossRoom(cur, profile.heightCm))"));
+check("והיא בודקת את המשקל העדכני ולא את מה שהוקלד, בגלל מילוי לאחור", src.includes("const cur = next[next.length - 1].kg;"));
+check("היעד בשמירה מחושב מהמשקל האמיתי שלה עכשיו", src.includes("const effProfile = lossStopped ? { ...profile, weeklyRateG: 0, weightKg: curWeight } : profile;"));
+check("והמסך מוצג פעם אחת, כי הדגל נשמר", src.includes("lossStopAt: date"));
+check("מי שנרשמת כשאין לה לאן לרדת מסומנת כבר ברישום", src.includes("lossStopAt: noLoss ? startDate : null"));
+
+console.log("\nשתי הדלתות בפרופיל\n");
+check("עריכת המשקל בפרופיל עוברת דרך אותו כלל", src.includes('if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(pendingWeight.value, profile.heightCm))'));
+check("ומציגה לה את אותו מסך", src.includes("setShowLossStop(true)"));
+check("קצב הירידה מתחת לקו מציג שמירה בלבד", src.includes("{(noLoss ? [0] : RATE_OPTIONS).map((r) => {"));
+check("הכלל בפרופיל נקרא מהמשקל האחרון שדיווחה", src.includes("const noLoss = noLossRoom(curWeight != null ? curWeight : profile.weightKg, profile.heightCm);"));
+
+console.log("\nהקצב, ולא רק המספר\n");
+const wk = (n, kg) => ({ date: addDays("2026-08-21", -n), kg });
+// 60 ק״ג שיורדת ל-57 בשלושה שבועות: קילו בשבוע, שהוא 1.67 אחוז
+check("ירידה של קילו בשבוע על 60 ק״ג מדליקה", fastLossPct([wk(21, 60), wk(0, 57)], "2026-08-21") >= 1);
+// אותה ירידה על 100 ק״ג היא 1 אחוז בדיוק, ולכן על הסף
+check("אותה ירידה על 100 ק״ג היא בדיוק על הסף", Math.abs(fastLossPct([wk(21, 100), wk(0, 97)], "2026-08-21") - 1) < 0.01);
+check("חצי קילו בשבוע על 80 ק״ג לא מדליקה", fastLossPct([wk(21, 80), wk(0, 78.5)], "2026-08-21") < 1);
+check("עלייה במשקל לא מדליקה", fastLossPct([wk(21, 70), wk(0, 72)], "2026-08-21") === 0);
+check("פחות משבועיים אינו קצב, כי השבוע הראשון יורד מנוזלים", fastLossPct([wk(10, 70), wk(0, 66)], "2026-08-21") === 0);
+check("דיווח אחד בלבד אינו קצב", fastLossPct([wk(0, 66)], "2026-08-21") === 0);
+check("ההתרעה לא חוזרת יותר מפעם בשלושה שבועות", src.includes("profile.fastLossAt > addDays(TODAY, -FAST_LOSS_DAYS)"));
+check("והיא אינה חוסמת כלום", src.includes("function FastLossSheet(") && !src.includes("fastLossBlock"));
+
+console.log("\nהקופי, מילה במילה\n");
+check("שתי השורות של רון במסך המעבר לשמירה", src.includes("לפי הנתונים שלך אנו לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית.") && src.includes("המערכת לא יכולה לתת ערכים של ירידה נוספת במשקל."));
+check('ובלי "הורדה", שאינה עברית תקנית כאן', !src.includes("הורדה נוספת במשקל"));
+check("ומסך הרישום נשאר בנוסח שלו, בלי נוספת", src.includes("לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל."));
+check("יש לה דרך להגיע לצוות משני המסכים", (src.match(/wa\.me\/972547304177/g) || []).length >= 4);
+
+console.log("\nהמשרד אינו מקבל שום נתון, לפי החלטת רון\n");
+const usage = readFileSync(new URL("../api/usage.js", import.meta.url), "utf8");
+check("שרת השימוש אינו יודע מה זה משקל", !/weight|bmi|\bkg\b/i.test(usage));
+check("ואינו יודע על השמירה מטעמי בריאות", !/lossStop|noLoss/i.test(usage));
+const admin = readFileSync(new URL("../api/admin.js", import.meta.url), "utf8");
+check("ומסך הניהול אינו מציג שום דבר מזה", !/lossStop|noLossRoom|minHealthyKg/i.test(admin));
+check("והאפליקציה אינה שולחת את זה לשום מקום", !/body:[^;]*lossStopAt/.test(src));
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.\n");
 process.exit(fail ? 1 : 0);
