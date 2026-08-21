@@ -588,7 +588,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.99";
+const VERSION = "6.00";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2111,9 +2111,11 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, 
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
   const commit = () => { const k = edit.key; if (k === "weightKg" || k === "goalWeightKg") { setPendingWeight({ key: k, value: edit.value }); setEdit(null); return; } setProfile({ ...profile, [k]: edit.value }); setEdit(null); };
-  // אין לה לאן לרדת, לפי המשקל האחרון שדיווחה. הכלל אחד, וכל השורות למטה שואלות אותו.
-  const noLoss = noLossRoom(curWeight != null ? curWeight : profile.weightKg, profile.heightCm);
-  const canResume = !!profile.lossStopAt && canResumeLoss(curWeight != null ? curWeight : profile.weightKg, profile.heightCm);
+  // **המצב, ולא המשקל של הרגע.** נעילת המסכים חייבת להישען על "העברנו אותה
+  // לשמירה" ולא על "היא מתחת לקו עכשיו", אחרת בטווח שבין שני הקווים הרשימה
+  // נפתחת והיא יכולה לבחור 250 לבד, וכל מנגנון ההגנה מפני תנודה מתבטל.
+  const inMaintain = !!profile.lossStopAt;
+  const canResume = inMaintain && canResumeLoss(curWeight != null ? curWeight : profile.weightKg, profile.heightCm);
   const confirmWeight = () => {
     if (pendingWeight) {
       const next = { ...profile, [pendingWeight.key]: pendingWeight.value };
@@ -2170,9 +2172,9 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, 
             {/* למי שבשמירה אין משקל יעד, ולכן אין מה להציג ואין מה לערוך. השורה גם
                 נשברה שם: המינימום של השדה גבוה מהערך שבתוכו, ולכן לחיצה על מינוס
                 הקפיצה את המספר למעלה. חוזרת מעצמה ברגע שהיא חוזרת לירידה. */}
-            {!noLoss && <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />}
+            {!inMaintain && <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />}
             <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
-            {noLoss && !canResume && (
+            {inMaintain && !canResume && (
               <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", margin: "8px 0 4px", fontSize: 14, color: C.sub, lineHeight: 1.6 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית.</div>
             )}
             {canResume && (
@@ -2383,7 +2385,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, 
 
             {edit.type === "rate" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
-                {(noLoss ? [0] : RATE_OPTIONS).map((r) => {
+                {(inMaintain ? [0] : RATE_OPTIONS).map((r) => {
                   const sel = edit.value === r; const rec = r === 250;
                   return (
                     <button key={r} onClick={() => setEdit({ ...edit, value: r })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: `${rec ? 2 : 1.5}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : C.panel, color: sel || rec ? C.brandD : C.ink, borderRadius: 12, padding: "11px", fontSize: 16, fontFamily: fontStack, fontWeight: sel || rec ? 600 : 400, cursor: "pointer" }}>
@@ -2392,7 +2394,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, 
                     </button>
                   );
                 })}
-                {noLoss && <div style={{ fontSize: 13.5, color: C.faint, lineHeight: 1.55, marginTop: 2 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל ללא התייעצות עם דיאטנית קלינית.</div>}
+                {inMaintain && <div style={{ fontSize: 13.5, color: C.faint, lineHeight: 1.55, marginTop: 2 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל ללא התייעצות עם דיאטנית קלינית.</div>}
               </div>
             )}
 
