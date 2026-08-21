@@ -551,7 +551,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "5.78";
+const VERSION = "5.80";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2984,6 +2984,12 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, on
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const add = () => { if (!text.trim()) return; setNotes((n) => [...n, { text: text.trim(), screen, t: new Date().toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) }]); setText(""); };
+  // Acknowledging the last answer, with nothing of her own waiting to be sent, closes the
+  // bubble: leaving it open on an empty form reads as if the tap did nothing.
+  const ackReply = (id) => {
+    onReadReply && onReadReply(id);
+    if ((replies || []).length <= 1 && !notes.length) setTimeout(() => setOpen(false), 250);
+  };
   const copyAll = () => { try { navigator.clipboard.writeText(notes.map((n) => `• [${n.screen}] ${n.text}`).join("\n")); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) {} };
   const sendFeedback = async () => {
     if (!notes.length || sending) return;
@@ -3036,7 +3042,7 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, on
               <div key={r.id} style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 14, padding: "13px 15px", marginBottom: 12 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: C.brand, marginBottom: 6 }}>תשובה מהצוות 💜</div>
                 <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{r.text}</div>
-                <div style={{ marginTop: 11 }}><Btn onClick={() => onReadReply && onReadReply(r.id)}>תודה, הבנתי</Btn></div>
+                <div style={{ marginTop: 11 }}><Btn onClick={() => ackReply(r.id)}>תודה, הבנתי</Btn></div>
               </div>
             ))}
             <div style={{ fontSize: 13.5, color: C.sub, lineHeight: 1.6, marginBottom: 12 }}>כל הערה תעזור לנו לשפר 💜 ואם תרצי שנחזור אלייך, אנא הוסיפי בהודעה את מספר הטלפון שלך</div>
