@@ -810,6 +810,8 @@ function render(){
   var noDate = DATA.women.filter(function(w){ return w.frozen && !!w.freezeTodo; });
   var backSoon = DATA.women.filter(function(w){ return w.backSoon; });
   var notesWaiting = DATA.women.filter(function(w){ return w.notes > 0; });
+  // הספירה היא של הערות ולא של נשים, כדי שהאריח והתור יאמרו את אותו מספר.
+  var notesCount = notesWaiting.reduce(function(n, w){ return n + (parseInt(w.notes, 10) || 0); }, 0);
   var base = MISSING ? missing : (VIEW==="nodate" ? noDate : VIEW==="backsoon" ? backSoon : VIEW==="notes" ? notesWaiting : pool);
 
   // מחזור אחד ברשימה נפתחת, במקום שלוש שורות של צ'יפים לשנה, לחודש ולמחזור.
@@ -871,7 +873,7 @@ function render(){
           (noDate.length?"⚠ ":"")+'הקפאה להשלמה ('+noDate.length+')</span>'+
         '<span class="chip'+(VIEW==="backsoon"?" on":"")+'" data-v="backsoon">חוזרות מהקפאה השבוע ('+backSoon.length+')</span>'+
         '<span class="chip'+(notesWaiting.length?" warn":"")+(VIEW==="notes"?" on":"")+'" data-v="notes">'+
-          (notesWaiting.length?"⚠ ":"")+'הערות ממתינות ('+notesWaiting.length+')</span>'+
+          (notesCount?"⚠ ":"")+'הערות ממתינות ('+notesCount+')</span>'+
       '</div>'+
       // Say what the list covers, so a woman who is missing from it does not read as a bug.
       (MISSING ? '<div class="note">מוצגות רק נשים ללא אות קבוצה במחזור של השבוע ובמחזור של השבוע הבא.</div>' : '')+
@@ -880,7 +882,8 @@ function render(){
       (VIEW==="backsoon" ? '<div class="note">חוזרות מהקפאה בשבוע הקרוב. <b>ליד כל אחת כתוב לאיזה מחזור להכניס אותה</b>, כדי שתדעי לאיזו קבוצת וואטסאפ היא שייכת.</div>' : '')+
       '</div>'+
       // שלוש רשימות נפתחות בשורה אחת, במקום חמש שורות של צ'יפים שתפסו חצי מסך
-      // לפני שהגענו לשם הראשון ברשימה.
+      // לפני שהגענו לשם הראשון ברשימה. בתור המענה אין מה לסנן, ולכן כולו יורד.
+      (VIEW === "notes" ? '' :
       '<div class="zone filt"><span class="zlab">סינון</span>'+
       '<div class="frow">'+
         '<span class="sel"><select id="fCohort" aria-label="מחזור">'+
@@ -903,7 +906,7 @@ function render(){
         ((COHORT||GROUP||APP!=="new") ? '<button class="btn sm ghost" data-fclear="1">ניקוי</button>' : '')+
       '</div>'+
       (MISSING ? '' : appGap())+
-      '</div>')+
+      '</div>'))+
     '</div>';
 
   // הכרטיס המלא. הוא לא השתנה, הוא רק עבר לגור בצד במקום בתוך הרשימה.
