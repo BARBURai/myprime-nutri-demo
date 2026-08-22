@@ -5,7 +5,7 @@ import {
   Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet,
   MessageCircle, Loader, Copy, Mic, Send, Lock, Clock, Cookie, BarChart3,
 } from "lucide-react";
-import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
+import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, ComposedChart, Bar, Line, Cell, ReferenceLine } from "recharts";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
@@ -598,7 +598,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.07";
+const VERSION = "6.08";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1742,7 +1742,14 @@ function WeighInTips({ style }) {
   );
 }
 
-function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWeek, stepsByDate = {}, startDate, stepGoalStored, stepsOpen, today = TODAY, onEditSteps }) {
+// הסימן הקטן שמסמן את היעד של יום אחד בגרף הקלוריות. Recharts מוסר את מרכז הנקודה,
+// והרוחב קבוע כי כל העמודות באותו רוחב. `key` נדרש כי Recharts משכפל את הרכיב לכל נקודה.
+function GoalDash({ cx, cy }) {
+  if (cx == null || cy == null) return null;
+  return <rect x={cx - 13} y={cy - 1} width={26} height={2.5} rx={1.25} fill={C.brandD} opacity={0.85} />;
+}
+
+function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWeek, stepsByDate = {}, activityLog = [], weightKg, startDate, stepGoalStored, stepsOpen, today = TODAY, onEditSteps }) {
   const data = weights.map((w) => ({ ...w, label: `${parseDay(w.date).getUTCDate()}/${parseDay(w.date).getUTCMonth() + 1}` }));
   const change = Math.round((weights[weights.length - 1].kg - weights[0].kg) * 10) / 10;
   const current = weights[weights.length - 1].kg;
@@ -1751,10 +1758,21 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
   const calByDate = {};
   log.forEach((e) => { calByDate[e.date] = (calByDate[e.date] || 0) + e.kcal; });
   const goalKcal = targets.targetKcal;
+  // כל יום נמדד מול היעד של אותו יום, בדיוק כמו ביומן. עד כאן הדוח השווה את כל שבעת
+  // הימים ליעד הבסיסי, ולכן ביום שהיא התאמנה הוא סימן אותה כחורגת בזמן שהיומן הראה
+  // לה שנשאר לה תקציב, ובכיוון השני נתן לה וי על גירעון כפול. דיווח של הדס קהלני.
+  // אותו חישוב בדיוק כמו ב-DayScreen: היעד ועוד האימון ועוד הצעדים, והצעדים רק מהיום
+  // שבו הם נפתחו לה. אותו משקל שהיומן משתמש בו, אחרת אותו יום היה יוצא שני מספרים.
+  const actByDate = {};
+  (activityLog || []).forEach((a) => { actByDate[a.date] = (actByDate[a.date] || 0) + (a.kcal || 0); });
+  const goalOn = (d) => {
+    const st = unlockedOn(startDate, d, STEPS_UNLOCK) ? stepsKcal((stepsByDate && stepsByDate[d]) || 0, weightKg) : 0;
+    return goalKcal + (actByDate[d] || 0) + st;
+  };
   const calSeries = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(TODAY, i - 6);
     const dd = parseDay(d);
-    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
+    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0), goal: Math.round(goalOn(d)) };
   });
   const loggedDays = calSeries.filter((x) => x.kcal > 0);
   // מתי יום נחשב "עמדה ביעד". החלטה של רון, 22 באוגוסט 2026, אחרי שהוא שאל:
@@ -1774,13 +1792,13 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
   // 1,200 הוא **מעל** מה שהיא שורפת ולא מתחתיו, ואין כאן שום גירעון כפול.
   const CAL_MET_LOW = 0.9, CAL_MET_LOW_MAINT = 0.95, CAL_MET_HIGH = 1.05;
   const metFloor = (g) => (onMaintain ? g * CAL_MET_LOW_MAINT : Math.max(g * CAL_MET_LOW, KCAL_FLOOR));
-  const calMet = (kc) => goalKcal > 0 && kc >= metFloor(goalKcal) && kc <= goalKcal * CAL_MET_HIGH;
+  const calMet = (kc, g) => g > 0 && kc >= metFloor(g) && kc <= g * CAL_MET_HIGH;
   // ומתחת לטווח אינו כמו מעליו. קודם שניהם נצבעו בכתום, ולכן "אכלתי 900"
   // ו"אכלתי 1,800" נראו לה זהה, וזה מטשטש בדיוק את ההבחנה שחשובה כאן.
-  const calBelow = (kc) => goalKcal > 0 && kc > 0 && kc < metFloor(goalKcal);
-  const metDays = loggedDays.filter((x) => calMet(x.kcal)).length;
+  const calBelow = (kc, g) => g > 0 && kc > 0 && kc < metFloor(g);
+  const metDays = loggedDays.filter((x) => calMet(x.kcal, x.goal)).length;
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
-  const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
+  const maxCal = Math.max(goalKcal, ...calSeries.map((x) => Math.max(x.kcal, x.goal)));
   // The protein task opens on week 3 DAY 4, not on day 1 of week 3. Reading the week alone
   // turned protein on three days early, while the tracker itself already used the exact
   // unlock day - so for three days she could be shown a target that did not exist yet.
@@ -1856,15 +1874,19 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
         {loggedDays.length > 0 && (
           <div style={{ height: 140, margin: "0 -6px" }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={calSeries} margin={{ top: 12, right: 8, left: 8, bottom: 0 }}>
+              {/* קו יעד אחד לכל השבוע ירד כאן. משהתחלנו למדוד כל יום מול היעד שלו,
+                  עמודה ירוקה של יום אימון עמדה מעליו ונקראה כסתירה. במקומו סימן קטן
+                  על כל עמודה, בגובה היעד של אותו יום, כך שהיא רואה בעין שהיעד זז.
+                  מספר מעל העמודה נבחן ונדחה: הוא נקרא כגובה העמודה, כלומר כמה אכלה. */}
+              <ComposedChart data={calSeries} margin={{ top: 12, right: 8, left: 8, bottom: 0 }}>
                 <XAxis dataKey="label" tick={{ fontSize: 13, fill: C.faint }} axisLine={false} tickLine={false} />
                 <YAxis domain={[0, Math.round(maxCal * 1.15)]} hide />
-                <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
-                <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 12, fill: C.brandD }} />
-                <Bar dataKey="kcal" radius={[6, 6, 0, 0]}>
-                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal) ? C.brand : calBelow(d.kcal) ? C.info : C.amber} />))}
+                <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v, k) => [`${v.toLocaleString()} קק״ל`, k === "goal" ? "היעד שלך ביום הזה" : "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
+                <Bar dataKey="kcal" radius={[6, 6, 0, 0]} isAnimationActive={false}>
+                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal, d.goal) ? C.brand : calBelow(d.kcal, d.goal) ? C.info : C.amber} />))}
                 </Bar>
-              </BarChart>
+                <Line dataKey="goal" stroke="none" isAnimationActive={false} activeDot={false} dot={<GoalDash />} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
@@ -6811,7 +6833,7 @@ export default function App() {
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
-              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
+              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={profile.weightKg} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
             </div>
