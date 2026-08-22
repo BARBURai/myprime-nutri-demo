@@ -118,7 +118,10 @@ check("והמסך מוצג פעם אחת, כי הדגל נשמר", src.includes(
 check("מי שנרשמת כשאין לה לאן לרדת מסומנת כבר ברישום", src.includes("lossStopAt: noLoss ? startDate : null"));
 
 console.log("\nשתי הדלתות בפרופיל\n");
-check("עריכת המשקל בפרופיל עוברת דרך אותו כלל", src.includes('if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(pendingWeight.value, profile.heightCm))'));
+check("עריכת המשקל בפרופיל עוברת דרך אותו כלל", src.includes('if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(nextCur, profile.heightCm))'));
+// אם יש לה דיווח מאוחר יותר בדוח הוא הקובע, אחרת עריכת נקודת הפתיחה כלפי מטה
+// הייתה מעבירה אותה לשמירה ומיד מציעה לה לחזור.
+check("והבדיקה היא על המשקל שיהיה הקובע, לא על מה שהוקלד", src.includes("const nextCur = latestIsBase ? pendingWeight.value : curWeight;") && src.includes("const latestIsBase = !weights.length || weights[weights.length - 1].date === profile.startDate;"));
 check("ומציגה לה את אותו מסך", src.includes("setShowLossStop(true)"));
 check("קצב הירידה בשמירה מציג שמירה בלבד", src.includes("{(inMaintain ? [0] : rateOptionsFor("));
 // הבאג שרון תפס: הנעילה נשענה על "היא מתחת לקו עכשיו" ולא על "העברנו אותה
