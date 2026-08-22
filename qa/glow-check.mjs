@@ -91,7 +91,11 @@ check("הניהול מחזיר גם את מה שכתוב בגיליון", /sheet
 check("והשער מעדיף את הסימון הידני", /ovr\.glow === "1"\) glow = true/.test(access) && /ovr\.glow === "0"\) glow = false/.test(access));
 check("כל שינוי נרשם ביומן", /field: "glow"/.test(adminApi));
 check("המסך מציג את שני הערכים זה לצד זה", adminUi.includes("בגיליון: ") && adminUi.includes("שיעורי בונוס Glow"));
-check("השורה מוצגת רק למי שבאפליקציה החדשה", /w\.newApp\s*\?\s*'<div class="edit"[^']*>?<span>שיעורי בונוס Glow/.test(adminUi));
+// רון, 19 באוגוסט 2026: הבונוס של מי שבקג'אבי ניתן לה שם, ולכן אצלה זו שורת חיווי
+// ולא פקד. השורה מוצגת בכל מקרה, כי המצב נכון בשני הצדדים, ורק הכפתורים מאחורי התנאי.
+check("השורה מוצגת לכל אישה, גם למי שבקג'אבי", /'<div class="edit"[^']*>?<span>שיעורי בונוס Glow'/.test(adminUi));
+check("אבל הכפתורים רק למי שבאפליקציה החדשה", /\(w\.newApp\s*\n?\s*\?\s*'<button class="btn'\+\(w\.glow\?" p":""\)\+'" data-glow="1"/.test(adminUi));
+check("ולמי שבקג'אבי נכתב שזה מוגדר שם", adminUi.includes("שיעורי הבונוס שלה <b>מוגדרים שם ולא כאן</b>"));
 check('"חזרה לגיליון" מופיע רק כשיש מה לבטל', /w\.glowOverride\?'<button class="btn[^"]*" data-glow=""/.test(adminUi));
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
