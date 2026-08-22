@@ -598,7 +598,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.10";
+const VERSION = "6.11";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -632,10 +632,15 @@ async function bkDecrypt(code, blob) {
   const pt = await bkSubtle.decrypt({ name: "AES-GCM", iv: bkUnb64(blob.iv) }, key, bkUnb64(blob.ct));
   return new TextDecoder().decode(pt);
 }
-async function bkUpload(email, code, plaintext) {
+// `notify` הוא המקרה היחיד שבו הקוד עצמו עוזב את המכשיר, והוא נשלח כדי שהשרת
+// יוכל להרכיב ממנו מייל אחד ולשכוח אותו. זה קורה בדיוק פעמיים בחיים של אישה:
+// כשהגיבוי נוצר, וכשהיא משנה את הקוד בעצמה. **בכל גיבוי רגיל, וזה מה שרץ אחרי
+// כל שינוי ביומן, נשלח טקסט מוצפן בלבד ושום מפתח.**
+async function bkUpload(email, code, plaintext, notify = false) {
   if (!bkSubtle) return false;
   const blob = await bkEncrypt(code, plaintext);
-  const r = await fetch("/api/backup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, blob }) });
+  const payload = notify ? { email, blob, code, notify: 1 } : { email, blob };
+  const r = await fetch("/api/backup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!r.ok) return false;
   const d = await r.json().catch(() => ({}));
   return !!d.ok;
@@ -6401,9 +6406,12 @@ export default function App() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
     bkAutoRef.current = true;
     (async () => {
-      const code = bkGetCode() || bkMakeCode();
+      // קוד חדש נולד כאן. **זה הרגע היחיד שבו אפשר לשלוח לה אותו**, ולכן המייל
+      // יוצא בדיוק כאן ולא בגיבוי הרגיל שרץ אחריו. אם כבר היה לה קוד, אין מה לשלוח.
+      const had = bkGetCode();
+      const code = had || bkMakeCode();
       try {
-        const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "");
+        const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "", !had);
         if (!ok) { bkAutoRef.current = false; return; } // silent: retries on the next load
         bkSetCode(code);
         setProfile((p) => ({ ...p, backup: { enabled: true, email, auto: true } }));
@@ -6462,7 +6470,7 @@ export default function App() {
     if (!email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
     setBkBusy(true);
     try {
-      const ok = await bkUpload(email, newCode, localStorage.getItem(STORAGE_KEY) || "");
+      const ok = await bkUpload(email, newCode, localStorage.getItem(STORAGE_KEY) || "", true);
       setBkBusy(false);
       if (!ok) return { ok: false, msg: "האיפוס נכשל, נסי שוב." };
       bkSetCode(newCode);
