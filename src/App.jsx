@@ -598,7 +598,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.01";
+const VERSION = "6.02";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4806,19 +4806,17 @@ function LossStopSheet({ onAck }) {
   );
 }
 
-// ירידה מהירה מדי. בקולה של ענת, ובלי חסימה: זו הזמנה לדבר ולא עצירה.
-// **הקופי כאן טרם אושר על ידי רון.**
-function FastLossSheet({ pct, onClose }) {
-  const waText = "היי, רציתי לדבר איתך על קצב הירידה שלי";
+// ירידה מהירה מדי. **קול המערכת ולא קולה של ענת**, כי זו הודעה שהאפליקציה
+// מחליטה עליה מחישוב שעשתה: בלי גוף ראשון, בלי אמוג'י ובלי חתימה. ראה סעיף 8.
+// הקופי של רון, 22 באוגוסט 2026. אינה חוסמת כלום, וזו הזמנה לדבר ולא עצירה.
+function FastLossSheet({ onClose }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
       <div style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(58,43,48,0.28)" }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: C.ink }}>רגע, הקצב שלך מהיר 🌸</div>
-        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>שמתי לב שבשבועות האחרונים את יורדת מהר יחסית. ירידה מהירה מדי באה על חשבון מסת השריר, ודווקא מקשה על השמירה אחר כך.</div>
-        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 8 }}>שווה שנדבר על זה יחד ונתאים לך את הקצב.</div>
-        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8 }}>ענת</div>
-        <a href={`https://wa.me/972547304177?text=${encodeURIComponent(waText)}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "12px 20px", fontSize: 15, fontWeight: 700, textDecoration: "none", marginTop: 12 }}>הודעה לצוות בוואטסאפ</a>
-        <div style={{ marginTop: 14 }}><Btn variant="ghost" onClick={onClose}>תודה, הבנתי</Btn></div>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, lineHeight: 1.45 }}>הקצב שלך מהיר מהמומלץ</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>לפי המשקל שהזנת, הירידה בשבועות האחרונים מהירה מהקצב שאנחנו ממליצים עליו. ירידה מהירה יכולה לבוא על חשבון מסת השריר ולהקשות על השמירה בהמשך.</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>כדאי להתייעץ עם דיאטנית קלינית.</div>
+        <div style={{ marginTop: 16 }}><Btn onClick={onClose}>הבנתי</Btn></div>
       </div>
     </div>
   );
@@ -6809,7 +6807,7 @@ export default function App() {
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "lossStop" && <LossStopSheet onAck={ackLossStop} />}
-            {sheet === "fastLoss" && <FastLossSheet pct={fastLossPct(weights, TODAY)} onClose={() => setSheet(null)} />}
+            {sheet === "fastLoss" && <FastLossSheet onClose={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
