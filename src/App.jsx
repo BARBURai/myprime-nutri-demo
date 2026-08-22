@@ -598,7 +598,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.03";
+const VERSION = "6.04";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2089,7 +2089,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, onLossAck, onBaseWeight, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, hasFutureEntries, onClearFuture }) {
+function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, hasFutureEntries, onClearFuture }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const [showLossStop, setShowLossStop] = useState(false);
@@ -2134,9 +2134,15 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, 
       const next = { ...profile, [pendingWeight.key]: pendingWeight.value };
       // הדלת האחורית שהייתה כאן: עריכת המשקל בפרופיל לא בדקה כלום, וקצב הירידה
       // נשאר כפי שהיה. עכשיו היא מגיעה לאותו מקום כמו הזנת משקל בדוח.
-      if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(pendingWeight.value, profile.heightCm)) {
+      //
+      // **והבדיקה היא על המשקל שיהיה הקובע אחרי העריכה, לא על מה שהוקלד.**
+      // "משקל התחלתי" הוא נקודת הפתיחה, ואם יש לה דיווח מאוחר יותר בדוח הוא
+      // הקובע. בלי זה עריכת נקודת הפתיחה כלפי מטה הייתה מעבירה אותה לשמירה
+      // ומיד מציעה לה לחזור, כי המשקל האמיתי שלה גבוה מהקו השני.
+      const nextCur = latestIsBase ? pendingWeight.value : curWeight;
+      if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(nextCur, profile.heightCm)) {
         next.weeklyRateG = 0;
-        next.goalWeightKg = pendingWeight.value;
+        next.goalWeightKg = nextCur;
         next.lossStopAt = TODAY;
         next.lossStopEver = true;
         next.resumeOfferAt = null;
@@ -6202,6 +6208,9 @@ export default function App() {
   // המשקל האחרון שהיא דיווחה. זה מה שכל כלל הבטיחות קורא, ולא המשקל של הרישום.
   const curWeight = currentWeightOf(profile, weights);
   const lossStopped = !!profile.lossStopAt;
+  // האם נקודת הפתיחה היא גם הדיווח האחרון. אם כן, עריכה שלה בפרופיל היא
+  // המשקל הקובע; ואם לא, הדיווח שבדוח גובר עליה.
+  const latestIsBase = !weights.length || weights[weights.length - 1].date === profile.startDate;
   // כשהיא בשמירה מטעמי בריאות, היעד הקלורי מחושב מהמשקל האמיתי שלה עכשיו. אחרת
   // התחזוקה נגזרת ממשקל שכבר אינו קיים, והיא גבוהה מדי. שאר הנשים לא מושפעות.
   const effProfile = lossStopped ? { ...profile, weeklyRateG: 0, weightKg: curWeight } : profile;
@@ -6779,7 +6788,7 @@ export default function App() {
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
             </div>
             {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
                 stayed tappable, rode up with the keyboard eating the space above it, and
