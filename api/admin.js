@@ -797,6 +797,5 @@ export default async function handler(req, res) {
   }
   women.forEach((w) => { const n = parseInt(pending[w.email], 10); if (n > 0) w.notes = n; });
 
-
   return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women });
 }
