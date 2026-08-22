@@ -40,6 +40,8 @@ const TRANSITIONS = [
   ["נעילת המסכים לפי המצב", "const inMaintain = !!profile.lossStopAt;"],
   ["והחזרה מול הקו השני", "const canResume = inMaintain && canResumeLoss("],
   ["מה שהחזרה כותבת", "lossStopAt: null, resumeOfferAt: null, weeklyRateG: 250"],
+  ["עריכת המשקל בפרופיל בודקת את הכלל", 'if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(nextCur, profile.heightCm))'],
+  ["ועל המשקל הקובע ולא על מה שהוקלד", "const nextCur = latestIsBase ? pendingWeight.value : curWeight;"],
   ["ההצעה לחזור נורית מהזנת משקל", "if (profile.lossStopAt && !profile.resumeOfferAt && canResumeLoss(cur, profile.heightCm))"],
   ["והיא מתאפסת בחצייה כלפי מטה", "lossStopEver: true, resumeOfferAt: null"],
   ["היעד בשמירה מחושב מהמשקל האמיתי", "const effProfile = lossStopped"],
@@ -66,14 +68,17 @@ function newWoman(heightCm, startKg, age = 50) {
     lossStopEver: noLoss,
     resumeOfferAt: null,
     offersShown: 0,
-    weights: [startKg],
+    base: startKg,          // "משקל התחלתי" בפרופיל
+    reports: [],            // מה שהיא הזינה בדוח, לפי הסדר
     screensShown: noLoss ? 1 : 0,            // מסך הרישום נחשב
   };
 }
-const cur = (w) => w.weights[w.weights.length - 1];
+const cur = (w) => (w.reports.length ? w.reports[w.reports.length - 1] : w.base);
+// נקודת הפתיחה היא גם הדיווח האחרון כל עוד לא דיווחה בדוח
+const latestIsBase = (w) => w.reports.length === 0;
 // בדיוק setWeightForDate
 function logWeight(w, kg, day) {
-  w.weights.push(kg);
+  w.reports.push(kg);
   if (!w.lossStopAt && w.weeklyRateG !== 0 && A.noLossRoom(cur(w), w.heightCm)) {
     w.weeklyRateG = 0; w.goalWeightKg = cur(w); w.lossStopAt = day; w.lossStopEver = true;
     w.resumeOfferAt = null; w.screensShown++;
@@ -98,6 +103,20 @@ const view = (w) => {
       : { age: w.age, heightCm: w.heightCm, weightKg: w.weightKg, weeklyRateG: w.weeklyRateG }),
   };
 };
+// בדיוק confirmWeight: עריכת "משקל התחלתי" בפרופיל.
+// **הבדיקה היא על המשקל שיהיה הקובע אחרי העריכה ולא על מה שהוקלד**, אחרת הורדת
+// נקודת הפתיחה מעבירה אותה לשמירה ומיד מציעה לה לחזור.
+function editBaseWeight(w, kg, day) {
+  const nextCur = latestIsBase(w) ? kg : cur(w);
+  w.base = kg;
+  if (w.weeklyRateG !== 0 && A.noLossRoom(nextCur, w.heightCm)) {
+    w.weeklyRateG = 0; w.goalWeightKg = nextCur; w.lossStopAt = day;
+    w.lossStopEver = true; w.resumeOfferAt = null; w.screensShown++;
+    return "moved";
+  }
+  return "none";
+}
+
 // בדיוק resumeLoss
 function pressResume(w) {
   w.lossStopAt = null; w.resumeOfferAt = null; w.weeklyRateG = 250;
@@ -181,6 +200,49 @@ for (let h = 140; h <= 195; h++) {
     }
   }
 }
+
+/* ---------- מסלול הפרופיל, שלא היה מסומלץ כלל עד 22 באוגוסט 2026 ---------- */
+// שני הבאגים האחרונים ישבו בדיוק כאן, ולכן זה נסרק עכשיו באותה קפדנות.
+let pSteps = 0, pMoved = 0, pStuck = 0;
+for (let h = 140; h <= 195; h++) {
+  const floor = A.minHealthyKg(h), back = A.resumeLossKg(h);
+  for (const startKg of [floor + 20, floor + 6, floor + 1]) {
+    if (startKg < 35 || startKg > 200) continue;
+    // א. עורכת את נקודת הפתיחה **בלי שדיווחה בדוח מעולם**
+    for (let kg = Math.max(35, floor - 5); kg <= startKg + 10; kg += 0.5) {
+      const w = newWoman(h, startKg);
+      const res = editBaseWeight(w, Math.round(kg * 2) / 2, "p");
+      pSteps++;
+      if (res === "moved") pMoved++;
+      const v = view(w);
+      // הסתירה שרון נתקל בה: עברה לשמירה, ומיד מוצע לה לחזור
+      if (res === "moved" && v.resumeCard) fail(`פרופיל ${h}/${kg}: עברה לשמירה ומיד הוצע לה לחזור`);
+      if (A.noLossRoom(cur(w), h) && !v.inMaintain) fail(`פרופיל ${h}/${kg}: מתחת לקו ולא בשמירה`);
+      if (v.inMaintain && v.rateChoices.length !== 1) fail(`פרופיל ${h}/${kg}: רשימה פתוחה בשמירה`);
+      if (v.inMaintain && v.goalRow) fail(`פרופיל ${h}/${kg}: שורת יעד בשמירה`);
+      // ומי שהעלתה את נקודת הפתיחה מעל הקו השני חייבת לקבל דרך חזרה
+      if (v.inMaintain && cur(w) >= back && !v.resumeCard) { pStuck++; fail(`פרופיל ${h}/${kg}: נעולה בשמירה בלי דרך לצאת`); }
+    }
+    // ב. **דיווחה בדוח, ואז עורכת את נקודת הפתיחה.** הדיווח הוא הקובע.
+    for (const rep of [floor - 1, floor + 0.5, back, back + 4]) {
+      for (const edit of [floor - 4, floor, startKg + 5]) {
+        const w = newWoman(h, startKg);
+        logWeight(w, Math.round(rep * 2) / 2, "r");
+        const before = { maintain: !!w.lossStopAt, cur: cur(w) };
+        const res = editBaseWeight(w, Math.round(edit * 2) / 2, "p");
+        pSteps++;
+        if (res === "moved") pMoved++;
+        const v = view(w);
+        // עריכת נקודת הפתיחה אינה משנה את המשקל הקובע כשיש דיווח מאוחר יותר
+        if (cur(w) !== before.cur) fail(`פרופיל ${h}: עריכת נקודת הפתיחה שינתה את המשקל הקובע`);
+        if (res === "moved" && v.resumeCard) fail(`פרופיל ${h}: עברה לשמירה ומיד הוצע לה לחזור`);
+        // ומי שהייתה מעל הקו לפי הדוח לא תועבר לשמירה בגלל מספר ישן בפרופיל
+        if (!A.noLossRoom(before.cur, h) && res === "moved") fail(`פרופיל ${h}: הועברה לשמירה אף שהדוח מעליו`);
+      }
+    }
+  }
+}
+console.log(`\nמסלול הפרופיל: ${pSteps.toLocaleString()} עריכות של "משקל התחלתי" · ${pMoved} מעברים לשמירה · ${pStuck} מקרים של נעילה בלי מוצא\n`);
 
 /* ---------- המסלול של רון, מודפס צעד-צעד ---------- */
 console.log("\nהמסלול שרון עשה בטלפון: גובה 155, נרשמה ב-75\n");
