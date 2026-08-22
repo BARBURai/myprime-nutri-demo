@@ -35,11 +35,13 @@ const A = new Function([
 /* ---------- כל מעבר מצב מאומת מול הקוד שמבצע אותו ---------- */
 const TRANSITIONS = [
   ["המעבר לשמירה נורה מהזנת משקל", "if (!profile.lossStopAt && profile.weeklyRateG !== 0 && noLossRoom(cur, profile.heightCm))"],
-  ["ומה שהוא כותב", "setProfile((pr) => ({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true }));"],
+  ["ומה שהוא כותב", "setProfile((pr) => ({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true, resumeOfferAt: null }));"],
   ["הבדיקה היא על המשקל העדכני ולא על מה שהוקלד", "const cur = next[next.length - 1].kg;"],
   ["נעילת המסכים לפי המצב", "const inMaintain = !!profile.lossStopAt;"],
   ["והחזרה מול הקו השני", "const canResume = inMaintain && canResumeLoss("],
-  ["מה שהחזרה כותבת", "lossStopAt: null, weeklyRateG: 250"],
+  ["מה שהחזרה כותבת", "lossStopAt: null, resumeOfferAt: null, weeklyRateG: 250"],
+  ["ההצעה לחזור נורית מהזנת משקל", "if (profile.lossStopAt && !profile.resumeOfferAt && canResumeLoss(cur, profile.heightCm))"],
+  ["והיא מתאפסת בחצייה כלפי מטה", "lossStopEver: true, resumeOfferAt: null"],
   ["היעד בשמירה מחושב מהמשקל האמיתי", "const effProfile = lossStopped"],
   ["רשימת הקצבים נעולה לפי המצב", "{(inMaintain ? [0] : rateOptionsFor("],
   ["ותקרת ה-500", "RATE_OPTIONS.filter((g) => g !== 500 || fastOk)"],
@@ -62,6 +64,8 @@ function newWoman(heightCm, startKg, age = 50) {
     goalWeightKg: noLoss ? startKg : Math.max(A.minHealthyKg(heightCm), startKg - 0.5),
     lossStopAt: noLoss ? "start" : null,
     lossStopEver: noLoss,
+    resumeOfferAt: null,
+    offersShown: 0,
     weights: [startKg],
     screensShown: noLoss ? 1 : 0,            // מסך הרישום נחשב
   };
@@ -71,8 +75,13 @@ const cur = (w) => w.weights[w.weights.length - 1];
 function logWeight(w, kg, day) {
   w.weights.push(kg);
   if (!w.lossStopAt && w.weeklyRateG !== 0 && A.noLossRoom(cur(w), w.heightCm)) {
-    w.weeklyRateG = 0; w.goalWeightKg = cur(w); w.lossStopAt = day; w.lossStopEver = true; w.screensShown++;
+    w.weeklyRateG = 0; w.goalWeightKg = cur(w); w.lossStopAt = day; w.lossStopEver = true;
+    w.resumeOfferAt = null; w.screensShown++;
     return "moved";
+  }
+  if (w.lossStopAt && !w.resumeOfferAt && A.canResumeLoss(cur(w), w.heightCm)) {
+    w.resumeOfferAt = day; w.offersShown++;
+    return "offer";
   }
   return "none";
 }
@@ -91,12 +100,12 @@ const view = (w) => {
 };
 // בדיוק resumeLoss
 function pressResume(w) {
-  w.lossStopAt = null; w.weeklyRateG = 250;
+  w.lossStopAt = null; w.resumeOfferAt = null; w.weeklyRateG = 250;
   w.goalWeightKg = Math.max(A.minHealthyKg(w.heightCm), cur(w) - 0.5);
 }
 
 /* ---------- ההרצה ---------- */
-let steps = 0, moved = 0, resumed = 0;
+let steps = 0, moved = 0, resumed = 0, offers = 0;
 const bad = [];
 const fail = (msg) => { if (bad.length < 30) bad.push(msg); };
 
@@ -117,6 +126,12 @@ for (let h = 140; h <= 195; h++) {
       const res = logWeight(w, kg, "d" + i);
       steps++;
       if (res === "moved") { moved++; screensAtLine++; }
+      if (res === "offer") {
+        offers++;
+        // ההצעה לחזור נורית אך ורק כשהיא בשמירה ומעל הקו השני
+        if (!w.lossStopAt) fail(`${h}/${kg}: הוצע לחזור למי שאינה בשמירה`);
+        if (kg < back) fail(`${h}/${kg}: ההצעה נורתה מתחת ל-${back}`);
+      }
       const v = view(w);
 
       // 1. לעולם לא גירעון מתחת לקו
@@ -132,6 +147,8 @@ for (let h = 140; h <= 195; h++) {
       // 2ב. מי שכבר ירדה מתחת לקו פעם אחת לעולם לא תראה 500 שוב
       if (w.lossStopEver && v.rateChoices.indexOf(500) !== -1) fail(`${h}/${kg}: 500 מוצע למי שכבר ירדה מתחת לקו`);
       if (!v.inMaintain && v.rateChoices.indexOf(500) !== -1 && kg - floor < 5) fail(`${h}/${kg}: 500 מוצע ופחות מ-5 ק״ג עד הקו`);
+      // ולעולם אין מצב שהכרטיס מוצג בלי שההצעה נורתה קודם
+      if (v.inMaintain && v.resumeCard && !w.resumeOfferAt) fail(`${h}/${kg}: הכרטיס מוצג וההצעה מעולם לא נורתה`);
       // 3. החזרה מוצעת אך ורק מעל הקו השני
       if (v.resumeCard && kg < back) fail(`${h}/${kg}: הוצע לחזור מתחת ל-${back}`);
       if (v.inMaintain && kg >= back && !v.resumeCard) fail(`${h}/${kg}: לא הוצע לחזור אף שהיא מעל ${back}`);
@@ -157,6 +174,9 @@ for (let h = 140; h <= 195; h++) {
         // 7. ואם היא יורדת שוב, המסך חוזר. חצייה חדשה היא אירוע חדש.
         const again = logWeight(w, A.minHealthyKg(h) - 0.5, "again");
         if (again !== "moved") fail(`${h}/${startKg}: חצייה שנייה לא הפעילה את המסך`);
+        // 8. וגם ההצעה לחזור חייבת להיפתח מחדש, ולא להישאר "כבר הוצעה"
+        const up = logWeight(w, A.resumeLossKg(h), "up2");
+        if (up !== "offer") fail(`${h}/${startKg}: ההצעה לא חזרה אחרי חצייה שנייה`);
       }
     }
   }
@@ -166,15 +186,15 @@ for (let h = 140; h <= 195; h++) {
 console.log("\nהמסלול שרון עשה בטלפון: גובה 155, נרשמה ב-75\n");
 const r = newWoman(155, 75, 55);   // הגיל שלו, כדי שהיעד הקלורי יהיה זהה למה שראה
 console.log(`  הקו התחתון ${A.minHealthyKg(155)} ק״ג · הקו לחזרה ${A.resumeLossKg(155)} ק״ג\n`);
-console.log("  משקל | BMI  | מצב      | רשימת הקצבים | שורת יעד | כפתור חזרה | יעד קלורי");
+console.log("  משקל | BMI  | מצב      | רשימת הקצבים | שורת יעד | כפתור חזרה | יעד קלורי | מה קפץ לה");
 for (const kg of [50, 45, 48, 49.5, 50, 51]) {
   const res = logWeight(r, kg, "x");
   const v = view(r);
-  console.log(`  ${String(kg).padEnd(5)}| ${A.bmiOf(kg, 155).toFixed(1)} | ${(v.inMaintain ? "שמירה" : "ירידה").padEnd(8)} | ${(v.rateChoices.length === 1 ? "נעולה" : "פתוחה").padEnd(13)}| ${(v.goalRow ? "מוצגת" : "מוסתרת").padEnd(9)}| ${(v.resumeCard ? "מוצג" : "אין").padEnd(11)}| ${v.target.targetKcal}${res === "moved" ? "   ← כאן קפץ המסך" : ""}`);
+  console.log(`  ${String(kg).padEnd(5)}| ${A.bmiOf(kg, 155).toFixed(1)} | ${(v.inMaintain ? "שמירה" : "ירידה").padEnd(8)} | ${(v.rateChoices.length === 1 ? "נעולה" : "פתוחה").padEnd(13)}| ${(v.goalRow ? "מוצגת" : "מוסתרת").padEnd(9)}| ${(v.resumeCard ? "מוצג" : "אין").padEnd(11)}| ${String(v.target.targetKcal).padEnd(9)}| ${res === "moved" ? "מסך המעבר" : res === "offer" ? "מסך ההצעה לחזור" : ""}`);
 }
 pressResume(r);
 console.log(`  אחרי לחיצה על "חזרה לירידה במשקל": קצב ${r.weeklyRateG} ג׳/שבוע, משקל יעד ${r.goalWeightKg} ק״ג\n`);
 
-console.log(`${steps.toLocaleString()} הזנות משקל סומלצו על ${56} גבהים · ${moved} מעברים לשמירה · ${resumed} חזרות לירידה\n`);
+console.log(`${steps.toLocaleString()} הזנות משקל סומלצו על ${56} גבהים · ${moved} מעברים לשמירה · ${offers} הצעות לחזור · ${resumed} חזרות בפועל\n`);
 if (bad.length) { console.log("בעיות:\n" + bad.map((b) => "  ✗ " + b).join("\n") + "\n"); process.exit(1); }
 console.log("לא נמצאה אף בעיה באף צעד.\n");

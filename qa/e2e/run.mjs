@@ -250,15 +250,20 @@ const CHECKS = [
       await page.mouse.click(8, 8);
       await page.waitForTimeout(400);
 
+      // 49.5 בגובה 152 חוצה את הקו השני (49), ולכן ההצעה לחזור קופצת בדוח עצמו.
+      // בלי זה היא עולה חזרה מעל הקו ולא יודעת שנפתחה לה הדרך, כי הכרטיס יושב
+      // בפרופיל והיא מזינה משקל בדוח.
       await logWeight(49.5);
-      await openBase();
       body = await page.locator("body").innerText();
-      const offered = body.includes("אפשר לחזור לירידה במשקל") && body.includes("כדאי להתייעץ עם דיאטנית קלינית לפני שחוזרים.");
-      await page.locator("text=חזרה לירידה במשקל").first().click();
-      await page.waitForTimeout(500);
+      const offered = body.includes("אפשר לחזור לירידה במשקל")
+        && body.includes("לפי המשקל שהזנת, אפשר לחזור לירידה מתונה. הקצב המרבי מכאן הוא 250 גרם בשבוע.")
+        && body.includes("לא עכשיו");
+      await page.getByRole("button", { name: "חזרה לירידה במשקל" }).first().click();
+      await page.waitForTimeout(600);
       const st2 = await state();
       const back = st2.weeklyRateG === 250 && !st2.lossStopAt;
       // מי שכבר ירדה מתחת לקו פעם אחת לא רואה 500 שוב, בשום משקל
+      await openBase();
       await page.locator("text=קצב ירידה").first().click();
       await page.waitForTimeout(400);
       body = await page.locator("body").innerText();
@@ -268,7 +273,7 @@ const CHECKS = [
 
       await context.close();
       const ok = shown && moved && acked && locked && noGoalRow && tooEarly && stillLocked && offered && back && noFast && !errors.length;
-      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · אישרה ${acked} · הקצבים נעלמו ${locked} · אין משקל יעד ${noGoalRow} · ב-48 לא מוצע ${tooEarly} · ונשאר נעול ${stillLocked} · ב-49.5 מוצע ${offered} · חזרה ${back} · בלי 500 ${noFast} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
+      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · אישרה ${acked} · הקצבים נעלמו ${locked} · אין משקל יעד ${noGoalRow} · ב-48 לא מוצע ${tooEarly} · ונשאר נעול ${stillLocked} · ההצעה קפצה ${offered} · חזרה ${back} · בלי 500 ${noFast} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
     },
   },
   {

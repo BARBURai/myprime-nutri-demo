@@ -146,8 +146,20 @@ check("ומסך הרישום נשאר בנוסח שלו, בלי נוספת", src
 // במסך הרישום הכפתור נשאר, כי הקופי של רון שם אומר במפורש "שלחי הודעה לצוות".
 check("במסך הרישום יש כפתור לצוות", /noLoss \? \([\s\S]{0,1400}wa\.me\/972547304177/.test(src));
 
+console.log("\nמסך ההצעה לחזור, שסוגר את הפער בכיוון למעלה\n");
+// בלי שורות ההערה, אחרת ההסבר בקוד ("ולא קולה של ענת") נתפס ככתוב על המסך
+const noComments = (t) => t.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+const offer = noComments(src.slice(src.indexOf("function ResumeOfferSheet("), src.indexOf("function FastLossSheet(")));
+check("הקופי, מילה במילה", offer.includes("אפשר לחזור לירידה במשקל") && offer.includes("לפי המשקל שהזנת, אפשר לחזור לירידה מתונה. הקצב המרבי מכאן הוא 250 גרם בשבוע.") && offer.includes("כדאי להתייעץ עם דיאטנית קלינית לפני שחוזרים."));
+check("שני כפתורים, כי זו הצעה ולא אישור", offer.includes("חזרה לירידה במשקל") && offer.includes("לא עכשיו"));
+check("בקול המערכת, בלי חתימה ובלי אמוג'י", !/ענת/.test(offer) && !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(offer));
+check("נורה מהזנת משקל בדוח, ולא רק בפרופיל", src.includes("if (profile.lossStopAt && !profile.resumeOfferAt && canResumeLoss(cur, profile.heightCm))"));
+check("ומוצג פעם אחת לכל עלייה", src.includes("setProfile((pr) => ({ ...pr, resumeOfferAt: date }));"));
+check("ומתאפס בחצייה כלפי מטה, כדי שעלייה עתידית תציג אותו שוב", src.includes("lossStopEver: true, resumeOfferAt: null") && src.includes("next.resumeOfferAt = null;"));
+check("והחזרה מנקה את שניהם", src.includes("lossStopAt: null, resumeOfferAt: null, weeklyRateG: 250"));
+
 console.log("\nמסך הקצב המהיר: קול המערכת ולא קולה של ענת\n");
-const fast = src.slice(src.indexOf("function FastLossSheet("), src.indexOf("function CheckinCheer("));
+const fast = noComments(src.slice(src.indexOf("function FastLossSheet("), src.indexOf("function CheckinCheer(")));
 check("הקופי של רון, מילה במילה", fast.includes("הקצב שלך מהיר מהמומלץ") && fast.includes("לפי המשקל שהזנת, הירידה בשבועות האחרונים מהירה מהקצב שאנחנו ממליצים עליו. ירידה מהירה יכולה לבוא על חשבון מסת השריר ולהקשות על השמירה בהמשך.") && fast.includes("כדאי להתייעץ עם דיאטנית קלינית."));
 check("בלי חתימה של ענת", !/ענת/.test(fast));
 check("בלי אמוג'י", !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(fast));
@@ -169,7 +181,7 @@ check("היא לא שולחת את מצב השמירה עצמו", !/body:[^;]*lo
 console.log("\nמסך המעבר: כפתור אחד, והאישור נשמר אצלה\n");
 check("ההמלצה על הדיאטנית היא טקסט ולא כפתור", src.includes("אנחנו ממליצים לך ליצור קשר עם הדיאטנית לקבלת הנחיות.") && !/LossStopSheet[\s\S]{0,1200}wa\.me/.test(src));
 check("ומעל הכפתור כתוב שהלחיצה היא אישור", src.includes('בלחיצה על "הבנתי" את מאשרת שקראת את ההודעה הזאת.'));
-check("יש בו כפתור אחד בלבד", (src.slice(src.indexOf("function LossStopSheet("), src.indexOf("function FastLossSheet(")).match(/<Btn |<a href=/g) || []).length === 1);
+check("יש בו כפתור אחד בלבד", (src.slice(src.indexOf("function LossStopSheet("), src.indexOf("function ResumeOfferSheet(")).match(/<Btn |<a href=/g) || []).length === 1);
 check("הלחיצה נרשמת גם אצלה, כדי שלא תלוי ברשת", src.includes("lossAckAt: TODAY"));
 check("והאישור נשאר אצלה בלבד", src.includes("setProfile((pr) => ({ ...pr, lossAckAt: TODAY }));"));
 
