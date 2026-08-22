@@ -598,7 +598,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.05";
+const VERSION = "6.06";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1757,11 +1757,23 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
     return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
   });
   const loggedDays = calSeries.filter((x) => x.kcal > 0);
-  // A day counts as "met the calorie goal" only if she ate CLOSE to the target. Trivial/partial logging
-  // (e.g. a single item, far below target) or strong under-eating does not count as meeting the goal.
-  // A day counts as "met the calorie goal" only if she ate CLOSE to the target. Trivial/partial logging
-  // (e.g. a single item, far below target) or strong under-eating does not count as meeting the goal.
-  const calMet = (kc) => goalKcal > 0 && kc >= goalKcal * 0.8 && kc <= goalKcal * 1.05;
+  // מתי יום נחשב "עמדה ביעד". החלטה של רון, 22 באוגוסט 2026, אחרי שהוא שאל:
+  // "אני מעודד אותה אם אני נותן לה 20 אחוז פחות... אני מודד אותה להגיע לפחות
+  // מאשר היעד שכבר נתתי לה והוא כבר מופחת, זה לא ממש טוב."
+  //
+  // **הגבול התחתון הוא הגבוה מבין 90 אחוז מהיעד או רצפת ה-1,200.** הרצפה כבר
+  // קיימת בקוד כמספר הנמוך ביותר שהאפליקציה תיתן כיעד, ולכן היא גם המספר
+  // הנמוך ביותר שהיא מוכנה לחגוג עליו. **היא תופסת בדיוק אצל מי שהיעד שלה
+  // קרוב אליה, כלומר אישה קטנה או מי שבשמירה מטעמי בריאות.**
+  //
+  // המרווח נשאר לא סימטרי: 10 אחוז כלפי מטה לטעות רישום, ו-5 בלבד כלפי מעלה,
+  // כי חריגה היא בדיוק מה שהמעקב נועד לתפוס.
+  const CAL_MET_LOW = 0.9, CAL_MET_HIGH = 1.05;
+  const metFloor = (g) => Math.max(g * CAL_MET_LOW, KCAL_FLOOR);
+  const calMet = (kc) => goalKcal > 0 && kc >= metFloor(goalKcal) && kc <= goalKcal * CAL_MET_HIGH;
+  // ומתחת לטווח אינו כמו מעליו. קודם שניהם נצבעו בכתום, ולכן "אכלתי 900"
+  // ו"אכלתי 1,800" נראו לה זהה, וזה מטשטש בדיוק את ההבחנה שחשובה כאן.
+  const calBelow = (kc) => goalKcal > 0 && kc > 0 && kc < metFloor(goalKcal);
   const metDays = loggedDays.filter((x) => calMet(x.kcal)).length;
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
   const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
@@ -1846,13 +1858,22 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
                 <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
                 <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 12, fill: C.brandD }} />
                 <Bar dataKey="kcal" radius={[6, 6, 0, 0]}>
-                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal) ? C.brand : C.amber} />))}
+                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal) ? C.brand : calBelow(d.kcal) ? C.info : C.amber} />))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         )}
-        <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.5, marginTop: 10 }}>הקלוריות והמאקרו הם הערכה.</div>
+        {loggedDays.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 10 }}>
+            {[[C.brand, "ביעד"], [C.info, "מתחת ליעד"], [C.amber, "מעל היעד"]].map((x) => (
+              <span key={x[1]} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: C.sub }}>
+                <span style={{ width: 9, height: 9, borderRadius: 3, background: x[0], display: "inline-block" }} />{x[1]}
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.5, marginTop: 10 }}>הספירה לפי מה שרשמת ביומן, ולכן יום שתועד חלקית לא ייחשב כעמידה ביעד. הקלוריות והמאקרו הם הערכה.</div>
       </div>
       <div ref={weightRef} style={cardBox}>
         <CardHeading icon={TrendingDown} text="דוח משקל" />

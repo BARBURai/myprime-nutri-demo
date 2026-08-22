@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.05** · עודכן: 21 באוגוסט 2026
+**גרסה נוכחית: v6.06** · עודכן: 21 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -344,7 +344,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -858,6 +858,28 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v6.06** - **"עמדת ביעד" נתן וי על גירעון כפול, ורון תפס את זה.** "אני מעודד אותה אם אני נותן לה 20 אחוז פחות... אני מודד אותה להגיע לפחות מאשר היעד שכבר נתתי לה והוא כבר מופחת, זה לא ממש טוב."
+
+**הוא צדק, וזה היה חמור:** היעד שלה כבר כולל גירעון של 275 קק״ל, ולכן אישה עם יעד 1,333 שאכלה 1,066 הייתה **542 קק״ל מתחת לתחזוקה שלה ומקבלת "עמדת ביעד 🎯"**. זה ההפך מכל עבודת ה-BMI.
+
+### הכלל החדש: הגבוה מבין 90 אחוז מהיעד, או רצפת ה-1,200
+**הרצפה אינה מספר חדש.** `KCAL_FLOOR` הוא כבר הנמוך ביותר שהאפליקציה תיתן כיעד, ומטעמי בטיחות. **אם היא לא מוכנה לרשום יעד נמוך מזה, היא גם לא צריכה לחגוג יום שנאכל פחות מזה.**
+
+| מי | היעד | היה | עכשיו |
+|---|---|---|---|
+| **בשמירה מטעמי בריאות** | 1,200 | 960 - 1,260 | **1,200 - 1,260** ← הרצפה תפסה |
+| קטנה, קצב 250 | 1,333 | 1,066 - 1,400 | **1,200 - 1,400** ← הרצפה תפסה |
+| ממוצעת | 1,500 | 1,200 - 1,575 | 1,350 - 1,575 |
+
+**הרצפה תופסת בדיוק אצל מי שרון היה מודאג ממנה**, ואצל אישה גדולה יותר האחוז הוא שקובע. **הגבול העליון לא זז**, כי חריגה היא בדיוק מה שהמעקב נועד לתפוס.
+
+### ושני דברים באותו מסך
+**א. מתחת לטווח ומעליו נצבעו באותו כתום**, כלומר "אכלתי 900" ו"אכלתי 1,800" נראו לה זהה. **עכשיו שלושה צבעים ומקרא שמסביר אותם.**
+
+**ב. משפט שרון ביקש:** "הספירה לפי מה שרשמת ביומן, ולכן יום שתועד חלקית לא ייחשב כעמידה ביעד." **בלעדיו מי שרושמת חלקית רואה מספר נמוך ולא יודעת למה.**
+
+**`qa/calmet-check.mjs`, 16 בדיקות בלי רשת**, מושכת את הכלל מהקוד ונועלת את שני המקרים שהיו נספרים קודם ואינם נספרים עכשיו.
 
 **v6.04** - **עריכת המשקל בפרופיל בדקה את מה שהוקלד במקום את המשקל הקובע, ולכן אפשר היה להגיע למצב סותר.** רון: "משהו קצת התברדק לי... שיחקתי עם המשקל בפרופיל ובדוח".
 
