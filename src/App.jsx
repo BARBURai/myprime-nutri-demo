@@ -598,7 +598,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.02";
+const VERSION = "6.03";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1128,7 +1128,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
     setStep(step + 1);
   };
 
-  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rateEff, goalWeightKg: rateEff === 0 ? weightN : Math.max(minHealthyKg(heightN), goalEff), lossStopAt: noLoss ? startDate : null, lossStopEver: noLoss, returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
+  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rateEff, goalWeightKg: rateEff === 0 ? weightN : Math.max(minHealthyKg(heightN), goalEff), lossStopAt: noLoss ? startDate : null, lossStopEver: noLoss, resumeOfferAt: null, returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
   const targets = computeTargets(draft);
   const proj = projection(weightN, rateEff === 0 ? weightN : goalEff, rateEff);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
@@ -2139,6 +2139,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, onResumeLoss, 
         next.goalWeightKg = pendingWeight.value;
         next.lossStopAt = TODAY;
         next.lossStopEver = true;
+        next.resumeOfferAt = null;
         setShowLossStop(true);
       }
       setProfile(next);
@@ -4806,6 +4807,23 @@ function LossStopSheet({ onAck }) {
   );
 }
 
+// היא עלתה חזרה מעל הקו השני. **קול המערכת**, כמו שני המסכים האחרים.
+// הקופי של רון, 22 באוגוסט 2026. **כאן שני כפתורים מוצדקים**, כי זו הצעה ולא
+// אישור: המעבר לשמירה קורה לבד, והחזרה היא תמיד בחירה שלה.
+function ResumeOfferSheet({ onResume, onLater }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(58,43,48,0.28)" }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, lineHeight: 1.45 }}>אפשר לחזור לירידה במשקל</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>לפי המשקל שהזנת, אפשר לחזור לירידה מתונה. הקצב המרבי מכאן הוא 250 גרם בשבוע.</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>כדאי להתייעץ עם דיאטנית קלינית לפני שחוזרים.</div>
+        <div style={{ marginTop: 16 }}><Btn onClick={onResume}>חזרה לירידה במשקל</Btn></div>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onLater} style={{ color: C.sub }}>לא עכשיו</Btn></div>
+      </div>
+    </div>
+  );
+}
+
 // ירידה מהירה מדי. **קול המערכת ולא קולה של ענת**, כי זו הודעה שהאפליקציה
 // מחליטה עליה מחישוב שעשתה: בלי גוף ראשון, בלי אמוג'י ובלי חתימה. ראה סעיף 8.
 // הקופי של רון, 22 באוגוסט 2026. אינה חוסמת כלום, וזו הזמנה לדבר ולא עצירה.
@@ -6489,8 +6507,16 @@ export default function App() {
     // לאחור של יום ישן לא יעביר אותה לשמירה על סמך מספר שכבר אינו נכון.
     const cur = next[next.length - 1].kg;
     if (!profile.lossStopAt && profile.weeklyRateG !== 0 && noLossRoom(cur, profile.heightCm)) {
-      setProfile((pr) => ({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true }));
+      // resumeOfferAt מתאפס כאן, כדי שעלייה חוזרת בעתיד תציג את ההצעה שוב.
+      setProfile((pr) => ({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true, resumeOfferAt: null }));
       setSheet("lossStop");
+      return;
+    }
+    // והכיוון ההפוך. **בלי זה היא עולה חזרה מעל הקו ולא יודעת שנפתחה לה הדרך**,
+    // כי הכרטיס יושב בפרופיל והיא מזינה משקל בדוח. מוצג פעם אחת לכל עלייה.
+    if (profile.lossStopAt && !profile.resumeOfferAt && canResumeLoss(cur, profile.heightCm)) {
+      setProfile((pr) => ({ ...pr, resumeOfferAt: date }));
+      setSheet("resumeOffer");
       return;
     }
     // ירידה מהירה מדי. לא חוסמת כלום, ולא חוזרת יותר מפעם בשלושה שבועות: התרעה
@@ -6518,7 +6544,7 @@ export default function App() {
     const rest = (w || []).filter((x) => x.date !== start);
     return [...rest, { date: start, kg: Math.round(kg * 10) / 10 }].sort((a, b) => a.date < b.date ? -1 : 1);
   });
-  const resumeLoss = () => setProfile((pr) => ({ ...pr, lossStopAt: null, weeklyRateG: 250, goalWeightKg: Math.max(minHealthyKg(pr.heightCm), curWeight - 0.5) }));
+  const resumeLoss = () => setProfile((pr) => ({ ...pr, lossStopAt: null, resumeOfferAt: null, weeklyRateG: 250, goalWeightKg: Math.max(minHealthyKg(pr.heightCm), curWeight - 0.5) }));
   const reportAddWeight = () => setSheet("weight");
   const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
   const devAnchorDay1 = () => {
@@ -6808,6 +6834,7 @@ export default function App() {
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "lossStop" && <LossStopSheet onAck={ackLossStop} />}
             {sheet === "fastLoss" && <FastLossSheet onClose={() => setSheet(null)} />}
+            {sheet === "resumeOffer" && <ResumeOfferSheet onResume={() => { resumeLoss(); setSheet(null); }} onLater={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
