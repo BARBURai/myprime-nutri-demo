@@ -34,6 +34,47 @@ const num = (v, max) => {
   return Number.isFinite(n) && n >= 0 ? Math.min(n, max) : 0;
 };
 
+// ── התיוג של מי שצפתה בשיעורי הבונוס ─────────────────────────────────────
+// שם התג נקבע על ידי רון. **מדויק כלשונו**, כי תג שלא אותר במניצ'ט אינו שגיאה
+// שם אלא כתיבה שנוחתת בשום מקום. זה בדיוק מה שקרה ב-v5.43.
+const MC = "https://api.manychat.com";
+const MC_WA_PHONE_FIELD = 11510562;   // WA_PHONE, וזו עמודת ID בגיליון
+const GLOW_WATCH_TAG = "GLOW-DEMO-WATCH";
+
+// **חד כיווני בכוונה.** צפתה זה צפתה, והתג לעולם אינו מוסר. אחרת האוטומציה
+// במניצ'ט הייתה יכולה לירות שוב על אותה אישה.
+async function tagWatched(RU, RT, email, phone) {
+  const token = process.env.MANYCHAT_TOKEN;
+  const p = String(phone || "").replace(/[^\d]/g, "");
+  if (!token || !p) return;
+  // הסימון נתפס לפני הקריאה ולא אחריה, כדי ששתי טעינות במקביל לא ישלחו פעמיים.
+  // בלי תפוגה: זה אירוע של פעם אחת בחיים ואין לו סיבה לחזור.
+  const first = await redis(RU, RT, "SET", `glowtag:${email}`, "1", "NX");
+  if (first !== "OK") return;
+  try {
+    const call = async (path, body) => {
+      const r = await fetch(MC + path, {
+        method: body ? "POST" : "GET",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      let j = null; try { j = await r.json(); } catch (e) {}
+      // מניצ'ט עונה 200 עם גוף שאומר שזה נכשל, ולכן קוד ה-HTTP לבדו אינו התשובה.
+      const said = j && typeof j.status === "string" ? j.status : "";
+      return { ok: r.ok && said !== "error", j };
+    };
+    const found = await call(`/fb/subscriber/findByCustomField?field_id=${MC_WA_PHONE_FIELD}&field_value=${encodeURIComponent(p)}`);
+    const d = found.ok && found.j && found.j.data;
+    const sub = Array.isArray(d) ? d[0] : d;
+    if (!sub || !sub.id) throw new Error("not_found");
+    const put = await call("/fb/subscriber/addTagByName", { subscriber_id: sub.id, tag_name: GLOW_WATCH_TAG });
+    if (!put.ok) throw new Error("tag_failed");
+  } catch (e) {
+    // נכשל, ולכן משחררים את הסימון כדי שהטעינה הבאה שלה תנסה שוב.
+    try { await redis(RU, RT, "DEL", `glowtag:${email}`); } catch (e2) {}
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false });
 
@@ -81,6 +122,11 @@ export default async function handler(req, res) {
   // it. `days` is present on every genuine usage call and on none of the note-only ones,
   // so its presence is what decides.
   const hasUsage = !!(body && body.days && typeof body.days === "object");
+
+  // מי שהתחילה לצפות בשיעורי הבונוס מתויגת במניצ'ט, כדי שאפשר יהיה לפנות אליה
+  // שם בנפרד ממי שלא צפתה. **פעם אחת בחיים לכל אישה**: סימון ב-Redis חוסם כל
+  // קריאה נוספת, והנקודה הזאת נקראת בכל טעינה של האפליקציה.
+  if (hasUsage && rec.glowStarted) { tagWatched(RU, RT, email, body && body.phone).catch(() => {}); }
 
   try {
     if (hasUsage) await redis(RU, RT, "HSET", "admin:usage", email, JSON.stringify(rec));
