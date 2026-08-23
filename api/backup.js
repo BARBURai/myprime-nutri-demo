@@ -70,13 +70,16 @@ function mailHtml(code) {
 // deploy, which is why this lives here and not in a mailer of its own.
 async function mailCode(RU, RT, email, code) {
   const KEY = process.env.RESEND_API_KEY;
-  if (!KEY) return false;
+  // **REPORT_FROM נדרש ולא רק מומלץ.** בלעדיו הספק שולח מכתובת ברירת המחדל שלו,
+  // והיא מורשית לשלוח לבעל החשבון בלבד, כלומר המייל לאישה נדחה ממילא. עדיף לא
+  // לנסות בכלל מאשר לנסות ולהיכשל בשקט אצל כל אישה.
+  if (!KEY || !process.env.REPORT_FROM) return false;
   try {
     // Five minutes, so a retry cannot send twice, while a deliberate code change later
     // still gets its own email. The marker holds a timestamp and never the code.
     const seen = await redisCmd(RU, RT, ["SET", `bkmail:${email}`, String(Date.now()), "NX", "EX", 300]);
     if (seen !== "OK") return false;
-    const from = process.env.REPORT_FROM || "MyPrime <onboarding@resend.dev>";
+    const from = process.env.REPORT_FROM;
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
