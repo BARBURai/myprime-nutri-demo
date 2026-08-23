@@ -602,7 +602,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.13";
+const VERSION = "6.14";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -6460,7 +6460,11 @@ export default function App() {
     bkSetCode(code);
     setBkBusy(true);
     try {
-      const ok = await bkUpload(em, code, localStorage.getItem(STORAGE_KEY) || "");
+      // גם כאן הקוד נולד, ולכן גם כאן יוצא המייל. זה המסלול שבו היא בוחרת קוד
+      // בעצמה, ברישום או ממסך הגיבוי, והוא נשכח בפעם הראשונה. **הכלל הוא שהמייל
+      // יוצא בכל רגע שבו נקבע קוד חדש, ואין לזה שלושה מסלולים אלא שלוש נקודות
+      // של אותו רגע אחד.**
+      const ok = await bkUpload(em, code, localStorage.getItem(STORAGE_KEY) || "", true);
       setBkBusy(false);
       if (!ok) { bkSetCode(""); return { ok: false, msg: "ההפעלה נכשלה, נסי שוב." }; }
       setProfile((p) => ({ ...p, backup: { enabled: true, email: em } }));
