@@ -602,7 +602,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.15";
+const VERSION = "6.18";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -617,6 +617,13 @@ const BK_CODE_KEY = "myprime_bk_code";
 const BK_LAST_KEY = "myprime_bk_last";
 const bkSubtle = (typeof window !== "undefined" && window.crypto && window.crypto.subtle) ? window.crypto.subtle : null;
 function bkGetCode() { try { return localStorage.getItem(BK_CODE_KEY) || ""; } catch (e) { return ""; } }
+// **הקוד נקבע ברישום, והעלאה הראשונה עוד לא קרתה.** הסימון הזה מגשר בין השניים:
+// `finishOnboarding` קובע אותו, וההעלאה הראשונה שרצה אחריו היא זו ששולחת את המייל
+// ומנקה אותו. בלעדיו מי שבוחרת קוד ברישום לא הייתה מקבלת מייל לעולם, כי המנגנון
+// האוטומטי יוצא מיד כשהגיבוי כבר מסומן כמופעל.
+const BK_NOTIFY_KEY = "myprime_bk_notify";
+function bkNotifyPending() { try { return localStorage.getItem(BK_NOTIFY_KEY) === "1"; } catch (e) { return false; } }
+function bkSetNotifyPending(on) { try { if (on) localStorage.setItem(BK_NOTIFY_KEY, "1"); else localStorage.removeItem(BK_NOTIFY_KEY); } catch (e) {} }
 function bkSetCode(code) { try { if (code) localStorage.setItem(BK_CODE_KEY, code); else localStorage.removeItem(BK_CODE_KEY); } catch (e) {} }
 function bkB64(buf) { let s = ""; const b = new Uint8Array(buf); for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
 function bkUnb64(str) { const s = atob(str); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
@@ -6389,8 +6396,11 @@ export default function App() {
       try {
         const plaintext = localStorage.getItem(STORAGE_KEY);
         if (!plaintext || plaintext === bkSentRef.current) return;
-        const ok = await bkUpload(email, code, plaintext);
-        if (ok) { bkSentRef.current = plaintext; try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} }
+        // המייל יוצא כאן רק כשקוד חדש נקבע ברישום וטרם נשלח עליו כלום. בכל
+        // גיבוי אחר, וזה הרוב המוחלט, נשלח טקסט מוצפן בלבד ושום מפתח.
+        const notify = bkNotifyPending();
+        const ok = await bkUpload(email, code, plaintext, notify);
+        if (ok) { bkSentRef.current = plaintext; if (notify) bkSetNotifyPending(false); try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} }
       } catch (e) {}
     };
     const t = setTimeout(flush, 12000); // debounce: each change resets the timer
@@ -6493,7 +6503,7 @@ export default function App() {
 
   const finishOnboarding = (p, bk) => {
     const backup = { enabled: !!(bk && bk.enabled), email: (bk && bk.email) || (gateEmail || "").trim().toLowerCase() };
-    if (bk && bk.enabled && bk.code) { bkSetCode(bk.code); try { localStorage.removeItem(BK_LAST_KEY); } catch (e) {} }
+    if (bk && bk.enabled && bk.code) { bkSetCode(bk.code); bkSetNotifyPending(true); try { localStorage.removeItem(BK_LAST_KEY); } catch (e) {} }
     // Late joiner: her first login is already past day 2, so the drip-fed tips would all
     // fire at once. Mark them seen and offer the same material as one calm catch-up read.
     const day1 = programDayNumber(p.startDate, TODAY);

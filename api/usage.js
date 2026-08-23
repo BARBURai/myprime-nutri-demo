@@ -126,7 +126,11 @@ export default async function handler(req, res) {
   // מי שהתחילה לצפות בשיעורי הבונוס מתויגת במניצ'ט, כדי שאפשר יהיה לפנות אליה
   // שם בנפרד ממי שלא צפתה. **פעם אחת בחיים לכל אישה**: סימון ב-Redis חוסם כל
   // קריאה נוספת, והנקודה הזאת נקראת בכל טעינה של האפליקציה.
-  if (hasUsage && rec.glowStarted) { tagWatched(RU, RT, email, body && body.phone).catch(() => {}); }
+  // **מחכים לה.** בוורסל הפונקציה נסגרת ברגע שהתשובה יוצאת, וכל מה שרץ ברקע
+  // בלי המתנה נקטע באמצע. בגרסה הראשונה זה נשלח בלי await והקריאה למניצ'ט
+  // מעולם לא הספיקה לצאת. **המחיר הוא סיבוב אחד ל-Redis בטעינה של מי שצפתה,
+  // ואחרי התיוג הראשון הוא נעצר שם ולא ממשיך למניצ'ט.**
+  if (hasUsage && rec.glowStarted) { try { await tagWatched(RU, RT, email, body && body.phone); } catch (e) {} }
 
   try {
     if (hasUsage) await redis(RU, RT, "HSET", "admin:usage", email, JSON.stringify(rec));
