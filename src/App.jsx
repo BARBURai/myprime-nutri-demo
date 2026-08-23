@@ -594,11 +594,15 @@ const C = {
   brand: "#D45D79", brandD: "#A8425C", brandBg: "#FBE9EE",
   macroP: "#7E4FB5", proteinTrack: "#EBE1F7", macroF: "#E0986A", macroC: "#A87BB5",
   amber: "#C77A3C", amberBg: "#FBEEDF",
-  info: "#9C6BA6", infoBg: "#F2E7F3",
+  info: "#9C6BA6",
+  // "עמדה ביעד" בגרף הקלוריות. הצבע הראשי של האפליקציה הוא ורוד-אדום, ובתוך גרף
+  // שיש בו גם סגול וגם כתום העין קוראת אותו כאזהרה. זה הירוק שכבר משמש כאן למצב
+  // מאושר (תג "מאומת", ו"ההתקנה הסתיימה"), ולכן אינו שפה חדשה.
+  ok: "#3B7A57", infoBg: "#F2E7F3",
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.11";
+const VERSION = "6.12";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1888,7 +1892,7 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
                 <YAxis domain={[0, Math.round(maxCal * 1.15)]} hide />
                 <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v, k) => [`${v.toLocaleString()} קק״ל`, k === "goal" ? "היעד שלך ביום הזה" : "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
                 <Bar dataKey="kcal" radius={[6, 6, 0, 0]} isAnimationActive={false}>
-                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal, d.goal) ? C.brand : calBelow(d.kcal, d.goal) ? C.info : C.amber} />))}
+                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal, d.goal) ? C.ok : calBelow(d.kcal, d.goal) ? C.info : C.amber} />))}
                 </Bar>
                 <Line dataKey="goal" stroke="none" isAnimationActive={false} activeDot={false} dot={<GoalDash />} />
               </ComposedChart>
@@ -1897,7 +1901,7 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
         )}
         {loggedDays.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 10 }}>
-            {[[C.brand, "ביעד"], [C.info, "מתחת ליעד"], [C.amber, "מעל היעד"]].map((x) => (
+            {[[C.ok, "ביעד"], [C.info, "מתחת ליעד"], [C.amber, "מעל היעד"]].map((x) => (
               <span key={x[1]} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: C.sub }}>
                 <span style={{ width: 9, height: 9, borderRadius: 3, background: x[0], display: "inline-block" }} />{x[1]}
               </span>
