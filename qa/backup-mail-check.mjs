@@ -28,10 +28,17 @@ check("וגם כשהיא בוחרת קוד בעצמה ברישום",
   /bkUpload\(em, code, localStorage\.getItem\(STORAGE_KEY\) \|\| "", true\)/.test(app));
 // שלוש נקודות, ואין רביעית: כל bkUpload אחר הוא גיבוי רגיל ואסור שיישא קוד
 // הקריאות מכילות סוגריים בתוכן, ולכן סופרים לפי סוף השורה ולא לפי הסוגר הראשון
-const notifyCalls = app.split("\n").filter((l) => /bkUpload\(/.test(l) && /(, true\)|, !had\))/.test(l));
-check("ואין שום מסלול רביעי ששולח את הקוד", notifyCalls.length === 3, "נמצאו " + notifyCalls.length);
+const notifyCalls = app.split("\n").filter((l) => /bkUpload\(/.test(l) && /(, true\)|, !had\)|, notify\))/.test(l));
+check("ואין שום מסלול חמישי ששולח את הקוד", notifyCalls.length === 4, "נמצאו " + notifyCalls.length);
+// ההעלאה שרצה אחרי כל שינוי ביומן נושאת קוד אך ורק כשממתין סימון שנקבע ברישום,
+// וזה קורה פעם אחת בחיים. בכל שאר הפעמים `notify` הוא false ונשלח טקסט מוצפן בלבד.
 check("וגיבוי רגיל אחרי שינוי ביומן אינו נושא קוד",
-  app.split("\n").some((l) => /const ok = await bkUpload\(email, code, plaintext\);/.test(l)));
+  /const notify = bkNotifyPending\(\);/.test(app) &&
+  /const ok = await bkUpload\(email, code, plaintext, notify\);/.test(app));
+check("הסימון נקבע ברישום כשהיא בוחרת קוד בעצמה",
+  /bkSetCode\(bk\.code\); bkSetNotifyPending\(true\);/.test(app));
+check("ומתנקה אחרי שהמייל יצא, כדי שלא ייצא שוב",
+  /if \(notify\) bkSetNotifyPending\(false\);/.test(app));
 
 console.log("\nומה נשמר אצלנו, וזו ההבטחה עצמה\n");
 // כל כתיבה ל-Redis בקובץ, וכל אחת מהן חייבת להיות מוסברת
