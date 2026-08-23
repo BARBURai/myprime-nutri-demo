@@ -22,6 +22,16 @@ check("המייל יוצא רק כשהקוד נולד, ולא אם כבר היה
   /const had = bkGetCode\(\);/.test(app) && /bkUpload\(email, code, localStorage\.getItem\(STORAGE_KEY\) \|\| "", !had\)/.test(app));
 check("ושוב כשהיא משנה את הקוד בעצמה",
   /bkUpload\(email, newCode, localStorage\.getItem\(STORAGE_KEY\) \|\| "", true\)/.test(app));
+// המסלול שבו היא בוחרת קוד בעצמה ברישום. הוא נשכח בגרסה הראשונה, ורון נתקל
+// בו בבדיקה: הוא בחר קוד ברישום ושום מייל לא היה יוצא.
+check("וגם כשהיא בוחרת קוד בעצמה ברישום",
+  /bkUpload\(em, code, localStorage\.getItem\(STORAGE_KEY\) \|\| "", true\)/.test(app));
+// שלוש נקודות, ואין רביעית: כל bkUpload אחר הוא גיבוי רגיל ואסור שיישא קוד
+// הקריאות מכילות סוגריים בתוכן, ולכן סופרים לפי סוף השורה ולא לפי הסוגר הראשון
+const notifyCalls = app.split("\n").filter((l) => /bkUpload\(/.test(l) && /(, true\)|, !had\))/.test(l));
+check("ואין שום מסלול רביעי ששולח את הקוד", notifyCalls.length === 3, "נמצאו " + notifyCalls.length);
+check("וגיבוי רגיל אחרי שינוי ביומן אינו נושא קוד",
+  app.split("\n").some((l) => /const ok = await bkUpload\(email, code, plaintext\);/.test(l)));
 
 console.log("\nומה נשמר אצלנו, וזו ההבטחה עצמה\n");
 // כל כתיבה ל-Redis בקובץ, וכל אחת מהן חייבת להיות מוסברת
