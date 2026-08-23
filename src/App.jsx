@@ -5,14 +5,14 @@ import {
   Footprints, Dumbbell, ArrowDownRight, Info, Zap, Target, Sparkles, Droplet,
   MessageCircle, Loader, Copy, Mic, Send, Lock, Clock, Cookie, BarChart3,
 } from "lucide-react";
-import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, Bar, Cell, ReferenceLine } from "recharts";
+import { XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart, BarChart, ComposedChart, Bar, Line, Cell, ReferenceLine } from "recharts";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
-import { GLOW_STARTED_KEY } from "./content/glow";
+import { GLOW_STARTED_KEY, hasGlow } from "./content/glow";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -85,8 +85,55 @@ const PROTEIN_PER_KG = 1.6;        // טווח מומלץ 1.5-1.7
 const FAT_PER_KG = 0.9;
 const RATE_OPTIONS = [0, 250, 500];
 const UNDERWEIGHT_BMI = 18.5; // WHO: BMI<18.5 = תת-משקל
+// הרצפה לירידה במשקל, החלטה של רון מ-21 באוגוסט 2026. היא גבוהה מקו תת-המשקל
+// בכוונה: 18.5 הוא קו האבחון עצמו, ואישה שמתחילה מעליו עם גירעון קלורי חוצה אותו
+// תוך שבועיים. התוכניות המסחריות עוצרות סביב 20 מאותה סיבה.
+const MIN_LOSS_BMI = 20;
 function bmiOf(kg, heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? kg / (h * h) : 0; }
-function minHealthyKg(heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? Math.ceil(UNDERWEIGHT_BMI * h * h * 2) / 2 : 0; } // משקל מינימלי שעדיין BMI>=18.5, מעוגל ל-0.5 כלפי מעלה
+function minHealthyKg(heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? Math.ceil(MIN_LOSS_BMI * h * h * 2) / 2 : 0; } // המשקל הנמוך ביותר שמותר לכוון אליו, BMI 20, מעוגל ל-0.5 כלפי מעלה
+// אין לה לאן לרדת: המשקל שלה כבר בטווח שאנחנו לא ממליצים לרדת מתחתיו, ולכן מסך
+// היעד מציג לה שמירה בלבד. הכלל אחד, ומתוכו נגזרות שתי ההתנהגויות.
+function noLossRoom(weightKg, heightCm) { return heightCm > 0 && weightKg > 0 && weightKg <= minHealthyKg(heightCm); }
+// הקו השני, וזה כל מנגנון ההגנה מפני תנודה: היא יוצאת מירידה ב-BMI 20 וחוזרת רק
+// ב-BMI 21. הפער הוא שניים וחצי עד שלושה קילו, כלומר מעבר לתנודה יומית של מים
+// והורמונים, ולכן אין צורך בשום ממוצע ובשום חלון זמן. שני מספרים, וזהו.
+const RESUME_LOSS_BMI = 21;
+function resumeLossKg(heightCm) { const h = (heightCm || 0) / 100; return h > 0 ? Math.ceil(RESUME_LOSS_BMI * h * h * 2) / 2 : 0; }
+function canResumeLoss(weightKg, heightCm) { return heightCm > 0 && weightKg > 0 && weightKg >= resumeLossKg(heightCm); }
+// אילו קצבים מוצעים לה. החלטה של רון, 22 באוגוסט 2026: **500 גרם בשבוע מוצע רק
+// למי שיש לה מקום אמיתי.** התוכנית היא עשרה שבועות, ובקצב הזה זה חמישה קילו,
+// ולכן מי שפחות מזה מעל הקו הייתה מגיעה אליו לפני שהתוכנית נגמרת.
+// **ומי שכבר ירדה מתחת לקו פעם אחת נשארת על 250 לכל החיים**, גם אחרי שחזרה.
+const FAST_RATE_ROOM_KG = 5;
+function rateOptionsFor(weightKg, heightCm, everStopped) {
+  const room = (weightKg || 0) - minHealthyKg(heightCm);
+  const fastOk = !everStopped && room >= FAST_RATE_ROOM_KG;
+  return RATE_OPTIONS.filter((g) => g !== 500 || fastOk);   // רשימה אחת, כדי שלא תיסחף
+}
+// המשקל האחרון שהיא דיווחה, ולא זה של הרישום. זו כל הבעיה שהייתה כאן: הכלל ירה
+// פעם אחת וקרא מספר שקפוא מאותו רגע. מכאן והלאה כל מסך שנוגע במשקל שואל את זה.
+function currentWeightOf(profile, weights) {
+  const last = weights && weights.length ? weights[weights.length - 1].kg : null;
+  return last != null && isFinite(last) ? last : (profile ? profile.weightKg : 0);
+}
+// ירידה מהירה מדי, וזו ההגנה החזקה יותר: BMI אומר איפה היא, והקצב אומר לאן היא
+// נוסעת. שתי נקודות ותאריך, בלי ממוצע נע: המשקל מלפני כשלושה שבועות מול היום.
+const FAST_LOSS_PCT = 1;   // אחוז ממשקל הגוף בשבוע
+const FAST_LOSS_DAYS = 21;
+function fastLossPct(weights, today) {
+  if (!weights || weights.length < 2) return 0;
+  const cur = weights[weights.length - 1];
+  const cutoff = addDays(today, -FAST_LOSS_DAYS);
+  const older = weights.filter((w) => w.date <= cutoff);
+  const past = older.length ? older[older.length - 1] : weights[0];
+  const days = Math.round((parseDay(cur.date) - parseDay(past.date)) / 86400000);
+  // פחות משבועיים אינו קצב אלא תנודה, והשבוע הראשון בכל תוכנית יורד מהר בגלל
+  // נוזלים. התרעה עליו הייתה יוצאת כמעט לכל אישה, ואז אף אחת לא מתייחסת אליה.
+  if (days < 14 || !(past.kg > 0)) return 0;
+  const lost = past.kg - cur.kg;
+  if (lost <= 0) return 0;
+  return ((lost / (days / 7)) / past.kg) * 100;
+}
 const WATER_TARGET_GLASSES = 8;    // 8 כוסות = 2 ליטר
 const WATER_MIN_GLASSES = 6;       // 6 כוסות = 1.5 ליטר
 const WATER_TARGET_ML = 2000;      // יעד מים קבוע: 2 ליטר
@@ -547,11 +594,15 @@ const C = {
   brand: "#D45D79", brandD: "#A8425C", brandBg: "#FBE9EE",
   macroP: "#7E4FB5", proteinTrack: "#EBE1F7", macroF: "#E0986A", macroC: "#A87BB5",
   amber: "#C77A3C", amberBg: "#FBEEDF",
-  info: "#9C6BA6", infoBg: "#F2E7F3",
+  info: "#9C6BA6",
+  // "עמדה ביעד" בגרף הקלוריות. הצבע הראשי של האפליקציה הוא ורוד-אדום, ובתוך גרף
+  // שיש בו גם סגול וגם כתום העין קוראת אותו כאזהרה. זה הירוק שכבר משמש כאן למצב
+  // מאושר (תג "מאומת", ו"ההתקנה הסתיימה"), ולכן אינו שפה חדשה.
+  ok: "#3B7A57", infoBg: "#F2E7F3",
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.09";
+const VERSION = "6.12";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -585,10 +636,15 @@ async function bkDecrypt(code, blob) {
   const pt = await bkSubtle.decrypt({ name: "AES-GCM", iv: bkUnb64(blob.iv) }, key, bkUnb64(blob.ct));
   return new TextDecoder().decode(pt);
 }
-async function bkUpload(email, code, plaintext) {
+// `notify` הוא המקרה היחיד שבו הקוד עצמו עוזב את המכשיר, והוא נשלח כדי שהשרת
+// יוכל להרכיב ממנו מייל אחד ולשכוח אותו. זה קורה בדיוק פעמיים בחיים של אישה:
+// כשהגיבוי נוצר, וכשהיא משנה את הקוד בעצמה. **בכל גיבוי רגיל, וזה מה שרץ אחרי
+// כל שינוי ביומן, נשלח טקסט מוצפן בלבד ושום מפתח.**
+async function bkUpload(email, code, plaintext, notify = false) {
   if (!bkSubtle) return false;
   const blob = await bkEncrypt(code, plaintext);
-  const r = await fetch("/api/backup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, blob }) });
+  const payload = notify ? { email, blob, code, notify: 1 } : { email, blob };
+  const r = await fetch("/api/backup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!r.ok) return false;
   const d = await r.json().catch(() => ({}));
   return !!d.ok;
@@ -1064,7 +1120,16 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
   const goalEff = goalKg == null ? weightN : goalKg;
   const ageOk = ageN >= 33 && ageN <= 80;
   const heightOk = heightN >= 120 && heightN <= 210;
-  const weightOk = weightN >= 50 && weightN <= 150;
+  // בדיקת טעות הקלדה בלבד. הבריאות נשמרת על ידי כלל ה-BMI במסך היעד ולא על ידי
+  // מספר שרירותי כאן, שחסם נשים בריאות והכניס בשקט נשים בתת-משקל.
+  const weightOk = weightN >= 35 && weightN <= 200;
+  // אין לה לאן לרדת. הקצב נכפה לשמירה, כי המסך מציג לה שמירה בלבד ואסור שהטיוטה
+  // תישאר עם 250 שנבחר כברירת מחדל לפני שהיא הזינה גובה ומשקל.
+  const noLoss = noLossRoom(weightN, heightN);
+  const rateChoices = rateOptionsFor(weightN, heightN, false);
+  // אם היא בחרה 500 ואז תיקנה את המשקל כלפי מטה, האפשרות נעלמת מתחתיה ואסור
+  // שהערך יישאר בטיוטה.
+  const rateEff = noLoss ? 0 : (rateChoices.indexOf(rate) === -1 ? 250 : rate);
   const step0Valid = ageOk && heightOk && weightOk && keepShabbat !== null;
   const next = () => {
     if (step === 0 && !step0Valid) { setErr0(true); return; }
@@ -1072,9 +1137,9 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
     setStep(step + 1);
   };
 
-  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rate, goalWeightKg: rate === 0 ? weightN : Math.max(minHealthyKg(heightN), goalEff), returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
+  const draft = { age: ageN, heightCm: heightN, weightKg: weightN, activity: "יושבני", weeklyRateG: rateEff, goalWeightKg: rateEff === 0 ? weightN : Math.max(minHealthyKg(heightN), goalEff), lossStopAt: noLoss ? startDate : null, lossStopEver: noLoss, resumeOfferAt: null, returnPct: 50, startDate, keepShabbat: keepShabbat === true, stepGoal: null, stepBaseline: null, cupMl: DEFAULT_CUP_ML, diet, allergies, dislikes, fasting: false };
   const targets = computeTargets(draft);
-  const proj = projection(weightN, rate === 0 ? weightN : goalEff, rate);
+  const proj = projection(weightN, rateEff === 0 ? weightN : goalEff, rateEff);
   const projData = proj.data.map((d) => ({ ...d, label: `${d.w}` }));
   const backupSetup = wantBackup ? { enabled: true, email: bkEmail.trim().toLowerCase(), code: bkCode } : { enabled: false };
 
@@ -1105,7 +1170,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
             <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !heightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
             {err0 && !heightOk && errNote(heightCm === "" ? "יש למלא את הנתון" : "יש להזין גובה תקין בסנטימטרים")}
             <Field label="משקל נוכחי"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="decimal" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="" style={numStyle(err0 && !weightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ק״ג</span></span></Field>
-            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "יש להזין משקל תקין בק״ג")}
+            {err0 && !weightOk && errNote(weightKg === "" ? "יש למלא את הנתון" : "אפשר להזין משקל בין 35 ל-200 ק״ג")}
             <div style={{ padding: "14px 0", borderTop: `1px solid ${C.line}` }}>
               <div style={{ fontSize: 18, color: C.ink, marginBottom: 8 }}>תאריך תחילת התוכנית</div>
               {fixedStart ? (
@@ -1140,9 +1205,23 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
         {step === 1 && (
           <>
             <span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>מה המטרה שלך?</span>
+            {noLoss ? (
+              <>
+                <div style={{ background: C.brandBg, border: `1px solid ${C.brand}`, borderRadius: 14, padding: "14px 16px", margin: "12px 0 14px" }}>
+                  <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.6 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל.</div>
+                  <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 8 }}>אם המספרים לא נכונים, אפשר לחזור אחורה ולתקן. ואם את רוצה לדבר איתנו על זה, אנא שלחי הודעה לצוות בוואטסאפ.</div>
+                  <a href={`https://wa.me/972547304177?text=${encodeURIComponent("היי, יש לי שאלה על היעד שלי בתוכנית")}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#25D366", color: "#fff", borderRadius: 12, padding: "10px 18px", fontSize: 15, fontWeight: 700, textDecoration: "none", marginTop: 12 }}>הודעה לצוות בוואטסאפ</a>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, border: `2px solid ${C.brand}`, background: C.brandBg, borderRadius: 14, padding: 14 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${C.brand}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><div style={{ width: 10, height: 10, borderRadius: "50%", background: C.brand }} /></div>
+                  <span style={{ fontSize: 18, fontWeight: 500, color: C.ink }}>{rateLabel(0)}</span>
+                </div>
+                <p style={{ fontSize: 14, color: C.faint, marginTop: 12, lineHeight: 1.6 }}>כל שאר התוכנית פתוחה לך כרגיל: התכנים, המעקב היומי, התנועה והשיעורים.</p>
+              </>
+            ) : (<>
             <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 6, marginBottom: 14 }}>בחרי קצב ירידה שבועי. קצב מתון נשמר לאורך זמן וטוב יותר לשמירה על מסת שריר.</p>
-            {RATE_OPTIONS.map((g) => {
-              const sel = rate === g;
+            {rateChoices.map((g) => {
+              const sel = rateEff === g;
               const rec = g === 250;
               return (
                 <div key={g} onClick={() => setRate(g)} style={{ display: "flex", alignItems: "center", gap: 10, border: `${rec ? 2 : 1}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : "transparent", borderRadius: 14, padding: 14, marginBottom: 10, cursor: "pointer" }}>
@@ -1155,7 +1234,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
                 </div>
               );
             })}
-            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalEff} set={(v) => setGoalKg(Math.max(minHealthyKg(heightN), Math.min(weightN - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightN)} ק״ג, הטווח הבריא לגובה שלך.</div></div>)}
+            {rate !== 0 && (<div style={{ marginTop: 6 }}><Field label="משקל רצוי"><Stepper value={goalEff} set={(v) => setGoalKg(Math.max(minHealthyKg(heightN), Math.min(weightN - 0.5, v)))} step={0.5} suffix="ק״ג" /></Field><div style={{ fontSize: 13.5, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>לא ניתן לבחור יעד נמוך מ-{minHealthyKg(heightN)} ק״ג, שהוא הטווח שאנחנו ממליצים עליו לגובה שלך.</div></div>)}
+            </>)}
           </>
         )}
 
@@ -1270,7 +1350,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
               <div style={{ fontSize: 36, fontWeight: 600, color: C.brandD }}>{targets.targetKcal.toLocaleString()} <span style={{ fontSize: 18 }}>קק״ל</span></div>
             </div>
 
-            {targets.floored && (
+            {targets.floored && rateEff !== 0 && (
               <div style={{ fontSize: 14, color: C.amber, background: C.amberBg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 12, display: "flex", gap: 6 }}>
                 <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>הקצב שבחרת מהיר מהמומלץ עבור הנתונים שלך. היעד הוגבל ל־{KCAL_FLOOR} קק״ל לשמירה על בריאותך - שקלי קצב מתון יותר.</span>
               </div>
@@ -1352,7 +1432,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
 }
 // Shown when a participant has finished signing up but her programme starts on a
 // later Sunday. Day 1 (and everything with it) unlocks at midnight on that date.
-function PreStartScreen({ name, startDate }) {
+function PreStartScreen({ name, startDate, glow = false, onOpenGlow }) {
   // Phone only: on a desktop there is no home screen to put the icon on.
   const isPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
   const start = new Date(startDate);
@@ -1370,6 +1450,16 @@ function PreStartScreen({ name, startDate }) {
       </div>
       <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
       <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
+      {/* Only for a woman who is marked for the bonus. It opens straight onto the bonus
+          list rather than the content screen: before her start date nothing at all is
+          unlocked, so the ordinary screen would be empty and read as broken. */}
+      {glow && hasGlow() && (
+        <div style={{ background: C.panel, border: `1px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, lineHeight: 1.5 }}>💄 בונוס שמחכה לך כבר עכשיו</div>
+          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, margin: "8px 0 14px" }}>שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים Glow, עם ורד ספיבק.</div>
+          <Btn onClick={onOpenGlow}>לצפייה בשיעורים</Btn>
+        </div>
+      )}
       {isPhone && (
         <div style={{ background: C.brandBg, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
           <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>אפשר לסגור את האפליקציה.</div>
@@ -1661,7 +1751,14 @@ function WeighInTips({ style }) {
   );
 }
 
-function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDate = {}, startDate, stepGoalStored, stepsOpen, today = TODAY, onEditSteps }) {
+// הסימן הקטן שמסמן את היעד של יום אחד בגרף הקלוריות. Recharts מוסר את מרכז הנקודה,
+// והרוחב קבוע כי כל העמודות באותו רוחב. `key` נדרש כי Recharts משכפל את הרכיב לכל נקודה.
+function GoalDash({ cx, cy }) {
+  if (cx == null || cy == null) return null;
+  return <rect x={cx - 13} y={cy - 1} width={26} height={2.5} rx={1.25} fill={C.brandD} opacity={0.85} />;
+}
+
+function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWeek, stepsByDate = {}, activityLog = [], weightKg, startDate, stepGoalStored, stepsOpen, today = TODAY, onEditSteps }) {
   const data = weights.map((w) => ({ ...w, label: `${parseDay(w.date).getUTCDate()}/${parseDay(w.date).getUTCMonth() + 1}` }));
   const change = Math.round((weights[weights.length - 1].kg - weights[0].kg) * 10) / 10;
   const current = weights[weights.length - 1].kg;
@@ -1670,18 +1767,47 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
   const calByDate = {};
   log.forEach((e) => { calByDate[e.date] = (calByDate[e.date] || 0) + e.kcal; });
   const goalKcal = targets.targetKcal;
+  // כל יום נמדד מול היעד של אותו יום, בדיוק כמו ביומן. עד כאן הדוח השווה את כל שבעת
+  // הימים ליעד הבסיסי, ולכן ביום שהיא התאמנה הוא סימן אותה כחורגת בזמן שהיומן הראה
+  // לה שנשאר לה תקציב, ובכיוון השני נתן לה וי על גירעון כפול. דיווח של הדס קהלני.
+  // אותו חישוב בדיוק כמו ב-DayScreen: היעד ועוד האימון ועוד הצעדים, והצעדים רק מהיום
+  // שבו הם נפתחו לה. אותו משקל שהיומן משתמש בו, אחרת אותו יום היה יוצא שני מספרים.
+  const actByDate = {};
+  (activityLog || []).forEach((a) => { actByDate[a.date] = (actByDate[a.date] || 0) + (a.kcal || 0); });
+  const goalOn = (d) => {
+    const st = unlockedOn(startDate, d, STEPS_UNLOCK) ? stepsKcal((stepsByDate && stepsByDate[d]) || 0, weightKg) : 0;
+    return goalKcal + (actByDate[d] || 0) + st;
+  };
   const calSeries = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(TODAY, i - 6);
     const dd = parseDay(d);
-    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0) };
+    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0), goal: Math.round(goalOn(d)) };
   });
   const loggedDays = calSeries.filter((x) => x.kcal > 0);
-  // A day counts as "met the calorie goal" only if she ate CLOSE to the target. Trivial/partial logging
-  // (e.g. a single item, far below target) or strong under-eating does not count as meeting the goal.
-  const calMet = (kc) => goalKcal > 0 && kc >= goalKcal * 0.8 && kc <= goalKcal * 1.05;
-  const metDays = loggedDays.filter((x) => calMet(x.kcal)).length;
+  // מתי יום נחשב "עמדה ביעד". החלטה של רון, 22 באוגוסט 2026, אחרי שהוא שאל:
+  // "אני מעודד אותה אם אני נותן לה 20 אחוז פחות... אני מודד אותה להגיע לפחות
+  // מאשר היעד שכבר נתתי לה והוא כבר מופחת, זה לא ממש טוב."
+  //
+  // **הגבול התחתון הוא הגבוה מבין 90 אחוז מהיעד או רצפת ה-1,200.** הרצפה כבר
+  // קיימת בקוד כמספר הנמוך ביותר שהאפליקציה תיתן כיעד, ולכן היא גם המספר
+  // הנמוך ביותר שהיא מוכנה לחגוג עליו. **היא תופסת בדיוק אצל מי שהיעד שלה
+  // קרוב אליה, כלומר אישה קטנה או מי שבשמירה מטעמי בריאות.**
+  //
+  // המרווח נשאר לא סימטרי: 10 אחוז כלפי מטה לטעות רישום, ו-5 בלבד כלפי מעלה,
+  // כי חריגה היא בדיוק מה שהמעקב נועד לתפוס.
+  // **ומי שבשמירה נמדדת אחרת, החלטה של רון:** אצלה היעד הוא בדיוק המשקל שאינו
+  // זז, ולכן מרווח של 10 אחוז כלפי מטה הוא כבר ירידה. אצלה 5 אחוז בלבד, ובלי
+  // רצפת ה-1,200: היעד שלה הוגבל אליה דווקא מפני שהיא צורכת פחות ממנה, כלומר
+  // 1,200 הוא **מעל** מה שהיא שורפת ולא מתחתיו, ואין כאן שום גירעון כפול.
+  const CAL_MET_LOW = 0.9, CAL_MET_LOW_MAINT = 0.95, CAL_MET_HIGH = 1.05;
+  const metFloor = (g) => (onMaintain ? g * CAL_MET_LOW_MAINT : Math.max(g * CAL_MET_LOW, KCAL_FLOOR));
+  const calMet = (kc, g) => g > 0 && kc >= metFloor(g) && kc <= g * CAL_MET_HIGH;
+  // ומתחת לטווח אינו כמו מעליו. קודם שניהם נצבעו בכתום, ולכן "אכלתי 900"
+  // ו"אכלתי 1,800" נראו לה זהה, וזה מטשטש בדיוק את ההבחנה שחשובה כאן.
+  const calBelow = (kc, g) => g > 0 && kc > 0 && kc < metFloor(g);
+  const metDays = loggedDays.filter((x) => calMet(x.kcal, x.goal)).length;
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
-  const maxCal = Math.max(goalKcal, ...calSeries.map((x) => x.kcal));
+  const maxCal = Math.max(goalKcal, ...calSeries.map((x) => Math.max(x.kcal, x.goal)));
   // The protein task opens on week 3 DAY 4, not on day 1 of week 3. Reading the week alone
   // turned protein on three days early, while the tracker itself already used the exact
   // unlock day - so for three days she could be shown a target that did not exist yet.
@@ -1757,19 +1883,32 @@ function ReportScreen({ weights, addWeight, log, targets, programWeek, stepsByDa
         {loggedDays.length > 0 && (
           <div style={{ height: 140, margin: "0 -6px" }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={calSeries} margin={{ top: 12, right: 8, left: 8, bottom: 0 }}>
+              {/* קו יעד אחד לכל השבוע ירד כאן. משהתחלנו למדוד כל יום מול היעד שלו,
+                  עמודה ירוקה של יום אימון עמדה מעליו ונקראה כסתירה. במקומו סימן קטן
+                  על כל עמודה, בגובה היעד של אותו יום, כך שהיא רואה בעין שהיעד זז.
+                  מספר מעל העמודה נבחן ונדחה: הוא נקרא כגובה העמודה, כלומר כמה אכלה. */}
+              <ComposedChart data={calSeries} margin={{ top: 12, right: 8, left: 8, bottom: 0 }}>
                 <XAxis dataKey="label" tick={{ fontSize: 13, fill: C.faint }} axisLine={false} tickLine={false} />
                 <YAxis domain={[0, Math.round(maxCal * 1.15)]} hide />
-                <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v) => [`${v.toLocaleString()} קק״ל`, "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
-                <ReferenceLine y={goalKcal} stroke={C.brand} strokeDasharray="4 4" label={{ value: `יעד ${goalKcal.toLocaleString()}`, position: "insideTopRight", fontSize: 12, fill: C.brandD }} />
-                <Bar dataKey="kcal" radius={[6, 6, 0, 0]}>
-                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal) ? C.brand : C.amber} />))}
+                <Tooltip contentStyle={{ fontSize: 15, borderRadius: 8, border: `1px solid ${C.line}`, fontFamily: fontStack }} formatter={(v, k) => [`${v.toLocaleString()} קק״ל`, k === "goal" ? "היעד שלך ביום הזה" : "נאכל"]} labelFormatter={() => ""} cursor={{ fill: "rgba(212,93,121,0.06)" }} />
+                <Bar dataKey="kcal" radius={[6, 6, 0, 0]} isAnimationActive={false}>
+                  {calSeries.map((d, i) => (<Cell key={i} fill={d.kcal === 0 ? C.line : calMet(d.kcal, d.goal) ? C.ok : calBelow(d.kcal, d.goal) ? C.info : C.amber} />))}
                 </Bar>
-              </BarChart>
+                <Line dataKey="goal" stroke="none" isAnimationActive={false} activeDot={false} dot={<GoalDash />} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
-        <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.5, marginTop: 10 }}>הקלוריות והמאקרו הם הערכה.</div>
+        {loggedDays.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 10 }}>
+            {[[C.ok, "ביעד"], [C.info, "מתחת ליעד"], [C.amber, "מעל היעד"]].map((x) => (
+              <span key={x[1]} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12.5, color: C.sub }}>
+                <span style={{ width: 9, height: 9, borderRadius: 3, background: x[0], display: "inline-block" }} />{x[1]}
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.5, marginTop: 10 }}>הספירה לפי מה שרשמת ביומן, ולכן יום שתועד חלקית לא ייחשב כעמידה ביעד. הקלוריות והמאקרו הם הערכה.</div>
       </div>
       <div ref={weightRef} style={cardBox}>
         <CardHeading icon={TrendingDown} text="דוח משקל" />
@@ -2006,9 +2145,10 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, hasFutureEntries, onClearFuture }) {
+function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, hasFutureEntries, onClearFuture }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
+  const [showLossStop, setShowLossStop] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
@@ -2040,7 +2180,38 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
   const commit = () => { const k = edit.key; if (k === "weightKg" || k === "goalWeightKg") { setPendingWeight({ key: k, value: edit.value }); setEdit(null); return; } setProfile({ ...profile, [k]: edit.value }); setEdit(null); };
-  const confirmWeight = () => { if (pendingWeight) setProfile({ ...profile, [pendingWeight.key]: pendingWeight.value }); setPendingWeight(null); };
+  // **המצב, ולא המשקל של הרגע.** נעילת המסכים חייבת להישען על "העברנו אותה
+  // לשמירה" ולא על "היא מתחת לקו עכשיו", אחרת בטווח שבין שני הקווים הרשימה
+  // נפתחת והיא יכולה לבחור 250 לבד, וכל מנגנון ההגנה מפני תנודה מתבטל.
+  const inMaintain = !!profile.lossStopAt;
+  const canResume = inMaintain && canResumeLoss(curWeight != null ? curWeight : profile.weightKg, profile.heightCm);
+  const confirmWeight = () => {
+    if (pendingWeight) {
+      const next = { ...profile, [pendingWeight.key]: pendingWeight.value };
+      // הדלת האחורית שהייתה כאן: עריכת המשקל בפרופיל לא בדקה כלום, וקצב הירידה
+      // נשאר כפי שהיה. עכשיו היא מגיעה לאותו מקום כמו הזנת משקל בדוח.
+      //
+      // **והבדיקה היא על המשקל שיהיה הקובע אחרי העריכה, לא על מה שהוקלד.**
+      // "משקל התחלתי" הוא נקודת הפתיחה, ואם יש לה דיווח מאוחר יותר בדוח הוא
+      // הקובע. בלי זה עריכת נקודת הפתיחה כלפי מטה הייתה מעבירה אותה לשמירה
+      // ומיד מציעה לה לחזור, כי המשקל האמיתי שלה גבוה מהקו השני.
+      const nextCur = latestIsBase ? pendingWeight.value : curWeight;
+      if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(nextCur, profile.heightCm)) {
+        next.weeklyRateG = 0;
+        next.goalWeightKg = nextCur;
+        next.lossStopAt = TODAY;
+        next.lossStopEver = true;
+        next.resumeOfferAt = null;
+        setShowLossStop(true);
+      }
+      setProfile(next);
+      // המשקל שבפרופיל הוא נקודת הפתיחה של הגרף, ולכן שינוי שלו מזיז גם אותה.
+      // בלי זה `curWeight` נשאר תקוע על משקל הרישום, ומי שנרשמה מתחת לקו ואז
+      // תיקנה את המשקל כלפי מעלה נשארה נעולה בשמירה בלי שום דרך לצאת.
+      if (pendingWeight.key === "weightKg" && onBaseWeight) onBaseWeight(pendingWeight.value);
+    }
+    setPendingWeight(null);
+  };
   const cycle = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
   const startLabel = (() => {
     // Build the Hebrew label from the date itself - the Sunday list only covers past
@@ -2078,9 +2249,22 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
           <div style={{ paddingBottom: 4 }}>
             <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
             <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
-            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.weightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
-            <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />
+            <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: 35, suffix: "ק״ג", init: profile.weightKg })} />
+            {/* למי שבשמירה אין משקל יעד, ולכן אין מה להציג ואין מה לערוך. השורה גם
+                נשברה שם: המינימום של השדה גבוה מהערך שבתוכו, ולכן לחיצה על מינוס
+                הקפיצה את המספר למעלה. חוזרת מעצמה ברגע שהיא חוזרת לירידה. */}
+            {!inMaintain && <EditRow label="משקל יעד" display={`${profile.goalWeightKg} ק״ג`} onClick={() => open({ key: "goalWeightKg", label: "משקל יעד", type: "num", step: 0.5, min: minHealthyKg(profile.heightCm), suffix: "ק״ג", init: profile.goalWeightKg, hint: `המינימום הבריא לגובה שלך הוא ${minHealthyKg(profile.heightCm)} ק״ג.` })} />}
             <EditRow label="קצב ירידה" display={rateShort(profile.weeklyRateG)} onClick={() => open({ key: "weeklyRateG", label: "קצב ירידה", type: "rate", init: profile.weeklyRateG })} />
+            {inMaintain && !canResume && (
+              <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 14px", margin: "8px 0 4px", fontSize: 14, color: C.sub, lineHeight: 1.6 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית.</div>
+            )}
+            {canResume && (
+              <div style={{ background: C.brandBg, borderRadius: 12, padding: "13px 14px", margin: "8px 0 4px" }}>
+                <div style={{ fontSize: 15.5, fontWeight: 600, color: C.ink, lineHeight: 1.55 }}>אפשר לחזור לירידה במשקל</div>
+                <div style={{ fontSize: 13.5, color: C.sub, lineHeight: 1.6, marginTop: 4 }}>כדאי להתייעץ עם דיאטנית קלינית לפני שחוזרים.</div>
+                <div style={{ marginTop: 10 }}><Btn onClick={onResumeLoss} style={{ padding: "9px" }}>חזרה לירידה במשקל</Btn></div>
+              </div>
+            )}
             {maxStart ? (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 16, padding: "12px 0", borderTop: `1px solid ${C.line}` }}>
                 <span style={{ color: C.sub }}>תחילת התוכנית</span>
@@ -2282,7 +2466,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
 
             {edit.type === "rate" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
-                {RATE_OPTIONS.map((r) => {
+                {(inMaintain ? [0] : rateOptionsFor(curWeight != null ? curWeight : profile.weightKg, profile.heightCm, !!profile.lossStopEver)).map((r) => {
                   const sel = edit.value === r; const rec = r === 250;
                   return (
                     <button key={r} onClick={() => setEdit({ ...edit, value: r })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: `${rec ? 2 : 1.5}px solid ${sel || rec ? C.brand : C.line}`, background: sel || rec ? C.brandBg : C.panel, color: sel || rec ? C.brandD : C.ink, borderRadius: 12, padding: "11px", fontSize: 16, fontFamily: fontStack, fontWeight: sel || rec ? 600 : 400, cursor: "pointer" }}>
@@ -2291,6 +2475,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
                     </button>
                   );
                 })}
+                {inMaintain && <div style={{ fontSize: 13.5, color: C.faint, lineHeight: 1.55, marginTop: 2 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל ללא התייעצות עם דיאטנית קלינית.</div>}
               </div>
             )}
 
@@ -2306,6 +2491,7 @@ function ProfileScreen({ profile, setProfile, targets, onReset, onLogout, userNa
           </div>
         </div>
       )}
+      {showLossStop && <LossStopSheet onAck={() => { setShowLossStop(false); onLossAck && onLossAck(); }} />}
       {pendingWeight && (
         <div onClick={() => setPendingWeight(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
@@ -4665,6 +4851,57 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
 }
 
 const CHEER_SEEN_KEY = "mp_cheer_seen_v1";
+// מוצג פעם אחת בלבד, ברגע שמשקל שהיא דיווחה מביא אותה מתחת לקו. אחריו היא בשמירה.
+// הקופי של רון, 21 באוגוסט 2026. בלי חתימה של ענת, כי זו הודעת מערכת ולא מכתב ממנה.
+function LossStopSheet({ onAck }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(58,43,48,0.28)" }}>
+        <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.65 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית.</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>המערכת לא יכולה לתת ערכים של ירידה נוספת במשקל.</div>
+        {/* המלצה בטקסט ולא בכפתור, לפי רון: כפתור וואטסאפ לצד "הבנתי" נותן לה שתי
+            דרכים לצאת, ואז הלחיצה על "הבנתי" מפסיקה להיות אישור ונעשית בריחה. */}
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>אנחנו ממליצים לך ליצור קשר עם הדיאטנית לקבלת הנחיות.</div>
+        <div style={{ fontSize: 13.5, color: C.faint, lineHeight: 1.55, marginTop: 16 }}>בלחיצה על "הבנתי" את מאשרת שקראת את ההודעה הזאת.</div>
+        <div style={{ marginTop: 8 }}><Btn onClick={onAck}>הבנתי</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+// היא עלתה חזרה מעל הקו השני. **קול המערכת**, כמו שני המסכים האחרים.
+// הקופי של רון, 22 באוגוסט 2026. **כאן שני כפתורים מוצדקים**, כי זו הצעה ולא
+// אישור: המעבר לשמירה קורה לבד, והחזרה היא תמיד בחירה שלה.
+function ResumeOfferSheet({ onResume, onLater }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(58,43,48,0.28)" }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, lineHeight: 1.45 }}>אפשר לחזור לירידה במשקל</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>לפי המשקל שהזנת, אפשר לחזור לירידה מתונה. הקצב המרבי מכאן הוא 250 גרם בשבוע.</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>כדאי להתייעץ עם דיאטנית קלינית לפני שחוזרים.</div>
+        <div style={{ marginTop: 16 }}><Btn onClick={onResume}>חזרה לירידה במשקל</Btn></div>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onLater} style={{ color: C.sub }}>לא עכשיו</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+// ירידה מהירה מדי. **קול המערכת ולא קולה של ענת**, כי זו הודעה שהאפליקציה
+// מחליטה עליה מחישוב שעשתה: בלי גוף ראשון, בלי אמוג'י ובלי חתימה. ראה סעיף 8.
+// הקופי של רון, 22 באוגוסט 2026. אינה חוסמת כלום, וזו הזמנה לדבר ולא עצירה.
+function FastLossSheet({ onClose }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(58,43,48,0.28)" }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, lineHeight: 1.45 }}>הקצב שלך מהיר מהמומלץ</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>לפי המשקל שהזנת, הירידה בשבועות האחרונים מהירה מהקצב שאנחנו ממליצים עליו. ירידה מהירה יכולה לבוא על חשבון מסת השריר ולהקשות על השמירה בהמשך.</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>כדאי להתייעץ עם דיאטנית קלינית.</div>
+        <div style={{ marginTop: 16 }}><Btn onClick={onClose}>הבנתי</Btn></div>
+      </div>
+    </div>
+  );
+}
+
 function CheckinCheer({ name, streak, onClose }) {
   const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
   const cheer = cheerFor(streak, name);
@@ -5802,6 +6039,10 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
   const [recipeSel, setRecipeSel] = useState(null);   // the recipe she has open, if any
+  // Opens the content screen straight onto the bonus list. Deliberately a flag beside the
+  // sheet rather than a sheet of its own, so it is the same screen she already knows and
+  // there is no second code path to keep in step.
+  const [glowDirect, setGlowDirect] = useState(false);
   const [lockMsg, setLockMsg] = useState(null);
   const [tour, setTour] = useState(null);
   const [showIntro, setShowIntro] = useState(saved ? false : true);
@@ -5918,7 +6159,7 @@ export default function App() {
         // here, otherwise the following press would leave the app.
         try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
       }
-      else if (sheetRef.current) setSheet(null);
+      else if (sheetRef.current) { setSheet(null); setGlowDirect(false); }
       else if (recipeSelRef.current) setRecipeSel(null);
       else if (tabRef.current !== "day") setTab("day");
       // Nothing of ours left: no new entry is pushed, so the next press exits the app.
@@ -6020,7 +6261,16 @@ export default function App() {
   };
   const retryGate = () => { try { localStorage.removeItem("myprime_access_email"); localStorage.removeItem("myprime_start_date"); } catch (e) {} setGateEmail(""); setGateMsg(""); setGateReason(""); setGateStartDate(""); setGate("form"); };
 
-  const targets = useMemo(() => computeTargets(profile), [profile]);
+  // המשקל האחרון שהיא דיווחה. זה מה שכל כלל הבטיחות קורא, ולא המשקל של הרישום.
+  const curWeight = currentWeightOf(profile, weights);
+  const lossStopped = !!profile.lossStopAt;
+  // האם נקודת הפתיחה היא גם הדיווח האחרון. אם כן, עריכה שלה בפרופיל היא
+  // המשקל הקובע; ואם לא, הדיווח שבדוח גובר עליה.
+  const latestIsBase = !weights.length || weights[weights.length - 1].date === profile.startDate;
+  // כשהיא בשמירה מטעמי בריאות, היעד הקלורי מחושב מהמשקל האמיתי שלה עכשיו. אחרת
+  // התחזוקה נגזרת ממשקל שכבר אינו קיים, והיא גבוהה מדי. שאר הנשים לא מושפעות.
+  const effProfile = lossStopped ? { ...profile, weeklyRateG: 0, weightKg: curWeight } : profile;
+  const targets = useMemo(() => computeTargets(effProfile), [profile, curWeight, lossStopped]);
   const dailyTarget = profile.calorieOverride || targets.targetKcal;
   const programWeek = programWeekFor(profile.startDate, TODAY);
   // ===== App tour controller (day-3 guided "סיור באפליקציה") =====
@@ -6160,9 +6410,12 @@ export default function App() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
     bkAutoRef.current = true;
     (async () => {
-      const code = bkGetCode() || bkMakeCode();
+      // קוד חדש נולד כאן. **זה הרגע היחיד שבו אפשר לשלוח לה אותו**, ולכן המייל
+      // יוצא בדיוק כאן ולא בגיבוי הרגיל שרץ אחריו. אם כבר היה לה קוד, אין מה לשלוח.
+      const had = bkGetCode();
+      const code = had || bkMakeCode();
       try {
-        const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "");
+        const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "", !had);
         if (!ok) { bkAutoRef.current = false; return; } // silent: retries on the next load
         bkSetCode(code);
         setProfile((p) => ({ ...p, backup: { enabled: true, email, auto: true } }));
@@ -6221,7 +6474,7 @@ export default function App() {
     if (!email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
     setBkBusy(true);
     try {
-      const ok = await bkUpload(email, newCode, localStorage.getItem(STORAGE_KEY) || "");
+      const ok = await bkUpload(email, newCode, localStorage.getItem(STORAGE_KEY) || "", true);
       setBkBusy(false);
       if (!ok) return { ok: false, msg: "האיפוס נכשל, נסי שוב." };
       bkSetCode(newCode);
@@ -6315,7 +6568,51 @@ export default function App() {
     if (eligible) setSheet("fastingIntro");
   }, [programWeek, today, tab, sheet, modal, onboarded, showIntro, profile.fasting, profile.tipsSeen]);
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
-  const setWeightForDate = (date, kg) => { setWeights((w) => [...w.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1)); setSheet(null); };
+  const setWeightForDate = (date, kg) => {
+    const next = [...weights.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1);
+    setWeights(next);
+    // הבדיקה היא על המשקל העדכני ביותר ולא על מה שהיא הקלידה עכשיו, כדי שמילוי
+    // לאחור של יום ישן לא יעביר אותה לשמירה על סמך מספר שכבר אינו נכון.
+    const cur = next[next.length - 1].kg;
+    if (!profile.lossStopAt && profile.weeklyRateG !== 0 && noLossRoom(cur, profile.heightCm)) {
+      // resumeOfferAt מתאפס כאן, כדי שעלייה חוזרת בעתיד תציג את ההצעה שוב.
+      setProfile((pr) => ({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true, resumeOfferAt: null }));
+      setSheet("lossStop");
+      return;
+    }
+    // והכיוון ההפוך. **בלי זה היא עולה חזרה מעל הקו ולא יודעת שנפתחה לה הדרך**,
+    // כי הכרטיס יושב בפרופיל והיא מזינה משקל בדוח. מוצג פעם אחת לכל עלייה.
+    if (profile.lossStopAt && !profile.resumeOfferAt && canResumeLoss(cur, profile.heightCm)) {
+      setProfile((pr) => ({ ...pr, resumeOfferAt: date }));
+      setSheet("resumeOffer");
+      return;
+    }
+    // ירידה מהירה מדי. לא חוסמת כלום, ולא חוזרת יותר מפעם בשלושה שבועות: התרעה
+    // שחוזרת כל יום מלמדת אותה להפסיק לשקול את עצמה, וזו התוצאה הגרועה מכולן.
+    const recent = profile.fastLossAt && profile.fastLossAt > addDays(TODAY, -FAST_LOSS_DAYS);
+    if (!recent && fastLossPct(next, TODAY) >= FAST_LOSS_PCT) {
+      setProfile((pr) => ({ ...pr, fastLossAt: TODAY }));
+      setSheet("fastLoss");
+      return;
+    }
+    setSheet(null);
+  };
+  // החזרה לירידה היא לחיצה שלה ולעולם לא חישוב שלנו, ולכן אין יו-יו: בלי הלחיצה
+  // שום דבר לא זז. המעבר לשמירה הוא היחיד שקורה לבד, כי שם אנחנו מגינים עליה.
+  // היא קראה ואישרה. **נשמר על המכשיר שלה בלבד ואינו עוזב אותו.** רון ביקש
+  // תגית במסך הניהול, נשאלה שאלת הפרטיות, והוא ויתר עליה: מי שרואה תגית כזאת
+  // יודע שה-BMI שלה מתחת ל-20, וזו עובדה בריאותית שמסכי ההסכמה אינם מכסים.
+  const ackLossStop = () => {
+    setSheet(null);
+    setProfile((pr) => ({ ...pr, lossAckAt: TODAY }));
+  };
+  // נקודת הפתיחה בלבד. כל דיווח שהיא עשתה מאז נשאר במקומו.
+  const setBaseWeight = (kg) => setWeights((w) => {
+    const start = profile.startDate;
+    const rest = (w || []).filter((x) => x.date !== start);
+    return [...rest, { date: start, kg: Math.round(kg * 10) / 10 }].sort((a, b) => a.date < b.date ? -1 : 1);
+  });
+  const resumeLoss = () => setProfile((pr) => ({ ...pr, lossStopAt: null, resumeOfferAt: null, weeklyRateG: 250, goalWeightKg: Math.max(minHealthyKg(pr.heightCm), curWeight - 0.5) }));
   const reportAddWeight = () => setSheet("weight");
   const setCalorieGoal = (kcal) => { setProfile((p) => ({ ...p, calorieOverride: kcal })); setSheet(null); };
   const devAnchorDay1 = () => {
@@ -6547,10 +6844,10 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
-              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} programWeek={programWeek} stepsByDate={stepsByDate} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
+              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={profile.weightKg} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
             </div>
             {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
                 stayed tappable, rode up with the keyboard eating the space above it, and
@@ -6603,12 +6900,15 @@ export default function App() {
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
+            {sheet === "lossStop" && <LossStopSheet onAck={ackLossStop} />}
+            {sheet === "fastLoss" && <FastLossSheet onClose={() => setSheet(null)} />}
+            {sheet === "resumeOffer" && <ResumeOfferSheet onResume={() => { resumeLoss(); setSheet(null); }} onLater={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
-            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} onClose={() => setSheet(null)} />}
+            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} startGlow={glowDirect} onClose={() => { setSheet(null); setGlowDirect(false); }} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
 

@@ -55,6 +55,7 @@ const israelToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jer
 const TODAY = israelToday();
 // To put her on day N we walk back N-1 days from today, which is what the app does with
 // the date that comes from the registration sheet.
+let lastPage = null;
 const startForDay = (n) => new Date(Date.parse(TODAY + "T00:00:00Z") - (n - 1) * 86400000).toISOString().slice(0, 10);
 
 // A real cohort ALWAYS begins on a Sunday, so a woman's program day and her day of the week
@@ -84,23 +85,23 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate }) {
+async function stubApi(context, { startDate, glow = false }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate });
+    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow });
     if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify({ reply: "רשמתי לך", done: false, items: [] }) }] });
     if (url.includes("/api/catalog") || url.includes("/api/il-food")) return json({ items: [] });
     return json({ ok: true });
   });
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate });
+  await stubApi(context, { startDate, glow });
   await context.addInitScript(([sd, extra, neverAsked]) => {
     localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
     localStorage.setItem("myprime_access_name", "בדיקה");
@@ -118,6 +119,7 @@ async function openApp(browser, device, { day = 10, startDate: fixedStart = null
     localStorage.setItem("myprime_demo_state_v1", JSON.stringify(state));
   }, [startDate, seed, neverAskedNotify]);
   const page = await context.newPage();
+  lastPage = page;
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e.message || e)));
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
@@ -137,6 +139,145 @@ const record = (device, name, ok, detail, skip) => {
 };
 
 const CHECKS = [
+  {
+    // The lower bound for weight loss is BMI 20, and it is read off her height. A fixed
+    // number in kilograms cannot do this job: 50kg blocked a real participant at 152cm who
+    // is perfectly healthy, and waved through 51kg at 175cm, which is severe underweight.
+    // Both halves are asserted from the same screen, because a rule that only ever fires
+    // would be indistinguishable from a rule that never fires.
+    name: "מי שאין לה לאן לרדת מקבלת שמירה בלבד, ומי שכן מקבלת את הקצבים",
+    async run(browser, device) {
+      const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+      await stubApi(context, { startDate: startForDay(1) });
+      await context.addInitScript(([sd]) => {
+        localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
+        localStorage.setItem("myprime_access_name", "בדיקה");
+        localStorage.setItem("myprime_start_date", sd);
+        localStorage.setItem("myprime_install_ack", "1");
+      }, [startForDay(1)]);
+      const page = await context.newPage();
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(String(e.message || e)));
+      const goalStep = async (heightCm, weightKg) => {
+        await page.goto(BASE, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(2600);
+        await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
+        const nums = page.locator("input[type=number]");
+        await nums.nth(0).fill("50");
+        await nums.nth(1).fill(String(heightCm));
+        await nums.nth(2).fill(String(weightKg));
+        await page.locator("text=כן, כל השבוע").first().click();
+        await page.locator("text=המשך").first().click();
+        await page.waitForTimeout(600);
+        return page.locator("body").innerText();
+      };
+      // 152cm and 44kg is BMI 19.0 - inside the normal range, and blocked outright before this.
+      const low = await goalStep(152, 44);
+      const lowOk = low.includes("לפי הנתונים שלך אנו לא ממליצים על ירידה במשקל") && !low.includes("ירידה 250 ג׳ בשבוע") && low.includes("שמירה על המשקל");
+      // The same height at 60kg is BMI 26.0, and nothing about her screen may change.
+      const norm = await goalStep(152, 60);
+      const normOk = norm.includes("ירידה 250 ג׳ בשבוע") && norm.includes("משקל רצוי") && !norm.includes("אנו לא ממליצים על ירידה במשקל");
+      await context.close();
+      return { ok: lowOk && normOk && !errors.length, detail: `BMI 19 שמירה בלבד ${lowOk} · BMI 26 קצבים ${normOk} · שגיאות ${errors.length ? errors[0].slice(0, 80) : "אין"}` };
+    },
+  },
+  {
+    // The whole journey in one scenario, because the halves are meaningless apart: a rule
+    // that only ever fires looks exactly like a rule that never fires. She crosses the line
+    // on a weight she reports, gets the screen, lands in maintenance with the rate list
+    // gone, then gains back past the second line and is offered the way back.
+    name: "חצייה של הקו מעבירה לשמירה, ועלייה חזרה פותחת את הדרך בחזרה",
+    async run(browser, device) {
+      const start = sundayWeeksAgo(1);
+      const prof = { age: 50, heightCm: 152, weightKg: 55, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 50, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done", lossStopAt: null };
+      const { context, page, errors } = await openApp(browser, device, { startDate: start, seed: { profile: prof, weights: [{ date: start, kg: 55 }] } });
+      // בלי טעינה מחדש לאורך כל התרחיש: addInitScript רץ בכל ניווט ומחזיר את
+      // האחסון לזרע, כלומר טעינה מחדש הייתה מוחקת בדיוק את מה שאנחנו בודקים.
+      const logWeight = async (kg) => {
+        await page.locator("text=דוח").last().click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הזיני משקל").first().click();
+        await page.waitForTimeout(400);
+        await page.locator('input[inputmode="decimal"]').last().fill(String(kg));
+        await page.locator("text=שמור").first().click();
+        await page.waitForTimeout(700);
+      };
+      // "נתוני בסיס" מגיע מקופל, וכל שורות המשקל והקצב יושבות בתוכו
+      const openBase = async () => {
+        await page.locator("text=פרופיל").last().click();
+        await page.waitForTimeout(500);
+        if (!(await page.locator("text=קצב ירידה").count())) {
+          await page.locator("text=נתוני בסיס").first().click();
+          await page.waitForTimeout(400);
+        }
+      };
+      const state = () => page.evaluate(() => JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").profile || {});
+
+      // 45 ק״ג בגובה 152 הוא BMI 19.5, מתחת לקו של BMI 20 שהוא 46.5 ק״ג
+      await logWeight(45);
+      let body = await page.locator("body").innerText();
+      const shown = body.includes("לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית")
+        && body.includes("אנחנו ממליצים לך ליצור קשר עם הדיאטנית לקבלת הנחיות")
+        && body.includes('בלחיצה על "הבנתי" את מאשרת שקראת את ההודעה הזאת')
+        && !body.includes("הודעה לצוות בוואטסאפ");
+      const st1 = await state();
+      const moved = st1.weeklyRateG === 0 && !!st1.lossStopAt;
+      // הכפתור ולא הטקסט: שורת האישור שמעליו מכילה את המילה "הבנתי" בתוכה
+      await page.getByRole("button", { name: "הבנתי" }).first().click();
+      await page.waitForTimeout(500);
+      const acked = !!(await state()).lossAckAt;
+
+      // ברשימת הקצבים נשארה שמירה בלבד
+      await openBase();
+      await page.locator("text=קצב ירידה").first().click();
+      await page.waitForTimeout(400);
+      body = await page.locator("body").innerText();
+      const locked = !body.includes("ירידה 250 ג׳ בשבוע") && !body.includes("ירידה 500 ג׳ בשבוע") && body.includes("שמירה על המשקל");
+      // שורת משקל היעד נעלמת בשמירה: אין לה יעד, והמינימום של השדה היה גבוה מהערך שבתוכו
+      const noGoalRow = !body.includes("משקל יעד");
+      await page.mouse.click(8, 8);   // הרקע של החלון סוגר אותו
+      await page.waitForTimeout(400);
+
+      // 48 ק״ג עדיין מתחת לקו השני, שהוא 49 ק״ג בגובה הזה
+      // 48 בגובה 152 יושב בין שני הקווים: מעל 46.5 ומתחת ל-49. שם נשבר הכל פעם
+      // אחת, כי הנעילה נשענה על המשקל של הרגע ולא על המצב.
+      await logWeight(48);
+      await openBase();
+      body = await page.locator("body").innerText();
+      const tooEarly = !body.includes("אפשר לחזור לירידה במשקל") && !body.includes("משקל יעד");
+      await page.locator("text=קצב ירידה").first().click();
+      await page.waitForTimeout(400);
+      body = await page.locator("body").innerText();
+      const stillLocked = !body.includes("ירידה 250 ג׳ בשבוע") && !body.includes("ירידה 500 ג׳ בשבוע");
+      await page.mouse.click(8, 8);
+      await page.waitForTimeout(400);
+
+      // 49.5 בגובה 152 חוצה את הקו השני (49), ולכן ההצעה לחזור קופצת בדוח עצמו.
+      // בלי זה היא עולה חזרה מעל הקו ולא יודעת שנפתחה לה הדרך, כי הכרטיס יושב
+      // בפרופיל והיא מזינה משקל בדוח.
+      await logWeight(49.5);
+      body = await page.locator("body").innerText();
+      const offered = body.includes("אפשר לחזור לירידה במשקל")
+        && body.includes("לפי המשקל שהזנת, אפשר לחזור לירידה מתונה. הקצב המרבי מכאן הוא 250 גרם בשבוע.")
+        && body.includes("לא עכשיו");
+      await page.getByRole("button", { name: "חזרה לירידה במשקל" }).first().click();
+      await page.waitForTimeout(600);
+      const st2 = await state();
+      const back = st2.weeklyRateG === 250 && !st2.lossStopAt;
+      // מי שכבר ירדה מתחת לקו פעם אחת לא רואה 500 שוב, בשום משקל
+      await openBase();
+      await page.locator("text=קצב ירידה").first().click();
+      await page.waitForTimeout(400);
+      body = await page.locator("body").innerText();
+      const noFast = body.includes("ירידה 250 ג׳ בשבוע") && !body.includes("ירידה 500 ג׳ בשבוע");
+      await page.mouse.click(8, 8);
+      await page.waitForTimeout(300);
+
+      await context.close();
+      const ok = shown && moved && acked && locked && noGoalRow && tooEarly && stillLocked && offered && back && noFast && !errors.length;
+      return { ok, detail: `מסך ${shown} · לשמירה ${moved} · אישרה ${acked} · הקצבים נעלמו ${locked} · אין משקל יעד ${noGoalRow} · ב-48 לא מוצע ${tooEarly} · ונשאר נעול ${stillLocked} · ההצעה קפצה ${offered} · חזרה ${back} · בלי 500 ${noFast} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
+    },
+  },
   {
     name: "המסך הראשי נטען ואין שגיאת JavaScript",
     async run(browser, device) {
@@ -179,6 +320,44 @@ const CHECKS = [
     },
   },
   {
+    // She can watch the Glow bonus while she waits for day 1. The point of this scenario is
+    // the safety half: before her start date NOTHING of the programme is unlocked, and the
+    // button must not become a side door into content she has not reached. Asserted by
+    // counting programme lessons on the screen the button lands her on, which must be zero.
+    name: "לפני תחילת התוכנית: כרטיס הבונוס נפתח, ואין אף שיעור של התוכנית",
+    async run(browser, device) {
+      // Two days from now, so she is genuinely before day 1.
+      const future = new Date(Date.parse(TODAY + "T00:00:00Z") + 2 * 86400000).toISOString().slice(0, 10);
+      const { context, page, errors } = await openApp(browser, device, { startDate: future, glow: true });
+      const card = await page.locator("text=בונוס שמחכה לך כבר עכשיו").count();
+      await page.locator("text=לצפייה בשיעורים").first().click({ timeout: 5000 }).catch(() => {});
+      await page.waitForTimeout(900);
+      // The four bonus rows must be there...
+      const bonus = await page.locator("text=/שיעור \\d+ - /").count();
+      // ...and nothing from the programme: no week, no day, no lesson of a day.
+      const weeks = await page.locator("text=/^שבוע \\d+$/").count();
+      const dayRows = await page.locator('div[role="button"]').filter({ hasText: /יום \d/ }).count();
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: card > 0 && bonus >= 3 && weeks === 0 && dayRows === 0 && bad.length === 0,
+        detail: `כרטיס ${card} · שיעורי בונוס ${bonus} · שבועות ${weeks} · ימים ${dayRows}`,
+      };
+    },
+  },
+  {
+    // She is NOT marked for the bonus, so the waiting screen must stay exactly as it was.
+    name: "לפני תחילת התוכנית: בלי הסימון אין כרטיס בונוס",
+    async run(browser, device) {
+      const future = new Date(Date.parse(TODAY + "T00:00:00Z") + 2 * 86400000).toISOString().slice(0, 10);
+      const { context, page } = await openApp(browser, device, { startDate: future, glow: false });
+      const card = await page.locator("text=בונוס שמחכה לך כבר עכשיו").count();
+      const waiting = await page.locator("text=התוכנית שלך מתחילה ביום").count();
+      await context.close();
+      return { ok: card === 0 && waiting > 0, detail: `כרטיס ${card} (מצופה 0) · מסך המתנה ${waiting}` };
+    },
+  },
+  {
     // A participant reported that back from inside a recipe landed her on the diary instead
     // of the recipe list. The open recipe was not a layer the back handler could see. This
     // is the one part of the Android back button a desktop browser can actually reproduce,
@@ -214,6 +393,12 @@ const CHECKS = [
       // Straight into today's lessons. Going through "כל התוכנית" would work too, but the
       // shortest path to an open lesson is the one least likely to break for an unrelated
       // reason and hide what this scenario is actually about.
+      // **התרחיש הזה נכשל בשבת, וזו מגבלה שלו ולא באג באפליקציה.** הוא נכנס דרך
+      // "התכנים שלך היום", ובשבת אין תוכן חדש ולכן `data-tut="contentcard"`
+      // אינו קיים כלל והכרטיס מציג "כל התוכנית פתוחה לך". אומת ב-22 באוגוסט
+      // 2026: אין שגיאת ריצה, מסך התוכן תקין, והכניסה בלבד היא שלא נמצאת.
+      // התיקון הנכון הוא להיכנס דרך "כל התוכנית" ולפתוח שבוע, כי מ-v5.16 שום
+      // יום אינו נפתח מעצמו. ראה סעיף 28.
       await page.locator('[data-tut="contentcard"], [aria-label="כל התוכנית"]').first().click();
       await page.waitForTimeout(700);
       const tabs = page.locator('[data-tut^="content-tab-"]');
@@ -314,7 +499,10 @@ const CHECKS = [
       if (!(await entry.count())) { await context.close(); return { ok: false, detail: "לא נמצא הכניסה למסך ההמלצות בתפריט ההוספה" }; }
       await entry.click();
       await page.waitForTimeout(600);
-      const cont = page.locator("text=/הבנתי|המשך|קבלי המלצות/").first();
+      // כפתור ולא טקסט חופשי, וזו הייתה נפילה אמיתית של הבדיקה ב-23 באוגוסט 2026:
+      // הביטוי הקודם תפס גם "המשך משימת הצעדים" בכרטיס שמאחורי החלונית, שמופיע
+      // רק בימים מסוימים. הבדיקה לחצה על אלמנט מוסתר וחיכתה לו 30 שניות.
+      const cont = page.getByRole("button", { name: /הבנתי|קבלי המלצות/ }).first();
       if (await cont.count()) { await cont.click(); await page.waitForTimeout(500); }
       const q = await page.locator("text=/ספרי לי מה את רוצה לאכול/").count();
       const btn = await page.locator("text=קבלי המלצות").count();
@@ -332,7 +520,7 @@ const CHECKS = [
       if (!(await entry.count())) { await context.close(); return { ok: false, detail: "לא נמצא הכניסה למסך ההמלצות" }; }
       await entry.click();
       await page.waitForTimeout(600);
-      const cont = page.locator("text=/הבנתי|המשך|קבלי המלצות/").first();
+      const cont = page.getByRole("button", { name: /הבנתי|קבלי המלצות/ }).first();
       if (await cont.count()) { await cont.click(); await page.waitForTimeout(500); }
       const btn = page.locator("text=קבלי המלצות").first();
       if (!(await btn.count())) { await context.close(); return { ok: false, detail: "הכפתור לא נמצא" }; }
@@ -371,7 +559,7 @@ const CHECKS = [
       await page.waitForTimeout(400);
       await page.locator("text=/מה כדאי/").first().click();
       await page.waitForTimeout(600);
-      const cont = page.locator("text=/הבנתי|המשך|קבלי המלצות/").first();
+      const cont = page.getByRole("button", { name: /הבנתי|קבלי המלצות/ }).first();
       if (await cont.count()) { await cont.click(); await page.waitForTimeout(500); }
       await page.locator("textarea, input[type='text']").first().fill("אין לי כוח, בא לי לוותר על כל התוכנית");
       await page.locator("text=קבלי המלצות").first().click();
@@ -498,14 +686,24 @@ const CHECKS = [
 
 /* ---------- run ---------- */
 const browser = await chromium.launch({ executablePath: BROWSER });
-console.log(`\n  MyPrime QA שכבה 3 - ${CHECKS.length} בדיקות × ${DEVICES.length} מכשירים\n`);
-for (const device of DEVICES) {
-  for (const c of CHECKS) {
+// E2E_ONLY="חלק מהשם" מריץ תרחישים שהשם שלהם מכיל את המחרוזת, ו-E2E_DEVICE
+// מצמצם למכשיר אחד. נועד לחזור על תרחיש שנפל בלי לשלם על כל החבילה, וזה מה
+// שהיה חסר כשצריך היה לחקור נפילה אחת. שתיהן ריקות בהרצה רגילה.
+const ONLY = process.env.E2E_ONLY || "";
+const ONE_DEV = process.env.E2E_DEVICE || "";
+const RUN_DEV = DEVICES.filter((d) => !ONE_DEV || d.name.includes(ONE_DEV));
+const RUN_CHK = CHECKS.filter((c) => !ONLY || c.name.includes(ONLY));
+console.log(`\n  MyPrime QA שכבה 3 - ${RUN_CHK.length} בדיקות × ${RUN_DEV.length} מכשירים\n`);
+for (const device of RUN_DEV) {
+  for (const c of RUN_CHK) {
     try {
       const { ok, detail, skip } = await c.run(browser, device);
       record(device.name, c.name, ok, detail, skip);
     } catch (e) {
       record(device.name, c.name, false, `שגיאה: ${String(e.message || e).split("\n")[0].slice(0, 120)}`);
+      // E2E_SHOT=/path שומר צילום מסך של הכשל. בלי זה חוקרים לפי שם התרחיש,
+      // וזה בדיוק מה שכבר שלח אותנו פעם למסקנה שגויה.
+      if (process.env.E2E_SHOT && lastPage) { try { await lastPage.screenshot({ path: process.env.E2E_SHOT, fullPage: true }); } catch (e2) {} }
     }
   }
 }

@@ -15,6 +15,8 @@ const app = read("src/App.jsx");
 const sheet = read("api/_sheet.js");
 const access = read("api/access.js");
 const data = read("src/content/data.js");
+const usage = read("api/usage.js");
+const admin = read("public/admin.html");
 
 let pass = 0, fail = 0;
 const check = (n, c, extra) => { if (c) { pass++; console.log("  ✓ " + n); } else { fail++; console.log("  ✗ " + n + (extra ? "  → " + extra : "")); } };
@@ -23,7 +25,20 @@ console.log("\nהבונוס מחוץ לכל ספירה\n");
 check("שיעורי הבונוס יושבים בקובץ נפרד", /export const GLOW_DAY/.test(glow));
 check("והם אינם חלק מ-60 ימי התוכנית", !/GLOW|בונוס איפור/.test(data));
 check("הם נושאים שבוע 0 ויום 0", /week: 0,\s*\n\s*day: 0,/.test(glow));
-check("ולכן הם לא נספרים בסיכום השימוש", !/GLOW/.test(mod.slice(mod.indexOf("export function usageSummary"))));
+// The bonus IS counted now, but only in fields of its own. What must never happen is that
+// it leaks into the programme's own totals, because those are the denominator of "how much
+// she watched" on the office screen.
+{
+  const us = mod.slice(mod.indexOf("export function usageSummary"));
+  const beforeGlow = us.slice(0, us.indexOf("GLOW_DAY"));
+  const glowLoop = us.slice(us.indexOf("GLOW_DAY.lessons.forEach"), us.indexOf("return {"));
+  check("ספירת התוכנית אינה נוגעת בבונוס", !/GLOW/.test(beforeGlow) && /CONTENT_DAYS\.forEach/.test(beforeGlow));
+  check("וספירת הבונוס אינה נוגעת בספירת התוכנית",
+    !/vDone|vTotal|vViews|days\[/.test(glowLoop) && /gDone|gViews/.test(glowLoop));
+  check("הבונוס מדווח בשדות נפרדים משלו", /glowDone/.test(us) && /glowViews/.test(us) && /glowTotal/.test(us));
+}
+check("והשרת מקבל אותם כשדות נפרדים ובגבולות", /glowDone: num\(/.test(usage) && /glowViews: num\(/.test(usage));
+check("ומסך הניהול מציג אותם בשורה משלהם", /glowLine/.test(admin) && /שיעורי Glow/.test(admin));
 check("והם לא זולגים לשיעור הבא בתוכנית", /if \(w === 0\) return null;/.test(mod));
 
 console.log("\nמי רואה אותם\n");
@@ -80,6 +95,23 @@ check("האפליקציה שולחת את המייל בשליפת הקישור",
 check("שיעור בונוס אינו נפתח כשאין הרשאה גם במסך", /w === 0 \? \(showGlow \? GLOW_DAY : null\)/.test(mod));
 check("88 סרטוני התוכנית לא נגעו ולא נחסמים", !/isGlowVideo/.test(mod) && token.indexOf("isGlowVideo") > 0);
 
+console.log("\nמסך ההמתנה, לפני שהתוכנית מתחילה\n");
+check("מסך ההמתנה מקבל את הסימון", /function PreStartScreen\(\{ name, startDate, glow = false, onOpenGlow \}\)/.test(app));
+check("והכרטיס מוצג רק למי שמגיע לה", /\{glow && hasGlow\(\) && \(/.test(app));
+check("הקופי של הכרטיס בדיוק כפי שאושר",
+  app.includes("💄 בונוס שמחכה לך כבר עכשיו") &&
+  app.includes("שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים Glow, עם ורד ספיבק.") &&
+  app.includes(">לצפייה בשיעורים</Btn>"));
+check("הכפתור פותח ישירות את רשימת הבונוס", /setGlowDirect\(true\); setSheet\("content"\)/.test(app));
+// Before her start date NOTHING of the programme is unlocked, so the ordinary content view
+// would be an empty screen. Landing her on the bonus list is what makes the button safe as
+// well as useful: there is no day there to press.
+check("ומסך התוכן נפתח על הבונוס ולא על היום", /useState\(startGlow \? "all" : "today"\)/.test(mod) && /useState\(startGlow \? "glow" : "all"\)/.test(mod));
+check("והדגל מתאפס בסגירה, כדי שפתיחה רגילה לא תיפתח על הבונוס",
+  /setSheet\(null\); setGlowDirect\(false\)/.test(app));
+check("מסך הניהול מציג את הבונוס גם למי שהמחזור שלה טרם התחיל",
+  /glowLine\+'<div class="meta">המחזור שלה עוד לא התחיל/.test(admin));
+
 console.log("\nהסימון הידני במסך הניהול\n");
 const adminApi = read("api/admin.js");
 const adminUi = read("public/admin.html");
@@ -91,8 +123,9 @@ check("הניהול מחזיר גם את מה שכתוב בגיליון", /sheet
 check("והשער מעדיף את הסימון הידני", /ovr\.glow === "1"\) glow = true/.test(access) && /ovr\.glow === "0"\) glow = false/.test(access));
 check("כל שינוי נרשם ביומן", /field: "glow"/.test(adminApi));
 check("המסך מציג את שני הערכים זה לצד זה", adminUi.includes("בגיליון: ") && adminUi.includes("שיעורי בונוס Glow"));
-// רון, 19 באוגוסט 2026: הבונוס של מי שבקג'אבי ניתן לה שם, ולכן אצלה זו שורת חיווי
-// ולא פקד. השורה מוצגת בכל מקרה, כי המצב נכון בשני הצדדים, ורק הכפתורים מאחורי התנאי.
+// Ron, 19 August 2026: the bonus lessons of a woman on Kajabi are granted there, so for her
+// this is a read-out and not a control. The row still shows, because the state is true either
+// way; only the buttons are behind the flag.
 check("השורה מוצגת לכל אישה, גם למי שבקג'אבי", /'<div class="edit"[^']*>?<span>שיעורי בונוס Glow'/.test(adminUi));
 check("אבל הכפתורים רק למי שבאפליקציה החדשה", /\(w\.newApp\s*\n?\s*\?\s*'<button class="btn'\+\(w\.glow\?" p":""\)\+'" data-glow="1"/.test(adminUi));
 check("ולמי שבקג'אבי נכתב שזה מוגדר שם", adminUi.includes("שיעורי הבונוס שלה <b>מוגדרים שם ולא כאן</b>"));
