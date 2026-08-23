@@ -602,7 +602,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.14";
+const VERSION = "6.15";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -6082,7 +6082,11 @@ export default function App() {
         const v = checkins[d];
         return v && typeof v === "object" && Object.keys(v).length > 0;
       }).length;
-      payload = { email: em, ...u, trackerDays, day: TODAY, doneToday };
+      // הטלפון נשלח כדי שהשרת יוכל למצוא אותה במניצ'ט ולתייג את מי שצפתה
+      // בשיעורי הבונוס. הוא כבר אצלנו מהשער, בפורמט 972 נקי, ואינו נשמר אצלנו
+      // מעבר למה שכבר קיים.
+      let ph = ""; try { ph = localStorage.getItem("myprime_phone") || ""; } catch (e) {}
+      payload = { email: em, ...u, trackerDays, day: TODAY, doneToday, phone: ph };
     } catch (e) { return; }
     fetch("/api/usage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
       .catch(() => { /* a participant must never see this fail */ });
