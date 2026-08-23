@@ -18,8 +18,13 @@ const check = (n, c, extra) => { if (c) { pass++; console.log("  ✓ " + n); } e
 
 console.log("\nמתי מתייגים\n");
 check("רק כשהיא באמת התחילה לצפות", /if \(hasUsage && rec\.glowStarted\)/.test(api));
-check("והקריאה אינה חוסמת את שמירת נתוני השימוש",
-  /tagWatched\([^)]*\)\.catch\(\(\) => \{\}\)/.test(api));
+// **מחכים לה, וזה לא פרט.** בוורסל הפונקציה נסגרת ברגע שהתשובה יוצאת, וקריאה
+// שנשלחה בלי await נקטעת באמצע. בגרסה הראשונה זה נשלח בלי המתנה ואף אישה לא
+// תויגה. רון תפס את זה כשראה שאין אף תג במניצ'ט.
+check("מחכים לקריאה, אחרת השרת נסגר לפניה",
+  /await tagWatched\(RU, RT, email/.test(api));
+check("וכישלון שלה לעולם אינו מפיל את שמירת נתוני השימוש",
+  /try \{ await tagWatched\([^;]*; \} catch \(e\) \{\}/.test(api));
 check("הטלפון מגיע מהאפליקציה", /phone: ph/.test(app) && /localStorage\.getItem\("myprime_phone"\)/.test(app));
 
 console.log("\nפעם אחת בלבד, וזו ההגנה העיקרית\n");
