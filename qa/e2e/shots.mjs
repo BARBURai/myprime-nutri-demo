@@ -22,6 +22,11 @@ const DIST = join(ROOT, "dist");
 const OUT = join(ROOT, "qa", "shots");
 const BROWSER = process.env.QA_CHROMIUM || "/opt/pw-browsers/chromium";
 mkdirSync(OUT, { recursive: true });
+mkdirSync(join(OUT, "web"), { recursive: true });
+// שני פלטים: PNG לעיון, ו-JPEG קל לדף המכירה. הפלט לדף נשמר בצפיפות 2 ולא 3,
+// כי ברוחב תצוגה של כ-300 פיקסלים זה עדיין כפול ממה שצריך, והמשקל יורד בחצי.
+const WEB_DPR = 2;
+const WEB = { "02b-content-all": 1, "03-tracker": 2, "07-addfood": 3, "05-recommend": 4, "04c-report-cal": 5 };
 
 if (!existsSync(join(DIST, "index.html"))) { console.log("לא נמצא dist/index.html. הריצו קודם: npm run build"); process.exit(1); }
 
@@ -130,7 +135,7 @@ async function stubApi(context) {
 /* ---------- ההרצה ---------- */
 const browser = await chromium.launch({ executablePath: BROWSER, args: ["--no-sandbox"] });
 const context = await browser.newContext({
-  viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true,
+  viewport: { width: 390, height: 844 }, deviceScaleFactor: WEB_DPR, isMobile: true, hasTouch: true,
   locale: "he-IL", timezoneId: "Asia/Jerusalem",
   userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
 });
@@ -156,7 +161,12 @@ const fresh = async () => {
   await page.waitForTimeout(2800);
   await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
 };
-const shot = async (file) => { await page.waitForTimeout(500); await page.screenshot({ path: join(OUT, file + ".png") }); console.log("צולם | " + file); };
+const shot = async (file) => {
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: join(OUT, file + ".png") });
+  if (WEB[file]) await page.screenshot({ path: join(OUT, "web", "demo-" + WEB[file] + ".jpg"), type: "jpeg", quality: 78 });
+  console.log("צולם | " + file + (WEB[file] ? "  ->  web/demo-" + WEB[file] + ".jpg" : ""));
+};
 const tap = async (text, nth = 0) => { await page.locator(`text=${text}`).nth(nth).click({ timeout: 6000 }); await page.waitForTimeout(700); };
 
 console.log(`פרופיל: ${NAME} · התחלה ${START} · יום ${DAYS_IN + 1} בתוכנית`);

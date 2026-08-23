@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מיי פריים סולו | הצעה מיוחדת למשתתפות המפגש</title>
+<meta name="description" content="כל התוכנית של מיי פריים 360 באפליקציה, עם תזכורות יומיות ומעקב משימות וללא ליווי בקבוצה. החל מ-792 ש&quot;ח.">
+
+<meta property="og:title" content="מיי פריים סולו | הצעה מיוחדת למשתתפות המפגש">
+<meta property="og:description" content="כל התוכנית. בלי הקבוצה. אותם 10 שבועות באפליקציה, עם תזכורות יומיות ומעקב משימות.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="he_IL">
+<!-- TODO: תמונת OG 1200x630 -->
+
+<!-- ============ פאביקון ============ -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<meta name="theme-color" content="#4E2231">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --ivory:#FBF9F6;
+  --wine:#8A3E56;
+  --wine-lt:#A54F69;
+  --wine-deep:#4E2231;
+  --blush:#F3E8EA;
+  --blush-deep:#E8D2D8;
+  --ink:#2E2328;
+  --soft:#6B5B62;
+  --hair:#E8DDE0;
+  --white:#fff;
+  --gold:#C9973F;
+  --gold-lt:#E8B863;
+  --shadow:0 10px 30px rgba(78,34,49,.10);
+  --shadow-lg:0 18px 46px rgba(78,34,49,.18);
+  --glow:0 0 0 0 rgba(138,62,86,.55);
+  --radius:18px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Heebo',sans-serif;background:var(--ivory);color:var(--ink);
+  line-height:1.62;overflow-x:hidden;-webkit-font-smoothing:antialiased;font-size:19.5px;
+}
+img{max-width:100%;display:block}
+.wrap{max-width:720px;margin:0 auto;padding:0 20px;position:relative;z-index:2}
+h1,h2,h3{line-height:1.22;font-weight:900}
+h2{font-size:1.80rem;margin-bottom:.45em}
+h3{font-size:1.26rem;font-weight:800}
+.center{text-align:center}
+.hl{color:var(--wine);font-weight:900}
+section{padding:46px 0;position:relative;overflow:hidden}
+
+/* ============ אנימציית כניסה ============ */
+.rv{opacity:0;transform:translateY(22px);transition:opacity .6s ease,transform .6s ease}
+.rv.in{opacity:1;transform:none}
+
+/* ============ הירו ============ */
+.hero{
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%,rgba(232,210,216,.9),transparent 70%),
+    linear-gradient(180deg,var(--blush) 0%,var(--ivory) 100%);
+  padding:0 0 6px;text-align:center;position:relative;overflow:hidden;
+}
+.hero::before,.hero::after{
+  content:"";position:absolute;border-radius:50%;pointer-events:none;
+}
+.hero::before{width:220px;height:220px;background:rgba(138,62,86,.07);top:-70px;right:-70px}
+.hero::after{width:170px;height:170px;background:rgba(201,151,63,.10);bottom:20px;left:-60px}
+
+/* באנר תמונה עליון */
+.herobanner{
+  width:100%;aspect-ratio:1200/680;max-height:none;position:relative;overflow:hidden;
+  background:linear-gradient(120deg,var(--blush-deep),var(--blush));
+  display:flex;align-items:center;justify-content:center;
+  border-bottom:3px solid var(--wine);
+}
+.herobanner picture,.herobanner img{width:100%;height:100%;display:block}
+.herobanner img{object-fit:cover;object-position:center}
+.herobanner .ph{
+  text-align:center;color:var(--wine);padding:12px;
+}
+.herobanner .ph .t{font-weight:900;font-size:.98rem}
+.herobanner .ph .d{font-size:.78rem;color:var(--soft);font-weight:600;margin-top:2px}
+
+.hero .inner{padding:6px 0 0}
+.hero .eyebrow{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--wine);color:#fff;font-weight:800;
+  font-size:.74rem;letter-spacing:.03em;margin-bottom:6px;
+  padding:4px 14px;border-radius:999px;box-shadow:0 4px 12px rgba(138,62,86,.28);
+}
+.hero h1{
+  font-size:1.72rem;letter-spacing:-.02em;
+  max-width:600px;margin:0 auto 4px;line-height:1.14;
+}
+.hero h1 .l1{display:block;color:var(--wine-deep)}
+.hero h1 .l2{display:block;color:var(--wine);margin-top:2px}
+.hero .sub{
+  font-size:1.02rem;color:var(--ink);font-weight:700;
+  max-width:540px;margin:0 auto 7px;line-height:1.3;
+}
+
+/* קופסת ההצעה */
+.offerline{
+  max-width:560px;margin:9px auto 0;text-decoration:none;
+  background:linear-gradient(135deg,#fff,#FFF6E9);
+  border:2px solid var(--gold);border-radius:13px;
+  padding:0;box-shadow:0 6px 18px rgba(201,151,63,.24);
+  display:flex;align-items:center;gap:0;overflow:hidden;
+  transition:transform .2s,box-shadow .2s;
+}
+.offerline:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(201,151,63,.32)}
+.offerline .obadge{
+  flex:0 0 auto;align-self:stretch;display:flex;align-items:center;
+  background:linear-gradient(150deg,var(--wine),var(--wine-lt));
+  color:#fff;font-size:.72rem;font-weight:900;padding:0 9px;
+  white-space:nowrap;letter-spacing:.01em;line-height:1.2;
+}
+.offerline .obody{
+  flex:1;min-width:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;line-height:1.2;
+  padding-block:7px;padding-inline:12px 14px;
+}
+.offerline .big{font-size:1.06rem;font-weight:900;color:var(--wine);white-space:nowrap}
+.offerline .plus{font-size:.83rem;font-weight:700;color:var(--wine-deep);margin-top:1px;text-align:center}
+@media(min-width:380px){.offerline .plus{white-space:nowrap}}
+@media(max-width:379px){
+  .offerline .obadge{font-size:.68rem;padding:0 7px}
+  .offerline .plus{font-size:.78rem}
+  .offerline .jump{font-size:.8rem;padding-inline:10px 8px}
+}
+.offerline .jump{
+  flex:0 0 auto;align-self:stretch;display:flex;align-items:center;
+  padding-inline:12px 10px;font-size:.86rem;font-weight:900;color:var(--wine);
+  border-inline-start:1px dashed var(--blush-deep);white-space:nowrap;
+}
+@media(min-width:470px) and (max-width:679px){
+  .offerline .obody{padding-block:12px}
+  .offerline .big{font-size:1.24rem}
+  .offerline .plus{font-size:.97rem}
+  .offerline .jump{font-size:.95rem;padding-inline:18px 15px}
+}
+@media(min-width:680px){
+  .offerline{max-width:600px;margin-top:14px;border-radius:16px}
+  .offerline .obadge{font-size:.9rem;padding:0 16px}
+  .offerline .big{font-size:1.42rem}
+  .offerline .plus{font-size:1.04rem;white-space:nowrap}
+  .offerline .jump{font-size:1.06rem;padding-inline:22px 18px}
+  .offerline .obody{padding-block:13px;padding-inline:16px 24px}
+}
+@media(min-width:1441px){
+  .offerline{max-width:680px;margin-top:18px}
+  .offerline .obadge{font-size:1rem;padding:0 20px}
+  .offerline .big{font-size:1.6rem}
+  .offerline .plus{font-size:1.14rem}
+  .offerline .jump{font-size:1.16rem;padding-inline:26px 20px}
+  .offerline .obody{padding-block:16px;padding-inline:18px 28px}
+}
+
+/* ============ בחירת תסמינים ============ */
+.picker{padding:2px 0 40px;background:var(--ivory);overflow:visible}
+.picker .q{
+  text-align:center;font-size:1.04rem;font-weight:800;
+  margin-bottom:6px;color:var(--wine-deep);line-height:1.3;
+}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:560px;margin:0 auto}
+.chip{
+  background:#fff;border:2px solid var(--hair);border-radius:13px;
+  padding:10px 7px;font-family:inherit;font-size:.98rem;font-weight:700;
+  color:var(--ink);cursor:pointer;text-align:center;line-height:1.22;
+  transition:all .2s cubic-bezier(.34,1.4,.64,1);
+  min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  position:relative;-webkit-tap-highlight-color:transparent;
+  box-shadow:0 2px 8px rgba(78,34,49,.06);
+}
+.chip .ico{font-size:1.15rem;line-height:1}
+.chip:hover{border-color:var(--wine-lt);transform:translateY(-2px);box-shadow:0 6px 16px rgba(78,34,49,.12)}
+.chip:active{transform:scale(.96)}
+.chip.on{
+  background:linear-gradient(140deg,var(--wine),var(--wine-lt));
+  border-color:var(--wine);color:#fff;
+  box-shadow:0 8px 20px rgba(138,62,86,.34);transform:translateY(-2px);
+}
+.chip.on .ico{filter:brightness(0) invert(1)}
+.chip .v{
+  position:absolute;top:5px;left:5px;
+  width:19px;height:19px;border-radius:50%;background:#fff;
+  display:none;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.2);
+}
+.chip.on .v{display:flex;animation:pop .3s cubic-bezier(.34,1.6,.64,1)}
+@keyframes pop{0%{transform:scale(0)}100%{transform:scale(1)}}
+.chip .v svg{width:11px;height:11px;stroke:var(--wine);stroke-width:4}
+
+.chip-more{border-style:dashed;border-color:var(--wine);color:var(--wine);background:linear-gradient(140deg,#fff,var(--blush))}
+.chip-more.open .ico{transform:rotate(45deg);display:inline-block;transition:transform .3s}
+.more-btn{
+  display:block;margin:9px auto 0;background:none;border:none;
+  font-family:inherit;font-size:.96rem;font-weight:800;color:var(--wine);
+  cursor:pointer;padding:8px 16px;border-radius:999px;
+  border:1.5px dashed var(--blush-deep);transition:all .2s;
+}
+.more-btn:hover{background:var(--blush);border-color:var(--wine)}
+.more-wrap{max-height:0;overflow:hidden;transition:max-height .4s ease;max-width:560px;margin:0 auto}
+.more-wrap.open{max-height:560px}
+.more-wrap .chips{margin-top:10px}
+
+.picker .count{
+  text-align:center;margin-top:7px;font-size:1.02rem;color:var(--soft);
+  min-height:18px;font-weight:600;
+}
+.picker .count b{color:var(--wine);font-size:1.1rem}
+
+/* ============ כפתור ראשי בולט ============ */
+.cta-wrap{text-align:center;margin-top:2px;position:relative}
+.cta{
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  background:linear-gradient(135deg,var(--wine),var(--wine-lt));
+  color:#fff;font-family:inherit;
+  font-size:1.14rem;font-weight:900;text-decoration:none;
+  padding:18px 34px;border-radius:999px;border:none;cursor:pointer;
+  box-shadow:0 12px 30px rgba(138,62,86,.42);
+  position:relative;overflow:hidden;line-height:1.2;
+  transition:transform .2s,box-shadow .2s;
+  -webkit-tap-highlight-color:transparent;
+}
+.cta:hover{transform:translateY(-3px);box-shadow:0 18px 40px rgba(138,62,86,.5)}
+.cta:active{transform:translateY(0)}
+.cta::after{
+  content:"";position:absolute;top:0;left:-60%;width:45%;height:100%;
+  background:linear-gradient(120deg,transparent,rgba(255,255,255,.4),transparent);
+  animation:shine 3.6s ease-in-out infinite;
+}
+@keyframes shine{0%,80%{left:-60%}100%{left:130%}}
+.cta .arw{font-size:1.2rem;transition:transform .2s}
+.cta:hover .arw{transform:translateX(-4px)}
+
+/* הכפתור הגדול של הגילוי - בולט מאוד */
+.cta.reveal{
+  font-size:1.18rem;padding:17px 28px;width:100%;max-width:460px;
+  animation:heart 2.2s ease-in-out infinite;
+}
+@keyframes heart{
+  0%,100%{box-shadow:0 12px 30px rgba(138,62,86,.42),0 0 0 0 rgba(138,62,86,.4)}
+  50%{box-shadow:0 12px 30px rgba(138,62,86,.42),0 0 0 14px rgba(138,62,86,0)}
+}
+.cta.big{font-size:1.16rem;padding:19px 38px}
+.note-sm{font-size:.9rem;color:var(--soft);margin-top:6px;font-weight:600}
+.skip{display:inline-block;margin-top:9px;font-size:1rem;color:var(--soft);text-decoration:underline}
+
+/* חץ מטה מהבהב */
+.scroll-hint{
+  display:block;margin:14px auto 0;font-size:1.4rem;color:var(--wine);
+  animation:down 1.8s ease-in-out infinite;opacity:.6;
+}
+@keyframes down{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
+
+/* ============ מקומות לתמונות ============ */
+.imgslot{
+  background:linear-gradient(135deg,var(--blush),#fff);
+  border:2px dashed var(--wine);border-radius:var(--radius);
+  min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:22px 18px;color:var(--wine);gap:4px;
+  box-shadow:var(--shadow);
+}
+.imgslot .ic{font-size:1.7rem;margin-bottom:2px}
+.imgslot .t{font-weight:900;font-size:1rem}
+.imgslot .d{font-size:.92rem;color:var(--soft);font-weight:600}
+
+/* ============ בלוקים ============ */
+.blk{background:var(--white)}
+.blk-blush{
+  background:
+    radial-gradient(ellipse 70% 50% at 100% 0%,rgba(255,255,255,.7),transparent),
+    linear-gradient(160deg,var(--blush),#FAF2F4);
+}
+.blk-grad{background:linear-gradient(180deg,#fff,var(--ivory))}
+.lead-p{font-size:1.05rem;line-height:1.68;margin-bottom:.9rem;max-width:620px}
+.lead-p:last-child{margin-bottom:0}
+.big-line{
+  font-size:1.3rem;font-weight:900;line-height:1.38;color:var(--wine);
+  max-width:620px;margin:1.1rem 0;
+}
+.center .lead-p,.center .big-line{margin-inline:auto}
+
+.qlead{
+  font-size:1.06rem;font-weight:800;color:var(--soft);
+  margin-bottom:.35rem;letter-spacing:.01em;
+}
+@media(min-width:1441px){.qlead{font-size:1.2rem}}
+.hlmark{
+  position:relative;display:inline-block;color:var(--wine);
+  padding:2px 10px;z-index:1;
+}
+.hlmark::before{
+  content:"";position:absolute;inset:auto 0 4px 0;height:.55em;z-index:-1;
+  background:linear-gradient(90deg,rgba(201,151,63,.32),rgba(232,184,99,.5),rgba(201,151,63,.32));
+  border-radius:4px;transform:rotate(-.6deg);
+}
+
+/* קו מפריד דקורטיבי */
+.orn{display:flex;align-items:center;justify-content:center;gap:9px;margin:0 auto 1.1rem;max-width:200px}
+.orn span{height:2px;flex:1;background:linear-gradient(90deg,transparent,var(--wine))}
+.orn span:last-child{background:linear-gradient(90deg,var(--wine),transparent)}
+.orn .dot{width:7px;height:7px;border-radius:50%;background:var(--wine);flex-shrink:0}
+
+/* כרטיסי תשובה אישית לפי תסמין */
+.whycards{display:grid;gap:11px;max-width:620px;margin:1.2rem auto 0}
+.whycard{
+  background:#fff;border-radius:14px;padding:16px 18px;
+  border-inline-start:4px solid var(--wine);box-shadow:var(--shadow);
+  text-align:right;display:flex;gap:12px;align-items:flex-start;
+  opacity:0;transform:translateY(14px);animation:wcin .5s ease forwards;
+  animation-fill-mode:forwards;
+}
+@keyframes wcin{to{opacity:1;transform:none}}
+.whycard .wico{font-size:1.4rem;flex-shrink:0;line-height:1.2}
+.whycard .wt{font-weight:900;color:var(--wine);font-size:1.04rem;margin-bottom:2px}
+.whycard .wd{font-size:1.06rem;color:var(--soft);line-height:1.52}
+
+/* בלוק ההיפוך */
+.flip-box{
+  background:linear-gradient(135deg,var(--wine-deep),#6B3145);
+  color:#fff;border-radius:var(--radius);padding:26px 24px;margin-top:1.3rem;
+  box-shadow:var(--shadow-lg);position:relative;overflow:hidden;
+}
+.flip-box::before{
+  content:"";position:absolute;width:180px;height:180px;border-radius:50%;
+  background:rgba(255,255,255,.05);top:-60px;left:-40px;
+}
+.flip-box p{font-size:1.12rem;font-weight:700;line-height:1.45;position:relative;text-align:center}
+.flip-box .em{color:#F5CDD9;display:block;margin-top:.5rem;font-size:1.26rem;font-weight:900}
+
+/* ============ רשימת התוכנית ============ */
+.inc{
+  max-width:640px;margin:1.5rem auto 0;
+  display:grid;gap:10px;
+}
+.inc li{
+  list-style:none;display:flex;gap:13px;align-items:flex-start;
+  padding:15px 16px;background:#fff;border-radius:14px;
+  border:1px solid var(--hair);position:relative;overflow:hidden;
+  box-shadow:0 3px 10px rgba(78,34,49,.06);
+  transition:transform .22s,box-shadow .22s,border-color .22s;
+}
+.inc li::before{
+  content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:4px;
+  background:linear-gradient(180deg,var(--wine),var(--wine-lt));opacity:.55;
+}
+.inc li:hover{
+  transform:translateX(-5px);border-color:var(--wine-lt);
+  box-shadow:0 8px 20px rgba(78,34,49,.13);
+}
+.inc li.star{
+  border:2px solid var(--gold);
+  background:linear-gradient(135deg,#FFF9F0,#fff);
+  box-shadow:0 8px 22px rgba(201,151,63,.22);
+}
+.inc li.star::before{background:linear-gradient(180deg,var(--gold),var(--gold-lt));opacity:1;width:5px}
+.inc .tick{
+  flex-shrink:0;width:30px;height:30px;border-radius:9px;
+  background:linear-gradient(140deg,var(--wine),var(--wine-lt));
+  display:flex;align-items:center;justify-content:center;margin-top:1px;
+  box-shadow:0 3px 9px rgba(138,62,86,.3);
+}
+.inc li.star .tick{background:linear-gradient(140deg,var(--gold),var(--gold-lt));box-shadow:0 3px 9px rgba(201,151,63,.4)}
+.inc .tick svg{width:15px;height:15px;stroke:#fff;stroke-width:3.5}
+.inc .txt{font-size:1.02rem;line-height:1.5;font-weight:500;color:var(--soft)}
+.inc .txt b{color:var(--wine);font-weight:900;font-size:1.06rem}
+.inc li.star .txt b{color:#8A6520}
+.inc .badge{
+  display:inline-block;background:var(--gold);color:#fff;
+  font-size:.68rem;font-weight:900;padding:2px 9px;border-radius:999px;
+  margin-inline-start:7px;vertical-align:middle;
+}
+@media(min-width:700px){
+  .inc{grid-template-columns:1fr 1fr;gap:11px}
+  .inc li.star{grid-column:1/-1}
+}
+
+/* ============ עדויות ============ */
+/* קרוסלה אופקית - חוסכת גלילה אנכית */
+/* ===== כרטיס וידאו בקרוסלה ===== */
+.pnote{text-align:center;color:var(--soft);font-size:.98rem;margin-bottom:1.1rem;font-weight:600}
+.tcard.tvid{
+  padding:0;overflow:hidden;border-inline-start:none;
+  border:2px solid var(--wine);line-height:0;
+}
+.tcard.tvid iframe{width:100%;aspect-ratio:1/1;border:0;display:block;background:#000}
+
+/* קרוסלה אופקית - חוסכת גלילה אנכית */
+/* ===== עדות וידאו ===== */
+.pnote{text-align:center;color:var(--soft);font-size:.98rem;margin-bottom:1.1rem;font-weight:600}
+.vidwrap{max-width:600px;margin:0 auto 1.5rem}
+.vid1{
+  display:block;width:100%;padding:0;border:2px solid var(--wine);
+  border-radius:18px;overflow:hidden;cursor:pointer;background:#fff;
+  font-family:inherit;box-shadow:var(--shadow-lg);
+  transition:transform .2s;-webkit-tap-highlight-color:transparent;
+}
+.vid1:hover{transform:translateY(-3px)}
+.vid1 .vph{
+  width:100%;aspect-ratio:16/9;
+  background:linear-gradient(140deg,var(--wine-deep),var(--wine));
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+}
+.vid1 .play{
+  width:62px;height:62px;border-radius:50%;background:rgba(255,255,255,.95);
+  color:var(--wine);font-size:1.5rem;display:flex;align-items:center;justify-content:center;
+  padding-inline-start:5px;box-shadow:0 6px 20px rgba(0,0,0,.3);
+  animation:vpulse 2.4s ease-in-out infinite;
+}
+@keyframes vpulse{
+  0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.3),0 0 0 0 rgba(255,255,255,.5)}
+  50%{box-shadow:0 6px 20px rgba(0,0,0,.3),0 0 0 16px rgba(255,255,255,0)}
+}
+.vid1 .vtxt{color:#fff;font-weight:800;font-size:1.05rem}
+.vid1 iframe{width:100%;aspect-ratio:16/9;border:0;display:block}
+
+/* קרוסלה אופקית - חוסכת גלילה אנכית */
+/* ===== עדויות וידאו ===== */
+.pnote{text-align:center;color:var(--soft);font-size:.98rem;margin-bottom:1.1rem;font-weight:600}
+.vids{
+  display:flex;gap:12px;max-width:660px;margin:0 auto 1.4rem;
+  overflow-x:auto;scroll-snap-type:x mandatory;
+  padding:4px 4px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.vids::-webkit-scrollbar{display:none}
+.vid{
+  display:flex;flex-direction:column;
+  flex:0 0 78%;max-width:320px;scroll-snap-align:center;
+  background:#fff;border:2px solid var(--wine);border-radius:16px;
+  padding:0;overflow:hidden;cursor:pointer;font-family:inherit;
+  box-shadow:var(--shadow);transition:transform .2s;
+  -webkit-tap-highlight-color:transparent;
+}
+.vid:hover{transform:translateY(-3px)}
+.vid .vph{
+  width:100%;aspect-ratio:1/1;
+  background:linear-gradient(140deg,var(--blush),var(--blush-deep));
+  display:flex;align-items:center;justify-content:center;
+  color:var(--wine);font-weight:800;font-size:1rem;text-align:center;padding:12px;
+}
+.vid iframe{width:100%;aspect-ratio:1/1;border:0;display:block}
+.vid .vcap{
+  padding:11px 13px;font-size:.98rem;font-weight:700;color:var(--ink);
+  text-align:right;line-height:1.35;
+}
+@media(min-width:700px){.vid{flex:0 0 32%}}
+
+
+.tcards{
+  display:flex;gap:12px;max-width:660px;margin:0 auto;
+  overflow-x:auto;scroll-snap-type:x mandatory;align-items:flex-start;
+  padding:4px 4px 12px;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.tcards::-webkit-scrollbar{display:none}
+.tcards .tcard{
+  flex:0 0 84%;max-width:400px;scroll-snap-align:center;
+}
+@media(min-width:700px){.tcards .tcard{flex:0 0 46%}}
+.tdots{display:flex;gap:7px;justify-content:center;margin-top:10px}
+.tdots button{
+  width:8px;height:8px;border-radius:50%;border:none;padding:0;cursor:pointer;
+  background:var(--blush-deep);transition:all .25s;
+}
+.tdots button.on{background:var(--wine);width:22px;border-radius:999px}
+.tswipe{text-align:center;font-size:.95rem;color:var(--soft);margin-top:8px;font-weight:600}
+.tcard{
+  background:#fff;border-radius:var(--radius);padding:20px 22px;
+  box-shadow:var(--shadow);border-inline-start:4px solid var(--wine);
+}
+.tcard .stars{color:var(--gold);letter-spacing:2px;margin-bottom:.4rem;font-size:1rem}
+.tcard p{font-size:1.08rem;line-height:1.6}
+.tcard .who{display:block;margin-top:.6rem;font-weight:800;color:var(--wine);font-size:1rem}
+
+/* ============ ענת ============ */
+.anatpic{
+  width:150px;height:150px;margin:0 auto 1rem;border-radius:50%;
+  overflow:hidden;background:linear-gradient(160deg,#fff,var(--blush));
+  border:4px solid #fff;box-shadow:0 8px 22px rgba(78,34,49,.2);
+}
+.anatpic img{width:100%;height:100%;object-fit:cover;object-position:center 18%;display:block}
+@media(min-width:1441px){.anatpic{width:180px;height:180px}}
+.anat .box{
+  max-width:620px;margin:0 auto;
+  background:linear-gradient(150deg,var(--blush),#fff);
+  border-radius:24px;padding:30px 26px;text-align:center;
+  box-shadow:var(--shadow-lg);position:relative;
+}
+.anat .box p{font-size:1.09rem;line-height:1.62}
+.anat .box .punch{
+  display:block;margin-top:1rem;font-size:1.34rem;font-weight:900;color:var(--wine);
+}
+.anat .sign{margin-top:1rem;font-weight:800;color:var(--wine);font-size:1.02rem}
+
+/* ============ בונוסים ============ */
+.bgrid{display:grid;gap:14px;max-width:640px;margin:1.6rem auto 0}
+
+/* ===== כרטיס בונוס אחיד ===== */
+.bcard{
+  position:relative;background:#fff;border-radius:var(--radius);
+  border:1px solid var(--hair);box-shadow:var(--shadow);
+  padding:18px 16px;display:flex;gap:14px;align-items:center;
+  transition:transform .2s,box-shadow .2s;
+}
+.bcard:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
+.bcard.star{
+  border:2.5px solid var(--gold);
+  background:linear-gradient(140deg,#FFF9F1,#fff);
+  box-shadow:0 12px 30px rgba(201,151,63,.22);
+}
+.bnum{
+  position:absolute;top:9px;inset-inline-end:11px;
+  width:25px;height:25px;border-radius:8px;
+  background:var(--blush);color:var(--wine);
+  font-weight:900;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center;z-index:2;
+}
+.bcard.star .bnum{background:linear-gradient(140deg,var(--gold),var(--gold-lt));color:#fff}
+
+/* הריבוע הויזואלי */
+.bvis{
+  flex:0 0 88px;width:88px;height:88px;border-radius:16px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;flex-shrink:0;
+}
+.bvis-img{background:linear-gradient(160deg,#fff,var(--blush));box-shadow:0 4px 12px rgba(78,34,49,.14)}
+.bvis-img img{width:100%;height:100%;object-fit:cover;display:block}
+.bvis-wine{
+  background:linear-gradient(140deg,var(--wine),var(--wine-lt));color:#fff;
+  box-shadow:0 6px 18px rgba(138,62,86,.34);
+}
+.bvis .vnum{font-size:1.85rem;font-weight:900;line-height:1;letter-spacing:-.02em;position:relative}
+.bvis .vnum i{font-size:1rem;font-style:normal;vertical-align:super;margin-inline-start:1px}
+.bvis .vnum i.pre{vertical-align:baseline;font-size:1.3rem;margin-inline-end:1px}
+.bvis .vlbl{font-size:.76rem;font-weight:800;margin-top:3px;letter-spacing:.04em;position:relative}
+.bvis svg{width:34px;height:34px;stroke:#fff;position:relative}
+
+.bcard .brow{flex:1;min-width:0}
+.bcard .tag{
+  display:inline-block;background:var(--gold);color:#3A1B26;
+  font-size:.72rem;font-weight:900;padding:3px 10px;border-radius:999px;
+  margin-bottom:5px;line-height:1.4;
+}
+.bcard .tag.g{background:var(--blush);color:var(--wine)}
+.bcard h3{margin-bottom:.2rem;font-size:1.14rem}
+.bcard p{color:var(--soft);font-size:1.02rem;line-height:1.5}
+
+/* כרטיס התמונה במובייל - התמונה גדולה בתחתית */
+@media(max-width:679px){
+  .bcard-u.star{flex-direction:column-reverse;align-items:center;gap:0;padding:18px 16px}
+  .bcard-u.star .bvis{
+    flex:0 0 auto;width:100%;max-width:230px;height:auto;aspect-ratio:1/1;
+    margin-top:15px;border-radius:16px;
+  }
+  .bcard-u.star .brow{width:100%}
+}
+
+@media(min-width:600px){
+  .bcard{padding:22px 22px;gap:18px}
+  .bvis{flex:0 0 112px;width:112px;height:112px;border-radius:20px}
+  .bvis .vnum{font-size:2.4rem}
+  .bvis .vnum i{font-size:1.25rem}
+  .bvis .vlbl{font-size:.9rem}
+  .bvis svg{width:44px;height:44px}
+  .bnum{width:29px;height:29px;font-size:.95rem;top:11px;inset-inline-end:13px}
+}
+@media(min-width:1441px){
+  .bvis{flex:0 0 132px;width:132px;height:132px}
+  .bvis .vnum{font-size:2.8rem}
+}
+
+/* ============ ההצעה ============ */
+.offer{
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%,rgba(138,62,86,.5),transparent 70%),
+    linear-gradient(170deg,var(--wine-deep),#3D1A26);
+  color:#fff;text-align:center;
+}
+.offer h2{color:#fff}
+.offer .anchor{max-width:520px;margin:0 auto 1.3rem;font-size:1.04rem;color:rgba(255,255,255,.85)}
+.pricebox{
+  max-width:420px;margin:0 auto;background:#fff;color:var(--ink);
+  border-radius:22px;padding:28px 26px;box-shadow:0 22px 50px rgba(0,0,0,.32);
+  position:relative;
+}
+.pricebox .full{color:var(--soft);font-size:1.1rem}
+.pricebox .full s{color:var(--gold)}
+.pricebox .save{
+  display:inline-block;background:linear-gradient(135deg,var(--gold),var(--gold-lt));
+  color:#3A1B26;font-weight:900;font-size:.92rem;padding:5px 16px;border-radius:999px;margin:.6rem 0;
+  box-shadow:0 5px 14px rgba(201,151,63,.4);
+}
+.pricebox .save .sv{font-weight:600;font-size:.84rem;opacity:.82}
+.pricebox .main{
+  display:flex;align-items:baseline;justify-content:center;gap:5px;
+  font-weight:900;color:var(--wine);margin:.3rem 0;
+}
+.pricebox .main .num{font-size:2.6rem;line-height:1}
+.pricebox .main .unit{font-size:1rem;font-weight:800}
+.pricebox .incl{
+  display:inline-flex;align-items:center;gap:7px;margin-top:9px;
+  background:linear-gradient(135deg,#FFF6E9,#FFFBF4);
+  border:1.5px solid var(--gold);border-radius:999px;
+  padding:5px 15px 5px 12px;
+  color:#8A6520;font-weight:900;font-size:.95rem;line-height:1;
+}
+.pricebox .incl .ck{
+  width:18px;height:18px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(140deg,var(--gold),var(--gold-lt));
+  display:flex;align-items:center;justify-content:center;
+}
+.pricebox .incl .ck svg{width:10px;height:10px;stroke:#fff;stroke-width:4}
+.pricebox .pay{
+  color:var(--soft);font-weight:700;font-size:.86rem;margin-top:8px;line-height:1.35;
+}
+.pricebox .total{color:var(--soft);font-weight:700;margin-top:.35rem;font-size:1.05rem;line-height:1.3}
+.pricebox .total b{color:var(--wine);font-weight:900;font-size:1.35rem}
+.pricebox .perday{
+  margin-top:.9rem;padding-top:.9rem;border-top:2px dashed var(--blush-deep);
+  color:var(--soft);font-size:1.06rem;font-weight:600;
+}
+.pricebox .perday b{color:var(--wine);font-size:1.14rem}
+
+.costq-in{
+  margin-top:1.1rem;padding-top:1.1rem;border-top:2px solid var(--blush-deep);text-align:center;
+}
+.costq-in .q1{font-size:1.02rem;color:var(--soft);font-weight:600}
+.costq-in .q2{font-size:1.2rem;font-weight:900;color:var(--wine);margin:.25rem 0 .6rem;line-height:1.3}
+.costq-in p{font-size:1rem;color:var(--soft);line-height:1.55}
+.notdigital{
+  max-width:520px;margin:1.4rem auto 0;background:rgba(255,255,255,.12);
+  border-radius:14px;padding:17px 20px;font-size:1.02rem;line-height:1.5;
+  border:1px solid rgba(255,255,255,.18);
+}
+.notdigital b{color:#F5CDD9}
+.costq{max-width:520px;margin:1.6rem auto 0}
+.costq .q1{font-size:1.05rem;color:rgba(255,255,255,.78)}
+.costq .q2{font-size:1.3rem;font-weight:900;color:#F5CDD9;margin:.3rem 0 .7rem}
+.costq p{font-size:1.06rem;color:rgba(255,255,255,.8);line-height:1.58}
+
+.coupon{
+  display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;
+  margin:1.2rem auto 1.4rem;background:rgba(255,255,255,.12);
+  border:2px dashed var(--gold-lt);border-radius:999px;padding:9px 20px;
+}
+.coupon .lbl{font-size:.95rem;color:rgba(255,255,255,.88);font-weight:600}
+.coupon .code{font-weight:900;font-size:1.35rem;letter-spacing:.1em;color:var(--gold-lt);line-height:1}
+
+.offerhead{
+  display:flex;align-items:center;justify-content:center;gap:11px;
+  flex-wrap:wrap;margin-bottom:1.3rem;
+}
+.ohtitle{display:flex;flex-direction:column;align-items:center;gap:3px}
+.offerhead h2{margin:0;font-size:1.32rem;white-space:nowrap}
+.ohq{
+  font-size:.78rem;font-weight:800;color:var(--gold-lt);
+  background:rgba(255,255,255,.12);border:1px solid rgba(232,184,99,.45);
+  padding:2px 11px;border-radius:999px;white-space:nowrap;
+}
+@media(min-width:520px){
+  .offerhead h2{font-size:1.68rem}
+  .offerhead{gap:18px}
+  .ohq{font-size:.9rem;padding:3px 14px}
+}
+.countdown{display:inline-flex;gap:7px;justify-content:center;direction:ltr}
+.countdown .u{
+  background:rgba(255,255,255,.14);border-radius:10px;padding:5px 8px;min-width:44px;
+  border:1px solid rgba(255,255,255,.16);
+}
+.countdown .u .n{font-size:1.22rem;font-weight:900;line-height:1;color:var(--gold-lt)}
+.countdown .u .l{font-size:.62rem;color:rgba(255,255,255,.7);margin-top:2px}
+@media(min-width:520px){
+  .countdown{gap:8px}
+  .countdown .u{padding:8px 13px;min-width:58px;border-radius:12px}
+  .countdown .u .n{font-size:1.5rem}
+  .countdown .u .l{font-size:.68rem}
+}
+.offer .note-sm{color:rgba(255,255,255,.7)}
+.paynote{
+  max-width:520px;margin:1.4rem auto 0;font-size:.92rem;
+  color:rgba(255,255,255,.66);line-height:1.5;
+}
+.quota{
+  color:#F5CDD9;font-weight:800;font-size:1rem;margin:-.5rem 0 1.2rem;
+}
+.quota b{color:var(--gold-lt);font-weight:900}
+
+/* ============ אחריות ============ */
+.guar{background:linear-gradient(160deg,var(--blush),#FAF2F4);text-align:center}
+.guar .shield{
+  width:66px;height:66px;margin:0 auto 1rem;border-radius:50%;
+  background:linear-gradient(140deg,#fff,var(--blush));
+  box-shadow:var(--shadow-lg);display:flex;align-items:center;justify-content:center;
+  border:2px solid var(--wine);
+}
+.guar .shield svg{width:32px;height:32px;stroke:var(--wine);stroke-width:2}
+.guar .two{display:grid;gap:12px;max-width:560px;margin:1.3rem auto 0;grid-template-columns:1fr 1fr}
+.guar .gi{background:#fff;border-radius:16px;padding:18px 16px;box-shadow:var(--shadow)}
+.guar .gi b{display:block;color:var(--wine);font-size:1.04rem;margin-bottom:.3rem}
+.guar .gi span{font-size:1.02rem;color:var(--soft);line-height:1.5}
+
+/* ============ מתי מתחילות ============ */
+.start{background:#fff;text-align:center}
+.startic{
+  width:72px;height:72px;margin:0 auto 1rem;border-radius:50%;
+  background:linear-gradient(140deg,var(--wine),var(--wine-lt));
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 10px 26px rgba(138,62,86,.34);position:relative;
+}
+.startic::before{
+  content:"";position:absolute;inset:-7px;border-radius:50%;
+  border:2px dashed var(--blush-deep);
+}
+.startic svg{width:34px;height:34px;stroke:#fff;stroke-width:1.9}
+@media(min-width:1441px){.startic{width:84px;height:84px}.startic svg{width:40px;height:40px}}
+.start .flex{
+  max-width:560px;margin:1.2rem auto 0;
+  background:linear-gradient(135deg,var(--blush),#fff);
+  border-radius:16px;padding:20px 22px;font-size:1.02rem;line-height:1.58;
+  border:2px solid var(--blush-deep);
+}
+.start .flex b{color:var(--wine)}
+
+/* ============ שאלות ============ */
+.faq{background:linear-gradient(180deg,var(--ivory),var(--blush))}
+.acc{max-width:620px;margin:0 auto;display:grid;gap:11px}
+.acc details{background:#fff;border:1px solid var(--hair);border-radius:14px;overflow:hidden;box-shadow:0 3px 10px rgba(78,34,49,.05)}
+.acc summary{
+  padding:17px 20px;font-weight:800;font-size:1.01rem;cursor:pointer;list-style:none;
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  -webkit-tap-highlight-color:transparent;
+}
+.acc summary::-webkit-details-marker{display:none}
+.acc summary::after{content:"+";color:var(--wine);font-size:1.5rem;font-weight:400;flex-shrink:0}
+.acc details[open] summary::after{content:"–"}
+.acc details[open] summary{color:var(--wine)}
+.acc .body{padding:0 20px 18px;color:var(--soft);font-size:1.07rem;line-height:1.62}
+.acc .body b{color:var(--wine);font-weight:800}
+
+/* ============ בלוק עזרה ============ */
+.helpbox{
+  max-width:620px;margin:1.6rem auto 0;text-align:center;
+  background:linear-gradient(150deg,#fff,var(--blush));
+  border:2px solid var(--blush-deep);border-radius:20px;padding:24px 20px;
+  box-shadow:var(--shadow);
+}
+.helpbox h3{color:var(--wine);font-size:1.24rem;margin-bottom:.3rem}
+.helpbox p{color:var(--soft);font-size:1.02rem;margin-bottom:1.1rem;line-height:1.5}
+.hbtns{display:grid;gap:11px;max-width:400px;margin:0 auto}
+.hbtn{
+  display:flex;align-items:center;gap:12px;text-decoration:none;
+  background:#fff;border:2px solid var(--hair);border-radius:14px;
+  padding:13px 16px;text-align:right;transition:all .2s;
+}
+.hbtn:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(78,34,49,.14)}
+.hbtn svg{width:26px;height:26px;flex-shrink:0}
+.hbtn span{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+.hbtn b{font-size:1.04rem;font-weight:900}
+.hbtn small{font-size:.9rem;color:var(--soft);font-weight:600;direction:ltr;text-align:right}
+.hbtn.wa{border-color:#25D366}
+.hbtn.wa svg{color:#25D366}
+.hbtn.wa b{color:#128C4A}
+.hbtn.ml{border-color:var(--wine)}
+.hbtn.ml svg{color:var(--wine)}
+.hbtn.ml b{color:var(--wine)}
+@media(min-width:520px){.hbtns{grid-template-columns:1fr 1fr;max-width:560px}}
+
+/* ============ סגירה ============ */
+.closing{
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 100%,rgba(138,62,86,.5),transparent 70%),
+    linear-gradient(190deg,var(--wine-deep),#3D1A26);
+  color:#fff;text-align:center;
+}
+.closing h2{color:#fff;max-width:540px;margin:0 auto .7rem;font-size:1.52rem}
+.closing p{max-width:500px;margin:0 auto 1.4rem;color:rgba(255,255,255,.85);font-size:1.04rem}
+
+/* ============ פוטר ============ */
+footer{background:#3D1A26;color:rgba(255,255,255,.7);padding:26px 0;text-align:center}
+footer .links{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:10px}
+footer a{color:rgba(255,255,255,.82);text-decoration:none;font-size:.9rem}
+footer .meta{font-size:.84rem}
+
+/* ============ תפריט המבורגר ============ */
+.burger{
+  position:fixed;top:12px;inset-inline-start:12px;z-index:105;
+  width:46px;height:46px;background:rgba(78,34,49,.9);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:50%;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:4px;padding:0;
+  box-shadow:0 4px 14px rgba(78,34,49,.35);
+  -webkit-tap-highlight-color:transparent;transition:background .2s,transform .2s;
+}
+.burger:hover{background:var(--wine);transform:scale(1.05)}
+.burger span{display:block;width:19px;height:2px;background:#fff;border-radius:2px;transition:transform .3s,opacity .3s}
+.burger.open span:nth-child(1){transform:translateY(6px) rotate(45deg)}
+.burger.open span:nth-child(2){opacity:0}
+.burger.open span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
+
+.navmenu{
+  position:fixed;top:0;bottom:0;inset-inline-start:0;width:270px;max-width:82vw;z-index:120;
+  background:linear-gradient(165deg,var(--wine-deep),#3D1A26);
+  transform:translateX(105%);transition:transform .32s cubic-bezier(.4,0,.2,1);
+  padding:26px 22px;overflow-y:auto;box-shadow:-6px 0 34px rgba(0,0,0,.4);
+}
+.navmenu.open{transform:translateX(0)!important}
+.navmenu .close{
+  background:none;border:none;color:rgba(255,255,255,.7);font-size:1.7rem;
+  cursor:pointer;padding:0;line-height:1;margin-bottom:18px;
+}
+.navmenu .ttl{color:var(--gold-lt);font-size:.88rem;font-weight:800;letter-spacing:.06em;margin-bottom:12px}
+.navmenu a{
+  display:block;color:#fff;text-decoration:none;font-size:1.04rem;font-weight:700;
+  padding:13px 12px;border-radius:10px;margin-bottom:5px;transition:background .2s;
+  border-inline-start:3px solid transparent;
+}
+.navmenu a:hover{background:rgba(255,255,255,.1);border-inline-start-color:var(--gold)}
+.navmenu .joinbtn{
+  display:block;text-align:center;margin-top:16px;
+  background:linear-gradient(135deg,var(--gold),var(--gold-lt));color:#3A1B26;
+  font-weight:900;padding:14px;border-radius:999px;text-decoration:none;
+  box-shadow:0 6px 18px rgba(201,151,63,.4);border:none;
+}
+.navoverlay{
+  position:fixed;inset:0;background:rgba(46,35,40,.55);z-index:110;
+  opacity:0;pointer-events:none;transition:opacity .3s;backdrop-filter:blur(2px);
+}
+.navoverlay.open{opacity:1;pointer-events:auto}
+
+/* ============ תנאי מבצע ============ */
+.terms{background:var(--ivory);padding:26px 0 30px}
+.terms details{
+  max-width:720px;margin:0 auto;background:#fff;
+  border:1px solid var(--hair);border-radius:14px;overflow:hidden;
+}
+.terms summary{
+  padding:14px 20px;font-weight:800;font-size:.98rem;color:var(--wine);
+  cursor:pointer;list-style:none;display:flex;justify-content:space-between;
+  align-items:center;gap:10px;-webkit-tap-highlight-color:transparent;
+}
+.terms summary::-webkit-details-marker{display:none}
+.terms summary::after{content:"+";color:var(--wine);font-size:1.4rem;font-weight:400}
+.terms details[open] summary::after{content:"–"}
+.terms .tbody{padding:0 20px 18px}
+.terms .tbody p{
+  font-size:.88rem;line-height:1.65;color:var(--soft);
+  padding:5px 0;border-bottom:1px solid var(--hair);
+}
+.terms .tbody p:last-of-type{border-bottom:none}
+.terms .tlh{font-weight:800;color:var(--ink);padding-top:9px}
+
+/* ============ פוטר משפטי ============ */
+footer{background:#3D1A26;color:rgba(255,255,255,.72);padding:28px 0 22px;text-align:center}
+footer .contact{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+footer .contact a{
+  color:#fff;text-decoration:none;font-size:.95rem;font-weight:700;
+  background:rgba(255,255,255,.1);padding:8px 18px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.16);transition:background .2s;
+}
+footer .contact a:hover{background:rgba(255,255,255,.2)}
+footer .legal{
+  display:flex;gap:9px;justify-content:center;flex-wrap:wrap;align-items:center;
+  font-size:.92rem;line-height:2;padding-top:14px;border-top:1px solid rgba(255,255,255,.13);
+}
+footer .legal a{color:rgba(255,255,255,.7);text-decoration:none}
+footer .legal a:hover{color:#fff;text-decoration:underline}
+footer .sep{color:rgba(255,255,255,.3)}
+footer .brand{color:var(--gold-lt);font-weight:700}
+footer .meta{font-size:.88rem;color:rgba(255,255,255,.55);margin-top:12px}
+
+/* ============ באנר קוקיז ============ */
+#cookieBar[hidden]{display:none!important}
+#cookieBar{
+  position:fixed;bottom:0;left:0;right:0;z-index:130;
+  background:rgba(78,34,49,.82);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border-top:1px solid rgba(255,255,255,.18);
+  padding:8px 16px;display:flex;flex-wrap:wrap;align-items:center;
+  justify-content:center;gap:12px;font-family:'Heebo',sans-serif;
+}
+#cookieBar .txt{font-size:.8rem;line-height:1.4;color:rgba(255,255,255,.92);text-align:center;flex:1;min-width:190px}
+#cookieBar .txt a{color:var(--gold-lt);text-decoration:underline;font-weight:700}
+#cookieBar button{
+  padding:7px 18px;background:linear-gradient(135deg,var(--gold),var(--gold-lt));
+  color:#3A1B26;border:none;border-radius:999px;font-size:.85rem;font-weight:900;
+  cursor:pointer;white-space:nowrap;font-family:'Heebo',sans-serif;
+}
+
+/* ============ סרגל תחתון ============ */
+body.cookie-on .sticky{bottom:var(--cookieH,54px)}
+.sticky{
+  position:fixed;bottom:0;transition:bottom .25s ease;left:0;right:0;z-index:95;
+  background:#fff;box-shadow:0 -8px 28px rgba(78,34,49,.2);
+  border-top:2px solid var(--wine);padding:6px 0;
+  transform:translateY(120%);transition:transform .32s ease;
+}
+.sticky.show{transform:translateY(0)}
+.sticky .in{
+  max-width:720px;margin:0 auto;padding:0 14px;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+}
+.sticky .p{display:flex;flex-direction:column;line-height:1.2;flex-shrink:0}
+.sticky .p{align-items:flex-start}
+.sticky .p .lbl{font-size:.82rem;font-weight:900;color:var(--wine);white-space:nowrap;line-height:1.3}
+.sticky .p .lbl2{
+  font-size:.72rem;font-weight:800;color:#fff;white-space:nowrap;line-height:1;
+  background:linear-gradient(135deg,var(--wine),var(--wine-lt));
+  padding:3px 10px;border-radius:999px;margin-top:3px;
+}
+.sticky .mid{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;line-height:1.15;min-width:0;
+}
+.sticky .mid-big{
+  font-size:1.14rem;font-weight:900;color:var(--gold);white-space:nowrap;line-height:1.1;
+}
+.sticky .mid-sm{
+  display:block;font-size:.76rem;font-weight:800;color:var(--wine-deep);line-height:1.2;margin-top:1px;
+}
+.sticky .cta{padding:11px 20px;font-size:.96rem;margin:0;flex-shrink:0}
+.sticky .cta::after{display:none}
+@media(max-width:344px){.sticky .mid-sm{display:none}}
+@media(min-width:400px){.sticky .mid-sm{font-size:.84rem}.sticky .mid-big{font-size:1.24rem}}
+@media(min-width:560px){
+  .sticky .in{justify-content:space-between;gap:18px}
+  .sticky .p .lbl{font-size:.95rem}
+  .sticky .p .lbl2{font-size:.82rem;padding:3px 12px}
+  .sticky .mid{flex:1}
+  .sticky .mid-sm{display:block}
+
+}
+@media(min-width:1441px){
+  .sticky .in{max-width:940px}
+
+  .sticky .mid-sm{font-size:1.02rem}
+  .sticky .mid-big{font-size:1.6rem}
+  .sticky .p .lbl{font-size:1.08rem}
+  .sticky .p .lbl2{font-size:.94rem;padding:4px 14px}
+  .sticky .cta{font-size:1.1rem;padding:14px 28px}
+}
+@media(min-width:1921px){
+  .sticky .in{max-width:1100px}
+
+  .sticky .mid-sm{font-size:1.1rem}
+  .sticky .mid-big{font-size:1.75rem}
+}
+
+/* ============ רספונסיב ============ */
+@media(min-width:600px){
+  .herobanner{aspect-ratio:2400/430;max-height:none}
+  .chips{grid-template-columns:1fr 1fr 1fr 1fr}
+  .more-wrap .chips{grid-template-columns:1fr 1fr 1fr}
+  .bcard{padding:24px 26px}
+}
+
+/* ===== סקיילינג לדסקטופ - מדורג לפי רוחב מסך ===== */
+@media(min-width:1025px) and (max-width:1440px){
+  body{font-size:18px}
+  .wrap{max-width:820px}
+  .hero h1{font-size:clamp(2.1rem,3vw,2.5rem)}
+  .hero .sub{font-size:1.14rem}
+  .chips,.more-wrap{max-width:680px}
+  .chip{min-height:74px;font-size:1.06rem}
+  .cta.reveal{max-width:540px;font-size:1.3rem;padding:22px 34px}
+  h2{font-size:2rem}
+  .lead-p{font-size:1.13rem}
+  .big-line{font-size:1.45rem}
+  .inc,.bgrid,.tcards,.acc,.no-menu{max-width:720px}
+  .pricebox{max-width:470px}
+  .pricebox .main .num{font-size:3rem}
+}
+@media(min-width:1441px) and (max-width:1920px){
+  body{font-size:19px}
+  .wrap{max-width:940px}
+  .herobanner{aspect-ratio:2400/430}
+  .hero h1{font-size:2.8rem}
+  .hero .sub{font-size:1.24rem}
+  .hero .eyebrow{font-size:.88rem;padding:6px 18px}
+  .picker .q{font-size:1.24rem}
+  .chips,.more-wrap{max-width:820px}
+  .chip{min-height:84px;font-size:1.14rem;border-radius:16px}
+  .chip .ico{font-size:1.4rem}
+  .cta.reveal{max-width:600px;font-size:1.42rem;padding:25px 40px}
+  .cta.big{font-size:1.3rem;padding:22px 46px}
+  h2{font-size:2.25rem}
+  .lead-p{font-size:1.2rem}
+  .big-line{font-size:1.6rem}
+  .flip-box p{font-size:1.3rem}
+  .flip-box .em{font-size:1.5rem}
+  .inc,.bgrid,.tcards,.acc,.no-menu{max-width:820px}
+  .inc .txt{font-size:1.14rem}
+  .bcard h3{font-size:1.3rem}
+  .bcard p{font-size:1.08rem}
+  .pricebox{max-width:520px;padding:34px 32px}
+  .pricebox .main .num{font-size:3.4rem}
+  .anatpic{
+  width:150px;height:150px;margin:0 auto 1rem;border-radius:50%;
+  overflow:hidden;background:linear-gradient(160deg,#fff,var(--blush));
+  border:4px solid #fff;box-shadow:0 8px 22px rgba(78,34,49,.2);
+}
+.anatpic img{width:100%;height:100%;object-fit:cover;object-position:center 18%;display:block}
+@media(min-width:1441px){.anatpic{width:180px;height:180px}}
+.anat .box{max-width:780px;padding:38px 34px}
+  .anat .box p{font-size:1.22rem}
+  .anat .box .punch{font-size:1.6rem}
+  section{padding:60px 0}
+}
+@media(min-width:1921px){
+  body{font-size:21px}
+  .wrap{max-width:1100px}
+  .herobanner{aspect-ratio:2400/430}
+  .hero h1{font-size:3.4rem}
+  .hero .sub{font-size:1.42rem}
+  .hero .eyebrow{font-size:1rem;padding:7px 22px}
+  .picker .q{font-size:1.42rem}
+  .chips,.more-wrap{max-width:980px}
+  .chip{min-height:100px;font-size:1.3rem;border-radius:18px}
+  .chip .ico{font-size:1.7rem}
+  .cta.reveal{max-width:700px;font-size:1.6rem;padding:30px 46px}
+  .cta.big{font-size:1.46rem;padding:26px 54px}
+  h2{font-size:2.7rem}
+  .lead-p{font-size:1.34rem}
+  .big-line{font-size:1.85rem}
+  .flip-box{padding:36px 34px}
+  .flip-box p{font-size:1.5rem}
+  .flip-box .em{font-size:1.75rem}
+  .inc,.bgrid,.tcards,.acc,.no-menu{max-width:980px}
+  .inc .txt{font-size:1.3rem}
+  .inc .tick{width:32px;height:32px}
+  .bcard h3{font-size:1.5rem}
+  .bcard p{font-size:1.2rem}
+  .bcard .num{width:52px;height:52px;font-size:1.4rem}
+  .pricebox{max-width:600px;padding:40px 38px;border-radius:26px}
+  .pricebox .main .num{font-size:4rem}
+  .pricebox .full,.pricebox .incl{
+  display:inline-flex;align-items:center;gap:7px;margin-top:9px;
+  background:linear-gradient(135deg,#FFF6E9,#FFFBF4);
+  border:1.5px solid var(--gold);border-radius:999px;
+  padding:5px 15px 5px 12px;
+  color:#8A6520;font-weight:900;font-size:.95rem;line-height:1;
+}
+.pricebox .incl .ck{
+  width:18px;height:18px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(140deg,var(--gold),var(--gold-lt));
+  display:flex;align-items:center;justify-content:center;
+}
+.pricebox .incl .ck svg{width:10px;height:10px;stroke:#fff;stroke-width:4}
+.pricebox .pay{
+  color:var(--soft);font-weight:700;font-size:.86rem;margin-top:8px;line-height:1.35;
+}
+.pricebox .total{font-size:1.24rem}
+  .anatpic{
+  width:150px;height:150px;margin:0 auto 1rem;border-radius:50%;
+  overflow:hidden;background:linear-gradient(160deg,#fff,var(--blush));
+  border:4px solid #fff;box-shadow:0 8px 22px rgba(78,34,49,.2);
+}
+.anatpic img{width:100%;height:100%;object-fit:cover;object-position:center 18%;display:block}
+@media(min-width:1441px){.anatpic{width:180px;height:180px}}
+.anat .box{max-width:900px;padding:46px 40px}
+  .anat .box p{font-size:1.4rem}
+  .anat .box .punch{font-size:1.85rem}
+  .countdown .u{padding:12px 20px;min-width:78px}
+  .countdown .u .n{font-size:2.1rem}
+  .acc summary{font-size:1.22rem;padding:22px 26px}
+  .acc .body{font-size:1.16rem;padding:0 26px 22px}
+  .guar .two{max-width:720px}
+  .sticky .in{max-width:1100px}
+
+  section{padding:76px 0}
+}
+@media(max-width:400px){
+  body{font-size:17px}
+  .herobanner{aspect-ratio:1200/680}
+  .hero h1{font-size:1.46rem}
+  .hero .sub{font-size:.96rem;margin-bottom:8px}
+  .picker .q{font-size:.98rem}
+  .chip{font-size:.9rem;padding:9px 5px;min-height:50px;gap:2px}
+  .chip .ico{font-size:1.05rem}
+  .guar .two{grid-template-columns:1fr}
+  .pricebox .main .num{font-size:2.2rem}
+  .cta.reveal{font-size:1.08rem;padding:17px 20px}
+  .sticky .cta{padding:10px 16px;font-size:.9rem}
+}
+/* מסכים נמוכים - כיווץ נוסף כדי שהכרטיסים יישארו מעל הסרגל */
+@media(max-height:660px){
+  .hero .inner{padding:3px 0 0}
+  .hero h1{font-size:1.4rem;margin-bottom:3px}
+  .hero .sub{font-size:.94rem;margin-bottom:5px}
+  .picker .q{font-size:.95rem;margin-bottom:5px}
+  .chip{min-height:46px;padding:8px 5px;font-size:.9rem}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  html{scroll-behavior:auto}
+  /* כל אלמנט שנחשף באנימציה חייב להיות גלוי גם בלעדיה */
+  .rv,.whycard{opacity:1!important;transform:none!important}
+}
+
+/* ============ כפתור הנגישות - צמוד לימין במובייל ============ */
+@media(max-width:700px){
+  #INDmenu-btn,
+  #INDmenu-btn-wrapper,
+  [id^="INDmenu"]{
+    right:0!important;
+    left:auto!important;
+    margin-right:0!important;
+  }
+}
+</style>
+
+<!-- ============ Microsoft Clarity ============ -->
+<script type="text/javascript">
+(function(c,l,a,r,i,t,y){
+  c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+  t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+  y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+})(window, document, "clarity", "script", "xqwkxvom11");
+</script>
+
+<!-- ============ Meta Pixel ============ -->
+<script>
+!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
+document,'script','https://connect.facebook.net/en_US/fbevents.js');
+fbq('init','1696238838362331');
+fbq('track','PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none"
+src="https://www.facebook.com/tr?id=1696238838362331&ev=PageView&noscript=1"></noscript>
+
+<!-- ============ סגנונות ייעודיים לסולו ============ -->
+<style>
+/* ---- הירו ---- */
+.hero .herolead{max-width:600px;margin:14px auto 10px;font-size:1.02rem;color:var(--soft)}
+/* ---- תיקון פרופורציית תמונת המתנה ---- */
+.bcard .bvis-img{aspect-ratio:1/1;height:auto;min-height:0;overflow:hidden;display:block}
+.bcard .bvis-img img{width:100%;height:100%;object-fit:contain;object-position:center;display:block}
+.hero .herolead2{max-width:600px;margin:0 auto 20px;font-size:1rem;color:var(--ink)}
+.hero .herolead2 b{color:var(--wine-deep)}
+.hero .hero-cta{margin-bottom:6px}
+.hero .heroprice{
+  display:inline-block;margin:0 auto 16px;
+  background:var(--blush);border:1.5px solid var(--blush-deep);border-radius:999px;
+  padding:8px 20px;font-size:.98rem;color:var(--wine-deep);
+}
+.hero .heroprice b{color:var(--wine);font-size:1.12rem;font-weight:900}
+.hero .heroprice .hp2{font-size:.9rem;color:var(--soft)}
+
+/* ---- משפט סוגר בסקשן ההבדל ---- */
+.punchline{
+  margin:0 auto;max-width:600px;text-align:center;
+  font-size:1.6rem;font-weight:900;color:var(--wine-deep);line-height:1.32;
+  background:var(--blush);border-radius:var(--radius);
+  padding:30px 26px;box-shadow:var(--shadow);
+}
+#diff{padding:34px 0}
+
+/* ---- האם זה בשבילי ---- */
+.fitgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}
+.fitcard{background:var(--white);border-radius:var(--radius);padding:20px 20px 18px;box-shadow:var(--shadow);border-top:5px solid var(--hair)}
+.fitcard.yes{border-top-color:var(--wine)}
+.fitcard.no{border-top-color:var(--blush-deep)}
+.fitcard .fh{font-weight:900;font-size:1.08rem;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.fitcard.yes .fh{color:var(--wine)}
+.fitcard.no .fh{color:var(--soft)}
+.fitcard .fic{
+  width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+  font-size:.85rem;color:#fff;flex:0 0 24px;
+}
+.fitcard.yes .fic{background:var(--wine)}
+.fitcard.no .fic{background:var(--blush-deep);color:var(--soft)}
+.fitcard ul{list-style:none}
+.fitcard li{position:relative;padding-right:16px;margin-bottom:9px;font-size:.97rem;line-height:1.55}
+.fitcard li:last-child{margin-bottom:0}
+.fitcard li:before{content:"";position:absolute;right:0;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--blush-deep)}
+.fitcard.yes li:before{background:var(--wine-lt)}
+.fitnote{text-align:center;margin-top:20px;font-size:1rem;color:var(--soft)}
+.fitnote b{color:var(--wine-deep)}
+.fitnote a{color:var(--wine);font-weight:800}
+
+/* ---- אחריות בעמודה אחת ---- */
+.guar .two.one{grid-template-columns:1fr;max-width:420px;margin-left:auto;margin-right:auto}
+
+/* ---- מסלולי המחיר ---- */
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+.plan{
+  background:var(--white);border-radius:var(--radius);padding:24px 20px 20px;
+  box-shadow:var(--shadow);text-align:center;position:relative;
+  border:2px solid var(--hair);display:flex;flex-direction:column;
+}
+.plan.best{border-color:var(--gold);box-shadow:var(--shadow-lg)}
+.pbadge{
+  position:absolute;top:-13px;right:50%;transform:translateX(50%);
+  background:linear-gradient(135deg,var(--gold),var(--gold-lt));color:#fff;
+  font-size:.8rem;font-weight:900;padding:5px 14px;border-radius:999px;white-space:nowrap;
+}
+.plan .pname{font-size:1.06rem;font-weight:800;color:var(--wine-deep);margin-bottom:6px}
+.plan .pmain{display:flex;align-items:baseline;justify-content:center;gap:5px;margin-bottom:4px}
+.plan .pnum{font-size:2.3rem;font-weight:900;color:var(--wine);line-height:1}
+.plan .punit{font-size:.95rem;font-weight:700;color:var(--soft)}
+.plan .ptot{font-size:.9rem;color:var(--soft);margin-bottom:10px}
+.plan .ptot b{color:var(--ink)}
+.plan .pextra{font-size:.9rem;font-weight:800;color:var(--gold);margin-bottom:12px}
+.plan .plan-cta{width:100%;font-size:1rem;padding:15px 12px;margin-top:auto}
+.plan:not(.best) .plan-cta{
+  background:var(--white);color:var(--wine);border:2px solid var(--wine);
+  box-shadow:0 6px 18px rgba(138,62,86,.14);
+}
+.plan:not(.best) .plan-cta:hover{background:var(--blush)}
+.planinc{text-align:center;margin-top:18px;font-size:.98rem;font-weight:700;color:rgba(255,255,255,.92)}
+.offer .paynote{color:rgba(255,255,255,.62)}
+
+@media(max-width:560px){
+  .fitgrid{grid-template-columns:1fr}
+  .plans{grid-template-columns:1fr;gap:30px}
+  .plan{padding:22px 18px 18px}
+  .punchline{font-size:1.32rem;padding:24px 18px}
+  .hero .herolead,.hero .herolead2{font-size:.96rem}
+}
+
+/* ---- הדגמה מהאפליקציה ---- */
+.dlead{max-width:520px;margin:0 auto 1.4rem;color:var(--soft);font-size:1rem}
+.dcards{
+  display:flex;gap:14px;max-width:660px;margin:0 auto;
+  overflow-x:auto;scroll-snap-type:x mandatory;align-items:flex-start;
+  padding:4px 4px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.dcards::-webkit-scrollbar{display:none}
+.dcard{flex:0 0 62%;max-width:236px;scroll-snap-align:center;margin:0;text-align:center}
+@media(min-width:700px){.dcards{max-width:780px}.dcard{flex:0 0 30%;max-width:224px}}
+.dphone{
+  background:#fff;border:1px solid var(--hair);border-radius:20px;
+  padding:6px;box-shadow:var(--shadow-lg);overflow:hidden;
+}
+.dphone img{width:100%;height:auto;display:block;border-radius:14px}
+.dcard figcaption{margin-top:12px}
+.dcard figcaption b{display:block;font-size:1.04rem;font-weight:900;color:var(--wine-deep);line-height:1.4}
+.dcard figcaption span{display:block;margin-top:5px;font-size:.94rem;line-height:1.55;color:var(--soft)}
+.demo-cta{margin-top:22px}
+@media(max-width:520px){
+  .dcard figcaption b{font-size:1rem}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ כפתור תפריט צף ============ -->
+<button class="burger" id="burger" aria-label="תפריט ניווט" aria-expanded="false">
+  <span></span><span></span><span></span>
+</button>
+
+<!-- ============ תפריט ניווט ============ -->
+<div class="navoverlay" id="navOverlay"></div>
+<nav class="navmenu" id="navMenu" aria-label="ניווט בדף">
+  <button class="close" id="navClose" aria-label="סגירה">×</button>
+  <div class="ttl">מיי פריים סולו</div>
+  <a href="#program">מה יש בתוכנית</a>
+  <a href="#fit">האם זה בשבילי</a>
+  <a href="#bonuses">המתנות</a>
+  <a href="#guarantee">האחריות</a>
+  <a href="#offer">המחיר</a>
+  <a href="#proof">נשים כותבות</a>
+  <a href="#faq">שאלות ותשובות</a>
+  <a href="#offer" class="joinbtn" data-cta>אני מתחילה ←</a>
+</nav>
+
+<!-- ============ הירו ============ -->
+<header class="hero">
+
+  <!-- ==== באנר עליון ====
+       מובייל: assets/hero-m-v3.jpg (1200x680)  ·  דסקטופ: assets/hero-d-v3.jpg (2400x430) -->
+  <div class="herobanner">
+    <picture>
+      <source media="(min-width:768px)" srcset="assets/hero-d-v3.jpg">
+      <img src="assets/hero-m-v3.jpg" alt="מיי פריים סולו - כל התוכנית באפליקציה, ללא ליווי בקבוצה" width="1200" height="680" fetchpriority="high">
+    </picture>
+  </div>
+
+  <div class="wrap inner">
+    <p class="sub herolead">
+      אותם 10 שבועות של מיי פריים 360, יום אחרי יום באפליקציה: התזונה, אימוני הכוח, השינה והסטרס.
+    </p>
+    <p class="sub herolead2">
+      <b>עם תזכורת יומית, משימה לכל בוקר ומעקב אישי שלא נותן לך ליפול.</b><br>
+      ההבדל היחיד: אין קבוצת וואטסאפ ואין ליווי אישי מענת ומהדיאטנית.
+    </p>
+    <div class="heroprice">
+      <b>החל מ-792 ₪</b> · עד 12 תשלומים<br>
+      <span class="hp2">+ 3 שיעורי איפור במתנה</span>
+    </div>
+    <a href="#offer" class="cta hero-cta" data-cta>אני מתחילה <span class="arw">←</span></a>
+  </div>
+</header>
+
+<!-- ============ מה יש בתוכנית ============ -->
+<section class="blk-grad" id="program">
+  <div class="wrap rv">
+    <div class="orn"><span></span><span class="dot"></span><span></span></div>
+    <h2 class="center">10 שבועות.<br><span class="hlmark">הנה בדיוק מה שאת מקבלת</span></h2>
+    <ul class="inc">
+      <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="txt"><b>תוכנית מלאה של 10 שבועות באפליקציה</b> - משימה קצרה וסרטון הדרכה, כל בוקר.</span></li>
+      <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="txt"><b>תרגולי תזונה קלים והדרגתיים</b> - לרדת במשקל ולהיפטר מהבטן.</span></li>
+      <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="txt"><b>אימוני כוח, מוביליטי ורצפת אגן</b> - מותאמים לגיל המעבר, <b>20 דקות בלבד</b>.</span></li>
+      <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="txt"><b>כלים לניהול סטרס</b> ולשיפור השינה.</span></li>
+      <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="txt">הידע הרפואי של <b>ד"ר נועה חובב</b>, רופאת גיל המעבר.</span></li>
+      <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="txt"><b>גישה מלאה לכל התכנים</b> - לחצי שנה או לשנה, לפי המסלול שתבחרי.</span></li>
+      
+      <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="txt"><b>יומן מעקב משימות אישי</b> - לעקוב אחרי ההתקדמות ולהטמיע את ההרגלים החדשים.</span></li>
+      <li class="star"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="txt"><b>תזכורת יומית מהאפליקציה</b> - פתיחת יום עם המשימה של היום, כל בוקר.<span class="badge">מה ששומר על ההתמדה</span></span></li>
+      
+    </ul>
+
+    
+
+  </div>
+</section>
+
+
+<!-- ============ ההבדל מ-360 ============ -->
+<section class="blk" id="diff">
+  <div class="wrap rv">
+    <div class="punchline">את מקבלת את כל התהליך.<br>פשוט בלי קהל.</div>
+  </div>
+</section>
+
+<!-- ============ הדגמה מהאפליקציה ============ -->
+<section class="blk-grad" id="demo">
+  <div class="wrap rv">
+    <div class="orn"><span></span><span class="dot"></span><span></span></div>
+    <h2 class="center">ככה זה נראה מבפנים</h2>
+    <p class="center dlead">חמישה מסכים מתוך האפליקציה עצמה.</p>
+
+    <div class="dcards" id="dCards">
+      <figure class="dcard">
+        <div class="dphone"><img src="assets/demo-1.jpg" width="780" height="1688" loading="lazy" decoding="async" alt="מסך התוכן של האפליקציה, עם השבועות והשיעורים של כל יום"></div>
+        <figcaption><b>נפתח בהדרגה, שבוע אחרי שבוע</b><span>משימות תזונה, כושר וניהול סטרס.</span></figcaption>
+      </figure>
+      <figure class="dcard">
+        <div class="dphone"><img src="assets/demo-2.jpg" width="780" height="1688" loading="lazy" decoding="async" alt="יומן המעקב היומי, עם המשימות של היום"></div>
+        <figcaption><b>המשימות של היום, במסך אחד קצר</b><span>אין יותר כיף מאשר לסמן וי על משימה שהסתיימה.</span></figcaption>
+      </figure>
+      <figure class="dcard">
+        <div class="dphone"><img src="assets/demo-3.jpg" width="780" height="1688" loading="lazy" decoding="async" alt="מסך הוספת מזון, עם שש דרכים לרשום ארוחה"></div>
+        <figcaption><b>שש דרכים לרשום מה אכלת</b><span>בצילום, בקול, בסריקת ברקוד או בחיפוש. בלי לשקול ובלי לחפש ברשימות.</span></figcaption>
+      </figure>
+      <figure class="dcard">
+        <div class="dphone"><img src="assets/demo-4.jpg" width="780" height="1688" loading="lazy" decoding="async" alt="מסך ההמלצות, עם רעיונות לארוחה"></div>
+        <figcaption><b>&quot;מה כדאי לי לאכול עכשיו?&quot;</b><span>רעיונות לפי מה שנשאר לך היום ומה שיש לך בבית.</span></figcaption>
+      </figure>
+      <figure class="dcard">
+        <div class="dphone"><img src="assets/demo-5.jpg" width="780" height="1688" loading="lazy" decoding="async" alt="דוח ההתקדמות, עם גרף העמידה ביעד וגרף המשקל"></div>
+        <figcaption><b>את רואה את זה קורה</b><span>ההתקדמות שלך בגרף אחד, שבוע אחרי שבוע.</span></figcaption>
+      </figure>
+    </div>
+    <div class="tdots" id="dDots"></div>
+    <p class="tswipe">← החליקי לעוד</p>
+
+    <div class="cta-wrap demo-cta"><a href="#offer" class="cta" data-cta>אני מתחילה <span class="arw">←</span></a></div>
+  </div>
+</section>
+
+<!-- ============ האם זה בשבילי ============ -->
+<section class="blk-blush" id="fit">
+  <div class="wrap rv">
+    <h2 class="center">סולו בשבילך?</h2>
+    <div class="fitgrid">
+      <div class="fitcard yes">
+        <div class="fh"><span class="fic">&#10003;</span> כן, אם</div>
+        <ul>
+          <li>את מעדיפה לעשות את זה בשקט, בלי שאף אחת תראה</li>
+          <li>מספיק לך שהאפליקציה תזכיר לך ותעקוב אחרייך</li>
+          <li>את רוצה את התכנים זמינים לך לאורך זמן</li>
+        </ul>
+      </div>
+      <div class="fitcard no">
+        <div class="fh"><span class="fic">&bull;</span> פחות, אם</div>
+        <ul>
+          <li>חשוב לך לשאול שאלות ולקבל מענה אישי מענת ומהדיאטנית</li>
+          <li>הכוח של קבוצה עוזר לך להתמיד</li>
+        </ul>
+      </div>
+    </div>
+    <p class="fitnote">
+      אם זה המצב, <b>מיי פריים 360 היא מה שמתאים לך.</b>
+      <a href="https://wa.me/972547304177" target="_blank" rel="noopener">כתבי לנו בוואטסאפ</a> ונסביר.
+    </p>
+  </div>
+</section>
+
+<!-- ============ בונוסים ============ -->
+<section class="blk-grad" id="bonuses">
+  <div class="wrap rv">
+    <div class="orn"><span></span><span class="dot"></span><span></span></div>
+    <h2 class="center">2 מתנות למצטרפות עכשיו</h2>
+    <div class="bgrid">
+
+      <div class="bcard bcard-u star">
+        <span class="bnum">1</span>
+        <div class="bvis bvis-img">
+          <img src="assets/vered-v1.png" alt="ענת הראל וורד ספיבק - שיעורי איפור וטיפוח" width="600" height="600" loading="lazy">
+        </div>
+        <div class="brow">
+          <span class="tag">✦ עוד לא יצא לשוק</span>
+          <h3>3 שיעורים מתוכנית האיפור והטיפוח החדשה</h3>
+          <p>שלושה שיעורים מתוך תוכנית האיפור והטיפוח החדשה שלנו לנשים בגיל המעבר, יחד עם ורד ספיבק. את רואה אותם ראשונה, לפני שהתוכנית יוצאת לשוק.</p>
+        </div>
+      </div>
+
+      <div class="bcard bcard-u">
+        <span class="bnum">2</span>
+        <div class="bvis bvis-wine">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5"/></svg>
+          <span class="vlbl">מתכונים</span>
+        </div>
+        <div class="brow">
+          <span class="tag g">מתנה</span>
+          <h3>ספר מתכונים דיגיטלי</h3>
+          <p>עשיר, קל ומהיר. כולל אופציות צמחוני, טבעוני וללא גלוטן.</p>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ אחריות ============ -->
+<section class="guar" id="guarantee">
+  <div class="wrap rv">
+    <div class="shield">
+      <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+    </div>
+    <h2>14 יום להתחרט</h2>
+    <p class="lead-p center">כדי שתרגישי בטוחה לגמרי בהחלטה:</p>
+    <div class="two one">
+      <div class="gi"><b>החזר כספי מלא</b><span>מכל סיבה, עד 14 יום מתחילת התוכנית. פשוט כותבת לנו, ומסיימים.</span></div>
+    </div>
+    <p class="note-sm">בהתאם לתקנון.</p>
+  </div>
+</section>
+
+<!-- ============ ההצעה ============ -->
+<section class="offer" id="offer">
+  <div class="wrap">
+
+    <div class="offerhead">
+      <div class="ohtitle">
+        <h2>בחרי את התקופה שמתאימה לך</h2>
+        <span class="ohq">כל התוכנית · כל המתנות · אותו תוכן בדיוק</span>
+      </div>
+    </div>
+
+    <div class="plans">
+
+      <div class="plan">
+        <div class="pname">חצי שנה גישה מלאה</div>
+        <div class="pmain"><span class="pnum">כ-66</span><span class="punit">₪ בחודש</span></div>
+        <div class="ptot">סה"כ <b>792 ₪</b><br>12 תשלומים בקרדיט · או עד 2 תשלומים ללא ריבית</div>
+        <a href="https://secure.cardcom.solutions/EA/EA5/P1zSp76wtkCL9ruK3FRgA/Intro" class="cta plan-cta" data-cta data-plan="half">אני רוצה לחצי שנה <span class="arw">←</span></a>
+      </div>
+
+      <div class="plan best">
+        <span class="pbadge">⭐ הכי משתלם</span>
+        <div class="pname">שנה מלאה</div>
+        <div class="pmain"><span class="pnum">כ-83</span><span class="punit">₪ בחודש</span></div>
+        <div class="ptot">סה"כ <b>996 ₪</b><br>12 תשלומים בקרדיט · או עד 2 תשלומים ללא ריבית</div>
+        <div class="pextra">כ-17 ₪ בחודש יותר, ופי שניים זמן</div>
+        <a href="https://secure.cardcom.solutions/EA/EA5/htinANIP50mxl5scyKFRiQ/Intro" class="cta plan-cta" data-cta data-plan="year">אני רוצה לשנה מלאה <span class="arw">←</span></a>
+      </div>
+
+    </div>
+
+    <p class="planinc">שתי האפשרויות כוללות את כל התוכנית ואת שתי המתנות.</p>
+    <p class="paynote">בתשלומי קרדיט חברת האשראי מוסיפה ריבית לפי תנאיה.</p>
+    <p class="paynote">🔒 תשלום מאובטח · כרטיסי אשראי · ביט · אפל פיי · גוגל פיי · פייפאל</p>
+  </div>
+</section>
+
+<!-- ============ שאלות ============ -->
+<section class="blk-blush" id="proof">
+  <div class="wrap rv">
+    <h2 class="center">הן עשו את זה. גם את תצליחי.</h2>
+
+    <!-- ==== עדויות כתובות - קרוסלה ==== -->
+    <div class="tcards">
+      <div class="tcard tvid">
+        <iframe src="https://iframe.mediadelivery.net/embed/703375/0c5084a4-0096-4aff-809b-89cde2dc45b4?preload=false"
+                loading="lazy" allow="fullscreen; picture-in-picture" allowfullscreen
+                title="נשים מספרות על התוכנית"></iframe>
+      </div>
+      <div class="tcard">
+        <div class="stars">★★★★★</div>
+        <p>הצלחתי להשיל קילוגרמים תקועים, התזונה שלי השתפרה פלאים, הגוף התחזק - ואני מצליחה להתמיד גם אחרי סיום התוכנית.</p>
+        <span class="who">— אביב ב.</span>
+      </div>
+      <div class="tcard">
+        <div class="stars">★★★★★</div>
+        <p>השגתי את היעד שהצבתי לעצמי והורדתי את הקילוגרמים שרציתי. הפכתי לי לשגרה להתאמן בבוקר - ואין תירוץ.</p>
+        <span class="who">— שרי ק.</span>
+      </div>
+      <div class="tcard">
+        <div class="stars">★★★★★</div>
+        <p>הורדתי כבר יותר מ-6 קילו, ומה שלקחתי מהתוכנית אלו הרגלים לחיים.</p>
+        <span class="who">— מיכל ג.</span>
+      </div>
+      <div class="tcard">
+        <div class="stars">★★★★★</div>
+        <p>איפה שהולכת, עפה עלייך. אומרים שרזיתי ואני ישר אומרת התוכנית שלך. חובה לכל אישה ממש</p>
+        <span class="who">— נאוה ח.</span>
+      </div>
+      
+      
+      
+      
+    </div>
+    <div class="tdots" id="tDots"></div>
+    <p class="tswipe">← החליקי לעוד</p>
+  </div>
+</section>
+
+
+<section class="faq" id="faq">
+  <div class="wrap rv">
+    <h2 class="center">שאלות שנשים שואלות</h2>
+    <div class="acc">
+      <details>
+        <summary>אין קבוצה. איך אתמיד?</summary>
+        <div class="body">כל בוקר האפליקציה פותחת לך את היום עם משימה קצרה וסרטון הדרכה, ויומן המעקב האישי מראה לך בדיוק איפה את עומדת. ההתמדה נבנית מהרגלים ומתזכורות, לא מכוח רצון. <b>ההבדל בסולו הוא שאין קבוצה שמסתכלת, לא שאין מי שמזכיר.</b></div>
+      </details>
+      <details>
+        <summary>מתי מתחילות?</summary>
+        <div class="body">מתי שבא לך. אין תאריך פתיחה ואין מחזור שצריך לחכות לו. את נכנסת לאפליקציה ומתחילה מיום 1.</div>
+      </details>
+      <details>
+        <summary>אין לי הרבה זמן. כמה זה דורש ביום?</summary>
+        <div class="body">התוכנית תוכננה בדיוק לנשים עסוקות. סרטוני ההדרכה קצרים, האימונים 20 דקות בלבד, והכל בנוי להשתלב בתוך שגרת החיים שלך - גם כשיש נסיעות, עומס בעבודה או שינויים. את צופה מתי שנוח לך, מהטלפון.</div>
+      </details>
+      <details>
+        <summary>מקבלים תפריטים?</summary>
+        <div class="body"><b>לא, וזה לגמרי במכוון - חלק מהשיטה.</b><br>תפריט קבוע יכול לעבוד לזמן קצר, אבל הוא לא מלמד איך לאכול לאורך זמן ולא מאפשר גמישות בתוך החיים האמיתיים. וברגע שהוא נגמר, חוזרים בדיוק לאותה נקודה.<br><br>כאן את לומדת לבנות ארוחות מאוזנות <b>מתוך המאכלים שאת כבר אוהבת</b> - וזה נשאר איתך גם אחרי שהתוכנית נגמרת.</div>
+      </details>
+      <details>
+        <summary>מה ההבדל בין סולו לבין מיי פריים 360?</summary>
+        <div class="body">התכנים זהים לחלוטין: אותם 10 שבועות, אותם אימונים, אותה תזונה, אותו ידע רפואי, אותו יומן מעקב ואותן תזכורות יומיות. <b>ההבדל היחיד הוא שבסולו אין קבוצת ליווי ואין מענה אישי מענת ומהדיאטנית הקלינית.</b></div>
+      </details>
+      <details>
+        <summary>אני יכולה לעבור אחר כך ל-360 עם הליווי?</summary>
+        <div class="body">בהחלט. כתבי לנו בוואטסאפ ונסביר לך בדיוק איך.</div>
+      </details>
+      <details>
+        <summary>מה אם אתחרט?</summary>
+        <div class="body">יש לך 14 יום מתחילת התוכנית להחזר כספי מלא, מכל סיבה. פשוט כותבת לנו, ומסיימים.</div>
+      </details>
+    </div>
+
+    <div class="helpbox">
+      <h3>צריכה עזרה בהרשמה או יש לך שאלה נוספת?</h3>
+      <p>אנחנו כאן. כתבי לנו ונחזור אליך - מה שנוח לך:</p>
+      <div class="hbtns">
+        <a class="hbtn wa" href="https://wa.me/972547304177" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5 0-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.2.2 2.1 3.2 5.1 4.4.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.6-.3z"/><path d="M12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.3c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2zm0 18.2c-1.5 0-3-.4-4.2-1.2l-.3-.2-3.1.8.8-3-.2-.3c-.8-1.3-1.3-2.8-1.3-4.4 0-4.5 3.7-8.2 8.2-8.2s8.2 3.7 8.2 8.2-3.6 8.3-8.1 8.3z"/></svg>
+          <span><b>ווטסאפ</b><small>054-730-4177</small></span>
+        </a>
+        <a class="hbtn ml" href="mailto:info@myprime.co.il">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="m3 7 9 6 9-6"/></svg>
+          <span><b>מייל</b><small>info@myprime.co.il</small></span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ סגירה ============ -->
+<section class="closing">
+  <div class="wrap">
+    <h2>זו יכולה להיות תקופה של פריחה - לא של ויתור.</h2>
+    <p>הכוח נמצא בידיים שלך, וזה הרבה פחות מסובך ממה שאת חושבת.</p>
+    <a href="#offer" class="cta big" data-cta>אני מתחילה <span class="arw">←</span></a>
+  </div>
+</section>
+
+<!-- ============ ענת ============ -->
+<section class="blk anat">
+  <div class="wrap rv">
+    <div class="box">
+            <div class="anatpic">
+        <img src="assets/anat-v1.png" alt="ענת הראל" width="600" height="600" loading="lazy">
+      </div>
+      <p>ליוויתי אלפי נשים בדיוק דרך מה שאת עוברת עכשיו. אני יודעת כמה מתסכל להרגיש שהגוף השתנה בלי שביקשת - ואני יודעת גם שאפשר להחזיר שליטה. לא בדיאטה קיצונית, אלא בהרגלים קטנים שנשארים.
+        <span class="punch">את לא קורבן של גיל המעבר.</span>
+      </p>
+      <div class="sign">— ענת הראל</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ תנאי מבצע ============ -->
+<section class="terms">
+  <div class="wrap">
+    <details>
+      <summary>תנאי ההצעה</summary>
+      <div class="tbody">
+        <p>ההצעה מיועדת לנשים שהשתתפו במפגש הזום של מיי פריים ואינה מיועדת לרכישה כללית.</p>
+        <p>מיי פריים סולו כוללת גישה לכל תכני התוכנית באפליקציה, ללא ליווי אישי וללא השתתפות בקבוצת הליווי.</p>
+        <p>מסלול חצי שנה: 792 ש"ח. מסלול שנה מלאה: 996 ש"ח.</p>
+        <p>בתשלומי קרדיט חברת האשראי מוסיפה ריבית לפי תנאיה.</p>
+        <p>המחיר כולל את כל מרכיבי התוכנית כפי שמוצגים בדף. לא כלול במחיר כל שירות או שדרוג נוסף.</p>
+        <p>תוכן התוכנית הינו למשך 10 שבועות. תקופת הגישה לתכנים היא לפי המסלול שנרכש.</p>
+        <p>ניתן לבקש ביטול או החזר לפי מדיניות הביטול עד 14 יום מיום תחילת התוכנית.</p>
+        <p>החברה שומרת לעצמה את הזכות להפסיק את ההצעה או לשנות את תנאיה בכפוף לדין, עבור רכישות שטרם בוצעו בפועל.</p>
+        <p>התוכנית היא תהליך ליווי ואורח חיים ואינה מהווה ייעוץ רפואי, אבחון או טיפול רפואי.</p>
+        <p>התוצאות משתנות מאישה לאישה ותלויות במידת היישום והמחויבות האישית.</p>
+        <p>מידע מלא על השירות, תנאי השימוש והתמיכה מופיע בתקנון האתר.</p>
+        <p class="tlh">ט.ל.ח</p>
+      </div>
+      </details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <nav class="legal" aria-label="קישורים משפטיים">
+      <a href="https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a7%d7%95%d7%a7%d7%99%d7%96/" target="_blank" rel="noopener">מדיניות קוקיז</a>
+      <span class="sep">|</span>
+      <a href="https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a4%d7%a8%d7%98%d7%99%d7%95%d7%aa/" target="_blank" rel="noopener">מדיניות פרטיות</a>
+      <span class="sep">|</span>
+      <a href="https://myprime.co.il/%d7%94%d7%a6%d7%94%d7%a8%d7%aa-%d7%a0%d7%92%d7%99%d7%a9%d7%95%d7%aa/" target="_blank" rel="noopener">הצהרת נגישות</a>
+      <span class="sep">|</span>
+      <a href="https://myprime.co.il/%d7%aa%d7%a7%d7%a0%d7%95%d7%9f/" target="_blank" rel="noopener">תקנון האתר</a>
+      <span class="sep">|</span>
+      <a href="https://myprime.ravpage.co.il/BITUL" target="_blank" rel="noopener">ביטול עסקה</a>
+      <span class="sep">|</span>
+      <span class="brand">my prime ענת הראל</span>
+    </nav>
+    <div class="meta">מיי פריים ה.ד.ס בע"מ · כל הזכויות שמורות</div>
+  </div>
+</footer>
+
+<!-- ============ סרגל תחתון ============ -->
+<div class="sticky" id="sticky">
+  <div class="in">
+    <div class="p">
+      <span class="lbl">הצעה מיוחדת</span>
+      <span class="lbl2">למשתתפות המפגש</span>
+    </div>
+    <span class="mid">
+      <b class="mid-big">החל מ-792 ₪</b>
+      <span class="mid-sm">+ 3 שיעורי איפור במתנה</span>
+    </span>
+    <a href="#offer" class="cta">לפרטים ←</a>
+  </div>
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+/* ===== סרטון עדויות - טעינה בלחיצה ===== */
+(function(){
+  var v=document.getElementById('vidBtn');
+  if(!v)return;
+  v.addEventListener('click',function(){
+    var id=v.getAttribute('data-vid');
+    if(!id)return;
+    var ph=v.querySelector('.vph');
+    if(!ph)return;
+    var f=document.createElement('iframe');
+    f.src='https://iframe.mediadelivery.net/embed/703375/'+id+'?autoplay=true';
+    f.setAttribute('allow','autoplay; fullscreen');
+    f.setAttribute('loading','lazy');
+    ph.replaceWith(f);
+  });
+})();
+
+/* ===== קרוסלת עדויות ===== */
+(function(){
+  var track=document.querySelector('.tcards'),dots=document.getElementById('tDots');
+  if(!track||!dots)return;
+  var cards=track.querySelectorAll('.tcard');
+  cards.forEach(function(c,i){
+    var b=document.createElement('button');
+    b.type='button';b.setAttribute('aria-label','עדות '+(i+1));
+    if(i===0)b.className='on';
+    b.addEventListener('click',function(){c.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'})});
+    dots.appendChild(b);
+  });
+  var bs=dots.querySelectorAll('button');
+  track.addEventListener('scroll',function(){
+    var mid=track.scrollLeft+track.clientWidth/2,best=0,bd=1e9;
+    cards.forEach(function(c,i){
+      var d=Math.abs((c.offsetLeft+c.offsetWidth/2)-mid);
+      if(d<bd){bd=d;best=i}
+    });
+    bs.forEach(function(b,i){b.classList.toggle('on',i===best)});
+  },{passive:true});
+})();
+
+/* ===== קרוסלת ההדגמה מהאפליקציה ===== */
+(function(){
+  var track=document.getElementById('dCards'),dots=document.getElementById('dDots');
+  if(!track||!dots)return;
+  var cards=track.querySelectorAll('.dcard');
+  cards.forEach(function(c,i){
+    var b=document.createElement('button');
+    b.type='button';b.setAttribute('aria-label','מסך '+(i+1));
+    if(i===0)b.className='on';
+    b.addEventListener('click',function(){c.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'})});
+    dots.appendChild(b);
+  });
+  var bs=dots.querySelectorAll('button');
+  track.addEventListener('scroll',function(){
+    var mid=track.scrollLeft+track.clientWidth/2,best=0,bd=1e9;
+    cards.forEach(function(c,i){
+      var d=Math.abs((c.offsetLeft+c.offsetWidth/2)-mid);
+      if(d<bd){bd=d;best=i}
+    });
+    bs.forEach(function(b,i){b.classList.toggle('on',i===best)});
+  },{passive:true});
+})();
+
+/* ===== אנימציית כניסה ===== */
+(function(){
+  if(!('IntersectionObserver' in window)){
+    document.querySelectorAll('.rv').forEach(function(e){e.classList.add('in')});return;
+  }
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}});
+  },{threshold:.12});
+  document.querySelectorAll('.rv').forEach(function(e){io.observe(e)});
+})();
+
+/* ===== סרגל תחתון =====
+   מוצג מהרגע הראשון. נעלם רק כשבלוק ההצעה על המסך (שם יש כפתור גדול)
+   וכשמגיעים לפוטר (כדי לא לכסות את הלינקים המשפטיים). */
+(function(){
+  var st=document.getElementById('sticky'),
+      of=document.getElementById('offer'),
+      ft=document.querySelector('footer');
+  function check(){
+    var o=of.getBoundingClientRect();
+    var onOffer = o.top < window.innerHeight-60 && o.bottom > 60;
+    var atFooter = ft.getBoundingClientRect().top < window.innerHeight;
+    if(!onOffer && !atFooter) st.classList.add('show');
+    else st.classList.remove('show');
+  }
+  window.addEventListener('scroll',check,{passive:true});
+  window.addEventListener('resize',check,{passive:true});
+  check();
+})();
+
+/* ===== אירוע Meta Pixel =====
+   MP360_Interest - הגיעה ל-75% מהדף (אזור המחיר).
+   אירוע מותאם בשם ייחודי - לא מתנגש בשום אירוע קיים בפיקסל.
+   נורה פעם אחת בלבד בכל ביקור. */
+(function(){
+  if(typeof fbq!=='function')return;
+  var sent=false;
+  function onScroll(){
+    if(sent)return;
+    var h=document.documentElement.scrollHeight-window.innerHeight;
+    if(h<=0)return;
+    if((window.scrollY/h)>=0.75){
+      sent=true;
+      try{fbq('trackCustom','MP360_Solo_Interest',{page:'mp360_solo'});}catch(e){}
+      window.removeEventListener('scroll',onScroll);
+    }
+  }
+  window.addEventListener('scroll',onScroll,{passive:true});
+})();
+
+</script>
+
+<!-- ============ באנר קוקיז ============ -->
+<div id="cookieBar" hidden>
+  <div class="txt">
+    אתר זה משתמש בקוקיז וטכנולוגיות דומות למטרות ניטור, תחזוקה, שיפור האתר וכן התאמת התכנים והפרסום, בהתאם ל<a href="https://myprime.co.il/%d7%9e%d7%93%d7%99%d7%a0%d7%99%d7%95%d7%aa-%d7%a4%d7%a8%d7%98%d7%99%d7%95%d7%aa/" target="_blank" rel="noopener">מדיניות הפרטיות</a>.
+  </div>
+  <button id="cookieOk" type="button">הבנתי</button>
+</div>
+
+<script>
+/* ===== תפריט המבורגר ===== */
+(function(){
+  var b=document.getElementById('burger'),m=document.getElementById('navMenu'),
+      o=document.getElementById('navOverlay'),c=document.getElementById('navClose');
+  function open(){m.classList.add('open');o.classList.add('open');b.classList.add('open');
+    b.setAttribute('aria-expanded','true');document.body.style.overflow='hidden'}
+  function close(){m.classList.remove('open');o.classList.remove('open');b.classList.remove('open');
+    b.setAttribute('aria-expanded','false');document.body.style.overflow=''}
+  b.addEventListener('click',function(){m.classList.contains('open')?close():open()});
+  c.addEventListener('click',close);
+  o.addEventListener('click',close);
+  m.querySelectorAll('a').forEach(function(a){a.addEventListener('click',close)});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')close()});
+})();
+
+/* ===== באנר קוקיז - זוכר את הבחירה ===== */
+(function(){
+  var bar=document.getElementById('cookieBar'),ok=document.getElementById('cookieOk');
+  var seen=false;
+  try{seen=localStorage.getItem('mp360_cookie')==='1'}catch(e){}
+  function setH(){
+    document.documentElement.style.setProperty('--cookieH',bar.offsetHeight+'px');
+  }
+  if(!seen){
+    bar.hidden=false;document.body.classList.add('cookie-on');
+    setH();window.addEventListener('resize',setH,{passive:true});
+  }
+  ok.addEventListener('click',function(){
+    bar.hidden=true;document.body.classList.remove('cookie-on');
+    try{localStorage.setItem('mp360_cookie','1')}catch(e){}
+  });
+})();
+</script>
+
+<!-- ============ נגישות - נגיש ============ -->
+<script>window.interdeal={"sitekey":"9fd8fd0dea32e6467b980149c24d3899","Position":"Left","Menulang":"HE","domains":{"js":"https://js.nagich.co.il/","acc":"https://access.nagich.co.il/"},"btnStyle":{"vPosition":["70%",null],"scale":[(window.innerWidth<700?"0.4":"0.6"),(window.innerWidth<700?"0.4":"0.6")],"icon":{"type":11,"shape":"circle","outline":false}}};(function(d,h,b){var s=d.createElement("script");s.src=interdeal.domains.js+"core/4.5.12/accessibility.js";s.defer=true;s.integrity="sha512-QHRb6G6oDd5olis2Cry60Jf8LsyOtVE0nD9n2LcY20fodiZahlu99srQ3UNKvosE/tZrQ2Fs4CeAPX+MCZpg7w==";s.crossOrigin="anonymous";s.setAttribute("data-cfasync",true);b?b.appendChild(s):h.appendChild(s)})(document,document.head,document.body);</script>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"afcd9eb843fe458ca7f4d86d6e7adbe6","r":1}' crossorigin="anonymous"></script>
+</body>
+</html>
