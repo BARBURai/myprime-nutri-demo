@@ -54,8 +54,11 @@ check("המסך מקבל את המצב מרמת האפליקציה", src.include
 console.log("\nשלושת המצבים בגרף\n");
 check("מתחת לטווח אינו כמו מעליו", below(1000, 1500) === true && below(1600, 1500) === false);
 check("יום ריק אינו נספר כמתחת ליעד", below(0, 1500) === false);
-check("ובקוד נצבעים בשלושה צבעים ולא בשניים", src.includes("calMet(d.kcal, d.goal) ? C.brand : calBelow(d.kcal, d.goal) ? C.info : C.amber"));
-check("ויש מקרא שמסביר מה כל צבע", src.includes('[C.brand, "ביעד"], [C.info, "מתחת ליעד"], [C.amber, "מעל היעד"]'));
+check("ובקוד נצבעים בשלושה צבעים ולא בשניים", src.includes("calMet(d.kcal, d.goal) ? C.ok : calBelow(d.kcal, d.goal) ? C.info : C.amber"));
+check("ויש מקרא שמסביר מה כל צבע", src.includes('[C.ok, "ביעד"], [C.info, "מתחת ליעד"], [C.amber, "מעל היעד"]'));
+// "ביעד" לא נצבע בצבע הראשי של האפליקציה. הוא ורוד-אדום, ובגרף שיש בו גם סגול
+// וגם כתום הוא נקרא כאזהרה. רון תפס את זה בבדיקה בטלפון ב-23 באוגוסט 2026.
+check("ו'ביעד' ירוק ולא בצבע המותג", /ok: "#3B7A57"/.test(src) && !/calMet\(d\.kcal, d\.goal\) \? C\.brand/.test(src));
 
 console.log("\nהמשפט שרון ביקש\n");
 check("נאמר לה שהספירה לפי מה שרשמה", src.includes("הספירה לפי מה שרשמת ביומן, ולכן יום שתועד חלקית לא ייחשב כעמידה ביעד."));
