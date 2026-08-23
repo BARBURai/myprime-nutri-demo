@@ -174,7 +174,12 @@ await step("02b-content-all", async () => { await page.locator('[data-tut="conte
   const wk = page.getByText("שבוע 2", { exact: true });
   console.log("   שבוע 2: " + (await wk.count()) + " התאמות");
   await wk.first().click({ timeout: 5000 }); await page.waitForTimeout(900); });
-await step("03-tracker", async () => { await tap("הקישי למילוי המעקב"); await page.locator("text=הבנתי").first().click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(400); });
+await step("03-tracker", async () => {
+  await tap("הקישי למילוי המעקב");
+  await page.locator("text=הבנתי").first().click({ timeout: 3000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  await page.waitForTimeout(400);
+});
 await step("04-report-steps", async () => { await tap("דוח"); });
 await step("04b-report-weight", async () => { await tap("דוח"); await tap("משקל"); });
 await step("04c-report-cal", async () => { await tap("דוח"); await tap("יעד קלורי"); });
