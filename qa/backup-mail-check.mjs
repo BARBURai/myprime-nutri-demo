@@ -39,7 +39,11 @@ console.log("\nוההגנות סביב\n");
 check("הגיבוי נשמר לפני המייל, כך שספק מייל שנופל אינו עולה לה בגיבוי",
   api.indexOf('["SET", key, JSON.stringify(blob)]') < api.indexOf("await mailCode(RU, RT, email"));
 check("בלי מפתח של ספק המייל פשוט לא נשלח כלום",
-  /if \(!KEY\) return false;/.test(api));
+  /if \(!KEY \|\| !process\.env\.REPORT_FROM\) return false;/.test(api));
+// כתובת ברירת המחדל של הספק מורשית לשלוח לבעל החשבון בלבד, ולכן מייל לאישה
+// היה נדחה ממילא. עדיף לא לנסות מאשר להיכשל בשקט אצל כל אחת.
+check("וגם בלי כתובת שולח מאומתת, כדי לא להיכשל בשקט",
+  !/onboarding@resend\.dev/.test(api));
 check("סימון של חמש דקות מונע שליחה כפולה",
   /"NX", "EX", 300/.test(api));
 check("וכישלון בשליחה לעולם אינו מפיל את הבקשה",
