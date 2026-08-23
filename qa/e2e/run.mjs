@@ -55,6 +55,7 @@ const israelToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jer
 const TODAY = israelToday();
 // To put her on day N we walk back N-1 days from today, which is what the app does with
 // the date that comes from the registration sheet.
+let lastPage = null;
 const startForDay = (n) => new Date(Date.parse(TODAY + "T00:00:00Z") - (n - 1) * 86400000).toISOString().slice(0, 10);
 
 // A real cohort ALWAYS begins on a Sunday, so a woman's program day and her day of the week
@@ -118,6 +119,7 @@ async function openApp(browser, device, { day = 10, startDate: fixedStart = null
     localStorage.setItem("myprime_demo_state_v1", JSON.stringify(state));
   }, [startDate, seed, neverAskedNotify]);
   const page = await context.newPage();
+  lastPage = page;
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e.message || e)));
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
@@ -497,7 +499,10 @@ const CHECKS = [
       if (!(await entry.count())) { await context.close(); return { ok: false, detail: "לא נמצא הכניסה למסך ההמלצות בתפריט ההוספה" }; }
       await entry.click();
       await page.waitForTimeout(600);
-      const cont = page.locator("text=/הבנתי|המשך|קבלי המלצות/").first();
+      // כפתור ולא טקסט חופשי, וזו הייתה נפילה אמיתית של הבדיקה ב-23 באוגוסט 2026:
+      // הביטוי הקודם תפס גם "המשך משימת הצעדים" בכרטיס שמאחורי החלונית, שמופיע
+      // רק בימים מסוימים. הבדיקה לחצה על אלמנט מוסתר וחיכתה לו 30 שניות.
+      const cont = page.getByRole("button", { name: /הבנתי|קבלי המלצות/ }).first();
       if (await cont.count()) { await cont.click(); await page.waitForTimeout(500); }
       const q = await page.locator("text=/ספרי לי מה את רוצה לאכול/").count();
       const btn = await page.locator("text=קבלי המלצות").count();
@@ -515,7 +520,7 @@ const CHECKS = [
       if (!(await entry.count())) { await context.close(); return { ok: false, detail: "לא נמצא הכניסה למסך ההמלצות" }; }
       await entry.click();
       await page.waitForTimeout(600);
-      const cont = page.locator("text=/הבנתי|המשך|קבלי המלצות/").first();
+      const cont = page.getByRole("button", { name: /הבנתי|קבלי המלצות/ }).first();
       if (await cont.count()) { await cont.click(); await page.waitForTimeout(500); }
       const btn = page.locator("text=קבלי המלצות").first();
       if (!(await btn.count())) { await context.close(); return { ok: false, detail: "הכפתור לא נמצא" }; }
@@ -554,7 +559,7 @@ const CHECKS = [
       await page.waitForTimeout(400);
       await page.locator("text=/מה כדאי/").first().click();
       await page.waitForTimeout(600);
-      const cont = page.locator("text=/הבנתי|המשך|קבלי המלצות/").first();
+      const cont = page.getByRole("button", { name: /הבנתי|קבלי המלצות/ }).first();
       if (await cont.count()) { await cont.click(); await page.waitForTimeout(500); }
       await page.locator("textarea, input[type='text']").first().fill("אין לי כוח, בא לי לוותר על כל התוכנית");
       await page.locator("text=קבלי המלצות").first().click();
@@ -681,14 +686,24 @@ const CHECKS = [
 
 /* ---------- run ---------- */
 const browser = await chromium.launch({ executablePath: BROWSER });
-console.log(`\n  MyPrime QA שכבה 3 - ${CHECKS.length} בדיקות × ${DEVICES.length} מכשירים\n`);
-for (const device of DEVICES) {
-  for (const c of CHECKS) {
+// E2E_ONLY="חלק מהשם" מריץ תרחישים שהשם שלהם מכיל את המחרוזת, ו-E2E_DEVICE
+// מצמצם למכשיר אחד. נועד לחזור על תרחיש שנפל בלי לשלם על כל החבילה, וזה מה
+// שהיה חסר כשצריך היה לחקור נפילה אחת. שתיהן ריקות בהרצה רגילה.
+const ONLY = process.env.E2E_ONLY || "";
+const ONE_DEV = process.env.E2E_DEVICE || "";
+const RUN_DEV = DEVICES.filter((d) => !ONE_DEV || d.name.includes(ONE_DEV));
+const RUN_CHK = CHECKS.filter((c) => !ONLY || c.name.includes(ONLY));
+console.log(`\n  MyPrime QA שכבה 3 - ${RUN_CHK.length} בדיקות × ${RUN_DEV.length} מכשירים\n`);
+for (const device of RUN_DEV) {
+  for (const c of RUN_CHK) {
     try {
       const { ok, detail, skip } = await c.run(browser, device);
       record(device.name, c.name, ok, detail, skip);
     } catch (e) {
       record(device.name, c.name, false, `שגיאה: ${String(e.message || e).split("\n")[0].slice(0, 120)}`);
+      // E2E_SHOT=/path שומר צילום מסך של הכשל. בלי זה חוקרים לפי שם התרחיש,
+      // וזה בדיוק מה שכבר שלח אותנו פעם למסקנה שגויה.
+      if (process.env.E2E_SHOT && lastPage) { try { await lastPage.screenshot({ path: process.env.E2E_SHOT, fullPage: true }); } catch (e2) {} }
     }
   }
 }
