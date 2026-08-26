@@ -487,6 +487,11 @@ export default async function handler(req, res) {
     // key being absent is what distinguishes "not touched" from "cleared".
     const hasUntil = body && Object.prototype.hasOwnProperty.call(body, "until");
     const hasGroup = body && Object.prototype.hasOwnProperty.call(body, "group");
+    // תיקון השם ברישום. חל על מסך הניהול בלבד: שם ומשפחה הם שדות מערכת במניצ'ט
+    // ואינם ניתנים לכתיבה, ולכן הגיליון וההודעות שם ממשיכים עם השם הישן.
+    const hasName = body && (Object.prototype.hasOwnProperty.call(body, "first") || Object.prototype.hasOwnProperty.call(body, "last"));
+    const first = String((body && body.first) || "").trim().slice(0, 60);
+    const last = String((body && body.last) || "").trim().slice(0, 60);
     // Her cohort start. Approved by Ron on 19 August 2026, including the write into
     // ManyChat: "it is the same as if she had done it in ManyChat, and if an automation is
     // wired to it, that is as it should be." Always a Sunday, and the screen only ever
@@ -521,7 +526,7 @@ export default async function handler(req, res) {
     // את הפרמטר לכתובת ומסך הניהול מוגן במפתח. **הוא אינו מסיר שום תג במניצ'ט.**
     const glowTagReset = !!(body && body.glowtag);
     if (!email) return res.status(400).json({ ok: false, error: "missing_email" });
-    if (!hasUntil && !hasGroup && !hasGlow && !hasStart && !hasFreeze && !tag && !glowTagReset) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (!hasUntil && !hasGroup && !hasGlow && !hasStart && !hasFreeze && !tag && !glowTagReset && !hasName) return res.status(400).json({ ok: false, error: "nothing_to_do" });
     if (glowTagReset) {
       if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
       try { await redis(RU, RT, "DEL", `glowtag:${email}`); }
@@ -562,7 +567,7 @@ export default async function handler(req, res) {
       // What the value was before this edit. With no override in force that is the sheet's
       // own value, so read it rather than logging a blank.
       let sheetRow = null;
-      if ((hasUntil && !cur.until) || (hasGroup && !cur.group) || (hasGlow && !cur.glow) || (hasStart && !cur.start) || (hasFreeze && !cur.start)) {
+      if ((hasUntil && !cur.until) || (hasGroup && !cur.group) || (hasGlow && !cur.glow) || (hasStart && !cur.start) || (hasFreeze && !cur.start) || (hasName && !cur.first && !cur.last)) {
         try {
           const sheet = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
           sheetRow = sheet.women.find((w) => w.email === email) || null;
@@ -579,6 +584,11 @@ export default async function handler(req, res) {
       }
       if (hasStart) {
         log.unshift({ at, by, field: "start", from: cur.start || (sheetRow ? sheetRow.start : "") || "", to: start });
+      }
+      if (hasName) {
+        const wasF = cur.first || (sheetRow ? sheetRow.first : "") || "";
+        const wasL = cur.last || (sheetRow ? sheetRow.last : "") || "";
+        log.unshift({ at, by, field: "name", from: (wasF + " " + wasL).trim(), to: (first + " " + last).trim() });
       }
       // The freeze writes the start date too, so the two can never disagree about which week
       // she is in. `back` empty means she does not know yet: frozen, with no date.
@@ -627,6 +637,8 @@ export default async function handler(req, res) {
         until: hasUntil ? until : (cur.until || ""),
         group: hasGroup ? group : (cur.group || ""),
         start: hasStart ? start : (freezeStart || cur.start || ""),
+        first: hasName ? first : (cur.first || ""),
+        last: hasName ? last : (cur.last || ""),
         glow: hasGlow ? glow : (cur.glow || ""),
         by, at, log: log.slice(0, 20),
       });
@@ -752,11 +764,23 @@ export default async function handler(req, res) {
     // back this coming week and has to be put in the right WhatsApp group.
     const backSoon = !!freeze && !!freeze.back && !!freeze.week && freeze.back >= today && freeze.back <= addDaysStr(today, 7);
     const group = (ovr && ovr.group) || w.group || "";
+    // השם ברישום מגיע ממניצ'ט דרך הגיליון, ולא מהאישה. חלק מהנשים נרשמו בוואטסאפ
+    // בשם של בעלן, והמשרד צריך לתקן את זה כדי לדעת למי הוא כותב. **שם ומשפחה הם
+    // שדות מערכת במניצ'ט ואינם ניתנים לכתיבה, ולכן התיקון חל על המסך הזה בלבד**,
+    // והגיליון נשאר כפי שהוא. השם שהאישה רואה באפליקציה הוא זה שהיא הקלידה
+    // בעצמה בכניסה, ואינו מושפע מכאן.
+    const first = (ovr && ovr.first) || w.first || "";
+    const last = (ovr && ovr.last) || w.last || "";
     const seenAt = seen[w.email] || "";
     let use = null;
     if (usage[w.email]) { try { use = JSON.parse(usage[w.email]); } catch (e) {} }
     return {
       ...w,
+      first,
+      last,
+      sheetFirst: w.first || "",
+      sheetLast: w.last || "",
+      nameOverride: (ovr && (ovr.first || ovr.last)) ? { by: ovr.by || "" } : null,
       // Both values travel, here as everywhere on this screen: what is in force, and what
       // the sheet says. The clerk must never have to guess which one she is looking at.
       start,

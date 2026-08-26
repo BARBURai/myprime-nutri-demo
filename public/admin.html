@@ -887,7 +887,7 @@ function render(){
     var qDigits = q.replace(/[^0-9]/g, "");
     var qPhone = phoneKey(q);
     list = DATA.women.filter(function(w){
-      if((w.first+" "+w.last+" "+w.email+" "+w.phone).toLowerCase().indexOf(q) !== -1) return true;
+      if((w.first+" "+w.last+" "+(w.sheetFirst||"")+" "+(w.sheetLast||"")+" "+w.email+" "+w.phone).toLowerCase().indexOf(q) !== -1) return true;
       return qDigits.length >= 3 && phoneKey(w.phone).indexOf(qPhone) !== -1;
     });
   } else {
@@ -978,6 +978,7 @@ function render(){
       if(L.field === "tag:app") return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה' : 'הסירה את הסימון של האפליקציה החדשה');
       if(L.field === "freeze") return pre + (L.to ? 'הכניסה אותה להקפאה · '+esc(L.to) : 'סיימה לה את ההקפאה'+(L.from?' (הייתה '+esc(L.from)+')':''));
       if(L.field === "email") return pre + 'שינתה לה את כתובת המייל מ-'+esc(L.from)+' ל-'+esc(L.to);
+      if(L.field === "name") return pre + (L.to ? 'תיקנה את השם ל-'+esc(L.to)+(L.from?' (היה '+esc(L.from)+')':'') : 'החזירה את השם לזה שבגיליון'+(L.from?' (היה '+esc(L.from)+')':''));
       if(L.field === "start") return pre + (L.to ? 'העבירה אותה למחזור של '+il(L.to)+(L.from?' (הייתה ב-'+il(L.from)+')':'') : 'החזירה את תאריך ההתחלה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
       if(L.field === "group") return pre + (L.to ? 'שינתה את הקבוצה מ-'+(L.from?esc(L.from):"ללא קבוצה")+' ל-'+esc(L.to) : 'החזירה את הקבוצה לערך שבגיליון'+(L.from?' (הייתה '+esc(L.from)+')':''));
       return pre + (L.to ? 'שינתה את תאריך הגישה מ-'+(L.from?il(L.from):"לא ידוע")+' ל-'+il(L.to) : 'החזירה את תאריך הגישה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
@@ -991,6 +992,14 @@ function render(){
       '<div class="fld"><span class="flabel">כתובת מייל</span><span class="fval"><span class="mono">'+esc(w.email)+'</span>'+
         '<button class="btn sm" data-copy="'+esc(w.email)+'">העתקה</button></span></div>'+
     '</div>'+
+    '<div class="edit" id="fld-name"><span>שם'+(w.nameOverride?" ✎":"")+'</span>'+
+      '<input class="field sm" style="max-width:150px" id="fn_'+esc(w.email)+'" value="'+esc(w.first||"")+'" placeholder="שם פרטי">'+
+      '<input class="field sm" style="max-width:150px" id="ln_'+esc(w.email)+'" value="'+esc(w.last||"")+'" placeholder="שם משפחה">'+
+      '<button class="btn p" data-savename="'+esc(w.email)+'">שמירה</button>'+
+      (w.nameOverride?'<button class="btn ghost" data-clearname="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+    '</div>'+
+    (w.nameOverride?'<div class="manual">השם שונה ידנית · בגיליון: '+esc(((w.sheetFirst||"")+" "+(w.sheetLast||"")).trim()||"ריק")+'</div>':'')+
+    '<div class="note">התיקון חל על <b>המסך הזה בלבד</b>. שם ומשפחה הם שדות מערכת במניצ\'ט ואי אפשר לכתוב אליהם, ולכן <b>הגיליון וההודעות בוואטסאפ ממשיכים עם השם הישן</b>. החיפוש מוצא אותה בשני השמות. <b>השם שהיא רואה באפליקציה הוא זה שהיא הקלידה בעצמה ואינו מושפע מכאן.</b></div>'+
     (w.pendingEmail?'<div class="manual">כתובת חדשה שכבר בתוקף: <b>'+esc(w.pendingEmail)+'</b> <button class="lnk" data-copy="'+esc(w.pendingEmail)+'">העתקה</button> · הגיליון עוד לא התעדכן, והיא נכנסת עם החדשה</div>':'')+
     '<div class="edit" id="fld-mail"><span>שינוי כתובת מייל</span>'+
       '<input class="field sm" style="max-width:260px;direction:ltr" id="e_'+esc(w.email)+'" placeholder="'+esc(w.email)+'">'+
@@ -1591,6 +1600,23 @@ function render(){
   // next load instead of waiting minutes for Google's published sheet to refresh, and the
   // matching ManyChat tag, which is where the sheet column comes from in the first place.
   // The panel stays open, because the clerk wants to see the new state where she pressed.
+  app.querySelectorAll("[data-savename]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-savename");
+    var fn=(document.getElementById("fn_"+em).value||"").trim();
+    var ln=(document.getElementById("ln_"+em).value||"").trim();
+    if(!fn && !ln){ alert("צריך למלא לפחות שם אחד"); return; }
+    el.disabled=true; el.textContent="שומרת...";
+    save(em,{first:fn, last:ln}).then(function(r){ if(!r.ok) throw new Error(); return load().then(render); })
+      .catch(function(){ alert("לא הצלחתי לשמור."); el.disabled=false; el.textContent="שמירה"; });
+  }; });
+  app.querySelectorAll("[data-clearname]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-clearname");
+    if(!confirm("להחזיר את השם למה שכתוב בגיליון?")) return;
+    el.disabled=true;
+    save(em,{first:"", last:""}).then(function(r){ if(!r.ok) throw new Error(); return load().then(render); })
+      .catch(function(){ alert("לא הצלחתי."); el.disabled=false; });
+  }; });
+
   app.querySelectorAll("[data-glowtag]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-glowtag");
     if(!confirm("לאפס את הסימון של תיוג Glow עבור "+em+"?\n\nזה מוחק רק את הסימון אצלנו שאומר שכבר תויגה, כדי שאפשר יהיה לבדוק שוב.\nהתג במניצ'ט לא מוסר.")) return;
