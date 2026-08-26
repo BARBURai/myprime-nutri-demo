@@ -1359,6 +1359,7 @@ function render(){
       TAB = (VIEW === "notes") ? "notes" : "info";
       if(TAB === "notes" && !NOTES[em]) notesLoad(em);
       if(TAB === "notes" && BANK === null) bankLoad();
+      if(!MC[em]) mcLoad(em);
     }
     render();
     if(SEL && innerWidth < 1000) window.scrollTo(0, 0);
@@ -1368,6 +1369,7 @@ function render(){
   }; });
   app.querySelectorAll("[data-tab]").forEach(function(el){ el.onclick=function(){
     TAB = el.getAttribute("data-tab");
+    if(SEL && !MC[SEL]) mcLoad(SEL);
     if(TAB==="notes" && SEL && !NOTES[SEL]) notesLoad(SEL);
     if(TAB==="notes" && BANK === null) bankLoad();
     render(); }; });
