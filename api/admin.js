@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "6.24";
+const ADMIN_VERSION = "6.25";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -56,6 +56,11 @@ const MC_START_FIELD_ID = 11675348;
 // reason as the date above.
 const MC_EMAIL_FIELD_ID = 11510555;
 const MC_EMAIL_FIELD = "CF_EMAIL";
+// השם ברישום. אלה **שדות מותאמים אישית** שנוצרו אצלכם ולא שדות המערכת של
+// מניצ'ט, ולכן הם ניתנים לכתיבה בדיוק כמו CF_EMAIL ושדה הקבוצה. שדות המערכת
+// first_name ו-last_name הם אלה שלקריאה בלבד, וזה מה שבלבל בהתחלה.
+const MC_FIRST_FIELD = "F_NAME";
+const MC_LAST_FIELD = "L_NAME";
 // Noon, by Ron. Every cohort begins on a Sunday at 12:00.
 //
 // A datetime field there does not take just any shape, and the first attempt wrote nothing
@@ -117,7 +122,7 @@ async function mcFind(phone) {
 // Push the same change into ManyChat. Runs after the local write and never blocks it: if
 // ManyChat is unreachable the clerk's change still takes effect in the app, which is the
 // thing she is looking at. The screen reports which of the two actually happened.
-async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on, freezeTag }) {
+async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on, freezeTag, hasName, first, last }) {
   let sub;
   try { sub = await mcFind(phone); } catch (e) { return "failed"; }
   if (!sub) return "not_found";
@@ -159,6 +164,25 @@ async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on, 
         startErr = "התקבל אבל השדה נשאר ריק";
       }
       if (!startEcho) return "startfail:" + (startErr || "לא נשמר");
+    }
+    // השם. **מניצ'ט עונה 200 גם כשהוא נכשל**, ולכן הערך נקרא בחזרה ומושווה, בדיוק
+    // כמו בשינוי המייל. הפקידה רואה מה באמת נשמר שם ולא מה שהנחנו.
+    if (hasName) {
+      for (const [fname, value] of [[MC_FIRST_FIELD, first], [MC_LAST_FIELD, last]]) {
+        const w = await mc("/fb/subscriber/setCustomFieldByName", {
+          subscriber_id: sub.id, field_name: fname, field_value: value,
+        });
+        if (!w.ok) return "namefail:" + fname + " " + (w.error || "נדחה");
+      }
+      let backF = "", backL = "";
+      try {
+        const again = await mcFind(phone);
+        const fields = (again && again.custom_fields) || [];
+        const val = (n) => { const f = fields.find((x) => x.name === n); return (f && f.value) || ""; };
+        backF = String(val(MC_FIRST_FIELD) || "").trim();
+        backL = String(val(MC_LAST_FIELD) || "").trim();
+      } catch (e) {}
+      if (backF !== first || backL !== last) return "namefail:נשמר שם " + ((backF + " " + backL).trim() || "ריק");
     }
     if (hasGroup) {
       await mc("/fb/subscriber/setCustomFieldByName", {
@@ -535,6 +559,8 @@ export default async function handler(req, res) {
     }
     if (tag && tag !== "full" && tag !== "app" && tag !== "cancelproc") return res.status(400).json({ ok: false, error: "bad_tag" });
     if (hasGlow && glow && glow !== "1" && glow !== "0") return res.status(400).json({ ok: false, error: "bad_glow" });
+    // שם ריק לגמרי היה מוחק לה את השם במניצ'ט, שהוא המקור. אין מסלול כזה.
+    if (hasName && !first && !last) return res.status(400).json({ ok: false, error: "bad_name" });
     if (hasUntil && until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
     if (hasGroup && group && !GROUP_RE.test(group)) return res.status(400).json({ ok: false, error: "bad_group" });
     if (hasStart && start && !DATE_RE.test(start)) return res.status(400).json({ ok: false, error: "bad_date" });
@@ -651,8 +677,8 @@ export default async function handler(req, res) {
       // automations there hang off her start date and not off the day she comes back.
       const mcStart = hasStart ? start : freezeStart;
       const freezeTag = hasFreeze ? (freeze ? "on" : "off") : "";
-      if (process.env.MANYCHAT_TOKEN && (hasGroup || mcStart || glow === "1" || glow === "0" || tag || freezeTag)) {
-        mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", tag, on, freezeTag });
+      if (process.env.MANYCHAT_TOKEN && (hasGroup || mcStart || glow === "1" || glow === "0" || tag || freezeTag || hasName)) {
+        mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", tag, on, freezeTag, hasName, first, last });
       }
       return res.status(200).json({ ok: true, mc: mcState });
     } catch (e) {
@@ -780,7 +806,7 @@ export default async function handler(req, res) {
       last,
       sheetFirst: w.first || "",
       sheetLast: w.last || "",
-      nameOverride: (ovr && (ovr.first || ovr.last)) ? { by: ovr.by || "" } : null,
+      nameOverride: (ovr && (ovr.first || ovr.last) && (first !== (w.first || "") || last !== (w.last || ""))) ? { by: ovr.by || "" } : null,
       // Both values travel, here as everywhere on this screen: what is in force, and what
       // the sheet says. The clerk must never have to guess which one she is looking at.
       start,
