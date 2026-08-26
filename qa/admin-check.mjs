@@ -798,5 +798,18 @@ console.log("\nבנק התשובות");
   delete process.env.MANYCHAT_TOKEN;
 }
 
+// **המתגים של מניצ'ט לא רונדרו אף פעם מאז v5.70.** mcBlock מציג אותם רק כשיש
+// לו מצב טעון, והמצב נטען עד אז רק מכפתור "עריכה" שנמחק באותה גרסה. התוצאה:
+// "מניצ'ט: בודקת..." לנצח, ואי אפשר היה לסמן "ביטול בתהליך" על אף אישה.
+{
+  console.log("\nהמצב ממניצ'ט נטען בפתיחת הכרטיס\n");
+  const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  const open = html.slice(html.indexOf('[data-open]'), html.indexOf('[data-back]'));
+  check("פתיחת כרטיס טוענת את המצב ממניצ'ט", /if\(!MC\[em\]\) mcLoad\(em\);/.test(open));
+  const tabs = html.slice(html.indexOf('[data-tab]'), html.indexOf('[data-tab]') + 700);
+  check("וגם מעבר ללשונית, אם עוד לא נטען", /if\(SEL && !MC\[SEL\]\) mcLoad\(SEL\);/.test(tabs));
+  check("הכפתור שנמחק ב-v5.70 באמת כבר לא קיים בשום מקום", !/data-edit="/.test(html));
+}
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
