@@ -182,6 +182,12 @@
   /* ארבעה סוגים של פעולה, וכל אחד נראה אחרת: עריכה רגילה, מה שדורש טיפול,
      פעולה הרסנית, ויצירת קשר. שורה של כפתורים זהים לא אומרת כלום. */
   .dacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+.qsel{
+  font-family:inherit;font-weight:700;font-size:.92rem;cursor:pointer;
+  min-width:170px;max-width:220px;
+}
+.qsel.need{border-color:#C9772A;color:#8A4B12;background:#FFF6EC}
+
   .qa{
     background:var(--card);border:1px solid var(--line-2);border-radius:999px;
     padding:7px 14px 7px 12px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:36px;
@@ -739,6 +745,7 @@ function appGap(){
 }
 
 var CODES = null, CODESOPEN = false, FREEZING = "", VIEW = "";
+var NAMING = "";   // הכרטיס שבו שדה השם פתוח לעריכה
 var SEL = "";   // המשתתפת שהכרטיס שלה פתוח. במחשב הוא יושב בצד, בטלפון הוא תופס את המסך
 var TAB = "info";   // הלשונית הפתוחה בכרטיס
 // ההערות של אישה אחת, נקראות בפתיחת הלשונית שלה בלבד. הרשימה הראשית מקבלת מספר
@@ -992,14 +999,18 @@ function render(){
       '<div class="fld"><span class="flabel">כתובת מייל</span><span class="fval"><span class="mono">'+esc(w.email)+'</span>'+
         '<button class="btn sm" data-copy="'+esc(w.email)+'">העתקה</button></span></div>'+
     '</div>'+
-    '<div class="edit" id="fld-name"><span>שם'+(w.nameOverride?" ✎":"")+'</span>'+
-      '<input class="field sm" style="max-width:150px" id="fn_'+esc(w.email)+'" value="'+esc(w.first||"")+'" placeholder="שם פרטי">'+
-      '<input class="field sm" style="max-width:150px" id="ln_'+esc(w.email)+'" value="'+esc(w.last||"")+'" placeholder="שם משפחה">'+
-      '<button class="btn p" data-savename="'+esc(w.email)+'">שמירה</button>'+
-
-    '</div>'+
-    (w.nameOverride?'<div class="manual">השם תוקן · הגיליון עדיין מציג: '+esc(((w.sheetFirst||"")+" "+(w.sheetLast||"")).trim()||"ריק")+'</div>':'')+
-    '<div class="note">השם נכתב <b>למניצ\'ט</b>, לשדות F_NAME ו-L_NAME, <b>ומשם הוא מגיע לגיליון לבד</b> בייצוא הבא. עד אז מוצג כאן השם המתוקן, והחיפוש מוצא אותה בשני השמות. <b>אין "חזרה לגיליון": לתקן שוב פירושו פשוט להקליד את השם הנכון.</b> והשם שהיא רואה באפליקציה הוא זה שהיא הקלידה בעצמה בכניסה, ואינו מושפע מכאן.</div>'+
+    (NAMING === w.email
+      ? '<div class="edit" id="fld-name"><span>שם</span>'+
+          '<input class="field sm" style="max-width:150px" id="fn_'+esc(w.email)+'" value="'+esc(w.first||"")+'" placeholder="שם פרטי">'+
+          '<input class="field sm" style="max-width:150px" id="ln_'+esc(w.email)+'" value="'+esc(w.last||"")+'" placeholder="שם משפחה">'+
+          '<button class="btn p" data-savename="'+esc(w.email)+'">שמירה</button>'+
+          '<button class="btn ghost" data-noname="1">ביטול</button>'+
+        '</div>'+
+        '<div class="note">השם נכתב גם <b>למניצ\'ט</b>, לשדות F_NAME ו-L_NAME. <b>השם שהיא רואה באפליקציה הוא זה שהיא הקלידה בעצמה בכניסה, ואינו מושפע מכאן.</b></div>'
+      : '<div class="fld" id="fld-name"><span class="flabel">שם</span><span class="fval">'+
+          esc(((w.first||"")+" "+(w.last||"")).trim() || "לא ידוע")+
+          '<button class="btn sm" data-editname="'+esc(w.email)+'">✎ שינוי</button></span></div>'+
+        (w.nameOverride?'<div class="manual">נשמר גם במניצ\'ט ✓</div>':''))+
     (w.pendingEmail?'<div class="manual">כתובת חדשה שכבר בתוקף: <b>'+esc(w.pendingEmail)+'</b> <button class="lnk" data-copy="'+esc(w.pendingEmail)+'">העתקה</button> · הגיליון עוד לא התעדכן, והיא נכנסת עם החדשה</div>':'')+
     '<div class="edit" id="fld-mail"><span>שינוי כתובת מייל</span>'+
       '<input class="field sm" style="max-width:260px;direction:ltr" id="e_'+esc(w.email)+'" placeholder="'+esc(w.email)+'">'+
@@ -1200,14 +1211,30 @@ function render(){
       rows.map(function(r){ return r.html; }).join("");
   }
 
+  function jumpTo(id){
+    TAB = (id==="fld-mail"||id==="fld-name") ? "info" : (id==="fld-until"||id==="fld-cancel"||id==="fld-glow") ? "perm" : "cohort";
+    if(id==="fld-name") NAMING = SEL;
+    render();
+    var t = document.getElementById(id);
+    if(!t) return;
+    t.scrollIntoView({ block:"center", behavior:"smooth" });
+    t.classList.add("lit");
+    setTimeout(function(){ t.classList.remove("lit"); }, 1500);
+  }
+
   function quickActs(w){
-    var b = function(jump, icon, label, cls){ return '<button class="qa'+(cls?" "+cls:"")+'" data-jump="'+jump+'">'+icon+label+'</button>'; };
+    var opts = [["fld-coh","העברת מחזור"],["fld-grp","שיוך קבוצה"],
+      ["fld-frz", w.freeze ? ((w.frozen && w.freezeTodo) ? "השלמת ההקפאה" : "עדכון ההקפאה") : "הכנסה להקפאה"]];
+    if(w.newApp) opts.push(["fld-until","הארכת גישה"]);
+    opts.push(["fld-name","שינוי השם"]);
+    opts.push(["fld-mail","שינוי כתובת מייל"]);
+    opts.push(["fld-cancel","ביטול בתהליך"]);
+    var need = (!w.group && !w.frozen) || (w.frozen && w.freezeTodo);
     return '<div class="dacts">'+
-      b("fld-coh", I_CAL, "העברת מחזור", "")+
-      b("fld-grp", I_USERS, "שיוך קבוצה", (!w.group && !w.frozen) ? "need" : "")+
-      b("fld-frz", I_SNOW, w.freeze ? ((w.frozen && w.freezeTodo) ? "השלמת ההקפאה" : "עדכון ההקפאה") : "הכנסה להקפאה", (w.frozen && w.freezeTodo) ? "need" : "cold")+
-      (w.newApp ? b("fld-until", I_CLOCK, "הארכת גישה", "") : "")+
-      b("fld-cancel", I_BAN, w.blocked ? "ביטול הסימון" : "ביטול בתהליך", "kill")+
+      '<select class="field sm qsel'+(need?" need":"")+'" id="qa_'+esc(w.email)+'" data-qa="'+esc(w.email)+'">'+
+        '<option value="">פעולות מהירות ⌄</option>'+
+        opts.map(function(o){ return '<option value="'+o[0]+'">'+o[1]+'</option>'; }).join("")+
+      '</select>'+
       (w.phone?'<a class="qa wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">'+I_WA+'וואטסאפ</a>':'')+
     '</div>';
   }
@@ -1424,15 +1451,13 @@ function render(){
       .catch(function(){ el.disabled = false; alert("הפעולה נכשלה. נסי שוב."); });
   }; });
   // קיצור דרך: פותח את הלשונית הנכונה, גולל אל השדה ומדגיש אותו לרגע.
+  app.querySelectorAll("[data-qa]").forEach(function(el){ el.onchange=function(){
+    var id = el.value; el.selectedIndex = 0;
+    if(!id) return;
+    jumpTo(id);
+  }; });
   app.querySelectorAll("[data-jump]").forEach(function(el){ el.onclick=function(){
-    var id = el.getAttribute("data-jump");
-    TAB = (id==="fld-mail") ? "info" : (id==="fld-until"||id==="fld-cancel"||id==="fld-glow") ? "perm" : "cohort";
-    render();
-    var t = document.getElementById(id);
-    if(!t) return;
-    t.scrollIntoView({ block:"center", behavior:"smooth" });
-    t.classList.add("lit");
-    setTimeout(function(){ t.classList.remove("lit"); }, 1500);
+    jumpTo(el.getAttribute("data-jump"));
   }; });
   app.querySelectorAll("[data-edit]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-edit"); EDITING=em; render();
@@ -1600,6 +1625,10 @@ function render(){
   // next load instead of waiting minutes for Google's published sheet to refresh, and the
   // matching ManyChat tag, which is where the sheet column comes from in the first place.
   // The panel stays open, because the clerk wants to see the new state where she pressed.
+  app.querySelectorAll("[data-editname]").forEach(function(el){ el.onclick=function(){
+    NAMING = el.getAttribute("data-editname"); render(); }; });
+  app.querySelectorAll("[data-noname]").forEach(function(el){ el.onclick=function(){
+    NAMING = ""; render(); }; });
   app.querySelectorAll("[data-savename]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-savename");
     var fn=(document.getElementById("fn_"+em).value||"").trim();
@@ -1611,6 +1640,7 @@ function render(){
       if(!r.ok) throw new Error();
       if(r.mc && r.mc.indexOf("namefail:")===0) alert("השם שונה אצלנו, אבל במניצ'ט הוא לא נכתב.\n\nמניצ'ט אמר: "+r.mc.slice(9)+"\n\nכלומר הגיליון וההודעות שם ממשיכים עם השם הישן.");
       else mcWarn(r);
+      NAMING = "";
       return load().then(render);
     }).catch(function(){ alert("לא הצלחתי לשמור."); el.disabled=false; el.textContent="שמירה"; });
   }; });
