@@ -602,7 +602,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.22";
+const VERSION = "6.23";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1090,6 +1090,7 @@ function InstallGate({ onSkip }) {
             </ol>
           </div>
         )}
+        <OpenFromIconNote />
         {vid && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>ואותם שלבים בסרטון קצר</div>
@@ -1097,7 +1098,6 @@ function InstallGate({ onSkip }) {
             <InstallVideo videoId={vid} />
           </div>
         )}
-        <OpenFromIconNote />
         <a href={waHref} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "13px", fontSize: 15.5, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>
           <MessageCircle size={19} /> צריכה עזרה? דברי איתנו בוואטסאפ
         </a>
