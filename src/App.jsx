@@ -12,7 +12,7 @@ import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
-import { GLOW_STARTED_KEY, hasGlow } from "./content/glow";
+import { GLOW_STARTED_KEY, hasGlow, glowStarted } from "./content/glow";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -602,7 +602,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.23";
+const VERSION = "6.24";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -6092,6 +6092,10 @@ export default function App() {
   // Read from storage first so the bonus is there on the very first paint, before the gate
   // has answered. The gate then rewrites it on every load.
   const [glow, setGlow] = useState(() => { try { return localStorage.getItem("myprime_glow") === "1"; } catch (e) { return false; } });
+  // "התחילה לצפות בבונוס". נשמר על המכשיר שלה, ומוחזק כאן גם כמצב כדי שהשליחה
+  // של נתוני השימוש תצא שוב באותו ביקור. בלי זה התג במניצ'ט יצא רק בכניסה הבאה
+  // שלה, כלומר לרוב רק למחרת, ומי שנרשמה וצפתה באותו ערב לא הייתה מתויגת כלל.
+  const [glowSeen, setGlowSeen] = useState(() => glowStarted());
   const [futureData, setFutureData] = useState(false); // one-time notice about entries dated ahead
   const [futureConfirm, setFutureConfirm] = useState(false);
   // Progress counts for the office screen, sent once per load. Counts only: how much of each
@@ -6104,7 +6108,7 @@ export default function App() {
     // already finished. Sending once per load would miss the common case: she fills the
     // tracker at 18:00 without reloading, and the 19:00 push still asks whether she filled it.
     const doneToday = !!(checkins[TODAY] && checkins[TODAY]._done);
-    const stamp = TODAY + (doneToday ? ":done" : ":open");
+    const stamp = TODAY + (doneToday ? ":done" : ":open") + (glowSeen ? ":glow" : "");
     if (usageSentRef.current === stamp) return;
     const em = gateEmail || (() => { try { return localStorage.getItem("myprime_access_email") || ""; } catch (e) { return ""; } })();
     if (!em) return;
@@ -6124,7 +6128,7 @@ export default function App() {
     } catch (e) { return; }
     fetch("/api/usage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
       .catch(() => { /* a participant must never see this fail */ });
-  }, [gate, gateEmail, checkins]);
+  }, [gate, gateEmail, checkins, glowSeen]);
 
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
   const [freeze, setFreeze] = useState(() => { try { return JSON.parse(localStorage.getItem("myprime_freeze") || "null"); } catch (e) { return null; } });
@@ -6953,7 +6957,7 @@ export default function App() {
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
-            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} startGlow={glowDirect} onClose={() => { setSheet(null); setGlowDirect(false); }} />}
+            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} startGlow={glowDirect} onGlowStart={() => setGlowSeen(true)} onClose={() => { setSheet(null); setGlowDirect(false); }} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
 

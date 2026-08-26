@@ -198,7 +198,7 @@ export function ContentDayCard({ week, dow, C, font, onOpen, glow }) {
   );
 }
 
-export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, backRef, startGlow = false }) {
+export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, backRef, startGlow = false , onGlowStart }) {
   const allDays = CONTENT_DAYS;
   const showGlow = !!glow && hasGlow();
   // Saturday carries day-of-week 0, and "everything up to today" then matches nothing, so the
@@ -576,7 +576,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
               </div>
             )}
 
-            {l.videoId && <div data-tut="lessonplayer"><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => { bumpView(openL.week, openL.day, openL.i); markDone(openL.week, openL.day, openL.i); } : undefined} onStart={openL.week === 0 ? markGlowStarted : undefined} /></div>}
+            {l.videoId && <div data-tut="lessonplayer"><BunnyPlayer videoId={l.videoId} C={C} font={font} onReach80={track ? () => { bumpView(openL.week, openL.day, openL.i); markDone(openL.week, openL.day, openL.i); } : undefined} onStart={openL.week === 0 ? () => { markGlowStarted(); if (onGlowStart) onGlowStart(); } : undefined} /></div>}
             {l.sections && l.sections.map((sec, si) => (
               <div key={si} style={{ marginBottom: 20 }}>
                 {sec.h && <div style={{ fontSize: 21, fontWeight: 700, color: C.brandD, marginBottom: 8 }}>{sec.h}</div>}

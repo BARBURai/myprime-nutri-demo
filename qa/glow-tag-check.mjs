@@ -12,6 +12,8 @@
 import { readFileSync } from "node:fs";
 const api = readFileSync(new URL("../api/usage.js", import.meta.url), "utf8");
 const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+const content = readFileSync(new URL("../src/content/ContentModule.jsx", import.meta.url), "utf8");
+const admin = readFileSync(new URL("../api/admin.js", import.meta.url), "utf8");
 
 let pass = 0, fail = 0;
 const check = (n, c, extra) => { if (c) { pass++; console.log("  ✓ " + n); } else { fail++; console.log("  ✗ " + n + (extra ? "  → " + extra : "")); } };
@@ -48,6 +50,25 @@ check("ואין מכאן שום שליחת הודעה או הפעלת זרימה
   !/sendContent|sendFlow|\/sending\//.test(api));
 check("התג היחיד שאפשר לכתוב הוא זה שרון נתן",
   (api.match(/tag_name:/g) || []).length === 1 && /GLOW_WATCH_TAG = "GLOW-DEMO-WATCH"/.test(api));
+
+// **התג יצא רק בכניסה הבאה שלה, ולרוב רק למחרת.** נתוני השימוש נשלחים פעם אחת
+// בטעינה, ומי שנרשמה וצפתה באותו ערב סיימה את הביקור לפני שהסימון "צפתה" נולד.
+// רון תפס את זה כשראה שתיים מתוך שישים.
+console.log("\nהתג יוצא באותו ביקור ולא במחרת\n");
+check("כל אחד מארבעת שיעורי הבונוס מדליק את הסימון",
+  /onStart=\{openL\.week === 0 \?/.test(content));
+check("והוא מודיע גם לאפליקציה, ולא רק לאחסון",
+  /markGlowStarted\(\); if \(onGlowStart\) onGlowStart\(\)/.test(content) && /onGlowStart=\{\(\) => setGlowSeen\(true\)\}/.test(app));
+check("השליחה מסומנת אחרת אחרי שהתחילה לצפות, ולכן היא יוצאת שוב",
+  /glowSeen \? ":glow" : ""/.test(app));
+check("והאפקט מאזין לשינוי הזה", /\[gate, gateEmail, checkins, glowSeen\]/.test(app));
+
+// בלי איפוס אי אפשר לבדוק את המסלול פעמיים על אותה אישה, כי הסימון אינו פג.
+console.log("\nאיפוס הסימון, לבדיקה\n");
+check("קיים במסך הניהול, שמוגן במפתח", /body\.glowtag/.test(admin) && /data-glowtag/.test(readFileSync(new URL("../public/admin.html", import.meta.url), "utf8")));
+check("והוא מוחק את הסימון הזה בלבד",
+  /DEL", `glowtag:\$\{email\}`/.test(admin));
+check("אינו נוגע בשום תג במניצ\'ט", !/glowTagReset[\s\S]{0,400}mcPush/.test(admin));
 
 console.log("\nוההתנהגות מול מניצ'ט\n");
 check("200 עם גוף שאומר שנכשל נחשב כישלון",

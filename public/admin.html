@@ -1109,6 +1109,11 @@ function render(){
         : '')+
     '</div>'+
     (w.newApp ? '' : '<div class="note">היא מנוהלת בקג\'אבי, ולכן שיעורי הבונוס שלה <b>מוגדרים שם ולא כאן</b>. השורה הזאת היא חיווי בלבד.</div>')+
+    (w.newApp
+      ? '<div class="note">מי שמתחילה לצפות בשיעורי הבונוס מתויגת אצלנו במניצ\'ט בתג <b>GLOW-DEMO-WATCH</b>, <b>פעם אחת בלבד</b>. '+
+        'האיפוס כאן מוחק את הסימון הזה בלבד, כדי שאפשר יהיה לבדוק את המסלול שוב. <b>הוא אינו מסיר את התג במניצ\'ט.</b> '+
+        '<button class="lnk" data-glowtag="'+esc(w.email)+'">איפוס תיוג Glow</button></div>'
+      : '')+
     '<div id="fld-cancel">'+mcBlock(w)+'</div>'+
     (w.newApp
       ? '<div class="edit" id="fld-until"><span>גישה עד</span>'+
@@ -1586,6 +1591,14 @@ function render(){
   // next load instead of waiting minutes for Google's published sheet to refresh, and the
   // matching ManyChat tag, which is where the sheet column comes from in the first place.
   // The panel stays open, because the clerk wants to see the new state where she pressed.
+  app.querySelectorAll("[data-glowtag]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-glowtag");
+    if(!confirm("לאפס את הסימון של תיוג Glow עבור "+em+"?\n\nזה מוחק רק את הסימון אצלנו שאומר שכבר תויגה, כדי שאפשר יהיה לבדוק שוב.\nהתג במניצ'ט לא מוסר.")) return;
+    el.disabled=true; el.textContent="מאפסת...";
+    save(em,{glowtag:1}).then(function(r){ if(!r.ok) throw new Error(); alert("הסימון אופס. בכניסה הבאה שלה לאפליקציה, אם היא צפתה, היא תתויג שוב."); return load().then(render); })
+      .catch(function(){ alert("לא הצלחתי לאפס."); el.disabled=false; el.textContent="איפוס תיוג Glow"; });
+  }; });
+
   app.querySelectorAll("[data-glow]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-for"), v=el.getAttribute("data-glow");
     el.disabled=true;
