@@ -602,7 +602,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.19";
+const VERSION = "6.20";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -960,8 +960,8 @@ function InstallGuideModal({ onClose }) {
         <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
         <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
           <li>פתחי את האפליקציה בדפדפן Safari.</li>
-          <li>הקישי על שלוש הנקודות (•••) בסרגל שבתחתית המסך. אם מופיע שם כפתור השיתוף עצמו, ריבוע עם חץ כלפי מעלה, הקישי עליו ועברי לשלב 4.</li>
-          <li>בחרי "שיתוף".</li>
+          <li>גללי לתחתית המסך, לסרגל של ספארי, והקישי על הכפתור המסומן.<img src="/guides/install-ios-share.png" alt="הסרגל התחתון של ספארי, כפתור השיתוף מסומן בעיגול אדום" style={{ display: "block", width: "100%", maxWidth: 300, margin: "8px 0 2px", borderRadius: 10 }} /></li>
+          <li>אם במקום הסרגל הזה את רואה רק שלוש נקודות (•••), הקישי עליהן ואז בחרי "שיתוף".</li>
           <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
           <li>בחרי "הוספה למסך הבית".</li>
           <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
@@ -1051,8 +1051,8 @@ function InstallGate({ onSkip }) {
             <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>{vid ? "ואותם שלבים בכתב, לאייפון (Safari)" : "אייפון (Safari)"}</div>
             <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
               <li>ודאי שאת בדפדפן Safari.</li>
-              <li>הקישי על שלוש הנקודות (•••) בסרגל שבתחתית המסך. אם מופיע שם כפתור השיתוף עצמו, ריבוע עם חץ כלפי מעלה, הקישי עליו ועברי לשלב 4.</li>
-              <li>בחרי "שיתוף".</li>
+              <li>גללי לתחתית המסך, לסרגל של ספארי, והקישי על הכפתור המסומן. <b>הוא לא נמצא על הסרטון.</b><img src="/guides/install-ios-share.png" alt="הסרגל התחתון של ספארי, כפתור השיתוף מסומן בעיגול אדום" style={{ display: "block", width: "100%", maxWidth: 300, margin: "8px 0 2px", borderRadius: 10 }} /></li>
+              <li>אם במקום הסרגל הזה את רואה רק שלוש נקודות (•••), הקישי עליהן ואז בחרי "שיתוף".</li>
               <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
               <li>בחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
@@ -1422,8 +1422,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
             <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
             <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 16px", paddingInlineStart: 20 }}>
               <li>פתחי את האפליקציה בדפדפן Safari.</li>
-              <li>הקישי על שלוש הנקודות (•••) בסרגל שבתחתית המסך. אם מופיע שם כפתור השיתוף עצמו, ריבוע עם חץ כלפי מעלה, הקישי עליו ועברי לשלב 4.</li>
-              <li>בחרי "שיתוף".</li>
+              <li>גללי לתחתית המסך, לסרגל של ספארי, והקישי על הכפתור המסומן.<img src="/guides/install-ios-share.png" alt="הסרגל התחתון של ספארי, כפתור השיתוף מסומן בעיגול אדום" style={{ display: "block", width: "100%", maxWidth: 300, margin: "8px 0 2px", borderRadius: 10 }} /></li>
+              <li>אם במקום הסרגל הזה את רואה רק שלוש נקודות (•••), הקישי עליהן ואז בחרי "שיתוף".</li>
               <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
               <li>בחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
