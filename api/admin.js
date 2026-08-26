@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "6.23";
+const ADMIN_VERSION = "6.24";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -515,8 +515,19 @@ export default async function handler(req, res) {
     const phone = String((body && body.phone) || "").replace(/[^\d]/g, "");
     const tag = String((body && body.tag) || "").trim();
     const on = !!(body && body.on);
+    // איפוס הסימון "כבר תויגה במניצ'ט על צפייה בבונוס". הסימון נכתב פעם אחת
+    // בחיים ואינו פג, ולכן בלי איפוס אי אפשר לבדוק את המסלול הזה פעמיים על אותה
+    // אישה. הוא יושב כאן ולא בסרגל `?dev=1`, כי סרגל הבדיקות פתוח לכל מי שמוסיף
+    // את הפרמטר לכתובת ומסך הניהול מוגן במפתח. **הוא אינו מסיר שום תג במניצ'ט.**
+    const glowTagReset = !!(body && body.glowtag);
     if (!email) return res.status(400).json({ ok: false, error: "missing_email" });
-    if (!hasUntil && !hasGroup && !hasGlow && !hasStart && !hasFreeze && !tag) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (!hasUntil && !hasGroup && !hasGlow && !hasStart && !hasFreeze && !tag && !glowTagReset) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (glowTagReset) {
+      if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+      try { await redis(RU, RT, "DEL", `glowtag:${email}`); }
+      catch (e) { return res.status(500).json({ ok: false, error: "write_failed" }); }
+      return res.status(200).json({ ok: true, mc: "off" });
+    }
     if (tag && tag !== "full" && tag !== "app" && tag !== "cancelproc") return res.status(400).json({ ok: false, error: "bad_tag" });
     if (hasGlow && glow && glow !== "1" && glow !== "0") return res.status(400).json({ ok: false, error: "bad_glow" });
     if (hasUntil && until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
