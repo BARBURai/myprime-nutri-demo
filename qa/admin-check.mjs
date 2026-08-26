@@ -43,11 +43,18 @@ globalThis.fetch = async (url, opts) => {
       return { ok: true, json: async () => ({ status: "success", data: { id: 77, custom_fields: [
         { id: 11675348, name: "360 - FINAL  PERSONAL START", value: MC.stored || null },
         { id: 11510555, name: "CF_EMAIL", value: MC.email || null },
+        { id: 900, name: "F_NAME", value: MC.fname || null },
+        { id: 901, name: "L_NAME", value: MC.lname || null },
       ], tags: [] } }) };
     }
     if (u.includes("TagByName")) {
       MC.tags = MC.tags || [];
       MC.tags.push((u.includes("addTag") ? "+" : "-") + (body && body.tag_name));
+      return { ok: true, json: async () => ({ status: "success" }) };
+    }
+    if (u.includes("setCustomFieldByName") && body && (body.field_name === "F_NAME" || body.field_name === "L_NAME")) {
+      if (MC.refuseName) return { ok: true, json: async () => ({ status: "error", message: "no" }) };
+      if (body.field_name === "F_NAME") MC.fname = body.field_value; else MC.lname = body.field_value;
       return { ok: true, json: async () => ({ status: "success" }) };
     }
     if (u.includes("setCustomField") && body && body.field_id === 11510555) {
@@ -750,6 +757,45 @@ console.log("\nבנק התשובות");
     check("נאמר למה אין ניסוח: " + pair[0], !!talkWhy(pair[1]));
   });
   check("ולהערה שיש לה ניסוח לא נאמר כלום", !talkWhy("חסרה לי רובריקה בפעילות הגופנית של הליכה מהירה"));
+}
+
+// השם ברישום מגיע ממניצ'ט, וחלק מהנשים נרשמו בוואטסאפ בשם של בעלן. השדות
+// F_NAME ו-L_NAME הם שדות מותאמים אישית ולא שדות מערכת, ולכן ניתן לכתוב אליהם.
+{
+  console.log("\nתיקון השם ברישום\n");
+  process.env.MANYCHAT_TOKEN = "test-token";
+  MC.fname = "בעלה"; MC.lname = "כהן"; MC.refuseName = false;
+  const sunN = (n) => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const d = new Date(today + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay() + n * 7);
+    return d.toISOString().slice(0, 10);
+  };
+  CSV2 = [
+    'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים',
+    `972500000001,בעלה,כהן,g1@test.com,${sunN(0)} 12:00:00,FALSE,א,3`,
+    `972500000002,שם,ישן,g2@test.com,${sunN(0)} 12:00:00,FALSE,א,3`,
+  ].join("\n");
+  check("שם ריק לגמרי נדחה, כי הוא היה מוחק לה את השם במקור",
+    (await callAdmin({ key: KEY }, "POST", { email: "g1@test.com", first: "", last: "", phone: "972500000001" })).code === 400);
+  const r1 = await callAdmin({ key: KEY }, "POST", { email: "g1@test.com", first: "רונית", last: "לוי", by: "רון", phone: "972500000001" });
+  check("השם נכתב למניצ'ט", MC.fname === "רונית" && MC.lname === "לוי", MC.fname + " " + MC.lname);
+  check("והתשובה אינה מדווחת על כישלון", r1.body.ok === true && String(r1.body.mc || "").indexOf("namefail") !== 0, String(r1.body.mc));
+  const w1 = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "g1@test.com");
+  check("המסך מציג את השם המתוקן", w1.first === "רונית" && w1.last === "לוי");
+  check("ולצידו מה שעדיין כתוב בגיליון", w1.sheetFirst !== "רונית" && !!w1.nameOverride);
+  check("היומן מתעד את התיקון", w1.log[0].field === "name" && w1.log[0].to === "רונית לוי" && w1.log[0].by === "רון");
+
+  // מניצ'ט עונה 200 גם כשהוא נכשל, ולכן הערך נקרא בחזרה. בלי זה כתיבה שנדחתה
+  // נראית בדיוק כמו כתיבה שהצליחה. זה בדיוק מה שנשבר ב-v5.43.
+  MC.refuseName = true;
+  const r2 = await callAdmin({ key: KEY }, "POST", { email: "g2@test.com", first: "מיכל", last: "כהן", phone: "972500000002" });
+  check("סירוב של מניצ'ט מדווח לפקידה", String(r2.body.mc || "").indexOf("namefail:") === 0, String(r2.body.mc));
+  const w2 = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "g2@test.com");
+  check("והשינוי עדיין תקף אצלנו, כי מניצ'ט לעולם אינו חוסם", w2.first === "מיכל");
+  MC.refuseName = false;
+  CSV2 = null;
+  delete process.env.MANYCHAT_TOKEN;
 }
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
