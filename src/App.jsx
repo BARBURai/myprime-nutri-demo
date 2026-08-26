@@ -602,7 +602,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.21";
+const VERSION = "6.22";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -954,6 +954,22 @@ function InstallShot({ src, alt }) {
   );
 }
 
+// הסרגל התחתון של ספארי מופיע בשתי צורות, ואצל כל אישה רק אחת מהן קיימת.
+// זה היה שני שלבים ממוספרים, וזה אילץ הפניה מסוג "עברי לשלב 4" שרון תפס
+// כלא ברורה. עכשיו זה שלב אחד עם שתי אפשרויות, ושני המסלולים ממשיכים לשלב
+// הבא בלי לאן לקפוץ.
+function IosBarOptions() {
+  const head = { fontWeight: 700, color: C.ink, lineHeight: 1.6 };
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={head}>אם את רואה את הסרגל הזה, הקישי על הכפתור המסומן.</div>
+      <InstallShot src="/guides/install-ios-share.png" alt="הסרגל התחתון של ספארי, כפתור השיתוף מסומן בעיגול אדום" />
+      <div style={{ ...head, marginTop: 12 }}>ואם את רואה רק שלוש נקודות, הקישי עליהן ואז בחרי "שיתוף".</div>
+      <InstallShot src="/guides/install-ios-dots.png" alt="הסרגל התחתון של ספארי במצב מכווץ, שלוש הנקודות מסומנות בעיגול אדום" />
+    </div>
+  );
+}
+
 function InstallGuideModal({ onClose }) {
   const waHref = "https://wa.me/972547304177?text=" + encodeURIComponent("היי, אני צריכה עזרה בהתקנת האפליקציה של מיי פריים");
   return (
@@ -971,8 +987,7 @@ function InstallGuideModal({ onClose }) {
         <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
         <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
           <li>פתחי את האפליקציה בדפדפן Safari.</li>
-          <li>גללי לתחתית המסך, לסרגל של ספארי, והקישי על הכפתור המסומן.<InstallShot src="/guides/install-ios-share.png" alt="הסרגל התחתון של ספארי, כפתור השיתוף מסומן בעיגול אדום" /></li>
-          <li>אם במקום הסרגל הזה את רואה רק שלוש נקודות (•••), הקישי עליהן ואז בחרי "שיתוף".<InstallShot src="/guides/install-ios-dots.png" alt="הסרגל התחתון של ספארי במצב מכווץ, שלוש הנקודות מסומנות בעיגול אדום" /></li>
+          <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions /></li>
           <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
           <li>בחרי "הוספה למסך הבית".</li>
           <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
@@ -995,6 +1010,9 @@ const INSTALL_VIDEO = {
   android: "a4580411-9255-4ef1-a862-b93554cc0c81",
 };
 const INSTALL_VIDEO_RATIO = "1080 / 2340";
+// הסרטון מצלם מסך טלפון שלם, ולכן ברוחב מלא הוא בגובה של כמעט מסך שלם
+// ודוחף את ההנחיות הכתובות אל מחוץ לתמונה. מי שרוצה לראות גדול לוחצת על מסך מלא בנגן.
+const INSTALL_VIDEO_MAX_W = 200;
 
 function InstallVideo({ videoId }) {
   const [url, setUrl] = useState(null);
@@ -1011,7 +1029,7 @@ function InstallVideo({ videoId }) {
   // הסרטון הוא תוספת ולא מסלול. אם הוא לא נטען, לא מוצגת שום שגיאה וההנחיות הכתובות
   // שמתחתיו ממשיכות לעבוד בדיוק כמו קודם.
   if (err) return null;
-  const box = { position: "relative", width: "100%", aspectRatio: INSTALL_VIDEO_RATIO, borderRadius: 14, overflow: "hidden", background: "#000" };
+  const box = { position: "relative", width: "100%", maxWidth: INSTALL_VIDEO_MAX_W, margin: "0 auto", aspectRatio: INSTALL_VIDEO_RATIO, borderRadius: 14, overflow: "hidden", background: "#000" };
   if (!url) return (<div style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center" }}><Loader size={26} className="spin" color="#fff" /></div>);
   return (
     <div style={box}>
@@ -1050,20 +1068,12 @@ function InstallGate({ onSkip }) {
             <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginTop: 6 }}>האייקון של מיי פריים 360 נמצא עכשיו בטלפון שלך. אפשר לסגור את החלון הזה ולפתוח את האפליקציה מהאייקון 💜</div>
           </div>
         )}
-        {vid && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>רגע לפני, סרטון קצר שמראה בדיוק איך</div>
-            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>דקה אחת, ואת רואה על המסך כל שלב. אפשר לצפות עד הסוף ואז לעשות, או לעצור באמצע ולעשות תוך כדי 💜</p>
-            <InstallVideo videoId={vid} />
-          </div>
-        )}
         {isIOS ? (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>{vid ? "ואותם שלבים בכתב, לאייפון (Safari)" : "אייפון (Safari)"}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אייפון (Safari)</div>
             <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
               <li>ודאי שאת בדפדפן Safari.</li>
-              <li>גללי לתחתית המסך, לסרגל של ספארי, והקישי על הכפתור המסומן. <b>הוא לא נמצא על הסרטון.</b><InstallShot src="/guides/install-ios-share.png" alt="הסרגל התחתון של ספארי, כפתור השיתוף מסומן בעיגול אדום" /></li>
-              <li>אם במקום הסרגל הזה את רואה רק שלוש נקודות (•••), הקישי עליהן ואז בחרי "שיתוף".<InstallShot src="/guides/install-ios-dots.png" alt="הסרגל התחתון של ספארי במצב מכווץ, שלוש הנקודות מסומנות בעיגול אדום" /></li>
+              <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions /></li>
               <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
               <li>בחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
@@ -1071,13 +1081,20 @@ function InstallGate({ onSkip }) {
           </div>
         ) : (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>{vid ? "ואותם שלבים בכתב, לאנדרואיד (Chrome)" : "אנדרואיד (Chrome)"}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אנדרואיד (Chrome)</div>
             <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
               <li>ודאי שאת בדפדפן Chrome.</li>
               <li>הקישי על תפריט שלוש הנקודות (⋮) בפינה העליונה.</li>
               <li>בחרי "התקנה ויצירת קיצור דרך" (בחלק מהטלפונים כתוב "הוספה למסך הבית" או "התקנת אפליקציה").</li>
               <li>אשרי - והאייקון יופיע במסך הבית.</li>
             </ol>
+          </div>
+        )}
+        {vid && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>ואותם שלבים בסרטון קצר</div>
+            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>אם נוח לך לראות במקום לקרוא, הסרטון מראה כל שלב על המסך.</p>
+            <InstallVideo videoId={vid} />
           </div>
         )}
         <OpenFromIconNote />
@@ -1433,8 +1450,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
             <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אייפון (Safari)</div>
             <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 16px", paddingInlineStart: 20 }}>
               <li>פתחי את האפליקציה בדפדפן Safari.</li>
-              <li>גללי לתחתית המסך, לסרגל של ספארי, והקישי על הכפתור המסומן.<InstallShot src="/guides/install-ios-share.png" alt="הסרגל התחתון של ספארי, כפתור השיתוף מסומן בעיגול אדום" /></li>
-              <li>אם במקום הסרגל הזה את רואה רק שלוש נקודות (•••), הקישי עליהן ואז בחרי "שיתוף".<InstallShot src="/guides/install-ios-dots.png" alt="הסרגל התחתון של ספארי במצב מכווץ, שלוש הנקודות מסומנות בעיגול אדום" /></li>
+              <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions /></li>
               <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
               <li>בחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
