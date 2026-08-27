@@ -897,11 +897,26 @@ console.log("\nחיפוש, תגי תוכנית ותאריך במסך הניהו�
   check("סולו 6 מקבלת סולו ולא 360", progPill({ solo: 6, cancelled: false }).indexOf("סולו 6") !== -1 &&
     !/p360pill/.test(progPill({ solo: 6, cancelled: false })));
   check("סולו 12 מקבלת סולו 12", progPill({ solo: 12, cancelled: false }).indexOf("סולו 12") !== -1);
-  check("מי שביטלה אינה מקבלת תג תוכנית", progPill({ solo: 0, cancelled: true }) === "");
-  check("ותג הביטול אדום בשני המקומות", (html.match(/grp dngpill">ביטלה/g) || []).length === 2);
+  // תג לא יורד: גם מי שביטלה ממשיכה להראות באיזו תוכנית היא הייתה, והביטול הוא תג לצידו.
+  check("מי שביטלה שומרת על תג 360", /p360pill/.test(progPill({ solo: 0, cancelled: true })));
+  check("ומי שביטלה בסולו שומרת על סולו", progPill({ solo: 6, cancelled: true }).indexOf("סולו 6") !== -1);
+  check("ותג הביטול קיים בשני המקומות", (html.match(/grp dngpill">ביטלה/g) || []).length === 2);
+  // .grp נכתב אחרי כולם ובאותה עוצמה, ולכן תג צבע שנכתב לפניו נדרס ומת בשקט.
+  // ככה .dngpill ו-.coldpill היו אפורים מאז שנכתבו, ואף אחד לא שם לב.
+  {
+    const at = (sel) => html.indexOf(sel + "{");
+    const grp = html.indexOf("\n  .grp{");
+    check("כל תגי הצבע נכתבים אחרי .grp", grp !== -1 &&
+      [".warnpill", ".newpill", ".solopill", ".p360pill", ".oldpill", ".coldpill", ".dngpill"]
+        .every((c) => at(c) > grp),
+      [".warnpill", ".newpill", ".solopill", ".p360pill", ".oldpill", ".coldpill", ".dngpill"]
+        .filter((c) => at(c) < grp).join(","));
+    check("תג הביטול אדום", /\.dngpill\{background:var\(--dangerbg\);color:var\(--danger\)/.test(html));
+    check("ותג 360 סגול כמו סולו", /\.p360pill\{background:#EDE7F6;color:#4A2E7A/.test(html));
+  }
   check("יש סינון לפי תוכנית", /id="fProg"/.test(html) &&
     /PROG==="6" && w\.solo!==6/.test(html) && /PROG==="12" && w\.solo!==12/.test(html) &&
-    /PROG==="360" && \(w\.solo \|\| w\.cancelled\)/.test(html));
+    /PROG==="360" && w\.solo/.test(html));
 
   // 3. התאריך. בורר התאריך המובנה מצייר לפי הגדרת השפה של המכשיר, ולכן אצל אחד
   //    הוא חודש-יום ואצל אחר יום-חודש. הבדיקה נועלת שהוא לא קיים במסך בכלל.
