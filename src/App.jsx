@@ -609,7 +609,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.34";
+const VERSION = "6.35";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -983,23 +983,49 @@ function IosBarOptions() {
 // ואין לנו שום דרך להשפיע עליה, ולכן היחיד שאפשר לעשות הוא לומר לה את זה במפורש
 // במקום להציג לה שלבים שלא יעבדו. משתתפת שלחה את הצילום ב-27 באוגוסט 2026.
 const isSamsungBrowser = () => /samsungbrowser/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
-function SamsungSwitchNote() {
+// באייפון אפשר להוסיף למסך הבית אך ורק מספארי. זו מגבלה של אפל, וכל דפדפן אחר
+// שם הוא ספארי מבפנים בלי האפשרות הזאת. קישור שנפתח מוואטסאפ נוחת לעיתים
+// קרובות בדפדפן פנימי או בכרום, ואז השלבים שאנחנו מציגים לה פשוט לא קיימים אצלה.
+// ספארי תמיד נושא "Version/" בזהות שלו, ודפדפן שנפתח בתוך אפליקציה אחרת אינו
+// נושא אותו. מחזירה מחרוזת ריקה כשזו ספארי, כדי שההודעה לא תוצג למי שכבר שם.
+function iosOtherBrowser() {
+  const ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+  if (!/iphone|ipad|ipod/i.test(ua)) return "";
+  if (/CriOS/i.test(ua)) return "Chrome";
+  if (/FxiOS/i.test(ua)) return "Firefox";
+  if (/EdgiOS/i.test(ua)) return "Edge";
+  if (/OPiOS|OPT\//i.test(ua)) return "Opera";
+  if (/FBAN|FBAV|FB_IAB/i.test(ua)) return "הדפדפן של פייסבוק";
+  if (/Instagram/i.test(ua)) return "הדפדפן של אינסטגרם";
+  if (!/Version\//i.test(ua)) return "דפדפן שנפתח בתוך אפליקציה אחרת";
+  return "";
+}
+// ההודעה שמופיעה כשהיא בדפדפן שאי אפשר להתקין ממנו. שני המקרים חולקים אותה, כי
+// הם אותו דבר בדיוק: לא היא טעתה, פשוט צריך לפתוח את הקישור במקום אחר.
+function BrowserSwitchNote() {
   const [copied, setCopied] = useState(false);
+  const ios = iosOtherBrowser();
+  const sam = !ios && isSamsungBrowser();
   const url = typeof location !== "undefined" ? location.origin + "/" : "";
   const copy = () => {
     const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1600); };
     if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done).catch(() => {}); return; }
     try { const t = document.createElement("textarea"); t.value = url; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); done(); } catch (e) {}
   };
+  if (!ios && !sam) return null;
+  const head = sam ? "את נמצאת בדפדפן של סמסונג"
+    : ios === "דפדפן שנפתח בתוך אפליקציה אחרת" ? "הקישור נפתח בתוך אפליקציה אחרת"
+    : "את נמצאת ב-" + ios + ", לא בספארי";
+  const why = sam
+    ? "ההתקנה מהדפדפן הזה נחסמת על ידי אנדרואיד, ומופיעה הודעה של Google Play Protect."
+    : "באייפון אפשר להוסיף אפליקציה למסך הבית רק מספארי.";
+  const blame = sam ? "זו חסימה של הטלפון ולא תקלה באפליקציה." : "זו מגבלה של אפל ולא תקלה באפליקציה.";
+  const what = sam ? "פתחי את אותו קישור בדפדפן Chrome, והתקיני משם." : "פתחי את אותו קישור בדפדפן Safari, והתקיני משם.";
   return (
     <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 14, padding: "14px 16px", marginBottom: 14, textAlign: "right" }}>
-      <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 6 }}>את נמצאת בדפדפן של סמסונג</div>
-      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, margin: "0 0 8px" }}>
-        ההתקנה מהדפדפן הזה נחסמת על ידי אנדרואיד, ומופיעה הודעה של Google Play Protect. <b>זו חסימה של הטלפון ולא תקלה באפליקציה.</b>
-      </p>
-      <p style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.65, margin: "0 0 10px", fontWeight: 600 }}>
-        פתחי את אותו קישור בדפדפן Chrome, והתקיני משם.
-      </p>
+      <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 6 }}>{head}</div>
+      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, margin: "0 0 8px" }}>{why} <b>{blame}</b></p>
+      <p style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.65, margin: "0 0 10px", fontWeight: 600 }}>{what}</p>
       <button onClick={copy} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 10, padding: "8px 14px", fontSize: 14.5, color: C.brandD, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>
         {copied ? "הקישור הועתק ✓" : "העתקת הקישור"}
       </button>
@@ -1014,7 +1040,7 @@ function InstallGuideModal({ onClose }) {
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 360, width: "100%", maxHeight: "85%", overflowY: "auto", textAlign: "right", fontFamily: fontStack }}>
         <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 4 }}>התקנה כאפליקציה במסך הבית</div>
         <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>אפשר להוסיף את מיי פריים למסך הבית כדי לפתוח אותה כמו אפליקציה רגילה, עם אייקון משלה.</p>
-        {isSamsungBrowser() && <SamsungSwitchNote />}
+        <BrowserSwitchNote />
         <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אנדרואיד (Chrome)</div>
         <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
           <li>פתחי את האפליקציה בדפדפן Chrome.</li>
@@ -1106,7 +1132,9 @@ function InstallGate({ onSkip }) {
             <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginTop: 6 }}>האייקון של מיי פריים 360 נמצא עכשיו בטלפון שלך. אפשר לסגור את החלון הזה ולפתוח את האפליקציה מהאייקון 💜</div>
           </div>
         )}
-        {isIOS ? (
+        {isIOS && iosOtherBrowser() ? (
+          <BrowserSwitchNote />
+        ) : isIOS ? (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אייפון (Safari)</div>
             <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
@@ -1118,7 +1146,7 @@ function InstallGate({ onSkip }) {
             </ol>
           </div>
         ) : isSamsungBrowser() ? (
-          <SamsungSwitchNote />
+          <BrowserSwitchNote />
         ) : (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אנדרואיד (Chrome)</div>
@@ -1480,7 +1508,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", maxHeight: "82%", overflowY: "auto", textAlign: "right", fontFamily: fontStack }}>
             <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 4 }}>התקנה כאפליקציה במסך הבית</div>
             <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>אפשר להוסיף את MyPrime למסך הבית כדי לפתוח אותה כמו אפליקציה רגילה, עם אייקון משלה.</p>
-            {isSamsungBrowser() && <SamsungSwitchNote />}
+            <BrowserSwitchNote />
             <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אנדרואיד (Chrome)</div>
             <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
               <li>פתחי את האפליקציה בדפדפן Chrome.</li>
