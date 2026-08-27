@@ -30,7 +30,7 @@ export const CHECKIN_TASKS = [
 
   { id: "water", label: "כוסות מים היום", type: "number", group: "drink", auto: "water", startWeek: 3, startDow: 2, recur: "daily" },
   { id: "drinkbefore", label: "שתיתי לפני כל ארוחה", type: "bool", group: "drink", startWeek: 3, startDow: 2, recur: "daily" },
-  { id: "protein", label: "הגעתי ליעד החלבון", type: "bool", group: "food", auto: "protein", startWeek: 3, startDow: 4, recur: "daily" },
+  { id: "protein", label: "הקפדתי על חלבון בכל ארוחה", type: "bool", group: "food", auto: "protein", startWeek: 3, startDow: 4, recur: "daily" },
 
   { id: "sleephours", label: "שעות שינה", type: "number", group: "calm", startWeek: 4, startDow: 2, recur: "daily" },
   { id: "noscreens", label: "בלי מסכים לפני השינה", type: "bool", group: "calm", startWeek: 4, startDow: 2, recur: "daily" },
