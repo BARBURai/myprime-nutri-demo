@@ -796,7 +796,7 @@ const CHECKS = [
     // בטלפוני סמסונג קישור מוואטסאפ נוחת בדפדפן של סמסונג, ושם ההתקנה נחסמת על
     // ידי אנדרואיד. משתתפת שלחה צילום של Google Play Protect. שני הצדדים באותו
     // תרחיש בכוונה, כי הודעה שמופיעה תמיד נראית בדיוק כמו הודעה שלא מופיעה אף פעם.
-    name: "בדפדפן של סמסונג מוצגת ההפניה לכרום, ובכרום לא",
+    name: "בדפדפן שאי אפשר להתקין ממנו מוצגת ההפניה, ובנכון לא",
     async run(browser, device) {
       if (!device.isMobile) return { ok: true, skip: true, detail: "רלוונטי לטלפון בלבד" };
       // באייפון ההנחיות הן של ספארי ולא של כרום, ולכן הצד השני של ההשוואה אינו קיים שם.
@@ -815,14 +815,22 @@ const CHECKS = [
         const note = await page.locator("text=את נמצאת בדפדפן של סמסונג").count();
         const chromeSteps = await page.locator("text=ודאי שאת בדפדפן Chrome").count();
         const copyBtn = await page.getByRole("button", { name: /העתקת הקישור/ }).count();
+        const iosNote = await page.locator("text=/לא בספארי|נפתח בתוך אפליקציה אחרת/").count();
+        const iosSteps = await page.locator("text=ודאי שאת בדפדפן Safari").count();
         await context.close();
-        return { note, chromeSteps, copyBtn };
+        return { note, chromeSteps, copyBtn, iosNote, iosSteps };
       };
       const sam = await look(SAMSUNG);
       const chr = await look(null);
+      // ובאייפון: כרום שם הוא ספארי מבפנים בלי אפשרות התקנה, ולכן גם הוא מקבל הפניה.
+      const CRIOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/120.0.0.0 Mobile/15E148 Safari/604.1";
+      const SAF = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+      const cr = await look(CRIOS);
+      const sf = await look(SAF);
       const ok = sam.note === 1 && sam.chromeSteps === 0 && sam.copyBtn === 1 &&
-                 chr.note === 0 && chr.chromeSteps === 1;
-      return { ok, detail: `סמסונג: הודעה ${sam.note} שלבים ${sam.chromeSteps} העתקה ${sam.copyBtn} · כרום: הודעה ${chr.note} שלבים ${chr.chromeSteps}` };
+                 chr.note === 0 && chr.chromeSteps === 1 &&
+                 cr.iosNote === 1 && cr.iosSteps === 0 && sf.iosNote === 0 && sf.iosSteps === 1;
+      return { ok, detail: `סמסונג ${sam.note}/${sam.chromeSteps} · כרום ${chr.note}/${chr.chromeSteps} · אייפון-כרום ${cr.iosNote}/${cr.iosSteps} · ספארי ${sf.iosNote}/${sf.iosSteps}` };
     },
   },
 ];
