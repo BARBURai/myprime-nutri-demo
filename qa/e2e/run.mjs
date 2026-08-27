@@ -760,6 +760,38 @@ const CHECKS = [
       return { ok, detail: `לפני ${before.join(",") || "אין"} · אחרי ${after.join(",") || "אין"} · כפתור חזרה ${backBtn} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
     },
   },
+  {
+    // דיווח של רינת לאון: "המספר 1 נשאר, לא יכולתי לרשום 70 אלא רק 71". השדה
+    // מגיע עם ערך בפנים, וההקלדה נדבקה אליו במקום להחליף אותו.
+    name: "הקלדה בשדה כמות מחליפה את המספר שכבר בו",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=חיפוש מזון").first().click();
+      await page.waitForTimeout(500);
+      const box = page.locator('input[type="text"], input:not([type])').first();
+      await box.fill("בננה");
+      await page.waitForTimeout(700);
+      await page.locator("text=בננה בינונית").first().click();
+      await page.waitForTimeout(500);
+      // מונה הכמות: שדה מספרי צר וממורכז, זה שיושב בין המינוס לפלוס.
+      const qty = page.locator('input[inputmode="numeric"]').first();
+      const before = await qty.inputValue();
+      await qty.click();
+      await page.waitForTimeout(200);
+      await page.keyboard.type("70");
+      await page.waitForTimeout(300);
+      const after = await qty.inputValue();
+      await context.close();
+      return {
+        ok: before !== "" && after === "70" && errors.length === 0,
+        detail: `היה ${before || "ריק"} · הוקלד 70 · יצא ${after} · שגיאות ${errors.length ? errors[0].slice(0, 50) : "אין"}`,
+      };
+    },
+  },
 ];
 
 /* ---------- run ---------- */
