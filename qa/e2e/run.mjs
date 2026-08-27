@@ -140,6 +140,38 @@ const record = (device, name, ok, detail, skip) => {
 
 const CHECKS = [
   {
+    // **החלבון היה המשימה האוטומטית היחידה שדרשה הצלחה ולא דיווח**, ולכן מי שלא
+    // תיעדה את כל מה שאכלה לא סגרה את היום, לא קיבלה מדליה, והרצף שלה נשבר.
+    // עכשיו היא מסומנת לבד למי שהגיעה ליעד, ומי שלא יכולה לסמן בעצמה. הבדיקה
+    // רצה על אישה שהחלבון שלה נמוך מהיעד, ולכן היא בדיוק המקרה שהיה חסום.
+    name: "משימת החלבון ניתנת לסימון ידני כשהיא לא הגיעה ליעד",
+    async run(browser, device) {
+      const start = sundayWeeksAgo(3);   // שבוע 4, ולכן משימת החלבון כבר פתוחה
+      const today = TODAY;
+      const seed = {
+        log: [{ id: "p1", date: today, meal: "בוקר", name: "תפוח", g: 180, unit: "g", source: "verified", kcal: 94, p: 0, f: 0, c: 25 }],
+      };
+      const { context, page, errors } = await openApp(browser, device, { startDate: start, seed });
+      await page.locator("text=הקישי למילוי המעקב").first().click({ timeout: 8000 });
+      await page.waitForTimeout(900);
+      await page.locator("text=הבנתי").first().click({ timeout: 2500 }).catch(() => {});
+      await page.waitForTimeout(400);
+      const label = await page.locator("text=הקפדתי על חלבון בכל ארוחה").count();
+      const oldLabel = await page.locator("text=הגעתי ליעד החלבון").count();
+      // התיבה שלה: הכפתור שיושב באותה שורה של הכיתוב. כשהיא לא הגיעה ליעד זו
+      // חייבת להיות תיבת סימון ולא תג "אוטומטי", אחרת אין לה מה לעשות.
+      const box = page.locator('div:has(> div > span:text-is("הקפדתי על חלבון בכל ארוחה")) > button').last();
+      const hasBox = await box.count();
+      let ticked = 0;
+      if (hasBox) { await box.click({ timeout: 5000 }); await page.waitForTimeout(600); ticked = await box.locator("svg").count(); }
+      await context.close();
+      return {
+        ok: label === 1 && oldLabel === 0 && hasBox === 1 && ticked === 1 && !errors.length,
+        detail: `כיתוב חדש ${label}, ישן ${oldLabel}, תיבה ${hasBox}, נסמנה ${ticked}, שגיאות ${errors.length ? errors[0].slice(0, 70) : "אין"}`,
+      };
+    },
+  },
+  {
     // The lower bound for weight loss is BMI 20, and it is read off her height. A fixed
     // number in kilograms cannot do this job: 50kg blocked a real participant at 152cm who
     // is perfectly healthy, and waved through 51kg at 175cm, which is severe underweight.

@@ -531,7 +531,12 @@ function taskDone(task, answers, auto) {
     if (task.auto === "steps") return auto.steps != null;
     if (task.auto === "water") return auto.water != null;
     if (task.auto === "journal") return auto.journal;
-    if (task.auto === "protein") return auto.protein;
+    // **החלבון הוא היחיד מבין הארבעה שנשען על הצלחה ולא על דיווח.** צעדים, מים
+    // ויומן מסתמנים ברגע שהיא הזינה משהו. לכן מי שלא תיעדה את כל מה שאכלה נחשבה
+    // כמי שלא הגיעה לחלבון, לא סגרה את היום, לא קיבלה מדליה, והרצף שלה נשבר.
+    // עכשיו הווי עדיין ניתן לבד למי שהגיעה, ומי שלא יכולה לסמן בעצמה. אותו דפוס
+    // בדיוק כמו הסרטונים: מסומן אוטומטית, ואפשר גם לסמן ידנית.
+    if (task.auto === "protein") return auto.protein || answers[task.id] === true;
   }
   const v = answers[task.id];
   // Strength: done if she logged an "אימון כוח" activity that day, or checked it manually.
@@ -602,7 +607,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.26";
+const VERSION = "6.27";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4846,14 +4851,18 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
                 const done = taskDone(t, answers, auto);
                 const strengthAuto = t.id === "strength" && auto && auto.strengthLogged; // logged as an activity in the journal
                 const autoNote = t.auto === "steps" ? "יש למלא בעיגול הצעדים" : t.auto === "water" ? "יש לעדכן בעיגול המים" : "יש למלא בעיגול הקלוריות";
+                // החלבון מוצג כתג "אוטומטי" רק כשהיא באמת הגיעה ליעד. כשלא, הוא
+                // תיבת סימון רגילה שהיא מסמנת בעצמה, ולכן גם ההערה הכתומה שמפנה
+                // לעיגול הקלוריות אינה נכונה שם: אין לה מה למלא, יש לה מה לסמן.
+                const autoPill = !!t.auto && (t.auto !== "protein" || auto.protein);
                 return (
                   <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
                     <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                       <span style={{ fontSize: 16, color: C.ink }}>{t.label}{t.optional ? <span style={{ color: C.faint, fontSize: 13 }}> (רשות)</span> : null}</span>
-                      {t.auto && !done && <span style={{ fontSize: 12.5, color: C.amber, marginTop: 2 }}>{autoNote}</span>}
+                      {t.auto && t.auto !== "protein" && !done && <span style={{ fontSize: 12.5, color: C.amber, marginTop: 2 }}>{autoNote}</span>}
                       {strengthAuto && <span style={{ fontSize: 12.5, color: C.brandD, marginTop: 2 }}>נרשם ביומן הפעילות</span>}
                     </div>
-                    {t.auto ? (
+                    {autoPill ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, color: done ? C.brandD : C.faint, background: done ? C.brandBg : "transparent", padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}>{done ? <Check size={14} /> : null}{t.auto === "steps" && auto.steps != null ? `${auto.steps.toLocaleString()} · ` : ""}{t.auto === "water" && auto.water != null ? `${auto.water} · ` : ""}אוטומטי</span>
                     ) : strengthAuto ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, color: C.brandD, background: C.brandBg, padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}><Check size={14} />אוטומטי</span>
