@@ -726,6 +726,72 @@ const CHECKS = [
       };
     },
   },
+  {
+    // משתתפת ביקשה לראות את היומן לפי הארוחות, כדי לדעת מה אכלה מתי. הכפתור
+    // אומר מה יקרה אם לוחצים עליו, ובררת המחדל נשארת סדר ההזנה.
+    name: "היומן מתהפך לסדר הארוחות ובחזרה",
+    async run(browser, device) {
+      const log = [
+        { id: "e1", date: TODAY, meal: "ערב", name: "סלמון בדיקה", g: 100, unit: "g", source: "verified", kcal: 200, p: 20, f: 12, c: 0 },
+        { id: "e2", date: TODAY, meal: "בוקר", name: "לחם בדיקה", g: 30, unit: "g", source: "verified", kcal: 80, p: 3, f: 1, c: 15 },
+        { id: "e3", date: TODAY, meal: "צהריים", name: "אורז בדיקה", g: 150, unit: "g", source: "verified", kcal: 190, p: 4, f: 1, c: 42 },
+      ];
+      const { page, context, errors } = await openApp(browser, device, { day: 10, seed: { log } });
+      // סדר השמות ברשימה, לפי סדר האלמנטים בדף ולא לפי העין.
+      const order = async () => page.evaluate(() => {
+        const wrap = document.querySelector('[data-tut="diarylist"]');
+        if (!wrap) return [];
+        const out = [];
+        let el = wrap.nextElementSibling;
+        while (el) { const t = (el.textContent || ""); const m = t.match(/(סלמון|לחם|אורז) בדיקה/); if (m) out.push(m[1]); el = el.nextElementSibling; }
+        return out;
+      });
+      const before = await order();
+      const btn = page.getByRole("button", { name: /לפי הארוחה/ }).first();
+      const hadBtn = await btn.count();
+      if (hadBtn) { await btn.click(); await page.waitForTimeout(400); }
+      const after = await order();
+      const backBtn = await page.getByRole("button", { name: /לפי סדר ההזנה/ }).count();
+      await context.close();
+      const ok = hadBtn > 0 &&
+        before.join(",") === "סלמון,לחם,אורז" &&
+        after.join(",") === "לחם,אורז,סלמון" &&
+        backBtn > 0 && errors.length === 0;
+      return { ok, detail: `לפני ${before.join(",") || "אין"} · אחרי ${after.join(",") || "אין"} · כפתור חזרה ${backBtn} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
+    },
+  },
+  {
+    // דיווח של רינת לאון: "המספר 1 נשאר, לא יכולתי לרשום 70 אלא רק 71". השדה
+    // מגיע עם ערך בפנים, וההקלדה נדבקה אליו במקום להחליף אותו.
+    name: "הקלדה בשדה כמות מחליפה את המספר שכבר בו",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=חיפוש מזון").first().click();
+      await page.waitForTimeout(500);
+      const box = page.locator('input[type="text"], input:not([type])').first();
+      await box.fill("בננה");
+      await page.waitForTimeout(700);
+      await page.locator("text=בננה בינונית").first().click();
+      await page.waitForTimeout(500);
+      // מונה הכמות: שדה מספרי צר וממורכז, זה שיושב בין המינוס לפלוס.
+      const qty = page.locator('input[inputmode="numeric"]').first();
+      const before = await qty.inputValue();
+      await qty.click();
+      await page.waitForTimeout(200);
+      await page.keyboard.type("70");
+      await page.waitForTimeout(300);
+      const after = await qty.inputValue();
+      await context.close();
+      return {
+        ok: before !== "" && after === "70" && errors.length === 0,
+        detail: `היה ${before || "ריק"} · הוקלד 70 · יצא ${after} · שגיאות ${errors.length ? errors[0].slice(0, 50) : "אין"}`,
+      };
+    },
+  },
 ];
 
 /* ---------- run ---------- */

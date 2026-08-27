@@ -268,6 +268,8 @@ const RECENT = [
   { foodId: "chk", g: 120 }, { foodId: "oat", g: 60 }, { foodId: "cot", g: 100 },
 ];
 const MEALS = ["בוקר", "ביניים בוקר", "צהריים", "ביניים אחה״צ", "ערב", "נשנושים"];
+const DIARY_ORDER_KEY = "mp_diary_order_v1";
+function mealRank(m) { const i = MEALS.indexOf(m); return i === -1 ? MEALS.length : i; }
 const HE_DAYS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 const HE_DAYS_FULL = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 function lerpHex(a, b, t) {
@@ -607,7 +609,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.31";
+const VERSION = "6.33";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1519,6 +1521,14 @@ function PreStartScreen({ name, startDate, glow = false, onOpenGlow }) {
 
 function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onStepsHelp, onOpenContent, onOpenOnboard, catchupDue = false, onOpenCatchup, introLock = false, overlayOpen = false, glow = false, freeze = null }) {
   const dayLog = log.filter((e) => e.date === date);
+  // הרשימה מוצגת לפי סדר ההזנה, וזו ברירת המחדל. משתתפת ביקשה לראות אותה לפי
+  // הארוחה, כדי לדעת מה אכלה מתי. הבחירה נזכרת על המכשיר שלה, כי מי שמעדיפה
+  // לפי ארוחה לא צריכה ללחוץ כל יום מחדש. שינוי תצוגה בלבד: שום מספר לא זז.
+  const [byMeal, setByMeal] = useState(() => { try { return localStorage.getItem(DIARY_ORDER_KEY) === "meal"; } catch { return false; } });
+  const toggleOrder = () => setByMeal((v) => { const n = !v; try { localStorage.setItem(DIARY_ORDER_KEY, n ? "meal" : "add"); } catch {} return n; });
+  // sort יציב, ולכן בתוך כל ארוחה נשמר סדר ההזנה. ארוחה שאינה ברשימה יורדת לסוף
+  // במקום לעלות לראש, וזה מה שקורה כש-indexOf מחזיר מינוס אחת.
+  const shownLog = byMeal ? dayLog.slice().sort((a, b) => mealRank(a.meal) - mealRank(b.meal)) : dayLog;
   const consumed = dayLog.reduce((s, e) => s + (e.kcal || 0), 0);
   const dayAct = activityLog.filter((a) => a.date === date);
   const actKcal = dayAct.reduce((s, a) => s + (a.kcal || 0), 0);
@@ -1746,9 +1756,18 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </>
         )}
 
-        <div data-tut="diarylist" style={{ fontSize: 14, fontWeight: 700, color: C.ink, margin: "16px 0 2px" }}>מה שהוזן היום</div>
+        <div data-tut="diarylist" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, margin: "16px 0 2px" }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>מה שהוזן היום</span>
+          {/* הכפתור אומר מה יקרה אם לוחצים עליו, ולא מה מוצג עכשיו. עם פריט אחד
+              אין מה לסדר, ולכן הוא לא מוצג בכלל. */}
+          {dayLog.length > 1 && (
+            <button onClick={toggleOrder} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 999, padding: "4px 11px", fontSize: 13, color: C.sub, fontFamily: fontStack, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {byMeal ? "לפי סדר ההזנה" : "לפי הארוחה"} ⇅
+            </button>
+          )}
+        </div>
         {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 16, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה - הקישי על כפתור ה־+ להוספה</div>}
-        {dayLog.map((e) => (
+        {shownLog.map((e) => (
           <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
             <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
               <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
@@ -2670,7 +2689,7 @@ function photoHeadsup35Seen() { try { return localStorage.getItem("myprime_photo
 function markPhotoHeadsup35() { try { localStorage.setItem("myprime_photo_hs35", "1"); } catch (e) {} }
 
 async function aiNutritionChat(messages) {
-  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. דברי תמיד בלשון נקבה, גם אלייך וגם על עצמך: \"שמחה לעזור\", \"רשמתי לך\", ולא בלשון זכר.אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) אם חסר מידע על כמה דברים - שאלי על כולם בהודעה אחת (אפשר כרשימה קצרה), לא שאלה אחרי שאלה. שאלי רק על מה שבאמת חסר וחשוב, אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות מיותרות. חשוב מאוד - קראי את כל ההודעה של המשתמשת עד הסוף לפני שאת שואלת שאלה כלשהי, וכבדי כל פרט שכבר נמסר: אם המשתמשת כבר ציינה כמות או מידה (גרם, כוס, כף, כפית, פרוסה) - אל תשאלי עליה שוב לעולם, קחי אותה כפי שהיא. אם כתבה '2 כפות אורז' - יש לך כבר את הכמות, אל תשאלי כמה גרם. אם כבר ציינה אופן הכנה (מבושל, מטוגן, אפוי, על הגריל, חי) - אל תשאלי עליו שוב; 'אורז מבושל' פירושו שכבר יש לך את אופן ההכנה. אם המשתמשת כתבה יחידת מידה מפורשת (כפות / כפיות) - אל תשאלי 'כפות או כפיות', קחי מה שכתבה. כשמצוין שם של פריט שיש לו יחידה טבעית (ביצה, תפוח, בננה, פרוסת לחם, מלפפון, עגבנייה וכו') בלי מספר - הניחי שהכוונה ליחידה אחת ואל תשאלי 'כמה'; רק אם צוין מספר מפורש (למשל '3 ביצים') השתמשי בו. 'ביצה קשה' פירושו ביצה אחת. שאלי על כמות רק כשאין שום יחידה טבעית ולא צוינה שום מידה - למשל מאכל בתפזורת (אורז, פסטה, קוסקוס, גבינה לבנה, סלט) שנכתב בלי כמות כלל. אם המשתמשת הכינה מאכל שמתחלק ליחידות (פשטידה, תבנית עוגה, סיר תבשיל, מגש וכו') - זהי זאת, והתייחסי אליו כמוצר אחד שמתחלק לחתיכות (אל תפרקי אותו לרכיבים). אם היא לא ציינה כמה חתיכות/מנות יצאו מכל המאכל וכמה חתיכות היא אכלה - שאלי את שתי השאלות בהודעה אחת. בפריט כזה החזירי את הערכים של המאכל ה**שלם** (grams ו-kcal והמאקרו של כל התבנית), והוסיפי שני שדות: pieces (מספר החתיכות הכולל) ו-ate (כמה חתיכות היא אכלה). בפריט רגיל שאינו מתחלק לחתיכות - אל תוסיפי את השדות pieces ו-ate. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. עבור מאכל שמתחלק לחתיכות הוסיפי לפריט גם \"pieces\":מספר_חתיכות_כולל ו-\"ate\":כמה_אכלה (עם ערכי המאכל השלם). הערכות סבירות בלבד.";
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. דברי תמיד בלשון נקבה, גם אלייך וגם על עצמך: \"שמחה לעזור\", \"רשמתי לך\", ולא בלשון זכר.אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) אם חסר מידע על כמה דברים - שאלי על כולם בהודעה אחת (אפשר כרשימה קצרה), לא שאלה אחרי שאלה. שאלי רק על מה שבאמת חסר וחשוב, אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות מיותרות. חשוב מאוד - קראי את כל ההודעה של המשתמשת עד הסוף לפני שאת שואלת שאלה כלשהי, וכבדי כל פרט שכבר נמסר: אם המשתמשת כבר ציינה כמות או מידה (גרם, כוס, כף, כפית, פרוסה) - אל תשאלי עליה שוב לעולם, קחי אותה כפי שהיא. אם כתבה '2 כפות אורז' - יש לך כבר את הכמות, אל תשאלי כמה גרם. אם כבר ציינה אופן הכנה (מבושל, מטוגן, אפוי, על הגריל, חי) - אל תשאלי עליו שוב; 'אורז מבושל' פירושו שכבר יש לך את אופן ההכנה. אם המשתמשת כתבה יחידת מידה מפורשת (כפות / כפיות) - אל תשאלי 'כפות או כפיות', קחי מה שכתבה. הכלל על כמות הוא דקדוקי ולא לפי רשימת מאכלים: שם מאכל שנכתב בלשון יחיד ובלי מספר פירושו אחד, תמיד, גם אם לא שמעת על המאכל הזה מעולם. אל תשאלי 'כמה'. זה נכון גם כשנוספו למאכל מילים נוספות - 'תפוח ירוק', 'מלפפון קטן', 'פריכית אורז', 'פרגית על הגריל', 'פרוסת לחם מלא' - הלשון עדיין יחיד וזה עדיין אחד. מותר לשאול על כמות בשני מקרים בלבד: (1) המאכל נכתב בלשון רבים בלי מספר, למשל 'שקדים', 'עגבניות', 'תותים'; (2) מאכל בתפזורת שאין לו יחידה טבעית, למשל אורז, פסטה, קוסקוס, גבינה לבנה, סלט או גרנולה, שנכתב בלי שום מידה. בכל מקרה אחר הניחי אחד והמשיכי. הכלל הזה חל על כל פריט בנפרד גם כשמנויים כמה מאכלים באותו משפט, עם פסיקים או בלי: 'פריכית עגבנייה ומלפפון' הם שלושה פריטים, אחד מכל אחד, ואין לשאול 'כמה' על אף אחד מהם. ואל תבקשי אישור על ההנחה הזאת: לא 'ביצה אחת, נכון?' ולא 'עגבנייה אחת?' - פשוט קחי אחת והמשיכי. אם צוין מספר מפורש (למשל '3 ביצים') השתמשי בו. 'ביצה קשה' פירושו ביצה אחת, ואופן ההכנה שלה כבר נמסר - אל תשאלי אם היא קשה, עין או מקושקשת. אם המשתמשת הכינה מאכל שמתחלק ליחידות (פשטידה, תבנית עוגה, סיר תבשיל, מגש וכו') - זהי זאת, והתייחסי אליו כמוצר אחד שמתחלק לחתיכות (אל תפרקי אותו לרכיבים). אם היא לא ציינה כמה חתיכות/מנות יצאו מכל המאכל וכמה חתיכות היא אכלה - שאלי את שתי השאלות בהודעה אחת. בפריט כזה החזירי את הערכים של המאכל ה**שלם** (grams ו-kcal והמאקרו של כל התבנית), והוסיפי שני שדות: pieces (מספר החתיכות הכולל) ו-ate (כמה חתיכות היא אכלה). בפריט רגיל שאינו מתחלק לחתיכות - אל תוסיפי את השדות pieces ו-ate. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. עבור מאכל שמתחלק לחתיכות הוסיפי לפריט גם \"pieces\":מספר_חתיכות_כולל ו-\"ate\":כמה_אכלה (עם ערכי המאכל השלם). הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2200, system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }], messages }),
@@ -3672,7 +3691,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             <label style={mLbl}>שם המוצר</label>
             <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="לדוגמה: חטיף חלבון" style={mInput} />
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-              <div style={{ flex: 1 }}><label style={mLbl}>{mWhole ? "כמות (לא חובה)" : "כמות שאכלת"}</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>{mWhole ? "כמות (לא חובה)" : "כמות שאכלת"}</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
             </div>
             <div style={{ margin: "16px 0 8px" }}>
@@ -3689,12 +3708,12 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               </div>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <div style={{ flex: 1 }}><label style={mLbl}>קלוריות</label><input value={mKcal} onChange={(e) => setMKcal(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
-              <div style={{ flex: 1 }}><label style={mLbl}>חלבון (ג׳)</label><input value={mProt} onChange={(e) => setMProt(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>קלוריות</label><input value={mKcal} onChange={(e) => setMKcal(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>חלבון (ג׳)</label><input value={mProt} onChange={(e) => setMProt(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-              <div style={{ flex: 1 }}><label style={mLbl}>שומן (ג׳)</label><input value={mFat} onChange={(e) => setMFat(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
-              <div style={{ flex: 1 }}><label style={mLbl}>פחמימות (ג׳)</label><input value={mCarb} onChange={(e) => setMCarb(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>שומן (ג׳)</label><input value={mFat} onChange={(e) => setMFat(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>פחמימות (ג׳)</label><input value={mCarb} onChange={(e) => setMCarb(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
             </div>
             <div style={{ marginTop: 18 }}><Btn onClick={saveManual} disabled={!mName.trim() || !(mWhole || Number(mAmount) > 0)}>הוסיפי ליומן</Btn></div>
             <Btn variant="ghost" onClick={() => setStep("method")} style={{ marginTop: 8 }}>חזרה</Btn>
@@ -4000,7 +4019,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
                     <button onClick={() => setGrams(Math.max(au.g, grams - au.g))} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                      <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                      <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                       <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                     </div>
                     <button onClick={() => setGrams(grams + au.g)} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
@@ -4716,7 +4735,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
                       <button onClick={() => setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g) })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                         <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                       </div>
                       <button onClick={() => setChosen({ ...chosen, grams: chosen.grams + au.g })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
