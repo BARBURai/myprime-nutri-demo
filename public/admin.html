@@ -144,8 +144,6 @@
     font-size:13px;color:var(--warn);background:var(--warnbg);border-radius:7px;
     padding:5px 9px;margin-top:2px;
   }
-  .coldpill{background:var(--coldbg);color:var(--cold);border-color:var(--cold-line)}
-  .dngpill{background:var(--dangerbg);color:var(--danger);border-color:transparent}
   .btn.back{display:none;margin-bottom:11px}
   /* טלפון: פחות ריווח, ובלי הכרטיס הריק שתופס חצי מסך כשלא נבחרה אף אחת. */
   @media (max-width:640px){
@@ -316,9 +314,13 @@
   }
   .warnpill{background:var(--warnbg);color:var(--warn);border-color:transparent}
   .newpill{background:var(--card-2);color:var(--ink-2);border-color:var(--line)}
-.solopill{background:#EDE7F6;color:#4A2E7A;border-color:#D6C9EE}
-  .p360pill{background:var(--pinkbg);color:var(--pink-2);border-color:var(--pink-line)}
+  /* תגי התוכנית, סגולים שניהם, כי שניהם אומרים "לאיזו תוכנית היא רשומה". */
+  .solopill{background:#EDE7F6;color:#4A2E7A;border-color:#D6C9EE}
+  .p360pill{background:#EDE7F6;color:#4A2E7A;border-color:#D6C9EE}
   .oldpill{background:var(--card-2);color:var(--ink-3);border-color:var(--line)}
+  /* אלה חייבים לשבת אחרי .grp, אחרת הוא דורס להם את הרקע ואת הצבע והם מתים. */
+  .coldpill{background:var(--coldbg);color:var(--cold);border-color:var(--cold-line)}
+  .dngpill{background:var(--dangerbg);color:var(--danger);border-color:transparent}
   .meta{color:var(--soft);font-size:14px;margin-top:5px;word-break:break-word}
   .until{margin-top:9px;font-size:15px}
   .manual{color:var(--warn);font-size:13.5px;margin-top:3px}
@@ -906,11 +908,12 @@ function teamBlock(){
   '</div>';
 }
 
-// תג התוכנית. סולו למי שיש לה, ו-360 לכל מי שרשומה ולא ביטלה. מי שביטלה אינה
-// בתוכנית, ולכן אין לה תג תוכנית אלא תג ביטול אדום.
+// תג התוכנית. סולו למי שיש לה, ו-360 לכל השאר. הוא נשאר גם למי שביטלה, לפי
+// החלטת רון: תג לא יורד, כי צריך לדעת באיזו תוכנית היא הייתה. הביטול הוא תג
+// נוסף לצידו ולא במקומו.
 function progPill(w){
   if(w.solo) return '<span class="grp solopill">סולו '+w.solo+'</span>';
-  return w.cancelled ? '' : '<span class="grp p360pill">360</span>';
+  return '<span class="grp p360pill">360</span>';
 }
 
 function render(){
@@ -928,8 +931,8 @@ function render(){
     if(APP==="old" && w.newApp) return;
     // הספירה לפני הסינון עצמו, בדיוק כמו אפליקציה חדשה מול קג'אבי, כדי שהמספר
     // שליד כל אפשרות יגיד כמה יש בה ולא כמה נשארו אחרי שכבר בחרו אותה.
-    if(w.solo===6) nS6++; else if(w.solo===12) nS12++; else if(!w.cancelled) n360++;
-    if(PROG==="360" && (w.solo || w.cancelled)) return;
+    if(w.solo===6) nS6++; else if(w.solo===12) nS12++; else n360++;
+    if(PROG==="360" && w.solo) return;
     if(PROG==="6" && w.solo!==6) return;
     if(PROG==="12" && w.solo!==12) return;
     pool.push(w);
