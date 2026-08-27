@@ -180,5 +180,65 @@ st2 = closeDays(st2, FRI);
 check("וברגע ששישי הושלם, הגביע מגיע",
   api.weekTrophyEarned(st2.checkins, START, 2, FRI) === true);
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// שאלת רון: האם שורת ההשלמה לאחור משבשת את חישוב המדליה של היום שבו לחצו עליה,
+// והאם היום שהושלם לאחור באמת נחשב כהושלם.
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("\nשורת ההשלמה לאחור, ומה היא נוגעת בו");
+
+// 1. השורה כותבת ליום הקודם ולעולם לא ליום שבו לוחצים עליה.
+check("ההשלמה נכתבת ליום הקודם בלבד",
+  /setPrevValue=\{\(id, v\) => setCheckinValue\(addDays\(selectedDate, -1\), id, v\)\}/.test(src));
+// 2. השורה מרונדרת בנפרד ואינה חלק מרשימת המשימות של היום.
+check("השורה מרונדרת בנפרד ואינה משימה של היום",
+  /\{g\.id === "move" && showMakeup && \(/.test(src));
+check("ומצב הפתיחה שלה נקרא פעם אחת ואינו חי",
+  /const \[showMakeup\] = useState\(\(\) =>/.test(src));
+
+// 3. ליום שישי אין משימת אימון כוח, ולכן אין דרך שהשורה תיכנס לספירה שלו.
+const fridayTasks = api.tasksForDate(START, FRI, false).filter((t) => !t.optional);
+check("ברשימת המשימות של שישי אין אימון כוח", !fridayTasks.some((t) => t.id === "strength"));
+
+// 4. המבחן עצמו: לסמן ולבטל את אימון הכוח של חמישי, ולראות שיום שישי לא זז.
+{
+  const st = closeDays(seedWeek(THU), FRI);
+  const friBefore = api.dayComplete(START, FRI, false, st.checkins, st.stepsByDate, st.waterByDate, st.log, TARGETS, 250, st.activityLog);
+  st.checkins[THU] = { ...st.checkins[THU], strength: true };
+  const friAfter = api.dayComplete(START, FRI, false, st.checkins, st.stepsByDate, st.waterByDate, st.log, TARGETS, 250, st.activityLog);
+  delete st.checkins[THU].strength;
+  const friUndone = api.dayComplete(START, FRI, false, st.checkins, st.stepsByDate, st.waterByDate, st.log, TARGETS, 250, st.activityLog);
+  check("המדליה של שישי אינה מושפעת מההשלמה", friBefore === true && friAfter === true && friUndone === true,
+    `לפני ${friBefore} · אחרי ${friAfter} · אחרי ביטול ${friUndone}`);
+  check("ומספר המשימות של שישי אינו משתנה",
+    api.tasksForDate(START, FRI, false).filter((t) => !t.optional).length === fridayTasks.length);
+}
+
+// 5. והכיוון השני: היום שהושלם לאחור באמת נחשב כהושלם, ורק בגלל הסימון הזה.
+{
+  const st = seedWeek(THU);
+  const thuBefore = api.dayComplete(START, THU, false, st.checkins, st.stepsByDate, st.waterByDate, st.log, TARGETS, 250, st.activityLog);
+  st.checkins[THU] = { ...st.checkins[THU], strength: true };
+  const thuAfter = api.dayComplete(START, THU, false, st.checkins, st.stepsByDate, st.waterByDate, st.log, TARGETS, 250, st.activityLog);
+  check("חמישי אינו סגור לפני ההשלמה", thuBefore === false);
+  check("וסגור אחריה", thuAfter === true);
+  // ומה שנשאר אחרי הסימון הוא בדיוק אפס משימות חסרות, כלומר ההודעה שהיא רואה נכונה.
+  const st2 = closeDays(st, FRI);
+  check("ומהרגע הזה הוא נספר גם לגביע",
+    api.weekTrophyEarned(st2.checkins, START, 2, FRI) === true);
+}
+
+// 6. מה שכן יכול לקרות, וזה מה שההודעה אמורה לומר לה: בחמישי חסרה עוד משימה.
+{
+  const st = seedWeek(THU);
+  delete st.checkins[THU].veg;                  // חסרה עוד משימה באותו יום
+  st.checkins[THU] = { ...st.checkins[THU], strength: true };
+  const closed = api.dayComplete(START, THU, false, st.checkins, st.stepsByDate, st.waterByDate, st.log, TARGETS, 250, st.activityLog);
+  check("כשחסרה בחמישי עוד משימה, ההשלמה לבדה אינה סוגרת אותו", closed === false);
+  const st2 = closeDays(st, FRI);
+  check("ואז גם אין גביע", api.weekTrophyEarned(st2.checkins, START, 2, FRI) === false);
+  check("והמסך אומר לה שחסרה שם עוד משימה", /חסרה שם עוד משימה אחת/.test(src));
+}
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
