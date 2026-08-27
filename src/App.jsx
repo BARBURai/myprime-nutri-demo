@@ -268,6 +268,8 @@ const RECENT = [
   { foodId: "chk", g: 120 }, { foodId: "oat", g: 60 }, { foodId: "cot", g: 100 },
 ];
 const MEALS = ["בוקר", "ביניים בוקר", "צהריים", "ביניים אחה״צ", "ערב", "נשנושים"];
+const DIARY_ORDER_KEY = "mp_diary_order_v1";
+function mealRank(m) { const i = MEALS.indexOf(m); return i === -1 ? MEALS.length : i; }
 const HE_DAYS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 const HE_DAYS_FULL = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 function lerpHex(a, b, t) {
@@ -607,7 +609,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.31";
+const VERSION = "6.32";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1519,6 +1521,14 @@ function PreStartScreen({ name, startDate, glow = false, onOpenGlow }) {
 
 function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onStepsHelp, onOpenContent, onOpenOnboard, catchupDue = false, onOpenCatchup, introLock = false, overlayOpen = false, glow = false, freeze = null }) {
   const dayLog = log.filter((e) => e.date === date);
+  // הרשימה מוצגת לפי סדר ההזנה, וזו ברירת המחדל. משתתפת ביקשה לראות אותה לפי
+  // הארוחה, כדי לדעת מה אכלה מתי. הבחירה נזכרת על המכשיר שלה, כי מי שמעדיפה
+  // לפי ארוחה לא צריכה ללחוץ כל יום מחדש. שינוי תצוגה בלבד: שום מספר לא זז.
+  const [byMeal, setByMeal] = useState(() => { try { return localStorage.getItem(DIARY_ORDER_KEY) === "meal"; } catch { return false; } });
+  const toggleOrder = () => setByMeal((v) => { const n = !v; try { localStorage.setItem(DIARY_ORDER_KEY, n ? "meal" : "add"); } catch {} return n; });
+  // sort יציב, ולכן בתוך כל ארוחה נשמר סדר ההזנה. ארוחה שאינה ברשימה יורדת לסוף
+  // במקום לעלות לראש, וזה מה שקורה כש-indexOf מחזיר מינוס אחת.
+  const shownLog = byMeal ? dayLog.slice().sort((a, b) => mealRank(a.meal) - mealRank(b.meal)) : dayLog;
   const consumed = dayLog.reduce((s, e) => s + (e.kcal || 0), 0);
   const dayAct = activityLog.filter((a) => a.date === date);
   const actKcal = dayAct.reduce((s, a) => s + (a.kcal || 0), 0);
@@ -1746,9 +1756,18 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           </>
         )}
 
-        <div data-tut="diarylist" style={{ fontSize: 14, fontWeight: 700, color: C.ink, margin: "16px 0 2px" }}>מה שהוזן היום</div>
+        <div data-tut="diarylist" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, margin: "16px 0 2px" }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>מה שהוזן היום</span>
+          {/* הכפתור אומר מה יקרה אם לוחצים עליו, ולא מה מוצג עכשיו. עם פריט אחד
+              אין מה לסדר, ולכן הוא לא מוצג בכלל. */}
+          {dayLog.length > 1 && (
+            <button onClick={toggleOrder} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 999, padding: "4px 11px", fontSize: 13, color: C.sub, fontFamily: fontStack, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {byMeal ? "לפי סדר ההזנה" : "לפי הארוחה"} ⇅
+            </button>
+          )}
+        </div>
         {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 16, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה - הקישי על כפתור ה־+ להוספה</div>}
-        {dayLog.map((e) => (
+        {shownLog.map((e) => (
           <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
             <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
               <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
@@ -3672,7 +3691,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             <label style={mLbl}>שם המוצר</label>
             <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="לדוגמה: חטיף חלבון" style={mInput} />
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-              <div style={{ flex: 1 }}><label style={mLbl}>{mWhole ? "כמות (לא חובה)" : "כמות שאכלת"}</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>{mWhole ? "כמות (לא חובה)" : "כמות שאכלת"}</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
             </div>
             <div style={{ margin: "16px 0 8px" }}>
@@ -3689,12 +3708,12 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               </div>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <div style={{ flex: 1 }}><label style={mLbl}>קלוריות</label><input value={mKcal} onChange={(e) => setMKcal(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
-              <div style={{ flex: 1 }}><label style={mLbl}>חלבון (ג׳)</label><input value={mProt} onChange={(e) => setMProt(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>קלוריות</label><input value={mKcal} onChange={(e) => setMKcal(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>חלבון (ג׳)</label><input value={mProt} onChange={(e) => setMProt(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-              <div style={{ flex: 1 }}><label style={mLbl}>שומן (ג׳)</label><input value={mFat} onChange={(e) => setMFat(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
-              <div style={{ flex: 1 }}><label style={mLbl}>פחמימות (ג׳)</label><input value={mCarb} onChange={(e) => setMCarb(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>שומן (ג׳)</label><input value={mFat} onChange={(e) => setMFat(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
+              <div style={{ flex: 1 }}><label style={mLbl}>פחמימות (ג׳)</label><input value={mCarb} onChange={(e) => setMCarb(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
             </div>
             <div style={{ marginTop: 18 }}><Btn onClick={saveManual} disabled={!mName.trim() || !(mWhole || Number(mAmount) > 0)}>הוסיפי ליומן</Btn></div>
             <Btn variant="ghost" onClick={() => setStep("method")} style={{ marginTop: 8 }}>חזרה</Btn>
@@ -4000,7 +4019,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
                     <button onClick={() => setGrams(Math.max(au.g, grams - au.g))} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                      <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                      <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                       <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                     </div>
                     <button onClick={() => setGrams(grams + au.g)} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
@@ -4716,7 +4735,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
                       <button onClick={() => setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g) })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                         <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                       </div>
                       <button onClick={() => setChosen({ ...chosen, grams: chosen.grams + au.g })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
