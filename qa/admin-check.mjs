@@ -811,5 +811,47 @@ console.log("\nבנק התשובות");
   check("הכפתור שנמחק ב-v5.70 באמת כבר לא קיים בשום מקום", !/data-edit="/.test(html));
 }
 
+// תוכנית סולו: שימוש באפליקציה בלבד, בלי ליווי ובלי קבוצה. החלון נמדד מתאריך
+// ההתחלה ולמשך שישה חודשים או שנה, בלי 70 הימים ובלי `חודשי גישה נוספים`.
+{
+  console.log("\nתוכנית סולו\n");
+  const back = (n) => { const d = new Date(); d.setUTCMonth(d.getUTCMonth() - n); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d.toISOString().slice(0, 10); };
+  CSV2 = [
+    'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים,SOLO6,SOLO12',
+    `972510000001,סולו,שש,s6@test.com,${back(2)} 12:00:00,FALSE,,,TRUE,`,
+    `972510000002,סולו,שתיים,s12@test.com,${back(2)} 12:00:00,FALSE,,,,TRUE`,
+    `972510000003,סולו,פגה,s6old@test.com,${back(8)} 12:00:00,FALSE,,,TRUE,`,
+    `972510000004,סולו,שתיהן,sboth@test.com,${back(8)} 12:00:00,FALSE,,,TRUE,TRUE`,
+    `972510000005,רגילה,ללא,plain@test.com,${back(2)} 12:00:00,FALSE,,,,`,
+  ].join("\n");
+  const all = (await callAdmin({ key: KEY })).body.women;
+  const at = (em) => all.find((w) => w.email === em);
+  const plus = (start, months) => { const d = new Date(start + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + months); return d.toISOString().slice(0, 10); };
+
+  check("סולו 6 מסומנת במסך", at("s6@test.com").solo === 6);
+  check("סולו 12 מסומנת במסך", at("s12@test.com").solo === 12);
+  check("אישה רגילה אינה סולו", at("plain@test.com").solo === 0);
+  check("שתי העמודות מסומנות, ומנצחת הארוכה", at("sboth@test.com").solo === 12);
+
+  check("חלון סולו 6 הוא בדיוק שישה חודשים מההתחלה, בלי 70 יום",
+    at("s6@test.com").until === plus(at("s6@test.com").start, 6), at("s6@test.com").until);
+  check("וחלון סולו 12 הוא שנה", at("s12@test.com").until === plus(at("s12@test.com").start, 12));
+  check("והחלון של אישה רגילה לא נגע", at("plain@test.com").until === at("plain@test.com").sheetEnd);
+
+  check("סולו 6 שהתחילה לפני שמונה חודשים כבר נסגרה", at("s6old@test.com").expired === true);
+  check("וסולו 6 שהתחילה לפני חודשיים פתוחה", at("s6@test.com").expired === false);
+  check("השער מסכים איתה", (await callAccess("s6@test.com")).body.allowed === true);
+  check("והשער סוגר את מי שהחלון שלה נגמר", (await callAccess("s6old@test.com")).body.reason === "expired");
+  // אישה בסולו לעולם לא תקבל אות קבוצה, ולכן בלעדי זה היא הייתה נופלת לרשימת
+  // "חסרות קבוצה" של המשרד ונשארת שם לנצח.
+  check("מי שבסולו אינה נספרת כחסרת קבוצה", at("s6@test.com").needsGroup === false);
+  // הארכה ידנית חייבת להמשיך לגבור, גם על סולו.
+  await callAdmin({ key: KEY }, "POST", { email: "s6old@test.com", until: "2030-01-01", by: "רון" });
+  const back2 = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "s6old@test.com");
+  check("הארכה ידנית גוברת גם על סולו", back2.until === "2030-01-01" && back2.expired === false);
+  check("והשער נותן לה להיכנס", (await callAccess("s6old@test.com")).body.allowed === true);
+  CSV2 = null;
+}
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);

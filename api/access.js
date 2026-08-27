@@ -81,11 +81,17 @@ function isTrue(v) { return /^\s*true\s*$/i.test(String(v || "")); }
 
 // Access window ends 70 days + N months after the (Sunday) start date, inclusive of the
 // last day. N defaults to 3 but can be overridden per participant via the sheet.
-function isExpired(startSunday, extraMonths) {
-  const months = (Number.isFinite(extraMonths) && extraMonths > 0) ? Math.floor(extraMonths) : 3;
+function isExpired(startSunday, extraMonths, solo) {
   const exp = new Date(startSunday.getTime());
-  exp.setUTCDate(exp.getUTCDate() + 70);
-  exp.setUTCMonth(exp.getUTCMonth() + months);
+  // סולו: שימוש באפליקציה בלבד, בלי ליווי ובלי קבוצה. החלון נמדד מתאריך ההתחלה
+  // ולמשך שישה חודשים או שנה, **בלי 70 הימים ובלי `חודשי גישה נוספים`**.
+  if (solo === 6 || solo === 12) {
+    exp.setUTCMonth(exp.getUTCMonth() + solo);
+  } else {
+    const months = (Number.isFinite(extraMonths) && extraMonths > 0) ? Math.floor(extraMonths) : 3;
+    exp.setUTCDate(exp.getUTCDate() + 70);
+    exp.setUTCMonth(exp.getUTCMonth() + months);
+  }
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   return today.getTime() > exp.getTime();
@@ -137,6 +143,7 @@ export default async function handler(req, res) {
   } catch (e) { /* the map is a bridge, never a gate: a Redis hiccup falls back to the file */ }
 
   let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false;
+  let solo = 0;
   try {
     // Cache-busting: Google's published CSV can serve a stale copy for a few minutes.
     // Appending a timestamp helps fetch a fresher version, and we ask fetch not to cache.
@@ -149,6 +156,7 @@ export default async function handler(req, res) {
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
     let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, emailCol = -1, headerFound = false;
+    let solo6Col = -1, solo12Col = -1;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
       cancelCol = findCol(header, ["ביטלה"]);
@@ -160,6 +168,10 @@ export default async function handler(req, res) {
       monthsCol = findCol(header, ["חודשי גישה נוספים"]);
       // Optional. Marks the women who also received the מיי פריים Glow bonus lessons.
       glowCol = findCol(header, ["בונוס איפור"]);
+      // שתי עמודות אופציונליות של תוכנית סולו, נקראות כאן בדיוק כמו במסך הניהול
+      // כדי ששניהם לא יוכלו לחלוק על אורך החלון שלה.
+      solo6Col = findCol(header, ["SOLO6"]);
+      solo12Col = findCol(header, ["SOLO12"]);
       // Read the same column the office screen reads, so the two can never disagree about
       // who a row belongs to.
       emailCol = findCol(header, ["CF_EMAIL", "מייל", "email", "אימייל"]);
@@ -182,6 +194,9 @@ export default async function handler(req, res) {
 
       if (phoneCol !== -1 && cells[phoneCol]) phone = String(cells[phoneCol]).replace(/[^\d]/g, "");
       if (glowCol !== -1) glow = /^(true|yes|1|כן|✓|v)$/i.test(String(cells[glowCol] || "").trim());
+      const isYes = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
+      if (solo12Col !== -1 && isYes(cells[solo12Col])) solo = 12;
+      else if (solo6Col !== -1 && isYes(cells[solo6Col])) solo = 6;
 
       // Start date: prefer the exact column; else first date-looking token in the row.
       if (startCol !== -1 && cells[startCol]) {
@@ -260,7 +275,7 @@ export default async function handler(req, res) {
   const startDate = startSunday ? ymd(startSunday) : null;
   const pastWindow = clerkUntil
     ? israelDay(0) > clerkUntil
-    : (startSunday && isExpired(startSunday, extraMonths));
+    : (startSunday && isExpired(startSunday, extraMonths, solo));
   if (pastWindow) {
     return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate });
   }
