@@ -726,6 +726,40 @@ const CHECKS = [
       };
     },
   },
+  {
+    // משתתפת ביקשה לראות את היומן לפי הארוחות, כדי לדעת מה אכלה מתי. הכפתור
+    // אומר מה יקרה אם לוחצים עליו, ובררת המחדל נשארת סדר ההזנה.
+    name: "היומן מתהפך לסדר הארוחות ובחזרה",
+    async run(browser, device) {
+      const log = [
+        { id: "e1", date: TODAY, meal: "ערב", name: "סלמון בדיקה", g: 100, unit: "g", source: "verified", kcal: 200, p: 20, f: 12, c: 0 },
+        { id: "e2", date: TODAY, meal: "בוקר", name: "לחם בדיקה", g: 30, unit: "g", source: "verified", kcal: 80, p: 3, f: 1, c: 15 },
+        { id: "e3", date: TODAY, meal: "צהריים", name: "אורז בדיקה", g: 150, unit: "g", source: "verified", kcal: 190, p: 4, f: 1, c: 42 },
+      ];
+      const { page, context, errors } = await openApp(browser, device, { day: 10, seed: { log } });
+      // סדר השמות ברשימה, לפי סדר האלמנטים בדף ולא לפי העין.
+      const order = async () => page.evaluate(() => {
+        const wrap = document.querySelector('[data-tut="diarylist"]');
+        if (!wrap) return [];
+        const out = [];
+        let el = wrap.nextElementSibling;
+        while (el) { const t = (el.textContent || ""); const m = t.match(/(סלמון|לחם|אורז) בדיקה/); if (m) out.push(m[1]); el = el.nextElementSibling; }
+        return out;
+      });
+      const before = await order();
+      const btn = page.getByRole("button", { name: /לפי הארוחה/ }).first();
+      const hadBtn = await btn.count();
+      if (hadBtn) { await btn.click(); await page.waitForTimeout(400); }
+      const after = await order();
+      const backBtn = await page.getByRole("button", { name: /לפי סדר ההזנה/ }).count();
+      await context.close();
+      const ok = hadBtn > 0 &&
+        before.join(",") === "סלמון,לחם,אורז" &&
+        after.join(",") === "לחם,אורז,סלמון" &&
+        backBtn > 0 && errors.length === 0;
+      return { ok, detail: `לפני ${before.join(",") || "אין"} · אחרי ${after.join(",") || "אין"} · כפתור חזרה ${backBtn} · שגיאות ${errors.length ? errors[0].slice(0, 60) : "אין"}` };
+    },
+  },
 ];
 
 /* ---------- run ---------- */

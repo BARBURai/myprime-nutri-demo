@@ -916,6 +916,25 @@ function progPill(w){
   return '<span class="grp p360pill">360</span>';
 }
 
+// קפיצה לשדה מתוך תפריט הפעולות המהירות: פותחת את הלשונית הנכונה, גוללת אליו
+// ומקיפה אותו במסגרת לשנייה.
+//
+// היא חייבת לשבת כאן ולא בתוך render. המאזין שקורא לה יושב ב-wire, ש-render
+// אינו עוטף אותה, ולכן כשהיא הייתה בפנים הוא לא ראה אותה בכלל וכל בחירה
+// בתפריט זרקה "jumpTo is not defined". זה היה שם מ-v5.70, בשקט מוחלט, כי
+// שגיאת ריצה במסך הזה אינה נתפסת בשום בדיקה שקוראת קוד או מריצה שרת.
+function jumpTo(id){
+  TAB = (id==="fld-mail"||id==="fld-name") ? "info" : (id==="fld-until"||id==="fld-cancel"||id==="fld-glow") ? "perm" : "cohort";
+  if(id==="fld-name") NAMING = SEL;
+  if(id==="fld-until") UNTILING = SEL;
+  render();
+  var t = document.getElementById(id);
+  if(!t) return;
+  t.scrollIntoView({ block:"center", behavior:"smooth" });
+  t.classList.add("lit");
+  setTimeout(function(){ t.classList.remove("lit"); }, 1500);
+}
+
 function render(){
   var q = (document.getElementById("q") ? document.getElementById("q").value : "").trim().toLowerCase();
 
@@ -1311,18 +1330,6 @@ function render(){
     rows.sort(function(a,b){ return String(b.at).localeCompare(String(a.at)); });
     return '<div class="qhead">'+rows.length+' הערות ממתינות לתשובה. עונים לאחת, היא יורדת מהתור, והבאה כאן.</div>'+
       rows.map(function(r){ return r.html; }).join("");
-  }
-
-  function jumpTo(id){
-    TAB = (id==="fld-mail"||id==="fld-name") ? "info" : (id==="fld-until"||id==="fld-cancel"||id==="fld-glow") ? "perm" : "cohort";
-    if(id==="fld-name") NAMING = SEL;
-    if(id==="fld-until") UNTILING = SEL;
-    render();
-    var t = document.getElementById(id);
-    if(!t) return;
-    t.scrollIntoView({ block:"center", behavior:"smooth" });
-    t.classList.add("lit");
-    setTimeout(function(){ t.classList.remove("lit"); }, 1500);
   }
 
   function quickActs(w){
