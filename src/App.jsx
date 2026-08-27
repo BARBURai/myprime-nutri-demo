@@ -609,7 +609,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.33";
+const VERSION = "6.34";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -977,6 +977,36 @@ function IosBarOptions() {
   );
 }
 
+// בטלפוני סמסונג קישור שנפתח מוואטסאפ נוחת בדפדפן של סמסונג ולא בכרום, ושם
+// ההתקנה נחסמת על ידי אנדרואיד עם הודעה של Google Play Protect: "אפליקציה לא
+// בטוחה נחסמה, תוכננה לגרסה ישנה יותר של Android". זו תכונה של מה שהדפדפן מייצר
+// ואין לנו שום דרך להשפיע עליה, ולכן היחיד שאפשר לעשות הוא לומר לה את זה במפורש
+// במקום להציג לה שלבים שלא יעבדו. משתתפת שלחה את הצילום ב-27 באוגוסט 2026.
+const isSamsungBrowser = () => /samsungbrowser/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
+function SamsungSwitchNote() {
+  const [copied, setCopied] = useState(false);
+  const url = typeof location !== "undefined" ? location.origin + "/" : "";
+  const copy = () => {
+    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1600); };
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done).catch(() => {}); return; }
+    try { const t = document.createElement("textarea"); t.value = url; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); done(); } catch (e) {}
+  };
+  return (
+    <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 14, padding: "14px 16px", marginBottom: 14, textAlign: "right" }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 6 }}>את נמצאת בדפדפן של סמסונג</div>
+      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, margin: "0 0 8px" }}>
+        ההתקנה מהדפדפן הזה נחסמת על ידי אנדרואיד, ומופיעה הודעה של Google Play Protect. <b>זו חסימה של הטלפון ולא תקלה באפליקציה.</b>
+      </p>
+      <p style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.65, margin: "0 0 10px", fontWeight: 600 }}>
+        פתחי את אותו קישור בדפדפן Chrome, והתקיני משם.
+      </p>
+      <button onClick={copy} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 10, padding: "8px 14px", fontSize: 14.5, color: C.brandD, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>
+        {copied ? "הקישור הועתק ✓" : "העתקת הקישור"}
+      </button>
+    </div>
+  );
+}
+
 function InstallGuideModal({ onClose }) {
   const waHref = "https://wa.me/972547304177?text=" + encodeURIComponent("היי, אני צריכה עזרה בהתקנת האפליקציה של מיי פריים");
   return (
@@ -984,6 +1014,7 @@ function InstallGuideModal({ onClose }) {
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 360, width: "100%", maxHeight: "85%", overflowY: "auto", textAlign: "right", fontFamily: fontStack }}>
         <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 4 }}>התקנה כאפליקציה במסך הבית</div>
         <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>אפשר להוסיף את מיי פריים למסך הבית כדי לפתוח אותה כמו אפליקציה רגילה, עם אייקון משלה.</p>
+        {isSamsungBrowser() && <SamsungSwitchNote />}
         <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אנדרואיד (Chrome)</div>
         <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
           <li>פתחי את האפליקציה בדפדפן Chrome.</li>
@@ -1086,6 +1117,8 @@ function InstallGate({ onSkip }) {
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
             </ol>
           </div>
+        ) : isSamsungBrowser() ? (
+          <SamsungSwitchNote />
         ) : (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "14px 16px", marginBottom: 14 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אנדרואיד (Chrome)</div>
@@ -1447,6 +1480,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 16, padding: 20, maxWidth: 340, width: "100%", maxHeight: "82%", overflowY: "auto", textAlign: "right", fontFamily: fontStack }}>
             <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 4 }}>התקנה כאפליקציה במסך הבית</div>
             <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, margin: "0 0 14px" }}>אפשר להוסיף את MyPrime למסך הבית כדי לפתוח אותה כמו אפליקציה רגילה, עם אייקון משלה.</p>
+            {isSamsungBrowser() && <SamsungSwitchNote />}
             <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>אנדרואיד (Chrome)</div>
             <ol style={{ fontSize: 15, color: C.sub, lineHeight: 1.7, margin: "0 0 14px", paddingInlineStart: 20 }}>
               <li>פתחי את האפליקציה בדפדפן Chrome.</li>
