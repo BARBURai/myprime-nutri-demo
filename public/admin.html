@@ -986,6 +986,16 @@ function render(){
   }
   list.sort(function(a,b){ return (a.first+" "+a.last).localeCompare(b.first+" "+b.last,"he"); });
 
+  // בחיפוש, מי שהכרטיס שלה פתוח ואינה בתוצאות, הכרטיס שלה נסגר. בלי זה החיפוש
+  // הביא רשימה חדשה מימין וכרטיס ישן נשאר משמאל, ורון היה צריך ללחוץ על התוצאה
+  // כדי להעלים אותו. שלוש רשימות הסינון כבר מאפסות את הבחירה בעצמן.
+  //
+  // רק בחיפוש, ובכוונה. הנפילה אחורה שמתחת מציגה כרטיס של מי שאינה ברשימה
+  // המסוננת, וזה מה שמאפשר לפתוח אישה מתוך תור המענה כשהיא במחזור אחר.
+  if(searching && SEL && !list.some(function(w){ return w.email === SEL; })){
+    SEL = ""; EDITING = ""; FREEZING = ""; STATS = "";
+  }
+
   // הפס הכהה, אחר כך סרגל אחד שבתוכו שני אזורים נפרדים: מה שדורש טיפול, ומה שרק מצמצם
   // את הרשימה. הם חולקים סרגל אבל לא נראים אותו דבר, כדי שאף אחת לא תחשוב שזה סינון.
   var nWork = missing.length + noDate.length + backSoon.length;
@@ -1418,7 +1428,7 @@ function render(){
   qEl.oninput = function(){ var v=this.selectionStart; render(); var n=document.getElementById("q"); n.focus(); n.setSelectionRange(v,v); };
 
   app.querySelectorAll("[data-m]").forEach(function(el){ el.onclick=function(){
-    MISSING=!MISSING; EDITING=""; VIEW="";
+    MISSING=!MISSING; EDITING=""; VIEW=""; SEL="";
     // Turning it on opens every cohort and preselects "ללא קבוצה", so what is on screen
     // matches what the chip promises without the clerk setting three filters by hand.
     YEAR = null; MONTH = MISSING ? "" : null; COHORT = ""; GROUP = MISSING ? "-" : "";
@@ -1435,7 +1445,7 @@ function render(){
     APP = "new"; PROG = ""; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-v]").forEach(function(el){ el.onclick=function(){
-    var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; render(); }; });
+    var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; SEL=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-copy]").forEach(function(el){ el.onclick=function(){
     copyText(el.getAttribute("data-copy"), el); }; });
   app.querySelectorAll("[data-stats]").forEach(function(el){ el.onclick=function(){
