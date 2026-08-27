@@ -60,15 +60,30 @@ export function israelDay(offsetDays) {
 }
 
 // The access window: 70 programme days plus N months of continued access (default 3).
-export function accessEnd(startSunday, extraMonths) {
-  const months = (Number.isFinite(extraMonths) && extraMonths > 0) ? Math.floor(extraMonths) : 3;
+export function accessEnd(startSunday, extraMonths, solo) {
   const exp = new Date(startSunday.getTime());
+  // סולו היא תוכנית בלי ליווי ובלי קבוצה, והחלון שלה נמדד מתאריך ההתחלה ולמשך
+  // שישה חודשים או שנה, **בלי 70 הימים ובלי `חודשי גישה נוספים`**. זה מסלול
+  // נפרד לגמרי, ולכן הוא נבדק ראשון ויוצא מכאן.
+  if (solo === 6 || solo === 12) {
+    exp.setUTCMonth(exp.getUTCMonth() + solo);
+    return exp;
+  }
+  const months = (Number.isFinite(extraMonths) && extraMonths > 0) ? Math.floor(extraMonths) : 3;
   exp.setUTCDate(exp.getUTCDate() + 70);
   exp.setUTCMonth(exp.getUTCMonth() + months);
   return exp;
 }
 
 const isTrue = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
+
+// תוכנית סולו: שימוש באפליקציה בלבד, בלי ליווי ובלי קבוצה. שתי העמודות
+// אופציונליות, והיעדרן פירושו שאף אחת אינה בסולו ושום דבר אינו משתנה.
+function soloOf(cells, col) {
+  if (col.solo12 !== -1 && isTrue(cells[col.solo12])) return 12;
+  if (col.solo6 !== -1 && isTrue(cells[col.solo6])) return 6;
+  return 0;
+}
 
 // Reads the published CSV and returns one object per registered woman.
 // `headers` reports which columns were located, so a renamed column shows up as a missing
@@ -96,6 +111,10 @@ export async function loadSheet(csvUrl) {
     // "אפליקצי" would land on that one and read as TRUE for almost everybody.
     newapp: findCol(header, ["אפליקציית תזונה", "אפליקציה תזונה", "אפליקציה חדשה", "אפליקציה"]),
     glow: findCol(header, ["בונוס איפור"]),
+    // שתי עמודות אופציונליות של תוכנית סולו. השוואה מדויקת, כמו כל השאר, ולכן
+    // SOLO6 ו-SOLO12 לעולם לא יתבלבלו ביניהן.
+    solo6: findCol(header, ["SOLO6"]),
+    solo12: findCol(header, ["SOLO12"]),
   };
 
   const women = [];
@@ -145,7 +164,9 @@ export async function loadSheet(csvUrl) {
       sheetNewApp: col.newapp !== -1 ? isTrue(cells[col.newapp]) : false,
       // מיי פריים Glow bonus lessons. Optional column: absent means nobody has it.
       glow: col.glow !== -1 ? isTrue(cells[col.glow]) : false,
-      sheetEnd: startSunday ? ymd(accessEnd(startSunday, months)) : "",
+      // 6, 12, או 0. אם שתי העמודות מסומנות מנצחת הארוכה, כי אין סיבה לקצר לה.
+      solo: soloOf(cells, col),
+      sheetEnd: startSunday ? ymd(accessEnd(startSunday, months, soloOf(cells, col))) : "",
     });
   });
 

@@ -314,6 +314,7 @@
   }
   .warnpill{background:var(--warnbg);color:var(--warn);border-color:transparent}
   .newpill{background:var(--card-2);color:var(--ink-2);border-color:var(--line)}
+.solopill{background:#EDE7F6;color:#4A2E7A;border-color:#D6C9EE}
   .oldpill{background:var(--card-2);color:var(--ink-3);border-color:var(--line)}
   .meta{color:var(--soft);font-size:14px;margin-top:5px;word-break:break-word}
   .until{margin-top:9px;font-size:15px}
@@ -1253,6 +1254,7 @@ function render(){
         '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
         (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
         (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
+      (w.solo?'<span class="grp solopill">סולו '+w.solo+'</span>':'')+
         (w.cancelled?'<span class="grp">ביטלה</span>':'')+
         (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
         (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+'</div>'+
@@ -1276,6 +1278,7 @@ function render(){
       '<span class="row1"><span class="nm">'+esc(nm)+'</span>'+
       (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
+      (w.solo?'<span class="grp solopill">סולו '+w.solo+'</span>':'')+
       (w.cancelled?'<span class="grp">ביטלה</span>':'')+
       (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
       (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+

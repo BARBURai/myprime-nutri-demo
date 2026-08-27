@@ -30,7 +30,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "6.27";
+const ADMIN_VERSION = "6.28";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -773,7 +773,7 @@ export default async function handler(req, res) {
     // months, so it is recomputed here rather than carried over from the sheet.
     const start = (ovr && ovr.start) || w.start || "";
     const sheetEnd = (ovr && ovr.start && start)
-      ? ymd(accessEnd(new Date(start + "T00:00:00Z"), w.months))
+      ? ymd(accessEnd(new Date(start + "T00:00:00Z"), w.months, w.solo))
       : (w.sheetEnd || "");
     const until = (ovr && ovr.until) || sheetEnd || "";
     const blocked = !!(ovr && ovr.blocked === "1");
@@ -842,7 +842,7 @@ export default async function handler(req, res) {
       override: (ovr && ovr.until) ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "" } : null,
       log: (ovr && Array.isArray(ovr.log)) ? ovr.log : [],
       expired: !!until && today > until,
-      needsGroup: !w.cancelled && !group && (start === thisWeek || start === nextWeek),
+      needsGroup: !w.cancelled && !group && !w.solo && (start === thisWeek || start === nextWeek),
     };
   });
 
