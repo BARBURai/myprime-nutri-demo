@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -914,6 +914,17 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+### נבדק ונמצא תקין: הגביע של הילה
+**דיווח של הילה, 22 באוגוסט 2026:** "לא ביצעתי את אימון הכוח ביום חמישי, ביצעתי אותו ביום שישי וסימנתי כאילו ביצעתי בחמישי. למרות שקיבלתי מדליה על כל הימים לא קיבלתי גביע. ואז אחרי שלחצתי על אימון הכוח גם ביום שישי פתאום הופיע הגביע."
+
+**`qa/trophy-check.mjs`, 19 בדיקות בלי רשת**, מריצה את `weekTrophyEarned` האמיתי על המסלול שלה. **הכלל עובד נכון, ואין כאן באג.**
+
+**מה שקרה: הגביע דורש את כל ששת ימי החול של השבוע סגורים, ויום שישי בכלל זה.** ברגע שהיא השלימה את חמישי, **שישי עצמו עוד לא היה סגור**, ולכן הגביע לא הגיע. כשהיא סיימה גם את שישי, הוא הופיע. **שבת אינה נדרשת, ובשבוע 1 נדרשים ימים 3 עד 6 בלבד כי היומן נפתח ביום 3.**
+
+**מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
+1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
+2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
 
 **v6.33** - **המנוע שאל "כמה?" על מאכל שנכתב ביחיד, והכלל שהיה אמור למנוע את זה היה בנוי על רשימה.** הילה: "כל פעם שאני כותבת סוג אחד של אוכל, למשל פריכית, תפוח, מלפפון, הוא שואל אותי כמה. אם אני משתמשת בלשון יחיד אז זה ברור שזה אחד". **איקי כתבה על זה שלוש פעמים מיוני.**
 
