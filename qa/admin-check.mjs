@@ -853,5 +853,78 @@ console.log("\nבנק התשובות");
   CSV2 = null;
 }
 
+console.log("\nחיפוש, תגי תוכנית ותאריך במסך הניהול");
+{
+  // הכל נמשך מ-public/admin.html ולא מועתק, כדי שעריכה שם תישבר כאן ולא תעבור בשקט.
+  const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+
+  // 1. ספרות בתוך כתובת מייל אינן מספר טלפון. "lior5066@gmail.com" חיפש את 5066
+  //    והחזיר כל אישה עם מספר בקידומת 050-66, כי אחרי ניקוי הוא מתחיל ב-5066.
+  const pk = html.match(/function phoneKey\(s\)\{[\s\S]*?\n\}/);
+  const ip = html.match(/function isPhoneQ\(q\)\{[\s\S]*?\n\}/);
+  check("isPhoneQ קיימת ב-admin.html", !!ip);
+  const phoneKey = pk ? new Function(pk[0] + "; return phoneKey;")() : () => "";
+  const isPhoneQ = ip ? new Function(ip[0] + "; return isPhoneQ;")() : () => false;
+  check("מייל שיש בו ספרות אינו נחשב טלפון", isPhoneQ("lior5066@gmail.com") === false);
+  check("שם אינו נחשב טלפון", isPhoneQ("רונית לוי") === false);
+  check("מספר מקומי נחשב טלפון", isPhoneQ("050-661-2345") === true);
+  check("מספר מהוואטסאפ העסקי נחשב טלפון", isPhoneQ("+972 54-767-6619") === true);
+  check("שתי ספרות אינן מספיקות", isPhoneQ("12") === false);
+
+  const fm = html.match(/var qIsPhone = isPhoneQ\(q\)[\s\S]*?\n    \}\);/);
+  check("מסלול החיפוש נמצא ב-admin.html", !!fm);
+  const runSearch = fm
+    ? new Function("q", "women", "phoneKey", "isPhoneQ", "var DATA={women:women},list;" + fm[0] + "return list;")
+    : () => [];
+  const WOMEN = [
+    { first: "אורלי", last: "לוי", email: "lior5066@gmail.com", phone: "972501111111" },
+    { first: "רונית", last: "כהן", email: "ronit@test.com", phone: "972506612345" },
+    { first: "דנה", last: "מזרחי", email: "dana@test.com", phone: "972507778888" },
+  ];
+  const byMail = runSearch("lior5066@gmail.com", WOMEN, phoneKey, isPhoneQ);
+  check("חיפוש לפי מייל מחזיר אותה בלבד", byMail.length === 1 && byMail[0].email === "lior5066@gmail.com",
+    byMail.map((w) => w.email).join(","));
+  const byPhone = runSearch("050-661-2345", WOMEN, phoneKey, isPhoneQ);
+  check("וחיפוש לפי טלפון ממשיך לעבוד", byPhone.length === 1 && byPhone[0].email === "ronit@test.com");
+  check("וגם בצורה שהודבקה מהוואטסאפ", runSearch("+972 50 661 2345", WOMEN, phoneKey, isPhoneQ).length === 1);
+  check("חיפוש לפי שם מחזיר אותה בלבד", runSearch("דנה", WOMEN, phoneKey, isPhoneQ).length === 1);
+
+  // 2. תג התוכנית: סולו למי שיש לה, 360 לכל מי שרשומה ולא ביטלה, וכלום למי שביטלה.
+  const pp = html.match(/function progPill\(w\)\{[\s\S]*?\n\}/);
+  check("progPill קיימת ב-admin.html", !!pp);
+  const progPill = pp ? new Function(pp[0] + "; return progPill;")() : () => "";
+  check("אישה רגילה מקבלת תג 360", /p360pill/.test(progPill({ solo: 0, cancelled: false })));
+  check("סולו 6 מקבלת סולו ולא 360", progPill({ solo: 6, cancelled: false }).indexOf("סולו 6") !== -1 &&
+    !/p360pill/.test(progPill({ solo: 6, cancelled: false })));
+  check("סולו 12 מקבלת סולו 12", progPill({ solo: 12, cancelled: false }).indexOf("סולו 12") !== -1);
+  check("מי שביטלה אינה מקבלת תג תוכנית", progPill({ solo: 0, cancelled: true }) === "");
+  check("ותג הביטול אדום בשני המקומות", (html.match(/grp dngpill">ביטלה/g) || []).length === 2);
+  check("יש סינון לפי תוכנית", /id="fProg"/.test(html) &&
+    /PROG==="6" && w\.solo!==6/.test(html) && /PROG==="12" && w\.solo!==12/.test(html) &&
+    /PROG==="360" && \(w\.solo \|\| w\.cancelled\)/.test(html));
+
+  // 3. התאריך. בורר התאריך המובנה מצייר לפי הגדרת השפה של המכשיר, ולכן אצל אחד
+  //    הוא חודש-יום ואצל אחר יום-חודש. הבדיקה נועלת שהוא לא קיים במסך בכלל.
+  check("אין במסך אף בורר תאריך של הדפדפן", html.indexOf('type="date"') === -1);
+  const dm = html.match(/function daysInMonth\(y,m\)\{[\s\S]*?\n\}/);
+  const db = html.match(/function dateBox\(em, iso\)\{[\s\S]*?\n\}/);
+  const em2 = html.match(/function esc\(s\)\{[\s\S]*?\n\}/);
+  const mo = html.match(/var HEB_MONTHS = \[[^\]]*\];/);
+  check("dateBox ו-daysInMonth קיימות", !!dm && !!db && !!em2 && !!mo);
+  const mk = dm && db && em2 && mo
+    ? new Function("today", 'var DATA={today:today};' + mo[0] + em2[0] + dm[0] + db[0] + "; return {dateBox:dateBox, daysInMonth:daysInMonth};")("2026-08-27")
+    : { dateBox: () => "", daysInMonth: () => 0 };
+  check("פברואר 2027 הוא 28 ימים", mk.daysInMonth(2027, 2) === 28);
+  check("ופברואר 2028 הוא 29", mk.daysInMonth(2028, 2) === 29);
+  const box = mk.dateBox("a@b.com", "2027-03-02");
+  check("הערך נשמר כמו קודם, YYYY-MM-DD", box.indexOf('id="d_a@b.com" value="2027-03-02"') !== -1, box.slice(0, 120));
+  check("הסדר הוא יום, חודש ואז שנה",
+    box.indexOf('id="dd_') < box.indexOf('id="dm_') && box.indexOf('id="dm_') < box.indexOf('id="dy_'));
+  check("היום הנבחר הוא 2", /<option value="2" selected>2<\/option>/.test(box));
+  check("החודש נבחר בשמו ולא במספרו", /<option value="3" selected>מרץ<\/option>/.test(box));
+  check("והשנה 2027", /<option value="2027" selected>2027<\/option>/.test(box));
+  check("31 בפברואר אינו קיים ברשימה", mk.dateBox("a@b.com", "2027-02-10").split('id="dm_')[0].indexOf('value="31"') === -1);
+}
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
