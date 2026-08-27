@@ -792,6 +792,39 @@ const CHECKS = [
       };
     },
   },
+  {
+    // בטלפוני סמסונג קישור מוואטסאפ נוחת בדפדפן של סמסונג, ושם ההתקנה נחסמת על
+    // ידי אנדרואיד. משתתפת שלחה צילום של Google Play Protect. שני הצדדים באותו
+    // תרחיש בכוונה, כי הודעה שמופיעה תמיד נראית בדיוק כמו הודעה שלא מופיעה אף פעם.
+    name: "בדפדפן של סמסונג מוצגת ההפניה לכרום, ובכרום לא",
+    async run(browser, device) {
+      if (!device.isMobile) return { ok: true, skip: true, detail: "רלוונטי לטלפון בלבד" };
+      // באייפון ההנחיות הן של ספארי ולא של כרום, ולכן הצד השני של ההשוואה אינו קיים שם.
+      if (/iphone|ipad/i.test(device.userAgent || "")) return { ok: true, skip: true, detail: "באייפון ההנחיות הן של ספארי" };
+      const SAMSUNG = "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.0.0 Mobile Safari/537.36";
+      const look = async (ua) => {
+        const context = await browser.newContext({ ...device, ...(ua ? { userAgent: ua } : {}), locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+        await stubApi(context, { startDate: startForDay(10) });
+        await context.addInitScript(() => {
+          localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
+          localStorage.removeItem("myprime_install_ack");
+        });
+        const page = await context.newPage();
+        await page.goto(BASE, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(2600);
+        const note = await page.locator("text=את נמצאת בדפדפן של סמסונג").count();
+        const chromeSteps = await page.locator("text=ודאי שאת בדפדפן Chrome").count();
+        const copyBtn = await page.getByRole("button", { name: /העתקת הקישור/ }).count();
+        await context.close();
+        return { note, chromeSteps, copyBtn };
+      };
+      const sam = await look(SAMSUNG);
+      const chr = await look(null);
+      const ok = sam.note === 1 && sam.chromeSteps === 0 && sam.copyBtn === 1 &&
+                 chr.note === 0 && chr.chromeSteps === 1;
+      return { ok, detail: `סמסונג: הודעה ${sam.note} שלבים ${sam.chromeSteps} העתקה ${sam.copyBtn} · כרום: הודעה ${chr.note} שלבים ${chr.chromeSteps}` };
+    },
+  },
 ];
 
 /* ---------- run ---------- */
