@@ -300,6 +300,8 @@
   .bankadd input{width:16px;height:16px;accent-color:var(--pink);cursor:pointer}
   .note-card textarea.field{margin-top:5px;resize:vertical;font-family:inherit}
   .lit{outline:2px solid var(--pink);outline-offset:6px;border-radius:9px}
+  /* שלוש רשימות שלנו במקום בורר התאריך של הדפדפן. ראה dateBox. */
+  .dbox{display:inline-flex;gap:5px;align-items:center}
 
   .card{
     background:var(--card);border:1px solid var(--line);border-radius:14px;
@@ -315,6 +317,7 @@
   .warnpill{background:var(--warnbg);color:var(--warn);border-color:transparent}
   .newpill{background:var(--card-2);color:var(--ink-2);border-color:var(--line)}
 .solopill{background:#EDE7F6;color:#4A2E7A;border-color:#D6C9EE}
+  .p360pill{background:var(--pinkbg);color:var(--pink-2);border-color:var(--pink-line)}
   .oldpill{background:var(--card-2);color:var(--ink-3);border-color:var(--line)}
   .meta{color:var(--soft);font-size:14px;margin-top:5px;word-break:break-word}
   .until{margin-top:9px;font-size:15px}
@@ -373,6 +376,8 @@
 // store: a change made here never touches that file, because ManyChat and the access gate
 // both depend on it. The screen therefore always shows the sheet's value next to a manual
 // change rather than replacing it.
+var PROG = "";   // סינון לפי תוכנית: "" הכל, "360", "6" או "12"
+var UNTILING = "";   // הכרטיס שבו שדה "גישה עד" פתוח לעריכה
 var KEY = "", WHO = "", DATA = null, APP = "new", YEAR = null, MONTH = null, COHORT = "", GROUP = "", SHOWCANCELLED = false, MISSING = false, EDITING = "";
 var HEB_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 function monthLabel(ym){ var p = ym.split("-"); return HEB_MONTHS[parseInt(p[1],10)-1]+" "+p[0]; }
@@ -388,13 +393,72 @@ function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){retur
 function il(d){ if(!d) return ""; var p=d.split("-"); return p[2]+"."+p[1]+"."+p[0]; }
 // מספר טלפון מנוקה: בלי פלוס, בלי רווחים, בלי מקפים, בלי 972 ובלי אפס מוביל.
 // כך "+972 54-767-6619", "054-7676619" ו-"547676619" נראים אותו דבר בחיפוש.
+// מה שהודבק נחשב מספר טלפון רק כשאין בו אותיות ואין בו שטרודל. בלי הכלל הזה כתובת
+// מייל שיש בה ספרות נקראה כמספר: "lior5066@gmail.com" חיפש את 5066, וכל אישה עם
+// מספר בקידומת 050-66 נכנסה לתוצאות, כי המספר שלה מתחיל ב-5066 אחרי ניקוי.
+function isPhoneQ(q){
+  var t = String(q == null ? "" : q).trim();
+  return /^[0-9+()\-. ]+$/.test(t) && t.replace(/[^0-9]/g, "").length >= 3;
+}
 // חיפוש שמחזיר ריק אינו תשובה. הוא חייב לומר מה בדיוק חיפש ובכמה רשומות, כדי
 // שיהיה ברור אם המספר לא הובן או שהיא פשוט לא שם.
+// התאריך נבחר בשלוש רשימות שלנו, יום חודש ושנה, ולא בבורר התאריך של הדפדפן.
+// הבורר המובנה מצייר לפי הגדרת השפה של המכשיר שיושבים עליו, ולכן אצל אחד הוא
+// חודש-יום ואצל אחר יום-חודש, ואין שום דרך להגיד לו מה לעשות. הערך עצמו נשמר
+// כמו קודם, YYYY-MM-DD בשדה מוסתר, ולכן כל מה שקורא אותו לא השתנה.
+function daysInMonth(y,m){ return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+function dateBox(em, iso){
+  var p = String(iso||"").split("-");
+  var y = parseInt(p[0],10) || parseInt(String(DATA.today).slice(0,4),10);
+  var m = parseInt(p[1],10) || 1;
+  var d = parseInt(p[2],10) || 1;
+  var y0 = Math.min(y, parseInt(String(DATA.today).slice(0,4),10));
+  var days = "", months = "", years = "", i;
+  for(i=1;i<=daysInMonth(y,m);i++) days += '<option value="'+i+'"'+(i===d?" selected":"")+'>'+i+'</option>';
+  for(i=1;i<=12;i++) months += '<option value="'+i+'"'+(i===m?" selected":"")+'>'+HEB_MONTHS[i-1]+'</option>';
+  for(i=y0;i<=y0+10;i++) years += '<option value="'+i+'"'+(i===y?" selected":"")+'>'+i+'</option>';
+  return '<input type="hidden" id="d_'+esc(em)+'" value="'+esc(iso||"")+'">'+
+    '<span class="dbox">'+
+      '<select class="field sm" style="width:66px" aria-label="יום" data-dpart="'+esc(em)+'" id="dd_'+esc(em)+'">'+days+'</select>'+
+      '<select class="field sm" style="width:100px" aria-label="חודש" data-dpart="'+esc(em)+'" id="dm_'+esc(em)+'">'+months+'</select>'+
+      '<select class="field sm" style="width:84px" aria-label="שנה" data-dpart="'+esc(em)+'" id="dy_'+esc(em)+'">'+years+'</select>'+
+    '</span>';
+}
+// מרכיב מחדש את רשימת הימים לפי החודש והשנה שנבחרו, כדי שלא יהיה 31 בפברואר,
+// וכותב את הערך לשדה המוסתר.
+function dateSync(em){
+  var ys=document.getElementById("dy_"+em), ms=document.getElementById("dm_"+em), ds=document.getElementById("dd_"+em);
+  if(!ys||!ms||!ds) return;
+  var y=parseInt(ys.value,10), m=parseInt(ms.value,10), want=parseInt(ds.value,10)||1;
+  var max=daysInMonth(y,m), i, html="";
+  if(ds.options.length !== max){
+    for(i=1;i<=max;i++) html += '<option value="'+i+'">'+i+'</option>';
+    ds.innerHTML = html;
+    ds.value = Math.min(want, max);
+  }
+  var d=parseInt(ds.value,10);
+  document.getElementById("d_"+em).value = y+"-"+(m<10?"0":"")+m+"-"+(d<10?"0":"")+d;
+}
+function dateSet(em, iso){
+  var p = String(iso).split("-");
+  var ys=document.getElementById("dy_"+em), ms=document.getElementById("dm_"+em);
+  if(!ys||!ms) return;
+  var y=parseInt(p[0],10);
+  // שנה שנוצרה מ"הוסיפי" ואינה ברשימה נוספת אליה, אחרת הבחירה הייתה מתרוקנת בשקט.
+  if(!Array.prototype.some.call(ys.options,function(o){ return parseInt(o.value,10)===y; })){
+    var o=document.createElement("option"); o.value=y; o.textContent=y; ys.appendChild(o);
+  }
+  ys.value = y;
+  ms.value = parseInt(p[1],10);
+  dateSync(em);
+  document.getElementById("dd_"+em).value = parseInt(p[2],10);
+  dateSync(em);
+}
+
 function searchMiss(q){
   var n = (DATA && DATA.women || []).length;
-  var digits = q.replace(/[^0-9]/g, "");
   var scanned = "נסרקו כל " + n + " הרשומות בגיליון.";
-  if(digits.length >= 3){
+  if(isPhoneQ(q)){
     return "לא נמצאה אף משתתפת עם המספר הזה.<div class=\"note\">חיפשתי <b class=\"mono\">" +
       esc(phoneKey(q)) + "</b>, בלי תלות בפלוס, ברווחים, במקפים, בקידומת 972 או באפס שבהתחלה. " +
       scanned + " אם היא אמורה להיות שם, <b>המספר שרשום אצלה בגיליון שונה מזה.</b></div>";
@@ -842,19 +906,32 @@ function teamBlock(){
   '</div>';
 }
 
+// תג התוכנית. סולו למי שיש לה, ו-360 לכל מי שרשומה ולא ביטלה. מי שביטלה אינה
+// בתוכנית, ולכן אין לה תג תוכנית אלא תג ביטול אדום.
+function progPill(w){
+  if(w.solo) return '<span class="grp solopill">סולו '+w.solo+'</span>';
+  return w.cancelled ? '' : '<span class="grp p360pill">360</span>';
+}
+
 function render(){
   var q = (document.getElementById("q") ? document.getElementById("q").value : "").trim().toLowerCase();
 
   // A group is a cohort AND a letter together. Every cohort runs א..ה (two to five of them),
   // so "קבוצה ב" of the January intake and "קבוצה ב" of the April intake are different
   // groups of different women. Merging them by letter alone is what produced "ב (522)".
-  var pool = [], nNew = 0, nOld = 0;
+  var pool = [], nNew = 0, nOld = 0, n360 = 0, nS6 = 0, nS12 = 0;
   DATA.women.forEach(function(w){
     if(w.cancelled && !SHOWCANCELLED) return;
     if(!w.start) return;
     if(w.newApp) nNew++; else nOld++;
     if(APP==="new" && !w.newApp) return;
     if(APP==="old" && w.newApp) return;
+    // הספירה לפני הסינון עצמו, בדיוק כמו אפליקציה חדשה מול קג'אבי, כדי שהמספר
+    // שליד כל אפשרות יגיד כמה יש בה ולא כמה נשארו אחרי שכבר בחרו אותה.
+    if(w.solo===6) nS6++; else if(w.solo===12) nS12++; else if(!w.cancelled) n360++;
+    if(PROG==="360" && (w.solo || w.cancelled)) return;
+    if(PROG==="6" && w.solo!==6) return;
+    if(PROG==="12" && w.solo!==12) return;
     pool.push(w);
   });
 
@@ -892,11 +969,10 @@ function render(){
   var searching = !!q;
   var list;
   if(searching){
-    var qDigits = q.replace(/[^0-9]/g, "");
-    var qPhone = phoneKey(q);
+    var qIsPhone = isPhoneQ(q), qPhone = phoneKey(q);
     list = DATA.women.filter(function(w){
       if((w.first+" "+w.last+" "+(w.sheetFirst||"")+" "+(w.sheetLast||"")+" "+w.email+" "+w.phone).toLowerCase().indexOf(q) !== -1) return true;
-      return qDigits.length >= 3 && phoneKey(w.phone).indexOf(qPhone) !== -1;
+      return qIsPhone && phoneKey(w.phone).indexOf(qPhone) !== -1;
     });
   } else {
     list = inCohort.filter(function(w){
@@ -952,13 +1028,19 @@ function render(){
           letters.map(function(g){ return '<option value="'+esc(g)+'"'+(GROUP===g?" selected":"")+'>קבוצה '+esc(g)+' ('+groups[g]+')</option>'; }).join("")+
           '<option value="-"'+(GROUP==="-"?" selected":"")+'>ללא קבוצה ('+noGroup+')</option>'+
         '</select></span>'+
+        (MISSING ? '' : '<span class="sel"><select id="fProg" aria-label="תוכנית">'+
+          '<option value=""'+(PROG?"":" selected")+'>כל התוכניות ('+(n360+nS6+nS12)+')</option>'+
+          '<option value="360"'+(PROG==="360"?" selected":"")+'>360 ('+n360+')</option>'+
+          '<option value="6"'+(PROG==="6"?" selected":"")+'>סולו 6 ('+nS6+')</option>'+
+          '<option value="12"'+(PROG==="12"?" selected":"")+'>סולו 12 ('+nS12+')</option>'+
+        '</select></span>')+
         (MISSING ? '' : '<span class="sel"><select id="fApp" aria-label="אפליקציה">'+
           '<option value="new"'+(APP==="new"?" selected":"")+'>אפליקציה חדשה ('+nNew+')</option>'+
           '<option value="old"'+(APP==="old"?" selected":"")+'>קג\'אבי ('+nOld+')</option>'+
           '<option value=""'+(APP===""?" selected":"")+'>כל האפליקציות ('+(nNew+nOld)+')</option>'+
         '</select></span>')+
         '<span class="chip'+(SHOWCANCELLED?" on":"")+'" data-c="1">כולל מבוטלות</span>'+
-        ((COHORT||GROUP||APP!=="new") ? '<button class="btn sm ghost" data-fclear="1">ניקוי</button>' : '')+
+        ((COHORT||GROUP||PROG||APP!=="new") ? '<button class="btn sm ghost" data-fclear="1">ניקוי</button>' : '')+
       '</div>'+
       (MISSING ? '' : appGap())+
       '</div>'))+
@@ -1137,16 +1219,22 @@ function render(){
       : '')+
     '<div id="fld-cancel">'+mcBlock(w)+'</div>'+
     (w.newApp
-      ? '<div class="edit" id="fld-until"><span>גישה עד</span>'+
-          '<input class="field" style="max-width:190px" type="date" id="d_'+esc(w.email)+'" value="'+esc(w.until||"")+'">'+
-          '<span class="adds">הוסיפי '+
-            '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
-            '<select class="field sm" style="width:100px" id="u_'+esc(w.email)+'"><option value="d">ימים</option><option value="w">שבועות</option><option value="m">חודשים</option></select>'+
-            '<button class="btn sm" data-add="1" data-for="'+esc(w.email)+'">הוסיפי</button>'+
-          '</span>'+
-          '<button class="btn p" data-save="'+esc(w.email)+'">שמירה</button>'+
-          (w.override?'<button class="btn ghost" data-clear="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
-        '</div>'+
+      ? (UNTILING === w.email
+        ? '<div class="edit" id="fld-until"><span>גישה עד</span>'+
+            dateBox(w.email, w.until || DATA.today)+
+            '<span class="adds">הוסיפי '+
+              '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
+              '<select class="field sm" style="width:100px" id="u_'+esc(w.email)+'"><option value="d">ימים</option><option value="w">שבועות</option><option value="m">חודשים</option></select>'+
+              '<button class="btn sm" data-add="1" data-for="'+esc(w.email)+'">הוסיפי</button>'+
+            '</span>'+
+            '<button class="btn p" data-save="'+esc(w.email)+'">שמירה</button>'+
+            '<button class="btn ghost" data-nountil="1">ביטול</button>'+
+          '</div>'
+        : '<div class="fld" id="fld-until"><span class="flabel">גישה עד</span><span class="fval">'+
+            '<b'+(w.expired?' class="expired"':'')+'>'+(w.until?il(w.until):"לא ידוע")+'</b>'+(w.expired?' (הסתיימה)':'')+
+            '<button class="btn sm" data-edituntil="'+esc(w.email)+'">✎ שינוי</button>'+
+            (w.override?'<button class="btn sm ghost" data-clear="'+esc(w.email)+'">חזרה לגיליון</button>':'')+
+          '</span></div>')+
         (w.override?'<div class="manual">שונה ידנית · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')
       : '<div class="note">היא מנוהלת בקג\'אבי, ולכן <b>תאריך סיום הגישה ונתוני השימוש אינם רלוונטיים כאן</b> ואינם מוצגים. כל השאר נכון גם לגביה, כי הוא נשמר במניצ\'ט ובגיליון.</div>');
   }
@@ -1215,6 +1303,7 @@ function render(){
   function jumpTo(id){
     TAB = (id==="fld-mail"||id==="fld-name") ? "info" : (id==="fld-until"||id==="fld-cancel"||id==="fld-glow") ? "perm" : "cohort";
     if(id==="fld-name") NAMING = SEL;
+    if(id==="fld-until") UNTILING = SEL;
     render();
     var t = document.getElementById(id);
     if(!t) return;
@@ -1254,8 +1343,8 @@ function render(){
         '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
         (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
         (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
-      (w.solo?'<span class="grp solopill">סולו '+w.solo+'</span>':'')+
-        (w.cancelled?'<span class="grp">ביטלה</span>':'')+
+      progPill(w)+
+        (w.cancelled?'<span class="grp dngpill">ביטלה</span>':'')+
         (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
         (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+'</div>'+
         '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+
@@ -1278,8 +1367,8 @@ function render(){
       '<span class="row1"><span class="nm">'+esc(nm)+'</span>'+
       (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
-      (w.solo?'<span class="grp solopill">סולו '+w.solo+'</span>':'')+
-      (w.cancelled?'<span class="grp">ביטלה</span>':'')+
+      progPill(w)+
+      (w.cancelled?'<span class="grp dngpill">ביטלה</span>':'')+
       (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
       (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+
       (w.notes?'<span class="grp notepill">'+(w.notes>1?w.notes+' הערות ממתינות':'הערה ממתינה')+'</span>':'')+
@@ -1337,8 +1426,10 @@ function render(){
   if(fg) fg.onchange = function(){ GROUP = this.value; SEL = ""; EDITING = ""; render(); };
   var fa = document.getElementById("fApp");
   if(fa) fa.onchange = function(){ APP = this.value; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); };
+  var fp = document.getElementById("fProg");
+  if(fp) fp.onchange = function(){ PROG = this.value; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); };
   app.querySelectorAll("[data-fclear]").forEach(function(el){ el.onclick=function(){
-    APP = "new"; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); }; });
+    APP = "new"; PROG = ""; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-v]").forEach(function(el){ el.onclick=function(){
     var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; render(); }; });
@@ -1505,13 +1596,14 @@ function render(){
     if(unit==="m") d.setUTCMonth(d.getUTCMonth()+n);
     else d.setUTCDate(d.getUTCDate() + n*(unit==="w"?7:1));
     inp.value = d.toISOString().slice(0,10);
+    dateSet(em, inp.value);
   }; });
   app.querySelectorAll("[data-cancel]").forEach(function(el){ el.onclick=function(){ EDITING=""; FREEZING=""; render(); }; });
   app.querySelectorAll("[data-save]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-save"), v=document.getElementById("d_"+em).value;
     if(!v){ alert("צריך לבחור תאריך"); return; }
     el.disabled=true; el.textContent="שומרת...";
-    save(em,{until:v}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
+    save(em,{until:v}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; UNTILING=""; return load().then(render); })
       .catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירה"; });
   }; });
   // Moving her cohort. It asks first on purpose: this is the widest change on the screen,
@@ -1630,6 +1722,12 @@ function render(){
   // next load instead of waiting minutes for Google's published sheet to refresh, and the
   // matching ManyChat tag, which is where the sheet column comes from in the first place.
   // The panel stays open, because the clerk wants to see the new state where she pressed.
+  app.querySelectorAll("[data-dpart]").forEach(function(el){ el.onchange=function(){
+    dateSync(el.getAttribute("data-dpart")); }; });
+  app.querySelectorAll("[data-edituntil]").forEach(function(el){ el.onclick=function(){
+    UNTILING = el.getAttribute("data-edituntil"); render(); }; });
+  app.querySelectorAll("[data-nountil]").forEach(function(el){ el.onclick=function(){
+    UNTILING = ""; render(); }; });
   app.querySelectorAll("[data-editname]").forEach(function(el){ el.onclick=function(){
     NAMING = el.getAttribute("data-editname"); render(); }; });
   app.querySelectorAll("[data-noname]").forEach(function(el){ el.onclick=function(){
@@ -1675,7 +1773,7 @@ function render(){
   app.querySelectorAll("[data-clear]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-clear");
     el.disabled=true;
-    save(em,{until:""}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; return load().then(render); })
+    save(em,{until:""}).then(function(r){ if(!r.ok) throw new Error(); EDITING=""; UNTILING=""; return load().then(render); })
       .catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
   }; });
 }
