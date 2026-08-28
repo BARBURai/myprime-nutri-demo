@@ -609,7 +609,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.35";
+const VERSION = "6.36";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1004,8 +1004,13 @@ function iosOtherBrowser() {
 // הם אותו דבר בדיוק: לא היא טעתה, פשוט צריך לפתוח את הקישור במקום אחר.
 function BrowserSwitchNote() {
   const [copied, setCopied] = useState(false);
-  const ios = iosOtherBrowser();
-  const sam = !ios && isSamsungBrowser();
+  // מי שכבר בתוך האפליקציה המותקנת לא תראה את ההודעה לעולם. באייפון הזהות של
+  // אפליקציה מותקנת אינה נושאת "Version/", בדיוק כמו דפדפן פנימי, ולכן בלי
+  // הסייג הזה מי שכבר התקינה ופותחת את ההנחיות מהפרופיל הייתה מקבלת הפניה
+  // להתקין מספארי. תפיסה של רון לפני ההעלאה לייצור.
+  const standalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true);
+  const ios = standalone ? "" : iosOtherBrowser();
+  const sam = !standalone && !ios && isSamsungBrowser();
   const url = typeof location !== "undefined" ? location.origin + "/" : "";
   const copy = () => {
     const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1600); };
