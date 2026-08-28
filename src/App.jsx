@@ -582,6 +582,24 @@ function remainingRequired(startDate, date, keepShabbat, checkins, stepsByDate, 
   const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog);
   return ts.filter((t) => !taskDone(t, ans, au)).length;
 }
+// מה חסר לגביע של שבוע מסוים, יום-יום. אותו מסלול בדיוק שסוגר יום ונותן מדליה,
+// ולכן אין כאן חישוב שני שיכול להתפצל ממנו. שבת אינה נדרשת, בדיוק כמו בגביע.
+function missingForWeek(week, startDate, today, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog) {
+  const out = [];
+  for (let dnum = Math.max((week - 1) * 7 + 1, 3); dnum <= week * 7; dnum++) {
+    const date = addDays(startDate, dnum - 1);
+    if (date > today) break;
+    if (parseDay(date).getUTCDay() === 6) continue;
+    if (!unlockedOn(startDate, date, CHECKIN_UNLOCK)) continue;
+    const ts = tasksForDate(startDate, date, keepShabbat).filter((t) => !t.optional);
+    if (!ts.length) continue;
+    const ans = (checkins && checkins[date]) || {};
+    const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog);
+    const miss = ts.filter((t) => !taskDone(t, ans, au)).map((t) => t.label);
+    if (miss.length) out.push({ date, tasks: miss });
+  }
+  return out;
+}
 const seedEntry = (id, date, meal, foodId, g, source = "verified") => {
   const f = FOOD_BY_ID[foodId];
   return { id, date, meal, name: f.name, g, source, ...nutritionFor(f, g) };
@@ -621,7 +639,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.45";
+const VERSION = "6.46";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5157,8 +5175,16 @@ function weekTrophyEarned(checkins, startDate, w, today) {
   return any;
 }
 
-function CollectionModal({ checkins, startDate, today, onClose }) {
+function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, stepsByDate, waterByDate, log, targets, cupMl, activityLog }) {
   const { days } = trackerStats(checkins);
+  // רק בשישי ובשבת, לפי רון. בשאר השבוע עוד יש לה זמן, וזו רק הצקה.
+  const dw = dowOf(today);
+  const endOfWeek = dw === 6 || dw === 0;
+  const week = Math.min(programWeekFor(startDate, today), 10);
+  const [missOpen, setMissOpen] = useState(false);
+  const miss = missOpen
+    ? missingForWeek(week, startDate, today, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog)
+    : [];
   return (
     <SheetShell title="ארון המדליות והגביעים" onClose={onClose}>
       <div style={{ textAlign: "center", padding: "2px 0 8px" }}>
@@ -5172,7 +5198,7 @@ function CollectionModal({ checkins, startDate, today, onClose }) {
         <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginTop: 8 }}>{days} {days === 1 ? "מדליה" : "מדליות"}</div>
         <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>כל יום שהשלמת שווה מדליה</div>
       </div>
-      <div style={{ fontSize: 14, color: C.faint, margin: "8px 0 8px" }}>הגביעים שלך</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, margin: "10px 0 8px" }}>הגביעים שלך</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
         {Array.from({ length: 10 }).map((_, i) => {
           const w = i + 1; const earned = weekTrophyEarned(checkins, startDate, w, today);
@@ -5185,7 +5211,27 @@ function CollectionModal({ checkins, startDate, today, onClose }) {
           );
         })}
       </div>
+      {endOfWeek && TRACKER_ENABLED && (
+        <div style={{ marginTop: 14 }}><Btn variant="ghost" onClick={() => setMissOpen(true)}>מה נשאר לגביע?</Btn></div>
+      )}
       <div style={{ fontSize: 13, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע נכנס לארון כשמשלימים את ימי השבוע (ראשון עד שישי). שבת לא חובה.</div>
+      {missOpen && (
+        <div onClick={() => setMissOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, maxHeight: "80%", overflowY: "auto", fontFamily: fontStack }}>
+            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 12 }}>מה נשאר לגביע?</div>
+            {miss.length === 0 ? (
+              <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65 }}>לא נשאר כלום, כל ימי השבוע הושלמו.</div>
+            ) : miss.map((d) => (
+              <div key={d.date} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 700, color: C.ink }}>יום {HE_DAYS_FULL[parseDay(d.date).getUTCDay()]}</div>
+                <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 2 }}>{d.tasks.join(" · ")}</div>
+              </div>
+            ))}
+            <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 4, fontSize: 13.5, color: C.faint, lineHeight: 1.55 }}>כשכל ימי השבוע סגורים הגביע נכנס לארון. שבת לא חובה.</div>
+            <div style={{ marginTop: 14 }}><Btn onClick={() => setMissOpen(false)}>סגירה</Btn></div>
+          </div>
+        </div>
+      )}
     </SheetShell>
   );
 }
@@ -7140,7 +7186,7 @@ export default function App() {
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
-            {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
+            {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} keepShabbat={profile.keepShabbat} stepsByDate={stepsByDate} waterByDate={waterByDate} log={log} targets={targets} cupMl={profile.cupMl} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} startGlow={glowDirect} onGlowStart={() => setGlowSeen(true)} onClose={() => { setSheet(null); setGlowDirect(false); }} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
