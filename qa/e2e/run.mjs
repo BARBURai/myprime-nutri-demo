@@ -930,13 +930,16 @@ const CHECKS = [
       await page.locator('[data-tut="cabinet"]').first().click().catch(async () => { await page.locator("text=ארון").first().click(); });
       await page.waitForTimeout(700);
       if (!(await page.locator("text=ארון המדליות והגביעים").count())) bad.push("הארון לא נפתח");
-      const btn = page.locator("text=מה נשאר לגביע?").first();
+      const btn = page.locator("text=/מה נשאר לגביע של שבוע/").first();
       if (!(await btn.count())) bad.push("הכפתור אינו מוצג בשישי");
       else {
         await btn.click();
         await page.waitForTimeout(500);
         const body = await page.evaluate(() => document.body.innerText);
         if (!body.includes("מה נשאר לגביע של שבוע 2?")) bad.push("הכותרת אינה נוקבת בשבוע");
+        // כפתור הסגירה חייב להיות נראה בלי לגלול, אחרת החלונית נראית כאילו נחתכה
+        const seen = await page.evaluate(() => { const b = Array.from(document.querySelectorAll("button")).find((x) => x.innerText.trim() === "סגירה"); if (!b) return false; const r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; });
+        if (!seen) bad.push("כפתור הסגירה אינו נראה");
         if (!body.includes("יום חמישי · 27.08")) bad.push("היום החסר או התאריך שלו אינם מופיעים");
         if (!body.includes("אימון כוח")) bad.push("המשימה החסרה אינה מופיעה");
         if (body.includes("יום רביעי")) bad.push("יום שהושלם מופיע ברשימה");

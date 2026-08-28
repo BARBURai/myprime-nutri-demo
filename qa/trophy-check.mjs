@@ -273,7 +273,11 @@ console.log("\nמה נשאר לגביע");
 
 console.log("\nהמסך עצמו");
 check("הכפתור מוצג בשישי ובשבת בלבד", /const endOfWeek = dw === 6 \|\| dw === 0;/.test(src));
-check("הכותרת נוקבת בשבוע שעליו היא מדברת", /מה נשאר לגביע של שבוע \{week\}\?/.test(src));
+check("הכותרת נוקבת בשבוע שעליו היא מדברת", (src.match(/מה נשאר לגביע של שבוע \{week\}\?/g) || []).length === 2);
+check("וגם הכפתור עצמו", /<Btn variant="ghost" onClick=\{\(\) => setMissOpen\(true\)\}>מה נשאר לגביע של שבוע \{week\}\?<\/Btn>/.test(src));
+check("הרשימה גוללת וההסבר והסגירה נשארים במקומם",
+  /<div style=\{\{ overflowY: "auto", flex: 1, minHeight: 0 \}\}>/.test(src.slice(src.indexOf("מה נשאר לגביע של שבוע {week}?")))
+  && /marginTop: 14, flexShrink: 0 \}\}><Btn onClick=\{\(\) => setMissOpen\(false\)\}>סגירה/.test(src));
 check("והשבוע הוא זה של היום עצמו", /const week = Math\.min\(programWeekFor\(startDate, today\), 10\);/.test(src));
 check("ליד כל יום מופיע התאריך שלו", /pad2\(parseDay\(d\.date\)\.getUTCDate\(\)\)\}\.\{pad2\(parseDay\(d\.date\)\.getUTCMonth\(\) \+ 1\)/.test(src));
 check("וכשלא חסר כלום נאמר את זה במפורש", src.includes("לא נשאר כלום, כל ימי השבוע הושלמו."));
