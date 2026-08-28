@@ -640,7 +640,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.51";
+const VERSION = "6.52";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5179,7 +5179,11 @@ function weekTrophyLevel(checkins, startDate, w, today) {
     if (!(checkins[date] && checkins[date]._done)) missed++;
   }
   if (!any) return null;
-  return missed === 0 ? "gold" : missed === 1 ? "silver" : null;
+  if (missed === 0) return "gold";
+  // **כסף מוכרע רק כשהשבוע באמת נגמר.** בשישי עצמו היא עדיין יכולה למלא את
+  // שישי ולקבל זהב, ולכן כסף שנפסק שם היה מניח מראש שהיא לא תגיע. רון:
+  // "מי אמר שזה מה שיקרה? יגיע שישי, אמלא את שישי, אקבל זהב."
+  return missed === 1 && today > fri ? "silver" : null;
 }
 function weekTrophyEarned(checkins, startDate, w, today) {
   const fri = addDays(startDate, (w - 1) * 7 + 5);
@@ -5620,6 +5624,30 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
   ];
   const emptyState = <div style={{ textAlign: "center", color: C.sub, padding: "24px 12px", lineHeight: 1.7 }}>עוד אין נתונים לשבוע הזה.<br />ברגע שתתחילי למלא, הסיכום יופיע כאן.</div>;
   const hasData = (data.avgs && Object.keys(data.avgs).length > 0) || (data.counts && Object.keys(data.counts).length > 0) || !!data.journalDays;
+  // כמה ימים בשבוע יש בהם דיווח כלשהו. סימן אחד בשבוע הספיק כדי לפתוח את כל טקסט
+  // השבח, ואז הוא בירך אותה על שבוע מוצלח ומיד מנה שש שורות של "עוד לא דיווחת".
+  // רון, 28 באוגוסט 2026: "אין לזה קשר למציאות."
+  let reportedDays = 0;
+  for (let dnum = (week - 1) * 7 + 1; dnum <= week * 7; dnum++) {
+    const d = addDays(startDate, dnum - 1);
+    if (d > today) break;
+    const ans = checkins[d] || {};
+    const any = Object.keys(ans).some((k) => k !== "_done")
+      || ((stepsByDate && stepsByDate[d]) > 0)
+      || (waterMlOf(waterByDate ? waterByDate[d] : 0) > 0)
+      || (log || []).some((e) => e.date === d);
+    if (any) reportedDays++;
+  }
+  const thinWeek = hasData && reportedDays < 3;
+  // בקול המערכת ובלי חתימה של ענת: זה חישוב שלנו ולא משהו שהיא אמרה. ובלי
+  // "לא מילאת" ובלי שאלה, לפי החלטת רון.
+  const thinState = (
+    <div style={{ background: C.bg, borderRadius: 14, padding: "18px 16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
+      <div style={{ fontWeight: 800, marginBottom: 8 }}>עוד אין מספיק נתונים לסיכום השבועי</div>
+      <div style={{ color: C.sub }}>הסיכום נבנה ממה שמילאת ביומן המעקב, והשבוע יש דיווח {reportedDays === 1 ? "מיום אחד בלבד" : `מ${sumDays(reportedDays)} בלבד`}.</div>
+      <div style={{ color: C.sub, marginTop: 8 }}>אפשר להשלים ימים שעברו דרך סרגל הימים שלמעלה, והסיכום יופיע.</div>
+    </div>
+  );
   const intro = WK_INTRO[week] || [];
   const outro = WK_OUTRO[week] || { lines: [] };
   const taskLines = (WK_TASKS[week] || []).map((k) => summaryTaskLine(k, week, data, fasting)).filter(Boolean);
@@ -5633,7 +5661,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
   return (
     <SheetShell title={`סיכום שבוע ${week}`} onClose={onClose} className="no-textscale">
       {wk1 ? (
-        !wk1HasData ? emptyState : (
+        !wk1HasData ? emptyState : thinWeek ? thinState : (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
             {titleEl}
             {wk1Lines.map((ln, i) => (<div key={i} style={{ marginBottom: 8 }}>{ln}</div>))}
@@ -5642,7 +5670,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
             {achievementsEl}
           </div>
         )
-      ) : !hasData ? emptyState : (
+      ) : !hasData ? emptyState : thinWeek ? thinState : (
         <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
           {titleEl}
           {intro.map((p, i) => (<div key={`i${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
@@ -6297,7 +6325,7 @@ export default function App() {
   const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
   const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
   const [checkins, setCheckins] = useState(saved?.checkins || {});
-  const celebRef = useRef({ mounted: false, trophies: 0 });
+  const celebRef = useRef({ mounted: false, trophies: 0, golds: 0 });
   const [cheerTrophyWeek, setCheerTrophyWeek] = useState(1);
   const [cheerTrophyLevel, setCheerTrophyLevel] = useState("gold");
   const [goalAckWeek, setGoalAckWeek] = useState(saved?.goalAckWeek || 0);
@@ -6846,11 +6874,11 @@ export default function App() {
       }
     }
     if (changed) setCheckins(next);
-    let tcount = 0, maxW = 0, maxLevel = null;
-    for (let w = 1; w <= 10; w++) { const lv = weekTrophyLevel(next, profile.startDate, w, today); if (lv) { tcount++; maxW = w; maxLevel = lv; } }
-    if (!celebRef.current.mounted) { celebRef.current = { mounted: true, trophies: tcount }; return; }
-    const newTrophy = tcount > celebRef.current.trophies;
-    if (newTrophy) celebRef.current.trophies = tcount;
+    let tcount = 0, gcount = 0, maxW = 0, maxLevel = null;
+    for (let w = 1; w <= 10; w++) { const lv = weekTrophyLevel(next, profile.startDate, w, today); if (lv) { tcount++; if (lv === "gold") gcount++; maxW = w; maxLevel = lv; } }
+    if (!celebRef.current.mounted) { celebRef.current = { mounted: true, trophies: tcount, golds: gcount }; return; }
+    const newTrophy = tcount > celebRef.current.trophies || gcount > (celebRef.current.golds || 0);
+    if (newTrophy) { celebRef.current.trophies = tcount; celebRef.current.golds = gcount; }
     if (!profile.hideRewards) {
       if (newTrophy) { setCheerTrophyWeek(maxW); setCheerTrophyLevel(maxLevel); setSheet("trophyCheer"); }
       else if (celebrate) setSheet("checkinCheer");
