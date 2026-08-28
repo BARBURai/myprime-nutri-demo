@@ -846,6 +846,50 @@ const CHECKS = [
     },
   },
   {
+    // רון: "לחיצה על שאלות ותשובות ועזרה צריכה להוביל ישר לשאלות והתשובות, ואז
+    // בסוף השאלות והתשובות שיהיה קו מפריד ומתחתיו מחיקת כל הנתונים והתנתקות."
+    // ובאותה שיחה: "כל הטקסטים האפורים... אני רוצה אותם שחורים."
+    name: "השורה בפרופיל פותחת ישר את השאלות והתשובות, ובתחתיתן פעולות החשבון",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const bad = [];
+      await page.locator("text=פרופיל").last().click();
+      await page.waitForTimeout(700);
+      // הטקסט המשני בפרופיל צריך להיות שחור כמו הראשי, בלי שום אפור.
+      const grey = await page.evaluate(() => {
+        const bads = [];
+        document.querySelectorAll("div,span").forEach((el) => {
+          if (el.children.length) return;
+          const c = getComputedStyle(el).color;
+          if (c === "rgb(139, 115, 122)" || c === "rgb(187, 167, 172)") bads.push((el.innerText || "").slice(0, 20));
+        });
+        return bads.slice(0, 3);
+      });
+      if (grey.length) bad.push("נשאר טקסט אפור: " + grey.join(" | "));
+
+      await page.locator("text=שאלות, תשובות ועזרה").first().click();
+      await page.waitForTimeout(700);
+      if (!(await page.locator("text=כל מה שכדאי לדעת על השימוש").count())) bad.push("המסך לא נפתח בהקשה אחת");
+      if (await page.locator("text=שאלות ותשובות נפוצות").count()) bad.push("שורת הביניים עדיין קיימת");
+
+      const reset = page.locator("text=מחיקת כל הנתונים והתחלה מחדש").first();
+      const out = page.locator("text=התנתקות מהמכשיר הזה").first();
+      if (!(await reset.count())) bad.push("מחיקת הנתונים אינה בתוך המסך");
+      if (!(await out.count())) bad.push("ההתנתקות אינה בתוך המסך");
+      if (await out.count()) {
+        await out.scrollIntoViewIfNeeded();
+        await out.click();
+        await page.waitForTimeout(500);
+        if (!(await page.locator("text=להתנתק מהמכשיר?").count())) bad.push("חלונית האישור לא נפתחה");
+        const cancel = page.getByRole("button", { name: "ביטול" }).first();
+        if (await cancel.count()) await cancel.click();
+        await page.waitForTimeout(400);
+      }
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
     // בקשה של הילה: "כדאי להוסיף חיפוש במאכלים האחרונים שאכלתי." ההחלטה של רון:
     // החיפוש חוצה את שתי הלשוניות, כי מי שמחפשת במועדפים ולא מוצאת לא תחשוב
     // להחליף לשונית ולחפש שוב. שני הצדדים באותו תרחיש בכוונה: שהחיפוש מוצא בשתי

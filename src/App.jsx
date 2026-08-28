@@ -596,7 +596,11 @@ function initWeights(currentKg, startDate) {
    THEME - feminine rose palette
    ============================================================ */
 const C = {
-  bg: "#FAF3F4", panel: "#FFFFFF", ink: "#3A2B30", sub: "#8B737A", faint: "#BBA7AC",
+  // רון, 28 באוגוסט 2026: "כל הטקסטים האפורים האלה... לא מספיק שהם קטנים הם גם
+  // אפרפרים, וזה לא מתאים לקהל היעד שלנו. אני רוצה אותם שחורים." לכן sub ו-faint
+  // הם אותו שחור כמו ink, וההיררכיה נשמרת בגודל הפונט ובמשקל בלבד. זו אותה החלטה
+  // שכבר התקבלה על מסך הניהול ב-v4.96.
+  bg: "#FAF3F4", panel: "#FFFFFF", ink: "#3A2B30", sub: "#3A2B30", faint: "#3A2B30",
   line: "#F1E4E7",
   brand: "#D45D79", brandD: "#A8425C", brandBg: "#FBE9EE",
   macroP: "#7E4FB5", proteinTrack: "#EBE1F7", macroF: "#E0986A", macroC: "#A87BB5",
@@ -609,7 +613,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.41";
+const VERSION = "6.42";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2271,19 +2275,16 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, hasFutureEntries, onClearFuture }) {
+function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const [showLossStop, setShowLossStop] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const [confirmLogout, setConfirmLogout] = useState(false);
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   // The goal only exists from week 2 onward, so before that there is nothing to edit.
   const stepGoalEditable = (programWeek || 1) >= 2;
   const [baseOpen, setBaseOpen] = useState(false);
   const [dietOpen, setDietOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
   // Already installed to the home screen (or on desktop) - the install guide is redundant there.
   const isStandalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true) || !(typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || ""));
   const [newSens, setNewSens] = useState("");
@@ -2531,35 +2532,18 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         </div>)}
       </div>
 
-      {/* Help - questions, install guide and the account actions together. */}
-      <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
-        <div onClick={() => setHelpOpen(!helpOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+      {/* Help - הקשה אחת נכנסת לשאלות ותשובות. פעולות החשבון יושבות בתחתית המסך ההוא. */}
+      <div style={{ background: C.bg, borderRadius: 14, padding: "2px 14px", marginBottom: 8 }}>
+        <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", cursor: "pointer" }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות, תשובות ועזרה</span>
-          <ChevronDown size={20} color={C.sub} style={{ transform: helpOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+          <ChevronLeft size={18} color={C.faint} />
         </div>
-        {helpOpen && (<div style={{ marginTop: 6 }}>
-          <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
-            <span style={{ fontSize: 15.5, fontWeight: 600, color: C.ink }}>שאלות ותשובות נפוצות</span>
+        {!isStandalone && (
+          <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 17 }}>📲</span> התקנת האפליקציה על הטלפון</span>
             <ChevronLeft size={18} color={C.faint} />
           </div>
-          {!isStandalone && (
-            <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15.5, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 17 }}>📲</span> התקנת האפליקציה על הטלפון</span>
-              <ChevronLeft size={18} color={C.faint} />
-            </div>
-          )}
-          {hasFutureEntries && (
-            <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 2 }}>
-              <Btn variant="ghost" onClick={() => onClearFuture && onClearFuture()} style={{ color: C.sub }}>ניקוי נתונים בתאריכים עתידיים</Btn>
-              <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>מוחק יומן, צעדים ומים בתאריכים שאחרי היום בלבד. המועדפים, המשקלים וההישגים נשמרים.</div>
-            </div>
-          )}
-          <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 2 }}>
-            <Btn variant="ghost" onClick={() => setConfirmReset(true)} style={{ color: C.sub }}>מחיקת כל הנתונים והתחלה מחדש</Btn>
-          </div>
-          <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmLogout(true)} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
-          <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>משחרר את המכשיר הזה ומחזיר למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב עם המייל.</div>
-        </div>)}
+        )}
       </div>
 
       <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
@@ -2625,26 +2609,6 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
             <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>את עדכון המשקל השוטף עושים בדוח, לא כאן. השדה הזה הוא הנתון שאיתו התחלת או היעד שלך. למעקב אחרי המשקל בפועל - היכנסי לדוח ולחצי "הזיני משקל".</div>
             <Btn onClick={confirmWeight}>אני רוצה לשנות בכל זאת</Btn>
             <Btn variant="ghost" onClick={() => setPendingWeight(null)} style={{ marginTop: 8 }}>צאי בלי לשנות</Btn>
-          </div>
-        </div>
-      )}
-      {confirmReset && (
-        <div onClick={() => setConfirmReset(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>למחוק הכל ולהתחיל מחדש?</div>
-            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>פעולה זו תמחק את כל מה שהזנת במכשיר הזה - יומן האוכל, המשקל, הצעדים והכל - ותחזיר אותך למסך ההתחלה. אי אפשר לבטל את זה.{profile.backup?.enabled ? " אם הפעלת גיבוי, הנתונים שמורים אצלנו ותוכלי לשחזר עם הקוד שלך." : ""}</div>
-            <Btn onClick={() => { setConfirmReset(false); onReset(); }} style={{ background: "#D7263D" }}>כן, מחקי והתחילי מחדש</Btn>
-            <Btn variant="ghost" onClick={() => setConfirmReset(false)} style={{ marginTop: 8 }}>ביטול</Btn>
-          </div>
-        </div>
-      )}
-      {confirmLogout && (
-        <div onClick={() => setConfirmLogout(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>להתנתק מהמכשיר?</div>
-            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>תתנתקי מהמכשיר הזה ותחזרי למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב בכל רגע עם המייל שלך.</div>
-            <Btn onClick={() => { setConfirmLogout(false); onLogout(); }}>כן, התנתקי</Btn>
-            <Btn variant="ghost" onClick={() => setConfirmLogout(false)} style={{ marginTop: 8 }}>ביטול</Btn>
           </div>
         </div>
       )}
@@ -5823,7 +5787,7 @@ const FAQ_ITEMS = [
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
   // שש נשים שאלו את זה. מוצגת אך ורק עד שמשימת החלבון נפתחת, כי משם והלאה
   // הטבעת קיימת ביומן והשאלה עונה על עצמה. החלטה של רון.
-  { q: "למה אני לא רואה כמה חלבון ופחמימות אכלתי כל יום?", a: "מתחת לכל מאכל שרשמת ביומן מופיע הפירוט שלו: חלבון, שומן ופחמימות. זה נמצא שם מהיום הראשון.\n\nהסיכום היומי של החלבון, פחמימות ושומנים יופיע החל משבוע 3, יחד עם התחלת משימת החלבון.\n\nעד אז אנחנו מתמקדות במה שקשור במשימות הקיימות, ומוסיפים את הנתונים הרלוונטיים בהתאם למשימות שנפתחות.", untilMacro: true },
+  { q: "למה אני לא רואה כמה חלבון ופחמימות אכלתי כל יום?", a: "מתחת לכל מאכל שרשמת ביומן מופיע הפירוט שלו: חלבון, שומן ופחמימות. זה נמצא שם מהיום הראשון.\n\nהסיכום היומי של החלבון, השומן והפחמימות יופיע החל משבוע 3, יחד עם התחלת משימת החלבון.\n\nעד אז אנחנו מתמקדות במה שקשור למשימות הקיימות, ומוסיפות את הנתונים הרלוונטיים בהתאם למשימות שנפתחות.", untilMacro: true, b: "הסיכום היומי" },
   { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
   { q: "כמה קלוריות מותר לי לאכול היום?", a: "היעד הקלורי היומי מחושב לפי הגיל, המשקל, הגובה ורמת הפעילות שלך, ומופיע בעיגול הקלוריות ('מתוך ...'). אפשר לראות אותו גם במסך הפרופיל." },
   { q: "שכחתי להזין יום שלם - מה עושים?", a: "אפשר לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך, ולמלא בדיעבד." },
@@ -5832,19 +5796,29 @@ const FAQ_ITEMS = [
   { q: "למה משימות חדשות מופיעות לאורך התוכנית?", a: "המשימות נפתחות בהדרגה כדי לא להעמיס בבת אחת. כל כמה ימים מצטרפת משימה חדשה, צעד אחרי צעד." },
 ];
 
-function FaqModal({ onClose, onStartTour, startDate }) {
+// מדגיש ביטוי אחד בתוך תשובה. הטקסט עצמו נשאר מחרוזת אחת, כי אותה מחרוזת בדיוק
+// יושבת גם בבנק התשובות של המשרד, ובדיקה משווה ביניהן מילה במילה.
+function withBold(text, phrase) {
+  if (!phrase) return text;
+  const i = String(text).indexOf(phrase);
+  if (i < 0) return text;
+  return [text.slice(0, i), <b key="b">{phrase}</b>, text.slice(i + phrase.length)];
+}
+function FaqModal({ onClose, onStartTour, startDate, onReset, onLogout, hasFutureEntries, onClearFuture, backupOn }) {
   const [open, setOpen] = useState(-1);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const topics = TIPS.filter((t) => t.key === "cal");
   // שאלה שמסומנת untilMacro יורדת מהרשימה ברגע שמשימת החלבון נפתחה.
   const macroOpen = unlockedOn(startDate, TODAY, MACRO_UNLOCK);
   const items = FAQ_ITEMS.filter((f) => !f.untilMacro || !macroOpen);
-  const Item = ({ q, a, guide, i }) => (
+  const Item = ({ q, a, guide, b, i }) => (
     <div onClick={() => setOpen(open === i ? -1 : i)} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 13px", marginBottom: 8, cursor: "pointer" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 15.5, fontWeight: 600, color: C.ink }}>{q}</span>
         <ChevronDown size={18} color={C.sub} style={{ flexShrink: 0, transform: open === i ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
       </div>
-      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8, whiteSpace: "pre-line" }} onClick={(e) => e.stopPropagation()}>{a}{guide && <StepGuideLink style={{ marginTop: 10 }} />}</div>}
+      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8, whiteSpace: "pre-line" }} onClick={(e) => e.stopPropagation()}>{withBold(a, b)}{guide && <StepGuideLink style={{ marginTop: 10 }} />}</div>}
     </div>
   );
   return (
@@ -5855,10 +5829,41 @@ function FaqModal({ onClose, onStartTour, startDate }) {
         {onStartTour
           ? <button onClick={onStartTour} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: "none", borderRadius: 12, padding: "13px", marginBottom: 14, background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={17} /> סיור באפליקציה <span style={{ fontWeight: 400, fontSize: 13, opacity: 0.9 }}>(מעבר לשבוע ראשון, יום שלישי)</span></button>
           : <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 13px", marginBottom: 14, fontSize: 14, color: C.brandD, lineHeight: 1.6, textAlign: "center" }}>הסיור המודרך באפליקציה ייפתח כשהתוכנית שלך מתחילה 💜</div>}
-        {items.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} guide={f.guide} i={i} />)}
+        {items.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} guide={f.guide} b={f.b} i={i} />)}
         <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: "16px 0 8px" }}>מסכים באפליקציה</div>
         {topics.map((t, j) => <Item key={`t${j}`} q={t.title} a={t.text} i={100 + j} />)}
+        {hasFutureEntries && (
+          <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 14, marginTop: 18 }}>
+            <Btn variant="ghost" onClick={() => onClearFuture && onClearFuture()} style={{ color: C.sub }}>ניקוי נתונים בתאריכים עתידיים</Btn>
+            <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>מוחק יומן, צעדים ומים בתאריכים שאחרי היום בלבד. המועדפים, המשקלים וההישגים נשמרים.</div>
+          </div>
+        )}
+        <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 14, marginTop: hasFutureEntries ? 14 : 18 }}>
+          <Btn variant="ghost" onClick={() => setConfirmReset(true)} style={{ color: C.sub }}>מחיקת כל הנתונים והתחלה מחדש</Btn>
+        </div>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmLogout(true)} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
+        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>משחרר את המכשיר הזה ומחזיר למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב עם המייל.</div>
       </div>
+      {confirmReset && (
+        <div onClick={() => setConfirmReset(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>למחוק הכל ולהתחיל מחדש?</div>
+            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>פעולה זו תמחק את כל מה שהזנת במכשיר הזה - יומן האוכל, המשקל, הצעדים והכל - ותחזיר אותך למסך ההתחלה. אי אפשר לבטל את זה.{backupOn ? " אם הפעלת גיבוי, הנתונים שמורים אצלנו ותוכלי לשחזר עם הקוד שלך." : ""}</div>
+            <Btn onClick={() => { setConfirmReset(false); onReset(); }} style={{ background: "#D7263D" }}>כן, מחקי והתחילי מחדש</Btn>
+            <Btn variant="ghost" onClick={() => setConfirmReset(false)} style={{ marginTop: 8 }}>ביטול</Btn>
+          </div>
+        </div>
+      )}
+      {confirmLogout && (
+        <div onClick={() => setConfirmLogout(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>להתנתק מהמכשיר?</div>
+            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>תתנתקי מהמכשיר הזה ותחזרי למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב בכל רגע עם המייל שלך.</div>
+            <Btn onClick={() => { setConfirmLogout(false); onLogout(); }}>כן, התנתקי</Btn>
+            <Btn variant="ghost" onClick={() => setConfirmLogout(false)} style={{ marginTop: 8 }}>ביטול</Btn>
+          </div>
+        </div>
+      )}
     </SheetShell>
   );
 }
@@ -7035,7 +7040,7 @@ export default function App() {
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={profile.weightKg} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
             </div>
             {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
                 stayed tappable, rode up with the keyboard eating the space above it, and
@@ -7050,7 +7055,7 @@ export default function App() {
                 return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
               {(introLock || preStart)
-                ? <button data-tut="nav-fab" onClick={() => setLockMsg("plus")} aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: C.faint, opacity: 0.55, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
+                ? <button data-tut="nav-fab" onClick={() => setLockMsg("plus")} aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: "#BBA7AC", opacity: 0.55, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
                 : <button data-tut="nav-fab" onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>}
               {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
@@ -7077,7 +7082,7 @@ export default function App() {
               </div>
             )}
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
-            {sheet === "faq" && <FaqModal startDate={profile.startDate} onClose={() => setSheet(null)} onStartTour={preStart ? null : () => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
+            {sheet === "faq" && <FaqModal startDate={profile.startDate} onReset={resetDemo} onLogout={logoutDevice} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} backupOn={!!profile.backup?.enabled} onClose={() => setSheet(null)} onStartTour={preStart ? null : () => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
             {sheet === "backup" && <BackupModal backup={profile.backup} gateEmail={gateEmail} busy={bkBusy} onEnable={enableBackup} onBackupNow={backupNow} onResetCode={resetBackupCode} onClose={() => setSheet(null)} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} autoFocusInput={!tour} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
