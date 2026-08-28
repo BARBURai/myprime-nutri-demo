@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.42** · עודכן: 28 באוגוסט 2026
+**גרסה נוכחית: v6.43** · עודכן: 28 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -102,7 +102,7 @@ npm run lint || true   # אם מוגדר
 ```bash
 grep -c "<TutorialOverlay" src/App.jsx                            # חייב 2
 grep -c "AddModal state={modal}" src/App.jsx                      # חייב 1
-grep -o 'sheet === "[a-zA-Z]*"' src/App.jsx | sort -u | wc -l     # חייב 24
+grep -o 'sheet === "[a-zA-Z]*"' src/App.jsx | sort -u | wc -l     # חייב 25
 grep -c '"guide":' src/content/data.js                            # חייב 1
 grep -c '{favPrompt && (' src/App.jsx                             # חייב 1
 grep -c '<NotesFab' src/App.jsx                                   # חייב 1
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -384,18 +384,12 @@ node qa/e2e/admin.mjs      # מסך הניהול, בדפדפן אמיתי. רא�
 
 **`prompt-sync-check.mjs` הוא הבדיקה הכי חשובה מביניהן**, כי היא מוודאת שההעתק של ההנחיות ב-`qa/run-qa.mjs` עדיין זהה ל-`src/App.jsx`. **בלעדיה שכבה 2 בודקת אפליקציה שלא קיימת.** ראה למטה.
 
-### נפתח ונשאר פתוח במכוון: הקצב 500 שנעלם מהרשימה למי שקרובה לרף
-**החלטה של רון, 22 באוגוסט 2026: להשאיר כמו שזה.** התקרה של v6.01 אינה מציעה 500 למי שבתוך 5 ק״ג מהקו, **ולכן אישה קיימת שנמצאת שם ובחרה 500 תראה בפרופיל רשימה בלי 500, ו-250 ייראה מסומן.**
+### נסגר ב-v6.43: הקצב 500 שנעלם מהרשימה למי שקרובה לרף
+**רון, 28 באוגוסט 2026: "אני החלטתי להשאיר דבר כזה? אין לי בעיה שתהיה ב-250 בלבד."**
 
-**היעד הקלורי שלה לא זז, והיא ממשיכה על 500 עד שתבחר אחרת.** הפגם הוא בתצוגה בלבד.
+**הרישום הקודם כאן אמר שזו החלטה שלו להשאיר, וזה לא היה מדויק.** מה שהיה פתוח: התקרה של v6.01 הפסיקה להציע 500 למי שבתוך 5 ק״ג מהקו, **אבל מי שכבר בחרה 500 המשיכה לקבל את הגירעון המלא.** הרשימה בפרופיל אמרה דבר אחד והיעד הקלורי אמר אחר.
 
-**מי שנכנסת לזה:** BMI 20 עד כ-22, **ובחרה דווקא את הקצב המהיר ביותר.** בתוכנית שנשים מצטרפות אליה כדי לרדת במשקל זה שילוב נדיר, **ומ-150 המשתתפות ההערכה היא קרוב לאפס.**
-
-**ואי אפשר לדעת מי במצב הזה, וזו החלטת פרטיות ולא פער:** המשקל לעולם אינו עוזב את המכשיר שלה.
-
-**וזה מתפוגג מעצמו:** מי שב-BMI 21 ויורדת 500 גרם בשבוע חוצה את הקו תוך שבועות ספורים ועוברת לשמירה ממילא.
-
-**אם מישהי תשאל, התיקון הוא שורת הסבר מעל הרשימה, והוא קצר.**
+**עכשיו היא מועברת בפועל ל-250**, ומקבלת על זה מסך, כי המספר שהיא רואה עולה בכ-275 קלוריות. ראה v6.43.
 
 ### פתוח: סרטון ההתקנה לאייפון אינו תואם להנחיות הכתובות
 
@@ -975,6 +969,21 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v6.43** - **מי שבחרה 500 ומתקרבת לקו מועברת בפועל ל-250, ורואה על זה מסך.**
+
+**מה שהיה פתוח מ-v6.01:** התקרה הפסיקה להציע 500 למי שבתוך 5 ק״ג מהקו, **אבל מי שכבר בחרה 500 המשיכה לקבל את הגירעון המלא.** כלומר הרשימה בפרופיל הציגה 250 מסומן, והיעד הקלורי חושב לפי 500. **רון: "אין לי בעיה שתהיה ב-250 בלבד."**
+
+**והמספר שעל המסך שלה עולה בכ-275 קלוריות**, כי הגירעון קטן בחצי, **ולכן זה לעולם לא קורה בשקט.** הקופי שרון אישר, בקול המערכת ולא בשמה של ענת:
+
+> **הקצב שלך עודכן**
+> ככל שמתקרבים למשקל תקין אנחנו ממליצים על ירידה מתונה יותר. הקצב שלך עודכן ל-250 גרם בשבוע, והיעד הקלורי היומי עלה בהתאם.
+
+**הכלל יושב ב-`rateCapFor` ומשמש את שני המסלולים**, הזנת משקל בדוח ועריכת המשקל בפרופיל, בדיוק כמו כלל ה-BMI. **המעבר לשמירה גובר עליו:** מי שחצתה את הקו מקבלת את מסך השמירה ולא את זה.
+
+**מי שזה נוגע בה: קרוב לאפס.** צריך גם BMI 20 עד 22 וגם לבחור דווקא את הקצב המהיר ביותר.
+
+**`qa/ratecap-check.mjs`, 24 בדיקות בלי רשת**, ותרחיש בשכבה 3 שמזין 62 ק״ג ומוודא ששום דבר לא זז, ואז 57 ומוודא שהיא עברה ל-250 ושהמסך הוצג. **אומת שיש להם שיניים:** על הקוד שבייצור הבדיקה מחזירה 12 מתוך 24 והתרחיש 0 מתוך 3.
 
 **v6.42** - **"שאלות, תשובות ועזרה" נפתח בהקשה אחת, ואין יותר טקסט אפור באפליקציה.** שתי הערות של רון מבדיקה בטלפון.
 

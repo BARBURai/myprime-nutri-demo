@@ -218,6 +218,48 @@ const CHECKS = [
     // that only ever fires looks exactly like a rule that never fires. She crosses the line
     // on a weight she reports, gets the screen, lands in maintenance with the rate list
     // gone, then gains back past the second line and is offered the way back.
+    // v6.01 הפסיקה להציע 500 למי שקרובה לקו, ומי שכבר בחרה 500 המשיכה לקבל את
+    // הגירעון המלא. רון: "אין לי בעיה שתהיה ב-250 בלבד." המספר על המסך שלה עולה
+    // בכ-275 קלוריות, ולכן זה חייב להיאמר לה.
+    name: "מי שבחרה 500 ומתקרבת לקו מועברת ל-250, ורואה על זה מסך",
+    async run(browser, device) {
+      const start = sundayWeeksAgo(1);
+      const prof = { age: 50, heightCm: 165, weightKg: 70, activity: "יושבני", weeklyRateG: 500, goalWeightKg: 60, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done", lossStopAt: null };
+      const { context, page, errors } = await openApp(browser, device, { startDate: start, seed: { profile: prof, weights: [{ date: start, kg: 70 }] } });
+      const state = () => page.evaluate(() => JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").profile || {});
+      const logWeight = async (kg) => {
+        await page.locator("text=דוח").last().click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הזיני משקל").first().click();
+        await page.waitForTimeout(400);
+        await page.locator('input[inputmode="decimal"]').last().fill(String(kg));
+        await page.locator("text=שמור").first().click();
+        await page.waitForTimeout(800);
+      };
+      const bad = [];
+      // בגובה 165 הקו הוא 54.5 ק״ג, ו-5 ק״ג מעליו הם 59.5. 62 עדיין רחוק.
+      await logWeight(62);
+      if ((await state()).weeklyRateG !== 500) bad.push("הקצב זז כשעוד היה מקום");
+      if (await page.locator("text=הקצב שלך עודכן").count()) bad.push("המסך הוצג כשעוד היה מקום");
+
+      // 57 כבר בתוך 5 הקילו, ושם התקרה תופסת
+      await logWeight(57);
+      let body = await page.locator("body").innerText();
+      if (!body.includes("הקצב שלך עודכן")) bad.push("המסך לא הוצג");
+      if (!body.includes("הקצב שלך עודכן ל-250 גרם בשבוע, והיעד הקלורי היומי עלה בהתאם")) bad.push("הקופי אינו כלשונו");
+      const st = await state();
+      if (st.weeklyRateG !== 250) bad.push("הקצב נשאר " + st.weeklyRateG);
+      if (st.lossStopAt) bad.push("היא הועברה לשמירה במקום ל-250");
+      const btn = page.getByRole("button", { name: "הבנתי" }).first();
+      if (await btn.count()) await btn.click();
+      await page.waitForTimeout(500);
+      if (await page.locator("text=הקצב שלך עודכן").count()) bad.push("המסך לא נסגר");
+
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
     name: "חצייה של הקו מעבירה לשמירה, ועלייה חזרה פותחת את הדרך בחזרה",
     async run(browser, device) {
       const start = sundayWeeksAgo(1);

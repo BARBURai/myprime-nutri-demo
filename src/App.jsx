@@ -110,6 +110,14 @@ function rateOptionsFor(weightKg, heightCm, everStopped) {
   const fastOk = !everStopped && room >= FAST_RATE_ROOM_KG;
   return RATE_OPTIONS.filter((g) => g !== 500 || fastOk);   // רשימה אחת, כדי שלא תיסחף
 }
+// מחזירה את הקצב שיש להוריד אליה, או null כשאין מה לשנות. מקום אחד לשני
+// המסלולים, הדוח והפרופיל, כדי שלא יתפצלו.
+function rateCapFor(profile, weightKg) {
+  if (!profile || profile.lossStopAt || !(profile.weeklyRateG > 0)) return null;
+  const opts = rateOptionsFor(weightKg, profile.heightCm, !!profile.lossStopEver);
+  if (opts.includes(profile.weeklyRateG)) return null;
+  return Math.max(...opts);
+}
 // המשקל האחרון שהיא דיווחה, ולא זה של הרישום. זו כל הבעיה שהייתה כאן: הכלל ירה
 // פעם אחת וקרא מספר שקפוא מאותו רגע. מכאן והלאה כל מסך שנוגע במשקל שואל את זה.
 function currentWeightOf(profile, weights) {
@@ -613,7 +621,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.42";
+const VERSION = "6.43";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2279,6 +2287,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const [showLossStop, setShowLossStop] = useState(false);
+  const [showRateCap, setShowRateCap] = useState(false);
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   // The goal only exists from week 2 onward, so before that there is nothing to edit.
   const stepGoalEditable = (programWeek || 1) >= 2;
@@ -2330,6 +2339,11 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         next.lossStopEver = true;
         next.resumeOfferAt = null;
         setShowLossStop(true);
+      } else if (pendingWeight.key === "weightKg") {
+        // אותה תקרה, מהמסלול השני. עריכת המשקל בפרופיל הייתה הדלת האחורית של
+        // כלל ה-BMI, והיא גם הדלת האחורית של התקרה.
+        const capped = rateCapFor(next, nextCur);
+        if (capped != null) { next.weeklyRateG = capped; setShowRateCap(true); }
       }
       setProfile(next);
       // המשקל שבפרופיל הוא נקודת הפתיחה של הגרף, ולכן שינוי שלו מזיז גם אותה.
@@ -2602,6 +2616,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         </div>
       )}
       {showLossStop && <LossStopSheet onAck={() => { setShowLossStop(false); onLossAck && onLossAck(); }} />}
+      {showRateCap && <RateCapSheet onClose={() => setShowRateCap(false)} />}
       {pendingWeight && (
         <div onClick={() => setPendingWeight(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
@@ -5020,6 +5035,18 @@ function ResumeOfferSheet({ onResume, onLater }) {
 // ירידה מהירה מדי. **קול המערכת ולא קולה של ענת**, כי זו הודעה שהאפליקציה
 // מחליטה עליה מחישוב שעשתה: בלי גוף ראשון, בלי אמוג'י ובלי חתימה. ראה סעיף 8.
 // הקופי של רון, 22 באוגוסט 2026. אינה חוסמת כלום, וזו הזמנה לדבר ולא עצירה.
+function RateCapSheet({ onClose }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(58,43,48,0.28)" }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, lineHeight: 1.45 }}>הקצב שלך עודכן</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>ככל שמתקרבים למשקל תקין אנחנו ממליצים על ירידה מתונה יותר. הקצב שלך עודכן ל-250 גרם בשבוע, והיעד הקלורי היומי עלה בהתאם.</div>
+        <div style={{ marginTop: 16 }}><Btn onClick={onClose}>הבנתי</Btn></div>
+      </div>
+    </div>
+  );
+}
+
 function FastLossSheet({ onClose }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
@@ -6780,6 +6807,16 @@ export default function App() {
       setSheet("resumeOffer");
       return;
     }
+    // התקרה של v6.01 הפסיקה להציע 500 למי שקרובה לקו, אבל מי שכבר בחרה 500 המשיכה
+    // לקבל את הגירעון המלא, כלומר הרשימה בפרופיל אמרה דבר אחד והיעד הקלורי אמר אחר.
+    // רון, 28 באוגוסט 2026: "אין לי בעיה שתהיה ב-250 בלבד." המספר שעל המסך שלה זז
+    // בכ-275 קלוריות, ולכן זה לעולם לא קורה בשקט.
+    const capped = rateCapFor(profile, cur);
+    if (capped != null) {
+      setProfile((pr) => ({ ...pr, weeklyRateG: capped }));
+      setSheet("rateCap");
+      return;
+    }
     // ירידה מהירה מדי. לא חוסמת כלום, ולא חוזרת יותר מפעם בשלושה שבועות: התרעה
     // שחוזרת כל יום מלמדת אותה להפסיק לשקול את עצמה, וזו התוצאה הגרועה מכולן.
     const recent = profile.fastLossAt && profile.fastLossAt > addDays(TODAY, -FAST_LOSS_DAYS);
@@ -7095,6 +7132,7 @@ export default function App() {
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "lossStop" && <LossStopSheet onAck={ackLossStop} />}
             {sheet === "fastLoss" && <FastLossSheet onClose={() => setSheet(null)} />}
+            {sheet === "rateCap" && <RateCapSheet onClose={() => setSheet(null)} />}
             {sheet === "resumeOffer" && <ResumeOfferSheet onResume={() => { resumeLoss(); setSheet(null); }} onLater={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
