@@ -609,7 +609,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.36";
+const VERSION = "6.39";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1018,18 +1018,19 @@ function BrowserSwitchNote() {
     try { const t = document.createElement("textarea"); t.value = url; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); done(); } catch (e) {}
   };
   if (!ios && !sam) return null;
-  const head = sam ? "את נמצאת בדפדפן של סמסונג"
-    : ios === "דפדפן שנפתח בתוך אפליקציה אחרת" ? "הקישור נפתח בתוך אפליקציה אחרת"
-    : "את נמצאת ב-" + ios + ", לא בספארי";
+  // הכותרת אומרת את הכלל ולא את התסמין. הודעת Google Play Protect אינה מופיעה
+  // בכל מכשיר ובכל גרסה של הדפדפן, ולכן אזכור שלה מבלבל את מי שלא ראתה אותה.
+  // תיקון ניסוח לפי רון, אחרי שהוא עצמו לא קיבל את ההודעה.
+  const head = sam ? "את האפליקציה מתקינים רק דרך Chrome" : "את האפליקציה מתקינים רק דרך Safari";
   const why = sam
-    ? "ההתקנה מהדפדפן הזה נחסמת על ידי אנדרואיד, ומופיעה הודעה של Google Play Protect."
-    : "באייפון אפשר להוסיף אפליקציה למסך הבית רק מספארי.";
-  const blame = sam ? "זו חסימה של הטלפון ולא תקלה באפליקציה." : "זו מגבלה של אפל ולא תקלה באפליקציה.";
-  const what = sam ? "פתחי את אותו קישור בדפדפן Chrome, והתקיני משם." : "פתחי את אותו קישור בדפדפן Safari, והתקיני משם.";
+    ? "את נמצאת בדפדפן של סמסונג, וההתקנה ממנו עלולה להיחסם על ידי הטלפון."
+    : (ios === "דפדפן שנפתח בתוך אפליקציה אחרת" ? "הקישור נפתח בתוך אפליקציה אחרת" : "את נמצאת ב-" + ios) +
+      ", ובאייפון אפשר להוסיף אפליקציה למסך הבית רק מספארי.";
+  const what = sam ? "פתחי את אותו קישור ב-Chrome, והתקיני משם." : "פתחי את אותו קישור ב-Safari, והתקיני משם.";
   return (
     <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 14, padding: "14px 16px", marginBottom: 14, textAlign: "right" }}>
       <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 6 }}>{head}</div>
-      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, margin: "0 0 8px" }}>{why} <b>{blame}</b></p>
+      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, margin: "0 0 8px" }}>{why}</p>
       <p style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.65, margin: "0 0 10px", fontWeight: 600 }}>{what}</p>
       <button onClick={copy} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 10, padding: "8px 14px", fontSize: 14.5, color: C.brandD, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>
         {copied ? "הקישור הועתק ✓" : "העתקת הקישור"}
@@ -3419,6 +3420,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [addedKeys, setAddedKeys] = useState([]); // feature: multi-add from favorites
   const [addedMap, setAddedMap] = useState({}); // favId -> created journal entry id (for undo)
   const [histTab, setHistTab] = useState("fav"); // "fav" | "recent" (favorites is the default)
+  const [histQ, setHistQ] = useState(""); // חיפוש בתוך האחרונים והמועדפים, חוצה את שתי הלשוניות
   const [delTarget, setDelTarget] = useState(null); // { item, list } pending delete confirmation
   const [aiAsOne, setAiAsOne] = useState(true); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product (default = one product, recommended)
   const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
@@ -3735,7 +3737,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
               { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
               { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
-              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => setStep("history") },
+              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => { setHistQ(""); setStep("history"); } },
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") },
               { ic: Pencil, t: "הזנה ידנית", s: "להקליד ערכים מהתווית - בלי AI", bg: "#EDEFF3", color: "#6B7A99", go: () => setStep("manual") }].map((o) => (
               <div key={o.t} data-tut={o.tut} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
@@ -3844,45 +3846,81 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
           </>
         )}
         {step === "history" && (() => {
-          const list = histTab === "fav" ? (favorites || []) : (recents || []);
+          const favs = favorites || [];
+          const recs = recents || [];
+          const hq = histQ.trim();
+          const hSearch = hq.length >= 2;
+          const norm = (s) => String(s || "").trim().toLowerCase();
+          const hit = (f) => norm(f.name).includes(norm(hq));
+          const favHits = hSearch ? favs.filter(hit) : [];
+          // פריט שנמצא בשתי הרשימות מוצג פעם אחת בלבד, תחת מועדפים
+          const favNames = new Set(favHits.map((f) => norm(f.name)));
+          const recHits = hSearch ? recs.filter((f) => hit(f) && !favNames.has(norm(f.name))) : [];
+          const list = histTab === "fav" ? favs : recs;
+          // שדה החיפוש מוצג רק כשהרשימה ארוכה מספיק כדי שיהיה קשה למצוא בה
+          const showHistSearch = favs.length + recs.length > 8;
           const quickMeal = (() => { const h = new Date().getHours(); return h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; })();
           const tabBtn = (id, label) => (
             <button onClick={() => setHistTab(id)} style={{ flex: 1, border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 6px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, background: histTab === id ? C.panel : "transparent", color: histTab === id ? C.brandD : C.sub, boxShadow: histTab === id ? "0 1px 4px rgba(168,66,92,0.14)" : "none" }}>{label}</button>
           );
+          const histRow = (f, listId) => {
+            const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
+            const added = addedKeys.includes(f.id);
+            return (
+              <div key={listId + "-" + f.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לביטול - הקישי שוב על הוי · לכמות אחרת - על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
+                <button onClick={() => setDelTarget({ item: f, list: listId })} aria-label="הסרה מהרשימה" style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: "transparent", color: C.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trash2 size={16} /></button>
+                <button onClick={() => {
+                  if (added) {
+                    const eid = addedMap[f.id];
+                    if (eid && onUndoEntry) onUndoEntry(eid);
+                    setAddedKeys((k) => k.filter((x) => x !== f.id));
+                    setAddedMap((m) => { const n = { ...m }; delete n[f.id]; return n; });
+                  } else {
+                    const eid = "n" + Date.now();
+                    commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...servingFields(f, g), ...n, _entryId: eid }, true);
+                    setAddedKeys((k) => [...k, f.id]);
+                    setAddedMap((m) => ({ ...m, [f.id]: eid }));
+                  }
+                }} aria-label={added ? "ביטול הוספה" : "הוספה"} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
+              </div>
+            );
+          };
+          const histHead = (t) => (<div style={{ fontSize: 13.5, fontWeight: 700, color: C.brandD, margin: "12px 0 2px" }}>{t}</div>);
           return (
           <>
-            <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
-              {tabBtn("fav", "המועדפים שלי")}
-              {tabBtn("recent", "אחרונים")}
-            </div>
+            {showHistSearch && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", color: C.faint, marginBottom: 10 }}>
+                <Search size={15} /><input value={histQ} onChange={(e) => setHistQ(e.target.value)} placeholder="חיפוש בפריטים שלי…" style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+                {hq && <button onClick={() => setHistQ("")} aria-label="ניקוי החיפוש" style={{ border: "none", background: "transparent", color: C.faint, fontSize: 17, cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>}
+              </div>
+            )}
+            {!hSearch && (
+              <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
+                {tabBtn("fav", "המועדפים שלי")}
+                {tabBtn("recent", "אחרונים")}
+              </div>
+            )}
             <div style={{ fontSize: 13, color: C.sub, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 10 }}>הקישי <b>+</b> להוספה מהירה, או על <b>שם הפריט</b> כדי לבחור כמות אחרת. הפריט ייכנס לארוחה לפי שעת היום, ותמיד אפשר לשנות ביומן.</div>
             {addedKeys.length > 0 && <div style={{ marginBottom: 12 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
-            {list.length === 0 && (
-              <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>{histTab === "fav" ? "עדיין אין לך מועדפים. אחרי שתוסיפי מוצר, נשאל אם לשמור אותו כאן 💜" : "עדיין אין מוצרים אחרונים."}</div>
+            {hSearch ? (
+              <>
+                {favHits.length > 0 && histHead("מועדפים (" + favHits.length + ")")}
+                {favHits.map((f) => histRow(f, "fav"))}
+                {recHits.length > 0 && histHead("אחרונים (" + recHits.length + ")")}
+                {recHits.map((f) => histRow(f, "recent"))}
+                {favHits.length === 0 && recHits.length === 0 && (
+                  <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>לא נמצא פריט בשם הזה.</div>
+                )}
+              </>
+            ) : (
+              <>
+                {list.length === 0 && (
+                  <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>{histTab === "fav" ? "עדיין אין לך מועדפים. אחרי שתוסיפי מוצר, נשאל אם לשמור אותו כאן 💜" : "עדיין אין מוצרים אחרונים."}</div>
+                )}
+                {list.map((f) => histRow(f, histTab))}
+              </>
             )}
-            {list.map((f) => {
-              const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
-              const added = addedKeys.includes(f.id);
-              return (
-                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לביטול - הקישי שוב על הוי · לכמות אחרת - על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
-                  <button onClick={() => setDelTarget({ item: f, list: histTab })} aria-label="הסרה מהרשימה" style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: "transparent", color: C.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trash2 size={16} /></button>
-                  <button onClick={() => {
-                    if (added) {
-                      const eid = addedMap[f.id];
-                      if (eid && onUndoEntry) onUndoEntry(eid);
-                      setAddedKeys((k) => k.filter((x) => x !== f.id));
-                      setAddedMap((m) => { const n = { ...m }; delete n[f.id]; return n; });
-                    } else {
-                      const eid = "n" + Date.now();
-                      commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...servingFields(f, g), ...n, _entryId: eid }, true);
-                      setAddedKeys((k) => [...k, f.id]);
-                      setAddedMap((m) => ({ ...m, [f.id]: eid }));
-                    }
-                  }} aria-label={added ? "ביטול הוספה" : "הוספה"} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
-                </div>
-              );
-            })}
             {addedKeys.length > 0 && <div style={{ marginTop: 14 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
             {delTarget && (
               <div onClick={() => setDelTarget(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 30 }}>
@@ -5783,6 +5821,9 @@ const FAQ_ITEMS = [
   { q: "האפליקציה נראית ישנה או לא מתעדכנת - איך מרעננים?", a: "באנדרואיד אפשר למשוך את המסך כלפי מטה כדי לרענן, או לסגור את האפליקציה ולפתוח שוב. באייפון משיכה למטה לא עובדת - צריך לסגור את האפליקציה לגמרי (להחליק מלמטה למעלה, לעצור באמצע, ולהחליק את הכרטיס של האפליקציה כלפי מעלה), ואז לפתוח שוב מהאייקון. אם גם אחרי זה היא עדיין נראית ישנה, אפשר להסיר אותה ממסך הבית ולהוסיף מחדש - אבל שימי לב שזה מאפס את הנתונים במכשיר, אז כדאי לעשות קודם גיבוי במסך הפרופיל." },
   { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
+  // שש נשים שאלו את זה. מוצגת אך ורק עד שמשימת החלבון נפתחת, כי משם והלאה
+  // הטבעת קיימת ביומן והשאלה עונה על עצמה. החלטה של רון.
+  { q: "למה אני לא רואה כמה חלבון ופחמימות אכלתי כל יום?", a: "מתחת לכל מאכל שרשמת ביומן מופיע הפירוט שלו: חלבון, שומן ופחמימות. זה נמצא שם מהיום הראשון.\n\nהסיכום היומי של החלבון, עם היעד שלך, נפתח בשבוע 3 יחד עם משימת החלבון. עד אז אנחנו מתמקדות במה שמתחילים איתו: הצעדים, המים ומילוי היומן. מספרים שעדיין אין מאחוריהם משימה רק מעמיסים בלי לעזור.", untilMacro: true },
   { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
   { q: "כמה קלוריות מותר לי לאכול היום?", a: "היעד הקלורי היומי מחושב לפי הגיל, המשקל, הגובה ורמת הפעילות שלך, ומופיע בעיגול הקלוריות ('מתוך ...'). אפשר לראות אותו גם במסך הפרופיל." },
   { q: "שכחתי להזין יום שלם - מה עושים?", a: "אפשר לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך, ולמלא בדיעבד." },
@@ -5791,16 +5832,19 @@ const FAQ_ITEMS = [
   { q: "למה משימות חדשות מופיעות לאורך התוכנית?", a: "המשימות נפתחות בהדרגה כדי לא להעמיס בבת אחת. כל כמה ימים מצטרפת משימה חדשה, צעד אחרי צעד." },
 ];
 
-function FaqModal({ onClose, onStartTour }) {
+function FaqModal({ onClose, onStartTour, startDate }) {
   const [open, setOpen] = useState(-1);
   const topics = TIPS.filter((t) => t.key === "cal");
+  // שאלה שמסומנת untilMacro יורדת מהרשימה ברגע שמשימת החלבון נפתחה.
+  const macroOpen = unlockedOn(startDate, TODAY, MACRO_UNLOCK);
+  const items = FAQ_ITEMS.filter((f) => !f.untilMacro || !macroOpen);
   const Item = ({ q, a, guide, i }) => (
     <div onClick={() => setOpen(open === i ? -1 : i)} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 13px", marginBottom: 8, cursor: "pointer" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 15.5, fontWeight: 600, color: C.ink }}>{q}</span>
         <ChevronDown size={18} color={C.sub} style={{ flexShrink: 0, transform: open === i ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
       </div>
-      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>{a}{guide && <StepGuideLink style={{ marginTop: 10 }} />}</div>}
+      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8, whiteSpace: "pre-line" }} onClick={(e) => e.stopPropagation()}>{a}{guide && <StepGuideLink style={{ marginTop: 10 }} />}</div>}
     </div>
   );
   return (
@@ -5811,7 +5855,7 @@ function FaqModal({ onClose, onStartTour }) {
         {onStartTour
           ? <button onClick={onStartTour} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: "none", borderRadius: 12, padding: "13px", marginBottom: 14, background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={17} /> סיור באפליקציה <span style={{ fontWeight: 400, fontSize: 13, opacity: 0.9 }}>(מעבר לשבוע ראשון, יום שלישי)</span></button>
           : <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 13px", marginBottom: 14, fontSize: 14, color: C.brandD, lineHeight: 1.6, textAlign: "center" }}>הסיור המודרך באפליקציה ייפתח כשהתוכנית שלך מתחילה 💜</div>}
-        {FAQ_ITEMS.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} guide={f.guide} i={i} />)}
+        {items.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} guide={f.guide} i={i} />)}
         <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: "16px 0 8px" }}>מסכים באפליקציה</div>
         {topics.map((t, j) => <Item key={`t${j}`} q={t.title} a={t.text} i={100 + j} />)}
       </div>
@@ -7033,7 +7077,7 @@ export default function App() {
               </div>
             )}
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
-            {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} onStartTour={preStart ? null : () => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
+            {sheet === "faq" && <FaqModal startDate={profile.startDate} onClose={() => setSheet(null)} onStartTour={preStart ? null : () => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
             {sheet === "backup" && <BackupModal backup={profile.backup} gateEmail={gateEmail} busy={bkBusy} onEnable={enableBackup} onBackupNow={backupNow} onResetCode={resetBackupCode} onClose={() => setSheet(null)} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} autoFocusInput={!tour} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
