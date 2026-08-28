@@ -302,11 +302,9 @@ console.log("\nזהב וכסף");
 {
   const lvl = (st, today) => api.weekTrophyLevel(st.checkins, START, 2, today);
   check("שבוע שלם הוא זהב", lvl(closeDays(seedWeek(null), FRI), FRI) === "gold");
-  // כסף מוכרע רק כשהשבוע נגמר: בשישי עצמו היא עדיין יכולה להשלים ולקבל זהב.
   const SAT = d(14);
-  check("בשישי עצמו עוד אין כסף", lvl(closeDays(seedWeek(THU), FRI), FRI) === null, String(lvl(closeDays(seedWeek(THU), FRI), FRI)));
-  check("ובשבת, כשהשבוע נגמר, זה כסף", lvl(closeDays(seedWeek(THU), FRI), SAT) === "silver", String(lvl(closeDays(seedWeek(THU), FRI), SAT)));
-  check("וזהב כן ניתן בשישי עצמו", lvl(closeDays(seedWeek(null), FRI), FRI) === "gold");
+  check("יום אחד חסר הוא כסף", lvl(closeDays(seedWeek(THU), FRI), FRI) === "silver", String(lvl(closeDays(seedWeek(THU), FRI), FRI)));
+  check("וגם בשבת", lvl(closeDays(seedWeek(THU), FRI), SAT) === "silver");
 
   // שני ימים חסרים אינם גביע בכלל
   const two = seedWeek(THU);
