@@ -930,6 +930,13 @@ const CHECKS = [
       await page.locator('[data-tut="cabinet"]').first().click().catch(async () => { await page.locator("text=ארון").first().click(); });
       await page.waitForTimeout(700);
       if (!(await page.locator("text=ארון המדליות והגביעים").count())) bad.push("הארון לא נפתח");
+      // הקשה על הגביע של שבוע 2 חייבת לדבר על שבוע 2, וזה מה שרון תפס
+      await page.evaluate(() => { const im = document.querySelector('img[src*="trophy-2"]'); if (im && im.parentElement) im.parentElement.click(); });
+      await page.waitForTimeout(600);
+      const byTrophy = await page.evaluate(() => document.body.innerText);
+      if (!byTrophy.includes("מה נשאר לגביע של שבוע 2?")) bad.push("הקשה על גביע שבוע 2 לא פתחה את שבוע 2");
+      await page.getByRole("button", { name: "סגירה" }).first().click().catch(() => {});
+      await page.waitForTimeout(400);
       const btn = page.locator("text=/מה נשאר לגביע של שבוע/").first();
       if (!(await btn.count())) bad.push("הכפתור אינו מוצג בשישי");
       else {
