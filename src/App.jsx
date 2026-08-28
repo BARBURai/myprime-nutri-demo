@@ -640,7 +640,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.47";
+const VERSION = "6.48";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5238,12 +5238,12 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
       {missOpen && (
         <div onClick={() => setMissOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, maxHeight: "80%", overflowY: "auto", fontFamily: fontStack }}>
-            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 12 }}>מה נשאר לגביע?</div>
+            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 12 }}>מה נשאר לגביע של שבוע {week}?</div>
             {miss.length === 0 ? (
               <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65 }}>לא נשאר כלום, כל ימי השבוע הושלמו.</div>
             ) : miss.map((d) => (
               <div key={d.date} style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 15.5, fontWeight: 700, color: C.ink }}>יום {HE_DAYS_FULL[parseDay(d.date).getUTCDay()]}</div>
+                <div style={{ fontSize: 15.5, fontWeight: 700, color: C.ink }}>יום {HE_DAYS_FULL[parseDay(d.date).getUTCDay()]} · {pad2(parseDay(d.date).getUTCDate())}.{pad2(parseDay(d.date).getUTCMonth() + 1)}</div>
                 <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 2 }}>{d.tasks.join(" · ")}</div>
               </div>
             ))}
