@@ -96,12 +96,24 @@ async function stubApi(context, { startDate, glow = false }) {
   });
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
   await stubApi(context, { startDate, glow });
+  // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
+  // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
+  if (clock) {
+    await context.addInitScript((iso) => {
+      const Real = Date;
+      const shift = Real.parse(iso) - Real.now();
+      window.Date = new Proxy(Real, {
+        construct: (t, a) => (a.length === 0 ? new Real(Real.now() + shift) : new Real(...a)),
+        get: (t, k) => (k === "now" ? () => Real.now() + shift : Reflect.get(t, k)),
+      });
+    }, clock);
+  }
   await context.addInitScript(([sd, extra, neverAsked]) => {
     localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
     localStorage.setItem("myprime_access_name", "בדיקה");
@@ -885,6 +897,51 @@ const CHECKS = [
         ok: before !== "" && after === "70" && errors.length === 0,
         detail: `היה ${before || "ריק"} · הוקלד 70 · יצא ${after} · שגיאות ${errors.length ? errors[0].slice(0, 50) : "אין"}`,
       };
+    },
+  },
+  {
+    // רעיון של רון: כפתור בארון הגביעים שאומר מה חסר לגביע של השבוע, בשישי ובשבת
+    // בלבד. השעון נעוץ ליום שישי, אחרת התרחיש היה עובר בימים מסוימים ונופל באחרים.
+    name: "בארון הגביעים, מה נשאר לגביע מונה את היום ואת המשימה",
+    async run(browser, device) {
+      // 2026-08-16 הוא יום ראשון. יום 13 בתוכנית הוא שישי של שבוע 2.
+      const start = "2026-08-16";
+      const day = (n) => { const t = new Date(Date.UTC(2026, 7, 16)); t.setUTCDate(t.getUTCDate() + n - 1); return t.toISOString().slice(0, 10); };
+      const THU = day(12);
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      // שבוע 2 מלא, חוץ מאימון הכוח של חמישי. בדיוק המקרה של הילה.
+      const checkins = {}, stepsByDate = {}, waterByDate = {}, log = [];
+      const IDS = "steps journal strength veg mealorder".split(" ");
+      const NUM = new Set(["steps", "veg", "mealorder"]);
+      for (let n = 8; n <= 13; n++) {
+        const d = day(n);
+        stepsByDate[d] = 9000; waterByDate[d] = 2200;
+        log.push({ id: "x" + n, date: d, meal: "בוקר", name: "בדיקה", g: 200, unit: "g", source: "verified", kcal: 400, p: 130, f: 10, c: 20 });
+        const ans = {};
+        for (const id of IDS) ans[id] = NUM.has(id) ? 5 : true;
+        if (d === THU) delete ans.strength;
+        checkins[d] = ans;
+      }
+      const { context, page, errors } = await openApp(browser, device, {
+        startDate: start, clock: "2026-08-28T14:00:00.000Z",
+        seed: { profile: prof, checkins, stepsByDate, waterByDate, log, weights: [{ date: start, kg: 72 }] },
+      });
+      const bad = [];
+      await page.locator('[data-tut="cabinet"]').first().click().catch(async () => { await page.locator("text=ארון").first().click(); });
+      await page.waitForTimeout(700);
+      if (!(await page.locator("text=ארון המדליות והגביעים").count())) bad.push("הארון לא נפתח");
+      const btn = page.locator("text=מה נשאר לגביע?").first();
+      if (!(await btn.count())) bad.push("הכפתור אינו מוצג בשישי");
+      else {
+        await btn.click();
+        await page.waitForTimeout(500);
+        const body = await page.evaluate(() => document.body.innerText);
+        if (!body.includes("יום חמישי")) bad.push("היום החסר אינו מופיע");
+        if (!body.includes("אימון כוח")) bad.push("המשימה החסרה אינה מופיעה");
+        if (body.includes("יום רביעי")) bad.push("יום שהושלם מופיע ברשימה");
+      }
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
     },
   },
   {

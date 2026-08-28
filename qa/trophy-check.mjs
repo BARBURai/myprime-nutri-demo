@@ -106,12 +106,13 @@ const sim =
   grab(/function taskDone\(task, answers, auto\) \{[\s\S]*?\n\}/, "taskDone") + "\n" +
   grab(/function tasksForDate\(startDate, date, keepShabbat, fasting\) \{[\s\S]*?\n\}/, "tasksForDate") + "\n" +
   grab(/function dayComplete\(startDate, date, keepShabbat[\s\S]*?\n\}/, "dayComplete") + "\n" +
-  grab(/function weekTrophyEarned\(checkins, startDate, w, today\) \{[\s\S]*?\n\}/, "weekTrophyEarned");
+  grab(/function weekTrophyEarned\(checkins, startDate, w, today\) \{[\s\S]*?\n\}/, "weekTrophyEarned") + "\n" +
+  grab(/function missingForWeek\(week, startDate, today[\s\S]*?\n\}/, "missingForWeek");
 
 const { activeTasks } = await import("../src/checkins.js");
 const api = new Function("activeTasks",
   "const TRACKER_ENABLED = true; const DEFAULT_CUP_ML = 250; const CHECKIN_UNLOCK = { week: 1, day: 3 };" +
-  sim + "; return { tasksForDate, dayComplete, weekTrophyEarned, programDayNumber, taskDone, autoStatusFor };")(activeTasks);
+  sim + "; return { tasksForDate, dayComplete, weekTrophyEarned, programDayNumber, taskDone, autoStatusFor, missingForWeek };")(activeTasks);
 
 const TARGETS = { protein: 100 };
 // אישה בשבוע 2 שממלאת הכל: צעדים, מים, יומן, ובכל משימה ידנית מסמנת.
@@ -239,6 +240,44 @@ check("ברשימת המשימות של שישי אין אימון כוח", !fri
   check("ואז גם אין גביע", api.weekTrophyEarned(st2.checkins, START, 2, FRI) === false);
   check("והמסך אומר לה שחסרה שם עוד משימה", /חסרה שם עוד משימה אחת/.test(src));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. "מה נשאר לגביע?" - רעיון של רון, 28 באוגוסט 2026. מוצג בשישי ובשבת בלבד.
+//    המסך אינו מחשב מחדש: הוא מריץ בדיוק את המשימות שסוגרות את היום.
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("\nמה נשאר לגביע");
+{
+  const miss = (st, today) => api.missingForWeek(2, START, today, false, st.checkins, st.stepsByDate, st.waterByDate, st.log, TARGETS, 250, st.activityLog);
+  const full = closeDays(seedWeek(null), FRI);
+  check("שבוע מלא מחזיר רשימה ריקה", miss(full, FRI).length === 0);
+
+  const st = seedWeek(THU);
+  const one = miss(st, FRI);
+  check("יום אחד חסר מחזיר יום אחד", one.length === 1 && one[0].date === THU, JSON.stringify(one));
+  check("ובשמות המשימות, לא במספרים", one.length === 1 && one[0].tasks.includes("אימון כוח"), JSON.stringify(one[0] && one[0].tasks));
+
+  const two = seedWeek(THU);
+  delete two.checkins[THU].veg;
+  const t2 = miss(two, FRI);
+  check("שתי משימות חסרות באותו יום מוצגות שתיהן",
+    t2.length === 1 && t2[0].tasks.length === 2 && t2[0].tasks.includes("צבעים של ירקות היום"), JSON.stringify(t2[0] && t2[0].tasks));
+
+  // שבת אינה נדרשת לגביע, ולכן היא אינה מופיעה ברשימה גם כשלא מולאה
+  const sat = d(14);
+  check("שבת אינה מופיעה ברשימה", miss(seedWeek(null), sat).every((x) => x.date !== sat), sat);
+  // יום שעוד לא הגיע אינו נחשב חסר. ברביעי, חמישי עדיין לא היה.
+  const wed = d(11);
+  check("יום עתידי אינו נחשב חסר", miss(seedWeek(THU), wed).every((x) => x.date <= wed));
+}
+
+console.log("\nהמסך עצמו");
+check("הכפתור מוצג בשישי ובשבת בלבד", /const endOfWeek = dw === 6 \|\| dw === 0;/.test(src));
+check("הכותרת היא זו שרון אישר", /מה נשאר לגביע\?/.test(src));
+check("וכשלא חסר כלום נאמר את זה במפורש", src.includes("לא נשאר כלום, כל ימי השבוע הושלמו."));
+check("שם היום נכתב במלואו", /יום \{HE_DAYS_FULL\[parseDay\(d\.date\)\.getUTCDay\(\)\]\}/.test(src));
+check("משימות אופציונליות אינן נספרות", /tasksForDate\(startDate, date, keepShabbat\)\.filter\(\(t\) => !t\.optional\)/.test(src.slice(src.indexOf("function missingForWeek"))));
+check('"הגביעים שלך" היא כותרת ולא שורת הסבר', /fontSize: 17, fontWeight: 700, color: C\.ink, margin: "10px 0 8px" \}\}>הגביעים שלך/.test(src));
+
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
