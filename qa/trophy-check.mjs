@@ -273,6 +273,11 @@ console.log("\nמה נשאר לגביע");
 
 console.log("\nהמסך עצמו");
 check("הכפתור מוצג בשישי ובשבת בלבד", /const endOfWeek = dw === 6 \|\| dw === 0;/.test(src));
+check("והשבוע נגזר מהיום שממנו נפתח הארון ולא מהיום הנוכחי",
+  /const dayInView = viewDate \|\| today;/.test(src)
+  && /const dw = dowOf\(dayInView\);/.test(src)
+  && /const week = Math\.min\(programWeekFor\(startDate, dayInView\), 10\);/.test(src));
+check("והארון מקבל את היום שנבחר", /<CollectionModal checkins=\{checkins\} startDate=\{profile\.startDate\} today=\{today\} viewDate=\{selectedDate\}/.test(src));
 check("והקשה על גביע פותחת את השבוע שלו ולא את הנוכחי", /onClick=\{\(\) => \{ if \(started && TRACKER_ENABLED\) setMissWeek\(w\); \}\}/.test(src));
 check("גביע של שבוע שעוד לא התחיל אינו נפתח", /const started = addDays\(startDate, \(w - 1\) \* 7\) <= today;/.test(src));
 check("המסך מחשב לפי השבוע שנפתח", /missingForWeek\(missWeek, startDate, today/.test(src));
@@ -282,7 +287,6 @@ check("והכפתור נוקב בשבוע הנוכחי", /<Btn variant="ghost" o
 check("הרשימה גוללת וההסבר והסגירה נשארים במקומם",
   /<div style=\{\{ overflowY: "auto", flex: 1, minHeight: 0 \}\}>/.test(src.slice(src.indexOf("מה נשאר לגביע של שבוע {missWeek}?")))
   && /marginTop: 14, flexShrink: 0 \}\}><Btn onClick=\{\(\) => setMissWeek\(0\)\}>סגירה/.test(src));
-check("והשבוע הוא זה של היום עצמו", /const week = Math\.min\(programWeekFor\(startDate, today\), 10\);/.test(src));
 check("ליד כל יום מופיע התאריך שלו", /pad2\(parseDay\(d\.date\)\.getUTCDate\(\)\)\}\.\{pad2\(parseDay\(d\.date\)\.getUTCMonth\(\) \+ 1\)/.test(src));
 check("וכשלא חסר כלום נאמר את זה במפורש", src.includes("לא נשאר כלום, כל ימי השבוע הושלמו."));
 check("שם היום נכתב במלואו", /יום \{HE_DAYS_FULL\[parseDay\(d\.date\)\.getUTCDay\(\)\]\}/.test(src));
