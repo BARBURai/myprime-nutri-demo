@@ -930,6 +930,40 @@ console.log("\nחיפוש, תגי תוכנית ותאריך במסך הניהו�
   check("וגם אריחי 'לטיפול'",
     /VIEW = \(VIEW===v \? "" : v\); MISSING=false; SEL=""; EDITING="";/.test(html));
 
+  // 2ג. התשובה על המאקרו היומי יושבת בשני מקומות: בשאלות ותשובות שבאפליקציה,
+  //     ובבנק התשובות של המשרד. שתיהן חייבות לומר בדיוק אותו דבר, אחרת המשרד
+  //     עונה תשובה אחת והאפליקציה מציגה אחרת.
+  {
+    const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+    const Q = "למה אני לא רואה כמה חלבון ופחמימות אכלתי כל יום?";
+    // המחרוזת נקראת עד המרכאה הסוגרת האמיתית, עם כיבוד תווי בריחה, כי בצד
+    // האפליקציה יש אחריה עוד שדה ובצד המשרד אין.
+    const pick = (src) => {
+      const i = src.indexOf(Q);
+      if (i === -1) return "";
+      const j = src.indexOf('a:', i);
+      if (j === -1) return "";
+      const start = src.indexOf('"', j) + 1;
+      let out = "";
+      for (let k = start; k < src.length; k++) {
+        if (src[k] === "\\") { out += src[k] + src[k + 1]; k++; continue; }
+        if (src[k] === '"') break;
+        out += src[k];
+      }
+      return out;
+    };
+    const inApp = pick(app), inBank = pick(html);
+    check("השאלה על המאקרו קיימת בשאלות ותשובות שבאפליקציה", inApp.length > 0);
+    check("וגם בבנק התשובות של המשרד", inBank.length > 0);
+    check("ושתי התשובות זהות מילה במילה", inApp.length > 0 && inApp === inBank,
+      inApp.slice(0, 50) + " || " + inBank.slice(0, 50));
+    // היא יורדת מהרשימה ברגע שמשימת החלבון נפתחה, כי משם הטבעת עונה עליה.
+    check("והיא מוצגת רק עד שמשימת החלבון נפתחת",
+      /untilMacro: true/.test(app) &&
+      /const macroOpen = unlockedOn\(startDate, TODAY, MACRO_UNLOCK\);/.test(app) &&
+      /FAQ_ITEMS\.filter\(\(f\) => !f\.untilMacro \|\| !macroOpen\)/.test(app));
+  }
+
   // 3. התאריך. בורר התאריך המובנה מצייר לפי הגדרת השפה של המכשיר, ולכן אצל אחד
   //    הוא חודש-יום ואצל אחר יום-חודש. הבדיקה נועלת שהוא לא קיים במסך בכלל.
   check("אין במסך אף בורר תאריך של הדפדפן", html.indexOf('type="date"') === -1);
