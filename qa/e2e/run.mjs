@@ -927,6 +927,7 @@ const CHECKS = [
         seed: { profile: prof, checkins, stepsByDate, waterByDate, log, weights: [{ date: start, kg: 72 }] },
       });
       const bad = [];
+      // פותחים את הארון מיומן של יום שישי בשבוע 2, וזה מה שרון עשה
       await page.locator('[data-tut="cabinet"]').first().click().catch(async () => { await page.locator("text=ארון").first().click(); });
       await page.waitForTimeout(700);
       if (!(await page.locator("text=ארון המדליות והגביעים").count())) bad.push("הארון לא נפתח");
@@ -939,6 +940,7 @@ const CHECKS = [
       await page.waitForTimeout(400);
       const btn = page.locator("text=/מה נשאר לגביע של שבוע/").first();
       if (!(await btn.count())) bad.push("הכפתור אינו מוצג בשישי");
+      else if (!(await btn.innerText()).includes("שבוע 2")) bad.push("הכפתור נוקב בשבוע הלא נכון: " + (await btn.innerText()));
       else {
         await btn.click();
         await page.waitForTimeout(500);

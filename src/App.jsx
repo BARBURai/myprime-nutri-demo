@@ -640,7 +640,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.50";
+const VERSION = "6.51";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5195,12 +5195,15 @@ function weekTrophyEarned(checkins, startDate, w, today) {
   return any;
 }
 
-function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, stepsByDate, waterByDate, log, targets, cupMl, activityLog }) {
+function CollectionModal({ checkins, startDate, today, viewDate, onClose, keepShabbat, stepsByDate, waterByDate, log, targets, cupMl, activityLog }) {
   const { days } = trackerStats(checkins);
-  // רק בשישי ובשבת, לפי רון. בשאר השבוע עוד יש לה זמן, וזו רק הצקה.
-  const dw = dowOf(today);
+  // **היום שממנו נפתח הארון, ולא "היום".** רון פתח את הארון מיומן של שישי בשבוע 2
+  // וקיבל כפתור שמדבר על שבוע 3, כי הוא נשען על התאריך של היום. הכפתור מדבר על
+  // השבוע של היום שהיא רואה, וזה גם מה שקורה כשהיא פשוט על היום הנוכחי.
+  const dayInView = viewDate || today;
+  const dw = dowOf(dayInView);
   const endOfWeek = dw === 6 || dw === 0;
-  const week = Math.min(programWeekFor(startDate, today), 10);
+  const week = Math.min(programWeekFor(startDate, dayInView), 10);
   // נושא את מספר השבוע שנפתח, כדי שהקשה על גביע מסוים תדבר עליו ולא על השבוע
   // הנוכחי. רון: "לחצתי על הכפתור של שבוע 2 והוא רושם שבוע 3."
   const [missWeek, setMissWeek] = useState(0);
@@ -7214,7 +7217,7 @@ export default function App() {
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} level={cheerTrophyLevel} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
-            {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} keepShabbat={profile.keepShabbat} stepsByDate={stepsByDate} waterByDate={waterByDate} log={log} targets={targets} cupMl={profile.cupMl} activityLog={activityLog} onClose={() => setSheet(null)} />}
+            {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} viewDate={selectedDate} keepShabbat={profile.keepShabbat} stepsByDate={stepsByDate} waterByDate={waterByDate} log={log} targets={targets} cupMl={profile.cupMl} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} startGlow={glowDirect} onGlowStart={() => setGlowSeen(true)} onClose={() => { setSheet(null); setGlowDirect(false); }} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
