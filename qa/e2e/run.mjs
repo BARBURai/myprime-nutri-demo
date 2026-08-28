@@ -792,6 +792,77 @@ const CHECKS = [
       };
     },
   },
+  {
+    // בטלפוני סמסונג קישור מוואטסאפ נוחת בדפדפן של סמסונג, ושם ההתקנה נחסמת על
+    // ידי אנדרואיד. משתתפת שלחה צילום של Google Play Protect. שני הצדדים באותו
+    // תרחיש בכוונה, כי הודעה שמופיעה תמיד נראית בדיוק כמו הודעה שלא מופיעה אף פעם.
+    name: "בדפדפן שאי אפשר להתקין ממנו מוצגת ההפניה, ובנכון לא",
+    async run(browser, device) {
+      if (!device.isMobile) return { ok: true, skip: true, detail: "רלוונטי לטלפון בלבד" };
+      // באייפון ההנחיות הן של ספארי ולא של כרום, ולכן הצד השני של ההשוואה אינו קיים שם.
+      if (/iphone|ipad/i.test(device.userAgent || "")) return { ok: true, skip: true, detail: "באייפון ההנחיות הן של ספארי" };
+      const SAMSUNG = "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.0.0 Mobile Safari/537.36";
+      const look = async (ua, standalone) => {
+        const context = await browser.newContext({ ...device, ...(ua ? { userAgent: ua } : {}), locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+        await stubApi(context, { startDate: startForDay(10) });
+        await context.addInitScript((sa) => {
+          localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
+          localStorage.removeItem("myprime_install_ack");
+          // אפליקציה מותקנת: matchMedia מדווח standalone. אין דרך אחרת לדמות את זה.
+          if (sa) { const real = window.matchMedia.bind(window); window.matchMedia = (q) => (q === "(display-mode: standalone)" ? { matches: true, media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} } : real(q)); }
+        }, !!standalone);
+        const page = await context.newPage();
+        await page.goto(BASE, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(2600);
+        const note = await page.locator("text=את נמצאת בדפדפן של סמסונג").count();
+        const chromeSteps = await page.locator("text=ודאי שאת בדפדפן Chrome").count();
+        const copyBtn = await page.getByRole("button", { name: /העתקת הקישור/ }).count();
+        const iosNote = await page.locator("text=/לא בספארי|נפתח בתוך אפליקציה אחרת/").count();
+        const iosSteps = await page.locator("text=ודאי שאת בדפדפן Safari").count();
+        await context.close();
+        return { note, chromeSteps, copyBtn, iosNote, iosSteps };
+      };
+      const sam = await look(SAMSUNG);
+      const chr = await look(null);
+      // ובאייפון: כרום שם הוא ספארי מבפנים בלי אפשרות התקנה, ולכן גם הוא מקבל הפניה.
+      const CRIOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/120.0.0.0 Mobile/15E148 Safari/604.1";
+      const SAF = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+      const cr = await look(CRIOS);
+      const sf = await look(SAF);
+      // מי שכבר בתוך האפליקציה המותקנת לא תראה את ההודעה לעולם. באייפון הזהות של
+      // אפליקציה מותקנת אינה נושאת Version/, בדיוק כמו דפדפן פנימי, ולכן בלי הסייג
+      // היא הייתה מקבלת הפניה להתקין למרות שהיא כבר התקינה.
+      const PWA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+      const inst = await look(PWA, true);
+      // ובאפליקציה המותקנת יש עוד דרך להגיע להנחיות: הפרופיל. שם ההודעה הייתה
+      // מופיעה למי שכבר התקינה, כי מסך ההתקנה עצמו אינו מרונדר שם בכלל.
+      const instProfile = await (async () => {
+        const context = await browser.newContext({ ...device, userAgent: PWA, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+        await stubApi(context, { startDate: startForDay(10) });
+        await context.addInitScript(() => {
+          const real = window.matchMedia.bind(window);
+          window.matchMedia = (q) => (q === "(display-mode: standalone)" ? { matches: true, media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} } : real(q));
+        });
+        const page = await context.newPage();
+        await page.goto(BASE, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(2600);
+        await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
+        await page.locator("text=פרופיל").last().click().catch(() => {});
+        await page.waitForTimeout(700);
+        const row = page.locator("text=התקנת האפליקציה על הטלפון").first();
+        const had = await row.count();
+        if (had) { await row.click(); await page.waitForTimeout(700); }
+        const n = await page.locator("text=/לא בספארי|נפתח בתוך אפליקציה אחרת|נמצאת בדפדפן של סמסונג/").count();
+        await context.close();
+        return { had, n };
+      })();
+      const ok = sam.note === 1 && sam.chromeSteps === 0 && sam.copyBtn === 1 &&
+                 chr.note === 0 && chr.chromeSteps === 1 &&
+                 cr.iosNote === 1 && cr.iosSteps === 0 && sf.iosNote === 0 && sf.iosSteps === 1 &&
+                 inst.iosNote === 0 && inst.note === 0 && instProfile.n === 0;
+      return { ok, detail: `סמסונג ${sam.note}/${sam.chromeSteps} · כרום ${chr.note}/${chr.chromeSteps} · אייפון-כרום ${cr.iosNote}/${cr.iosSteps} · ספארי ${sf.iosNote}/${sf.iosSteps} · מותקנת ${inst.iosNote} · פרופיל במותקנת ${instProfile.n} (שורה ${instProfile.had})` };
+    },
+  },
 ];
 
 /* ---------- run ---------- */
