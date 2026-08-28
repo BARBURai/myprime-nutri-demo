@@ -640,7 +640,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.48";
+const VERSION = "6.49";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5232,13 +5232,14 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
         })}
       </div>
       {endOfWeek && TRACKER_ENABLED && (
-        <div style={{ marginTop: 14 }}><Btn variant="ghost" onClick={() => setMissOpen(true)}>מה נשאר לגביע?</Btn></div>
+        <div style={{ marginTop: 14 }}><Btn variant="ghost" onClick={() => setMissOpen(true)}>מה נשאר לגביע של שבוע {week}?</Btn></div>
       )}
       <div style={{ fontSize: 13, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע זהב נכנס לארון על שבוע שכל ימיו הושלמו, ראשון עד שישי. אם פספסת יום אחד, נכנס גביע כסף. שבת אינה נחשבת.</div>
       {missOpen && (
         <div onClick={() => setMissOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, maxHeight: "80%", overflowY: "auto", fontFamily: fontStack }}>
-            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 12 }}>מה נשאר לגביע של שבוע {week}?</div>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, maxHeight: "82%", display: "flex", flexDirection: "column", fontFamily: fontStack }}>
+            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 12, flexShrink: 0 }}>מה נשאר לגביע של שבוע {week}?</div>
+            <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
             {miss.length === 0 ? (
               <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65 }}>לא נשאר כלום, כל ימי השבוע הושלמו.</div>
             ) : miss.map((d) => (
@@ -5247,8 +5248,9 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
                 <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 2 }}>{d.tasks.join(" · ")}</div>
               </div>
             ))}
-            <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 4, fontSize: 13.5, color: C.faint, lineHeight: 1.55 }}>יום אחד אפשר לפספס ועדיין לקבל גביע כסף. שבוע שכולו הושלם מקבל זהב.</div>
-            <div style={{ marginTop: 14 }}><Btn onClick={() => setMissOpen(false)}>סגירה</Btn></div>
+            </div>
+            <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 4, fontSize: 13.5, color: C.faint, lineHeight: 1.55 }}>יום אחד אפשר לפספס ועדיין לקבל גביע כסף. שבוע שכולו הושלם מקבל זהב.</div>
+            <div style={{ marginTop: 14, flexShrink: 0 }}><Btn onClick={() => setMissOpen(false)}>סגירה</Btn></div>
           </div>
         </div>
       )}
