@@ -609,7 +609,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.38";
+const VERSION = "6.39";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3420,6 +3420,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [addedKeys, setAddedKeys] = useState([]); // feature: multi-add from favorites
   const [addedMap, setAddedMap] = useState({}); // favId -> created journal entry id (for undo)
   const [histTab, setHistTab] = useState("fav"); // "fav" | "recent" (favorites is the default)
+  const [histQ, setHistQ] = useState(""); // חיפוש בתוך האחרונים והמועדפים, חוצה את שתי הלשוניות
   const [delTarget, setDelTarget] = useState(null); // { item, list } pending delete confirmation
   const [aiAsOne, setAiAsOne] = useState(true); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product (default = one product, recommended)
   const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
@@ -3736,7 +3737,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
               { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
               { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
-              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => setStep("history") },
+              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => { setHistQ(""); setStep("history"); } },
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") },
               { ic: Pencil, t: "הזנה ידנית", s: "להקליד ערכים מהתווית - בלי AI", bg: "#EDEFF3", color: "#6B7A99", go: () => setStep("manual") }].map((o) => (
               <div key={o.t} data-tut={o.tut} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
@@ -3845,45 +3846,81 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
           </>
         )}
         {step === "history" && (() => {
-          const list = histTab === "fav" ? (favorites || []) : (recents || []);
+          const favs = favorites || [];
+          const recs = recents || [];
+          const hq = histQ.trim();
+          const hSearch = hq.length >= 2;
+          const norm = (s) => String(s || "").trim().toLowerCase();
+          const hit = (f) => norm(f.name).includes(norm(hq));
+          const favHits = hSearch ? favs.filter(hit) : [];
+          // פריט שנמצא בשתי הרשימות מוצג פעם אחת בלבד, תחת מועדפים
+          const favNames = new Set(favHits.map((f) => norm(f.name)));
+          const recHits = hSearch ? recs.filter((f) => hit(f) && !favNames.has(norm(f.name))) : [];
+          const list = histTab === "fav" ? favs : recs;
+          // שדה החיפוש מוצג רק כשהרשימה ארוכה מספיק כדי שיהיה קשה למצוא בה
+          const showHistSearch = favs.length + recs.length > 8;
           const quickMeal = (() => { const h = new Date().getHours(); return h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; })();
           const tabBtn = (id, label) => (
             <button onClick={() => setHistTab(id)} style={{ flex: 1, border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 6px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, background: histTab === id ? C.panel : "transparent", color: histTab === id ? C.brandD : C.sub, boxShadow: histTab === id ? "0 1px 4px rgba(168,66,92,0.14)" : "none" }}>{label}</button>
           );
+          const histRow = (f, listId) => {
+            const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
+            const added = addedKeys.includes(f.id);
+            return (
+              <div key={listId + "-" + f.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לביטול - הקישי שוב על הוי · לכמות אחרת - על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
+                <button onClick={() => setDelTarget({ item: f, list: listId })} aria-label="הסרה מהרשימה" style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: "transparent", color: C.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trash2 size={16} /></button>
+                <button onClick={() => {
+                  if (added) {
+                    const eid = addedMap[f.id];
+                    if (eid && onUndoEntry) onUndoEntry(eid);
+                    setAddedKeys((k) => k.filter((x) => x !== f.id));
+                    setAddedMap((m) => { const n = { ...m }; delete n[f.id]; return n; });
+                  } else {
+                    const eid = "n" + Date.now();
+                    commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...servingFields(f, g), ...n, _entryId: eid }, true);
+                    setAddedKeys((k) => [...k, f.id]);
+                    setAddedMap((m) => ({ ...m, [f.id]: eid }));
+                  }
+                }} aria-label={added ? "ביטול הוספה" : "הוספה"} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
+              </div>
+            );
+          };
+          const histHead = (t) => (<div style={{ fontSize: 13.5, fontWeight: 700, color: C.brandD, margin: "12px 0 2px" }}>{t}</div>);
           return (
           <>
-            <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
-              {tabBtn("fav", "המועדפים שלי")}
-              {tabBtn("recent", "אחרונים")}
-            </div>
+            {showHistSearch && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", color: C.faint, marginBottom: 10 }}>
+                <Search size={15} /><input value={histQ} onChange={(e) => setHistQ(e.target.value)} placeholder="חיפוש בפריטים שלי…" style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+                {hq && <button onClick={() => setHistQ("")} aria-label="ניקוי החיפוש" style={{ border: "none", background: "transparent", color: C.faint, fontSize: 17, cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>}
+              </div>
+            )}
+            {!hSearch && (
+              <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
+                {tabBtn("fav", "המועדפים שלי")}
+                {tabBtn("recent", "אחרונים")}
+              </div>
+            )}
             <div style={{ fontSize: 13, color: C.sub, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 10 }}>הקישי <b>+</b> להוספה מהירה, או על <b>שם הפריט</b> כדי לבחור כמות אחרת. הפריט ייכנס לארוחה לפי שעת היום, ותמיד אפשר לשנות ביומן.</div>
             {addedKeys.length > 0 && <div style={{ marginBottom: 12 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
-            {list.length === 0 && (
-              <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>{histTab === "fav" ? "עדיין אין לך מועדפים. אחרי שתוסיפי מוצר, נשאל אם לשמור אותו כאן 💜" : "עדיין אין מוצרים אחרונים."}</div>
+            {hSearch ? (
+              <>
+                {favHits.length > 0 && histHead("מועדפים (" + favHits.length + ")")}
+                {favHits.map((f) => histRow(f, "fav"))}
+                {recHits.length > 0 && histHead("אחרונים (" + recHits.length + ")")}
+                {recHits.map((f) => histRow(f, "recent"))}
+                {favHits.length === 0 && recHits.length === 0 && (
+                  <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>לא נמצא פריט בשם הזה.</div>
+                )}
+              </>
+            ) : (
+              <>
+                {list.length === 0 && (
+                  <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>{histTab === "fav" ? "עדיין אין לך מועדפים. אחרי שתוסיפי מוצר, נשאל אם לשמור אותו כאן 💜" : "עדיין אין מוצרים אחרונים."}</div>
+                )}
+                {list.map((f) => histRow(f, histTab))}
+              </>
             )}
-            {list.map((f) => {
-              const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
-              const added = addedKeys.includes(f.id);
-              return (
-                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לביטול - הקישי שוב על הוי · לכמות אחרת - על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
-                  <button onClick={() => setDelTarget({ item: f, list: histTab })} aria-label="הסרה מהרשימה" style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: "transparent", color: C.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trash2 size={16} /></button>
-                  <button onClick={() => {
-                    if (added) {
-                      const eid = addedMap[f.id];
-                      if (eid && onUndoEntry) onUndoEntry(eid);
-                      setAddedKeys((k) => k.filter((x) => x !== f.id));
-                      setAddedMap((m) => { const n = { ...m }; delete n[f.id]; return n; });
-                    } else {
-                      const eid = "n" + Date.now();
-                      commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...servingFields(f, g), ...n, _entryId: eid }, true);
-                      setAddedKeys((k) => [...k, f.id]);
-                      setAddedMap((m) => ({ ...m, [f.id]: eid }));
-                    }
-                  }} aria-label={added ? "ביטול הוספה" : "הוספה"} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
-                </div>
-              );
-            })}
             {addedKeys.length > 0 && <div style={{ marginTop: 14 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
             {delTarget && (
               <div onClick={() => setDelTarget(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 30 }}>

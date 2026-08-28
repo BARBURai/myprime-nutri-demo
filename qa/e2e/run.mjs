@@ -793,6 +793,63 @@ const CHECKS = [
     },
   },
   {
+    // בקשה של הילה: "כדאי להוסיף חיפוש במאכלים האחרונים שאכלתי." ההחלטה של רון:
+    // החיפוש חוצה את שתי הלשוניות, כי מי שמחפשת במועדפים ולא מוצאת לא תחשוב
+    // להחליף לשונית ולחפש שוב. שני הצדדים באותו תרחיש בכוונה: שהחיפוש מוצא בשתי
+    // הרשימות, ושפריט שנמצא בשתיהן מוצג פעם אחת בלבד.
+    name: "החיפוש באחרונים ובמועדפים מוצא בשתי הרשימות, וכפול מוצג פעם אחת",
+    async run(browser, device) {
+      const item = (name, kcal) => ({ id: "fav_" + name, name, per100: { kcal, p: 5, f: 2, c: 10 }, exact: { g: 100, kcal, p: 5, f: 2, c: 10 }, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }], def: 0, unit: "g", lastG: 100 });
+      const { context, page, errors } = await openApp(browser, device, {
+        seed: {
+          favorites: [item("יוגורט ביו בדיקה", 90), item("יוגורט עם גרנולה בדיקה", 140), item("סלט ירקות בדיקה", 40), item("לחם מלא בדיקה", 240), item("אגוזי מלך בדיקה", 650)],
+          recents: [item("יוגורט יווני בדיקה", 100), item("יוגורט ביו בדיקה", 90), item("ביצה קשה בדיקה", 155), item("אורז בדיקה", 130), item("טונה בדיקה", 116)],
+        },
+      });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=האחרונים והמועדפים שלי").first().click();
+      await page.waitForTimeout(500);
+
+      const bad = [];
+      const box = page.locator('input[placeholder="חיפוש בפריטים שלי…"]');
+      if (!(await box.count())) bad.push("שדה החיפוש לא מוצג אף שיש עשרה פריטים");
+      // כותרת המסך היא "האחרונים והמועדפים שלי", ולכן חיפוש טקסט חופשי תופס גם אותה.
+      const tab = () => page.getByRole("button", { name: "המועדפים שלי", exact: true });
+      const tabsBefore = await tab().count();
+      if (!tabsBefore) bad.push("שתי הלשוניות לא מוצגות לפני החיפוש");
+
+      if (await box.count()) {
+        await box.fill("יוגורט");
+        await page.waitForTimeout(500);
+      }
+      const txt = () => page.evaluate(() => document.body.innerText);
+      let body = await txt();
+      const count = (needle) => body.split(needle).length - 1;
+      if (count("יוגורט ביו בדיקה") !== 1) bad.push("פריט שנמצא בשתי הרשימות מוצג " + count("יוגורט ביו בדיקה") + " פעמים");
+      if (count("יוגורט יווני בדיקה") !== 1) bad.push("הפריט שקיים רק באחרונים אינו מוצג");
+      if (count("סלט ירקות בדיקה") !== 0) bad.push("פריט שאינו תואם נשאר על המסך");
+      if (!body.includes("מועדפים (2)")) bad.push("כותרת המועדפים חסרה");
+      if (!body.includes("אחרונים (1)")) bad.push("כותרת האחרונים חסרה");
+      if (body.indexOf("מועדפים (2)") > body.indexOf("אחרונים (1)")) bad.push("האחרונים מוצגים לפני המועדפים");
+      if (await tab().count()) bad.push("הלשוניות נשארו בזמן חיפוש");
+
+      if (await box.count()) { await box.fill("פסטה"); await page.waitForTimeout(400); }
+      body = await txt();
+      if (!body.includes("לא נמצא פריט בשם הזה")) bad.push("חיפוש בלי תוצאות אינו אומר את זה");
+
+      if (await box.count()) { await box.fill(""); await page.waitForTimeout(400); }
+      if (!(await tab().count())) bad.push("הלשוניות לא חזרו כשמחקו את החיפוש");
+      body = await txt();
+      if (!body.includes("סלט ירקות בדיקה")) bad.push("הרשימה המלאה לא חזרה");
+
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 50) : "אין"}` };
+    },
+  },
+  {
     // בטלפוני סמסונג קישור מוואטסאפ נוחת בדפדפן של סמסונג, ושם ההתקנה נחסמת על
     // ידי אנדרואיד. משתתפת שלחה צילום של Google Play Protect. שני הצדדים באותו
     // תרחיש בכוונה, כי הודעה שמופיעה תמיד נראית בדיוק כמו הודעה שלא מופיעה אף פעם.
