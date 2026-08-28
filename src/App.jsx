@@ -464,9 +464,10 @@ const SHOW_MACRO_STRIP = false;
 const CHECKIN_UNLOCK = { week: 1, day: 3 };   // starts on day 3 of week 1
 const CHECKIN_REVEAL_HOUR = 0;                // 0 = daily report available all day (set to 19 to lock until 19:00)
 const MEDAL_SRC = "/medal.png";
-function trophyForWeek(w) {
-  if (w >= 10) return "/medals/trophy-champion.webp";
-  return "/medals/trophy-" + Math.max(1, Math.min(9, w)) + ".webp";
+function trophyForWeek(w, level) {
+  const sil = level === "silver" ? "-silver" : "";
+  if (w >= 10) return "/medals/trophy-champion" + sil + ".webp";
+  return "/medals/trophy-" + Math.max(1, Math.min(9, w)) + sil + ".webp";
 }
 // Pulls the values the app already tracks so she is not asked twice.
 function autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog) {
@@ -639,7 +640,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.46";
+const VERSION = "6.47";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5110,10 +5111,11 @@ function CheckinCheer({ name, streak, onClose }) {
   );
 }
 
-function TrophyCheer({ week, name, streak, onClose }) {
+function TrophyCheer({ week, name, streak, level, onClose }) {
   const colors = ["#F4C04A", C.brand, C.amber, C.info, C.macroC];
-  const src = week >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${Math.max(1, Math.min(9, week))}.webp`;
-  const champ = week >= 10;
+  const src = trophyForWeek(week, level);
+  const silver = level === "silver";
+  const champ = week >= 10 && !silver;
   return (
     <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 47 }}>
       <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
@@ -5123,9 +5125,9 @@ function TrophyCheer({ week, name, streak, onClose }) {
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.35)" }}>
         <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
-        <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : "גביע השבוע נכנס לארון!"}</div>
+        <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : silver ? "גביע כסף נכנס לארון!" : "גביע השבוע נכנס לארון!"}</div>
         {streak >= 2 && <div style={{ fontSize: 18, fontWeight: 700, color: C.brand, marginTop: 8 }}>{streak} ימים ברצף</div>}
-        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : silver ? `השלמת חמישה ימים מתוך שישה בשבוע ${week}${name && name.trim() ? `, ${name.trim()}` : ""}. יום אחד אפשר לפספס, וזה עדיין שבוע חזק.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>{champ ? "סגירה 💜" : "ממשיכות חזק 💜"}</Btn></div>
       </div>
     </div>
@@ -5161,6 +5163,24 @@ function trackerStats(checkins) {
 
 // A weekly trophy is earned once the week's weekdays have passed (Friday <= today)
 // and every eligible non-Saturday day of that program week (from day 3) is completed.
+// זהב על שבוע שכל ימיו הושלמו, כסף כשפספסה יום אחד. החלטה של רון, 28 באוגוסט
+// 2026: הדרישה מחמירה מעצמה ככל שהתוכנית מתקדמת, כי מספר המשימות ביום גדל,
+// ועדי כתבה "קיבלתי רק גביע אחד". ההקלה היא על החיים ולא על ההתנהגות: **היום
+// עצמו עדיין חייב להיות שלם**, ומה שמותר הוא לפספס יום.
+function weekTrophyLevel(checkins, startDate, w, today) {
+  const fri = addDays(startDate, (w - 1) * 7 + 5);
+  if (fri > today) return null;
+  let any = false, missed = 0;
+  for (let dnum = Math.max((w - 1) * 7 + 1, 3); dnum <= w * 7; dnum++) {
+    const date = addDays(startDate, dnum - 1);
+    if (date > today) break;
+    if (parseDay(date).getUTCDay() === 6) continue;
+    any = true;
+    if (!(checkins[date] && checkins[date]._done)) missed++;
+  }
+  if (!any) return null;
+  return missed === 0 ? "gold" : missed === 1 ? "silver" : null;
+}
 function weekTrophyEarned(checkins, startDate, w, today) {
   const fri = addDays(startDate, (w - 1) * 7 + 5);
   if (fri > today) return false;
@@ -5201,12 +5221,12 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
       <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, margin: "10px 0 8px" }}>הגביעים שלך</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
         {Array.from({ length: 10 }).map((_, i) => {
-          const w = i + 1; const earned = weekTrophyEarned(checkins, startDate, w, today);
-          const src = w >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${w}.webp`;
+          const w = i + 1; const level = weekTrophyLevel(checkins, startDate, w, today);
           return (
-            <div key={w} style={{ textAlign: "center", opacity: earned ? 1 : 0.32 }}>
-              <img src={src} alt="" width={58} height={58} style={{ filter: earned ? "none" : "grayscale(1)" }} />
-              <div style={{ fontSize: 12, color: earned ? C.brandD : C.faint, marginTop: 2 }}>{w >= 10 ? "אלופה" : `שבוע ${w}`}</div>
+            <div key={w} style={{ textAlign: "center", opacity: level ? 1 : 0.32 }}>
+              <img src={trophyForWeek(w, level)} alt="" width={58} height={58} style={{ filter: level ? "none" : "grayscale(1)" }} />
+              <div style={{ fontSize: 12, color: level ? C.brandD : C.faint, marginTop: 2 }}>{w >= 10 ? "אלופה" : `שבוע ${w}`}</div>
+              {level === "silver" && <div style={{ fontSize: 11, color: C.sub }}>כסף</div>}
             </div>
           );
         })}
@@ -5214,7 +5234,7 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
       {endOfWeek && TRACKER_ENABLED && (
         <div style={{ marginTop: 14 }}><Btn variant="ghost" onClick={() => setMissOpen(true)}>מה נשאר לגביע?</Btn></div>
       )}
-      <div style={{ fontSize: 13, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע נכנס לארון כשמשלימים את ימי השבוע (ראשון עד שישי). שבת לא חובה.</div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע זהב נכנס לארון על שבוע שכל ימיו הושלמו, ראשון עד שישי. אם פספסת יום אחד, נכנס גביע כסף. שבת אינה נחשבת.</div>
       {missOpen && (
         <div onClick={() => setMissOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, maxHeight: "80%", overflowY: "auto", fontFamily: fontStack }}>
@@ -5227,7 +5247,7 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
                 <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 2 }}>{d.tasks.join(" · ")}</div>
               </div>
             ))}
-            <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 4, fontSize: 13.5, color: C.faint, lineHeight: 1.55 }}>כשכל ימי השבוע סגורים הגביע נכנס לארון. שבת לא חובה.</div>
+            <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 4, fontSize: 13.5, color: C.faint, lineHeight: 1.55 }}>יום אחד אפשר לפספס ועדיין לקבל גביע כסף. שבוע שכולו הושלם מקבל זהב.</div>
             <div style={{ marginTop: 14 }}><Btn onClick={() => setMissOpen(false)}>סגירה</Btn></div>
           </div>
         </div>
@@ -5543,7 +5563,8 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
     if (d > today) break;
     if (checkins[d] && checkins[d]._done) wkMedals++;
   }
-  const wkTrophy = weekTrophyEarned(checkins, startDate, week, today);
+  const wkLevel = weekTrophyLevel(checkins, startDate, week, today);
+  const wkTrophy = !!wkLevel;
   const achievementsEl = (!hideRewards && (wkMedals > 0 || wkTrophy)) ? (
     <div style={{ background: C.panel, border: `1.5px solid ${C.brand}`, borderRadius: 16, marginTop: 16, padding: "18px 14px", textAlign: "center", boxShadow: "0 2px 10px rgba(168,66,92,0.10)" }}>
       <div style={{ fontSize: 18.5, fontWeight: 800, color: C.brandD, marginBottom: 14 }}>ההישגים שלך השבוע 🏆</div>
@@ -5558,8 +5579,8 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
       )}
       {wkTrophy && (
         <div>
-          <img src={trophyForWeek(week)} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }} />
-          <div style={{ fontSize: 16, color: C.brandD, fontWeight: 800, marginTop: 6 }}>{week >= 10 ? "גביע האלופה נכנס לארון! 🎉" : "גביע השבוע נכנס לארון! 🎉"}</div>
+          <img src={trophyForWeek(week, wkLevel)} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }} />
+          <div style={{ fontSize: 16, color: C.brandD, fontWeight: 800, marginTop: 6 }}>{wkLevel === "silver" ? "גביע כסף נכנס לארון! 🎉" : week >= 10 ? "גביע האלופה נכנס לארון! 🎉" : "גביע השבוע נכנס לארון! 🎉"}</div>
         </div>
       )}
     </div>
@@ -5866,7 +5887,7 @@ const FAQ_ITEMS = [
   { q: "שכחתי להזין יום שלם - מה עושים?", a: "אפשר לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך, ולמלא בדיעבד." },
   { q: "סרקתי ברקוד והערכים לא תואמים לאריזה. מה עושים?", a: "הערכים שהופיעו הם של גרסה כללית של המוצר במאגר העולמי, ולא של האריזה הישראלית. במסך שמאשר את הכמות יש שורה קטנה: \"הערכים לא תואמים לאריזה? עדכני מהתווית\". לוחצים עליה ומקלידים את המספרים מהתווית, מהעמודה של 100 גרם. מהרגע הזה המוצר יהיה נכון אצלך גם בפעם הבאה." },
   { q: "איך עורכים או מוחקים פריט שהוספתי?", a: "בהקשה על הפריט ברשימת 'מה שהוזן היום' ביומן אפשר לערוך אותו או למחוק אותו." },
-  { q: "מה זה המדליות והגביעים?", a: "על כל יום שבו תשלימי את כל המשימות מקבלים מדליה, ועל שבוע שלם - גביע. הכל נאסף בארון ההישגים." },
+  { q: "מה זה המדליות והגביעים?", a: "על כל יום שבו השלמת את כל המשימות מקבלים מדליה. על שבוע שכל ימיו הושלמו, ראשון עד שישי, מקבלים גביע זהב, ואם פספסת יום אחד מקבלים גביע כסף. שבת אינה נחשבת. הכל נאסף בארון ההישגים." },
   { q: "אפשר להזין באפליקציה היקפים?", a: "אין מדידות היקפים כחלק מהמעקב הרשמי בתוכנית. אנחנו רוצות להשאיר את המעקב פשוט ולא להפוך את התהליך לעיסוק בעוד ועוד מספרים ומדידות.\n\nאם חשוב לך לעקוב גם אחרי היקפים, את כמובן יכולה לעשות את זה באופן עצמאי בבית, למשל בתחילת התוכנית ובהמשך להשוות, אבל זה לא חלק שאנחנו דורשות או מנהלות בתוך האפליקציה.\n\nהמטרה שלנו היא להתמקד בתהליך עצמו, בהרגלים, באימונים ובהתקדמות שלך לאורך הדרך." },
   { q: "למה משימות חדשות מופיעות לאורך התוכנית?", a: "המשימות נפתחות בהדרגה כדי לא להעמיס בבת אחת. כל כמה ימים מצטרפת משימה חדשה, צעד אחרי צעד." },
 ];
@@ -6269,6 +6290,7 @@ export default function App() {
   const [checkins, setCheckins] = useState(saved?.checkins || {});
   const celebRef = useRef({ mounted: false, trophies: 0 });
   const [cheerTrophyWeek, setCheerTrophyWeek] = useState(1);
+  const [cheerTrophyLevel, setCheerTrophyLevel] = useState("gold");
   const [goalAckWeek, setGoalAckWeek] = useState(saved?.goalAckWeek || 0);
   const [goalBump, setGoalBump] = useState(null);
   const [favorites, setFavorites] = useState(saved?.favorites || []);
@@ -6815,13 +6837,13 @@ export default function App() {
       }
     }
     if (changed) setCheckins(next);
-    let tcount = 0, maxW = 0;
-    for (let w = 1; w <= 10; w++) if (weekTrophyEarned(next, profile.startDate, w, today)) { tcount++; maxW = w; }
+    let tcount = 0, maxW = 0, maxLevel = null;
+    for (let w = 1; w <= 10; w++) { const lv = weekTrophyLevel(next, profile.startDate, w, today); if (lv) { tcount++; maxW = w; maxLevel = lv; } }
     if (!celebRef.current.mounted) { celebRef.current = { mounted: true, trophies: tcount }; return; }
     const newTrophy = tcount > celebRef.current.trophies;
     if (newTrophy) celebRef.current.trophies = tcount;
     if (!profile.hideRewards) {
-      if (newTrophy) { setCheerTrophyWeek(maxW); setSheet("trophyCheer"); }
+      if (newTrophy) { setCheerTrophyWeek(maxW); setCheerTrophyLevel(maxLevel); setSheet("trophyCheer"); }
       else if (celebrate) setSheet("checkinCheer");
     }
   }, [checkins, log, stepsByDate, waterByDate, activityLog, targets, profile.startDate, profile.keepShabbat, profile.hideRewards, today]);
@@ -7183,7 +7205,7 @@ export default function App() {
             {sheet === "rateCap" && <RateCapSheet onClose={() => setSheet(null)} />}
             {sheet === "resumeOffer" && <ResumeOfferSheet onResume={() => { resumeLoss(); setSheet(null); }} onLater={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
-            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
+            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} level={cheerTrophyLevel} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} keepShabbat={profile.keepShabbat} stepsByDate={stepsByDate} waterByDate={waterByDate} log={log} targets={targets} cupMl={profile.cupMl} activityLog={activityLog} onClose={() => setSheet(null)} />}

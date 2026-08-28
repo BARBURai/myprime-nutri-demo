@@ -939,7 +939,16 @@ const CHECKS = [
         if (!body.includes("יום חמישי")) bad.push("היום החסר אינו מופיע");
         if (!body.includes("אימון כוח")) bad.push("המשימה החסרה אינה מופיעה");
         if (body.includes("יום רביעי")) bad.push("יום שהושלם מופיע ברשימה");
+        // סוגרים את המסך וחוזרים לארון, לבדוק את גביע הכסף עצמו
+        await page.getByRole("button", { name: "סגירה" }).first().click().catch(() => {});
+        await page.waitForTimeout(400);
       }
+      // שבוע 2 חסר בו יום אחד, ולכן הוא כסף. שבוע 1 לא מולא כלל ואינו גביע.
+      const silver = await page.evaluate(() => Array.from(document.querySelectorAll("img")).filter((i) => i.src.includes("-silver.webp")).length);
+      if (silver !== 1) bad.push("גביעי כסף על המסך: " + silver);
+      const cab = await page.evaluate(() => document.body.innerText);
+      if (!cab.includes("כסף")) bad.push("לא כתוב שהגביע כסף");
+      if (!cab.includes("אם פספסת יום אחד, נכנס גביע כסף")) bad.push("שורת ההסבר אינה מופיעה בארון");
       await context.close();
       return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
     },
