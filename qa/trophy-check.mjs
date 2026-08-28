@@ -302,17 +302,23 @@ console.log("\nזהב וכסף");
 {
   const lvl = (st, today) => api.weekTrophyLevel(st.checkins, START, 2, today);
   check("שבוע שלם הוא זהב", lvl(closeDays(seedWeek(null), FRI), FRI) === "gold");
-  check("יום אחד חסר הוא כסף", lvl(closeDays(seedWeek(THU), FRI), FRI) === "silver", String(lvl(closeDays(seedWeek(THU), FRI), FRI)));
+  // כסף מוכרע רק כשהשבוע נגמר: בשישי עצמו היא עדיין יכולה להשלים ולקבל זהב.
+  const SAT = d(14);
+  check("בשישי עצמו עוד אין כסף", lvl(closeDays(seedWeek(THU), FRI), FRI) === null, String(lvl(closeDays(seedWeek(THU), FRI), FRI)));
+  check("ובשבת, כשהשבוע נגמר, זה כסף", lvl(closeDays(seedWeek(THU), FRI), SAT) === "silver", String(lvl(closeDays(seedWeek(THU), FRI), SAT)));
+  check("וזהב כן ניתן בשישי עצמו", lvl(closeDays(seedWeek(null), FRI), FRI) === "gold");
 
   // שני ימים חסרים אינם גביע בכלל
   const two = seedWeek(THU);
   delete two.checkins[d(10)];
-  check("שני ימים חסרים אינם גביע", lvl(closeDays(two, FRI), FRI) === null, String(lvl(closeDays(two, FRI), FRI)));
+  check("שני ימים חסרים אינם גביע", lvl(closeDays(two, FRI), SAT) === null, String(lvl(closeDays(two, FRI), SAT)));
 
   // לפני שישי אין הכרעה, בדיוק כמו קודם
   check("לפני שישי אין גביע בכלל", lvl(closeDays(seedWeek(null), d(11)), d(11)) === null);
 
   // וזהב נשאר בדיוק מה שהיה: weekTrophyEarned לא זז
+  check("שדרוג מכסף לזהב מקפיץ מסך חגיגה משלו",
+    /gcount > \(celebRef\.current\.golds \|\| 0\)/.test(src) && /celebRef = useRef\(\{ mounted: false, trophies: 0, golds: 0 \}\)/.test(src));
   check("weekTrophyEarned נשאר זהב בלבד",
     api.weekTrophyEarned(closeDays(seedWeek(THU), FRI).checkins, START, 2, FRI) === false
     && api.weekTrophyEarned(closeDays(seedWeek(null), FRI).checkins, START, 2, FRI) === true);

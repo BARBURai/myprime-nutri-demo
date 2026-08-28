@@ -956,12 +956,75 @@ const CHECKS = [
         await page.getByRole("button", { name: "סגירה" }).first().click().catch(() => {});
         await page.waitForTimeout(400);
       }
-      // שבוע 2 חסר בו יום אחד, ולכן הוא כסף. שבוע 1 לא מולא כלל ואינו גביע.
+      // בשישי עצמו עוד אין כסף: היא יכולה להשלים את היום החסר ולקבל זהב.
+      const silver = await page.evaluate(() => Array.from(document.querySelectorAll("img")).filter((i) => i.src.includes("-silver.webp")).length);
+      if (silver !== 0) bad.push("כסף הוכרע כבר בשישי: " + silver);
+      const cab = await page.evaluate(() => document.body.innerText);
+      if (!cab.includes("אם פספסת יום אחד, נכנס גביע כסף")) bad.push("שורת ההסבר אינה מופיעה בארון");
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
+    // רון: אישה שכמעט לא מילאה קיבלה סיכום שמברך אותה על שבוע מוצלח, ומיד
+    // מתחתיו שש שורות של "עוד לא דיווחת". סימן אחד בשבוע הספיק כדי לפתוח אותו.
+    name: "שבוע עם דיווח מיום אחד מקבל הודעה במקום סיכום",
+    async run(browser, device) {
+      const start = "2026-08-16";
+      const day = (n) => { const t = new Date(Date.UTC(2026, 7, 16)); t.setUTCDate(t.getUTCDate() + n - 1); return t.toISOString().slice(0, 10); };
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      // שבוע 2, ובו יום אחד בלבד שמולא. זה בדיוק המצב שרון תיאר: סימן אחד בשבוע.
+      const d1 = day(9);
+      const checkins = { [d1]: { steps: 9000, journal: true, veg: 3 } };
+      const { context, page, errors } = await openApp(browser, device, {
+        startDate: start, clock: "2026-08-28T14:00:00.000Z",
+        seed: { profile: prof, checkins, stepsByDate: { [d1]: 9000 }, waterByDate: { [d1]: 2000 }, log: [{ id: "w1", date: d1, meal: "בוקר", name: "בדיקה", g: 200, unit: "g", source: "verified", kcal: 400, p: 30, f: 10, c: 20 }], weights: [{ date: start, kg: 72 }] },
+      });
+      const bad = [];
+      // "סיכום שבועי" מופיע גם על כרטיס התוכן. זה שבתוך יומן המעקב הוא האחרון.
+      await page.locator("text=סיכום שבועי").last().click().catch(() => {});
+      await page.waitForTimeout(800);
+      const body = await page.evaluate(() => document.body.innerText);
+      if (!body.includes("עוד אין מספיק נתונים לסיכום השבועי")) bad.push("הכרטיס אינו מוצג");
+      if (!body.includes("דיווח מיום אחד בלבד")) bad.push("מספר ימי הדיווח אינו נכון");
+      if (body.includes("הוכחת לעצמך")) bad.push("טקסט השבח עדיין מוצג");
+      if (body.includes("ענת")) bad.push("הכרטיס חתום בשמה של ענת");
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
+    // ובשבת, כשהשבוע כבר נגמר, אותו מצב בדיוק הוא כסף. שני התרחישים נפרדים כי
+    // כל אחד נועץ שעון אחר, וזה מה שכל הכלל תלוי בו.
+    name: "בשבת, שבוע שחסר בו יום אחד מקבל גביע כסף",
+    async run(browser, device) {
+      const start = "2026-08-16";
+      const day = (n) => { const t = new Date(Date.UTC(2026, 7, 16)); t.setUTCDate(t.getUTCDate() + n - 1); return t.toISOString().slice(0, 10); };
+      const THU = day(12);
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      const checkins = {}, stepsByDate = {}, waterByDate = {}, log = [];
+      const IDS = "steps journal strength veg mealorder".split(" ");
+      const NUM = new Set(["steps", "veg", "mealorder"]);
+      for (let n = 8; n <= 13; n++) {
+        const d = day(n);
+        stepsByDate[d] = 9000; waterByDate[d] = 2200;
+        log.push({ id: "s" + n, date: d, meal: "בוקר", name: "בדיקה", g: 200, unit: "g", source: "verified", kcal: 400, p: 130, f: 10, c: 20 });
+        const ans = {};
+        for (const id of IDS) ans[id] = NUM.has(id) ? 5 : true;
+        if (d === THU) delete ans.strength;
+        checkins[d] = ans;
+      }
+      const { context, page, errors } = await openApp(browser, device, {
+        startDate: start, clock: "2026-08-29T14:00:00.000Z",
+        seed: { profile: prof, checkins, stepsByDate, waterByDate, log, weights: [{ date: start, kg: 72 }] },
+      });
+      const bad = [];
+      await page.locator('[data-tut="cabinet"]').first().click().catch(async () => { await page.locator("text=ארון").first().click(); });
+      await page.waitForTimeout(700);
       const silver = await page.evaluate(() => Array.from(document.querySelectorAll("img")).filter((i) => i.src.includes("-silver.webp")).length);
       if (silver !== 1) bad.push("גביעי כסף על המסך: " + silver);
       const cab = await page.evaluate(() => document.body.innerText);
       if (!cab.includes("כסף")) bad.push("לא כתוב שהגביע כסף");
-      if (!cab.includes("אם פספסת יום אחד, נכנס גביע כסף")) bad.push("שורת ההסבר אינה מופיעה בארון");
       await context.close();
       return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
     },
