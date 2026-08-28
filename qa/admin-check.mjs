@@ -935,11 +935,16 @@ console.log("\nחיפוש, תגי תוכנית ותאריך במסך הניהו�
   //     עונה תשובה אחת והאפליקציה מציגה אחרת.
   {
     const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
-    const Q = "למה אני לא רואה כמה חלבון ופחמימות אכלתי כל יום?";
+    // כל שאלה שיושבת בשני המקומות נבדקת כאן. תוספת של שאלה משותפת נכנסת לרשימה הזאת.
+    const SHARED = [
+      "למה אני לא רואה כמה חלבון ופחמימות אכלתי כל יום?",
+      "אפשר להזין באפליקציה היקפים?",
+    ];
+    const Q = SHARED[0];
     // המחרוזת נקראת עד המרכאה הסוגרת האמיתית, עם כיבוד תווי בריחה, כי בצד
     // האפליקציה יש אחריה עוד שדה ובצד המשרד אין.
-    const pick = (src) => {
-      const i = src.indexOf(Q);
+    const pick = (src, q = Q) => {
+      const i = src.indexOf(q);
       if (i === -1) return "";
       const j = src.indexOf('a:', i);
       if (j === -1) return "";
@@ -957,6 +962,11 @@ console.log("\nחיפוש, תגי תוכנית ותאריך במסך הניהו�
     check("וגם בבנק התשובות של המשרד", inBank.length > 0);
     check("ושתי התשובות זהות מילה במילה", inApp.length > 0 && inApp === inBank,
       inApp.slice(0, 50) + " || " + inBank.slice(0, 50));
+    for (const q of SHARED.slice(1)) {
+      const a = pick(app, q), b = pick(html, q);
+      check("\"" + q + "\" קיימת בשני המקומות", a.length > 0 && b.length > 0);
+      check("ושתי התשובות עליה זהות מילה במילה", a.length > 0 && a === b, a.slice(0, 40) + " || " + b.slice(0, 40));
+    }
     // היא יורדת מהרשימה ברגע שמשימת החלבון נפתחה, כי משם הטבעת עונה עליה.
     check("והיא מוצגת רק עד שמשימת החלבון נפתחת",
       /untilMacro: true/.test(app) &&
