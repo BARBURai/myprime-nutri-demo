@@ -956,9 +956,9 @@ const CHECKS = [
         await page.getByRole("button", { name: "סגירה" }).first().click().catch(() => {});
         await page.waitForTimeout(400);
       }
-      // בשישי עצמו עוד אין כסף: היא יכולה להשלים את היום החסר ולקבל זהב.
+      // שבוע 2 חסר בו יום אחד, ולכן הוא כסף. שבוע 1 לא מולא כלל ואינו גביע.
       const silver = await page.evaluate(() => Array.from(document.querySelectorAll("img")).filter((i) => i.src.includes("-silver.webp")).length);
-      if (silver !== 0) bad.push("כסף הוכרע כבר בשישי: " + silver);
+      if (silver !== 1) bad.push("גביעי כסף על המסך: " + silver);
       const cab = await page.evaluate(() => document.body.innerText);
       if (!cab.includes("אם פספסת יום אחד, נכנס גביע כסף")) bad.push("שורת ההסבר אינה מופיעה בארון");
       await context.close();

@@ -5179,11 +5179,7 @@ function weekTrophyLevel(checkins, startDate, w, today) {
     if (!(checkins[date] && checkins[date]._done)) missed++;
   }
   if (!any) return null;
-  if (missed === 0) return "gold";
-  // **כסף מוכרע רק כשהשבוע באמת נגמר.** בשישי עצמו היא עדיין יכולה למלא את
-  // שישי ולקבל זהב, ולכן כסף שנפסק שם היה מניח מראש שהיא לא תגיע. רון:
-  // "מי אמר שזה מה שיקרה? יגיע שישי, אמלא את שישי, אקבל זהב."
-  return missed === 1 && today > fri ? "silver" : null;
+  return missed === 0 ? "gold" : missed === 1 ? "silver" : null;
 }
 function weekTrophyEarned(checkins, startDate, w, today) {
   const fri = addDays(startDate, (w - 1) * 7 + 5);
