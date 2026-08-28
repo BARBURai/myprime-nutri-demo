@@ -802,13 +802,15 @@ const CHECKS = [
       // באייפון ההנחיות הן של ספארי ולא של כרום, ולכן הצד השני של ההשוואה אינו קיים שם.
       if (/iphone|ipad/i.test(device.userAgent || "")) return { ok: true, skip: true, detail: "באייפון ההנחיות הן של ספארי" };
       const SAMSUNG = "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.0.0 Mobile Safari/537.36";
-      const look = async (ua) => {
+      const look = async (ua, standalone) => {
         const context = await browser.newContext({ ...device, ...(ua ? { userAgent: ua } : {}), locale: "he-IL", timezoneId: "Asia/Jerusalem" });
         await stubApi(context, { startDate: startForDay(10) });
-        await context.addInitScript(() => {
+        await context.addInitScript((sa) => {
           localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
           localStorage.removeItem("myprime_install_ack");
-        });
+          // אפליקציה מותקנת: matchMedia מדווח standalone. אין דרך אחרת לדמות את זה.
+          if (sa) { const real = window.matchMedia.bind(window); window.matchMedia = (q) => (q === "(display-mode: standalone)" ? { matches: true, media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} } : real(q)); }
+        }, !!standalone);
         const page = await context.newPage();
         await page.goto(BASE, { waitUntil: "domcontentloaded" });
         await page.waitForTimeout(2600);
@@ -827,10 +829,38 @@ const CHECKS = [
       const SAF = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
       const cr = await look(CRIOS);
       const sf = await look(SAF);
+      // מי שכבר בתוך האפליקציה המותקנת לא תראה את ההודעה לעולם. באייפון הזהות של
+      // אפליקציה מותקנת אינה נושאת Version/, בדיוק כמו דפדפן פנימי, ולכן בלי הסייג
+      // היא הייתה מקבלת הפניה להתקין למרות שהיא כבר התקינה.
+      const PWA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+      const inst = await look(PWA, true);
+      // ובאפליקציה המותקנת יש עוד דרך להגיע להנחיות: הפרופיל. שם ההודעה הייתה
+      // מופיעה למי שכבר התקינה, כי מסך ההתקנה עצמו אינו מרונדר שם בכלל.
+      const instProfile = await (async () => {
+        const context = await browser.newContext({ ...device, userAgent: PWA, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+        await stubApi(context, { startDate: startForDay(10) });
+        await context.addInitScript(() => {
+          const real = window.matchMedia.bind(window);
+          window.matchMedia = (q) => (q === "(display-mode: standalone)" ? { matches: true, media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} } : real(q));
+        });
+        const page = await context.newPage();
+        await page.goto(BASE, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(2600);
+        await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
+        await page.locator("text=פרופיל").last().click().catch(() => {});
+        await page.waitForTimeout(700);
+        const row = page.locator("text=התקנת האפליקציה על הטלפון").first();
+        const had = await row.count();
+        if (had) { await row.click(); await page.waitForTimeout(700); }
+        const n = await page.locator("text=/לא בספארי|נפתח בתוך אפליקציה אחרת|נמצאת בדפדפן של סמסונג/").count();
+        await context.close();
+        return { had, n };
+      })();
       const ok = sam.note === 1 && sam.chromeSteps === 0 && sam.copyBtn === 1 &&
                  chr.note === 0 && chr.chromeSteps === 1 &&
-                 cr.iosNote === 1 && cr.iosSteps === 0 && sf.iosNote === 0 && sf.iosSteps === 1;
-      return { ok, detail: `סמסונג ${sam.note}/${sam.chromeSteps} · כרום ${chr.note}/${chr.chromeSteps} · אייפון-כרום ${cr.iosNote}/${cr.iosSteps} · ספארי ${sf.iosNote}/${sf.iosSteps}` };
+                 cr.iosNote === 1 && cr.iosSteps === 0 && sf.iosNote === 0 && sf.iosSteps === 1 &&
+                 inst.iosNote === 0 && inst.note === 0 && instProfile.n === 0;
+      return { ok, detail: `סמסונג ${sam.note}/${sam.chromeSteps} · כרום ${chr.note}/${chr.chromeSteps} · אייפון-כרום ${cr.iosNote}/${cr.iosSteps} · ספארי ${sf.iosNote}/${sf.iosSteps} · מותקנת ${inst.iosNote} · פרופיל במותקנת ${instProfile.n} (שורה ${instProfile.had})` };
     },
   },
 ];
