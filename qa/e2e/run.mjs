@@ -814,10 +814,10 @@ const CHECKS = [
         const page = await context.newPage();
         await page.goto(BASE, { waitUntil: "domcontentloaded" });
         await page.waitForTimeout(2600);
-        const note = await page.locator("text=את נמצאת בדפדפן של סמסונג").count();
+        const note = await page.locator("text=מתקינים רק דרך Chrome").count();
         const chromeSteps = await page.locator("text=ודאי שאת בדפדפן Chrome").count();
         const copyBtn = await page.getByRole("button", { name: /העתקת הקישור/ }).count();
-        const iosNote = await page.locator("text=/לא בספארי|נפתח בתוך אפליקציה אחרת/").count();
+        const iosNote = await page.locator("text=מתקינים רק דרך Safari").count();
         const iosSteps = await page.locator("text=ודאי שאת בדפדפן Safari").count();
         await context.close();
         return { note, chromeSteps, copyBtn, iosNote, iosSteps };
@@ -852,7 +852,7 @@ const CHECKS = [
         const row = page.locator("text=התקנת האפליקציה על הטלפון").first();
         const had = await row.count();
         if (had) { await row.click(); await page.waitForTimeout(700); }
-        const n = await page.locator("text=/לא בספארי|נפתח בתוך אפליקציה אחרת|נמצאת בדפדפן של סמסונג/").count();
+        const n = await page.locator("text=/מתקינים רק דרך/").count();
         await context.close();
         return { had, n };
       })();

@@ -609,7 +609,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.37";
+const VERSION = "6.38";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1018,18 +1018,19 @@ function BrowserSwitchNote() {
     try { const t = document.createElement("textarea"); t.value = url; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); done(); } catch (e) {}
   };
   if (!ios && !sam) return null;
-  const head = sam ? "את נמצאת בדפדפן של סמסונג"
-    : ios === "דפדפן שנפתח בתוך אפליקציה אחרת" ? "הקישור נפתח בתוך אפליקציה אחרת"
-    : "את נמצאת ב-" + ios + ", לא בספארי";
+  // הכותרת אומרת את הכלל ולא את התסמין. הודעת Google Play Protect אינה מופיעה
+  // בכל מכשיר ובכל גרסה של הדפדפן, ולכן אזכור שלה מבלבל את מי שלא ראתה אותה.
+  // תיקון ניסוח לפי רון, אחרי שהוא עצמו לא קיבל את ההודעה.
+  const head = sam ? "את האפליקציה מתקינים רק דרך Chrome" : "את האפליקציה מתקינים רק דרך Safari";
   const why = sam
-    ? "ההתקנה מהדפדפן הזה נחסמת על ידי אנדרואיד, ומופיעה הודעה של Google Play Protect."
-    : "באייפון אפשר להוסיף אפליקציה למסך הבית רק מספארי.";
-  const blame = sam ? "זו חסימה של הטלפון ולא תקלה באפליקציה." : "זו מגבלה של אפל ולא תקלה באפליקציה.";
-  const what = sam ? "פתחי את אותו קישור בדפדפן Chrome, והתקיני משם." : "פתחי את אותו קישור בדפדפן Safari, והתקיני משם.";
+    ? "את נמצאת בדפדפן של סמסונג, וההתקנה ממנו עלולה להיחסם על ידי הטלפון."
+    : (ios === "דפדפן שנפתח בתוך אפליקציה אחרת" ? "הקישור נפתח בתוך אפליקציה אחרת" : "את נמצאת ב-" + ios) +
+      ", ובאייפון אפשר להוסיף אפליקציה למסך הבית רק מספארי.";
+  const what = sam ? "פתחי את אותו קישור ב-Chrome, והתקיני משם." : "פתחי את אותו קישור ב-Safari, והתקיני משם.";
   return (
     <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 14, padding: "14px 16px", marginBottom: 14, textAlign: "right" }}>
       <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 6 }}>{head}</div>
-      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, margin: "0 0 8px" }}>{why} <b>{blame}</b></p>
+      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, margin: "0 0 8px" }}>{why}</p>
       <p style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.65, margin: "0 0 10px", fontWeight: 600 }}>{what}</p>
       <button onClick={copy} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 10, padding: "8px 14px", fontSize: 14.5, color: C.brandD, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>
         {copied ? "הקישור הועתק ✓" : "העתקת הקישור"}
