@@ -273,7 +273,9 @@ console.log("\nמה נשאר לגביע");
 
 console.log("\nהמסך עצמו");
 check("הכפתור מוצג בשישי ובשבת בלבד", /const endOfWeek = dw === 6 \|\| dw === 0;/.test(src));
-check("הכותרת היא זו שרון אישר", /מה נשאר לגביע\?/.test(src));
+check("הכותרת נוקבת בשבוע שעליו היא מדברת", /מה נשאר לגביע של שבוע \{week\}\?/.test(src));
+check("והשבוע הוא זה של היום עצמו", /const week = Math\.min\(programWeekFor\(startDate, today\), 10\);/.test(src));
+check("ליד כל יום מופיע התאריך שלו", /pad2\(parseDay\(d\.date\)\.getUTCDate\(\)\)\}\.\{pad2\(parseDay\(d\.date\)\.getUTCMonth\(\) \+ 1\)/.test(src));
 check("וכשלא חסר כלום נאמר את זה במפורש", src.includes("לא נשאר כלום, כל ימי השבוע הושלמו."));
 check("שם היום נכתב במלואו", /יום \{HE_DAYS_FULL\[parseDay\(d\.date\)\.getUTCDay\(\)\]\}/.test(src));
 check("משימות אופציונליות אינן נספרות", /tasksForDate\(startDate, date, keepShabbat\)\.filter\(\(t\) => !t\.optional\)/.test(src.slice(src.indexOf("function missingForWeek"))));

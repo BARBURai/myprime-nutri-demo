@@ -936,7 +936,8 @@ const CHECKS = [
         await btn.click();
         await page.waitForTimeout(500);
         const body = await page.evaluate(() => document.body.innerText);
-        if (!body.includes("יום חמישי")) bad.push("היום החסר אינו מופיע");
+        if (!body.includes("מה נשאר לגביע של שבוע 2?")) bad.push("הכותרת אינה נוקבת בשבוע");
+        if (!body.includes("יום חמישי · 27.08")) bad.push("היום החסר או התאריך שלו אינם מופיעים");
         if (!body.includes("אימון כוח")) bad.push("המשימה החסרה אינה מופיעה");
         if (body.includes("יום רביעי")) bad.push("יום שהושלם מופיע ברשימה");
         // סוגרים את המסך וחוזרים לארון, לבדוק את גביע הכסף עצמו
