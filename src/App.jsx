@@ -640,7 +640,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.49";
+const VERSION = "6.50";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5201,9 +5201,11 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
   const dw = dowOf(today);
   const endOfWeek = dw === 6 || dw === 0;
   const week = Math.min(programWeekFor(startDate, today), 10);
-  const [missOpen, setMissOpen] = useState(false);
-  const miss = missOpen
-    ? missingForWeek(week, startDate, today, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog)
+  // נושא את מספר השבוע שנפתח, כדי שהקשה על גביע מסוים תדבר עליו ולא על השבוע
+  // הנוכחי. רון: "לחצתי על הכפתור של שבוע 2 והוא רושם שבוע 3."
+  const [missWeek, setMissWeek] = useState(0);
+  const miss = missWeek
+    ? missingForWeek(missWeek, startDate, today, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog)
     : [];
   return (
     <SheetShell title="ארון המדליות והגביעים" onClose={onClose}>
@@ -5222,8 +5224,9 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
         {Array.from({ length: 10 }).map((_, i) => {
           const w = i + 1; const level = weekTrophyLevel(checkins, startDate, w, today);
+          const started = addDays(startDate, (w - 1) * 7) <= today;
           return (
-            <div key={w} style={{ textAlign: "center", opacity: level ? 1 : 0.32 }}>
+            <div key={w} onClick={() => { if (started && TRACKER_ENABLED) setMissWeek(w); }} style={{ textAlign: "center", opacity: level ? 1 : 0.32, cursor: started ? "pointer" : "default" }}>
               <img src={trophyForWeek(w, level)} alt="" width={58} height={58} style={{ filter: level ? "none" : "grayscale(1)" }} />
               <div style={{ fontSize: 12, color: level ? C.brandD : C.faint, marginTop: 2 }}>{w >= 10 ? "אלופה" : `שבוע ${w}`}</div>
               {level === "silver" && <div style={{ fontSize: 11, color: C.sub }}>כסף</div>}
@@ -5232,13 +5235,14 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
         })}
       </div>
       {endOfWeek && TRACKER_ENABLED && (
-        <div style={{ marginTop: 14 }}><Btn variant="ghost" onClick={() => setMissOpen(true)}>מה נשאר לגביע של שבוע {week}?</Btn></div>
+        <div style={{ marginTop: 14 }}><Btn variant="ghost" onClick={() => setMissWeek(week)}>מה נשאר לגביע של שבוע {week}?</Btn></div>
       )}
-      <div style={{ fontSize: 13, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע זהב נכנס לארון על שבוע שכל ימיו הושלמו, ראשון עד שישי. אם פספסת יום אחד, נכנס גביע כסף. שבת אינה נחשבת.</div>
-      {missOpen && (
-        <div onClick={() => setMissOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 10, textAlign: "center", lineHeight: 1.5 }}>הקישי על גביע כדי לראות מה נשאר בשבוע שלו.</div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 6, textAlign: "center", lineHeight: 1.5 }}>גביע זהב נכנס לארון על שבוע שכל ימיו הושלמו, ראשון עד שישי. אם פספסת יום אחד, נכנס גביע כסף. שבת אינה נחשבת.</div>
+      {missWeek > 0 && (
+        <div onClick={() => setMissWeek(0)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, maxHeight: "82%", display: "flex", flexDirection: "column", fontFamily: fontStack }}>
-            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 12, flexShrink: 0 }}>מה נשאר לגביע של שבוע {week}?</div>
+            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 12, flexShrink: 0 }}>מה נשאר לגביע של שבוע {missWeek}?</div>
             <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
             {miss.length === 0 ? (
               <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65 }}>לא נשאר כלום, כל ימי השבוע הושלמו.</div>
@@ -5250,7 +5254,7 @@ function CollectionModal({ checkins, startDate, today, onClose, keepShabbat, ste
             ))}
             </div>
             <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 4, fontSize: 13.5, color: C.faint, lineHeight: 1.55 }}>יום אחד אפשר לפספס ועדיין לקבל גביע כסף. שבוע שכולו הושלם מקבל זהב.</div>
-            <div style={{ marginTop: 14, flexShrink: 0 }}><Btn onClick={() => setMissOpen(false)}>סגירה</Btn></div>
+            <div style={{ marginTop: 14, flexShrink: 0 }}><Btn onClick={() => setMissWeek(0)}>סגירה</Btn></div>
           </div>
         </div>
       )}
