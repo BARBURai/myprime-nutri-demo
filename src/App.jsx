@@ -609,7 +609,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.39";
+const VERSION = "6.40";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3730,7 +3730,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px))" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
-          <button onClick={close} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+          <button onClick={step === "qty" && back ? back : close} aria-label={step === "qty" && back ? "חזרה" : "סגירה"} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
         </div>
         {step === "method" && (
           <>
@@ -3806,9 +3806,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             {query && filtered.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                <div key={f.id} onClick={() => pickFood(f, g)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
                 </div>
               );
             })}
@@ -3816,9 +3816,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             {query && catResults.filter((f) => !filtered.some((x) => x.name === f.name)).map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, unit: f.unit || "g", source: f.source === "verified" ? "verified" : "estimated", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                <div key={f.id} onClick={() => pickFood(f, g)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
                 </div>
               );
             })}
@@ -3826,9 +3826,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             {query && dbResults.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                <div key={f.id} onClick={() => pickFood(f, g)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
                 </div>
               );
             })}

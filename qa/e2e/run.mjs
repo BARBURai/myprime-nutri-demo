@@ -510,6 +510,59 @@ const CHECKS = [
     },
   },
   {
+    // רון: "ההסתברות שבדיוק מה שרשום במאגר זה בדיוק מה שהיא אכלה היא אפסית."
+    // לכן אין יותר הוספה מהירה בתוצאות החיפוש, והקשה בכל מקום בשורה פותחת את
+    // מסך הכמות. ובאותו תרחיש גם: "לחצתי על המוצר עשיתי איקס, לא חזרתי למסך החיפוש."
+    name: "שורת חיפוש נפתחת לכמות, וה-✕ שם מחזיר לתוצאות ולא סוגר הכל",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const sheetTitle = () => page.evaluate(() => {
+        const ov = Array.from(document.querySelectorAll("div")).find((d) => getComputedStyle(d).backgroundColor === "rgba(58, 43, 48, 0.4)" && d.style.position === "absolute");
+        if (!ov || !ov.firstElementChild) return "אין חלון פתוח";
+        const h = ov.firstElementChild.querySelector("span");
+        return h ? h.innerText.trim() : "?";
+      });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=חיפוש מזון").first().click();
+      await page.waitForTimeout(500);
+      const box = page.locator('input[placeholder="חיפוש מזון…"]');
+      await box.fill("בננה");
+      await page.waitForTimeout(800);
+
+      const bad = [];
+      // בשורת התוצאה אין יותר שום כפתור, ולכן אין דרך להוסיף כמות של המאגר בטעות.
+      const btns = await page.evaluate(() => {
+        const row = Array.from(document.querySelectorAll("div")).find((d) => d.children.length === 2 && d.innerText.startsWith("בננה בינונית"));
+        return row ? row.querySelectorAll("button").length : -1;
+      });
+      if (btns !== 0) bad.push("בשורת התוצאה יש " + btns + " כפתורים");
+      // הקשה על הקצה של השורה, שם ישב הפלוס, פותחת את מסך הכמות
+      const row = page.locator("text=בננה בינונית").first();
+      const box2 = await row.boundingBox();
+      if (box2) await page.mouse.click(box2.x + 10, box2.y + box2.height / 2);
+      await page.waitForTimeout(600);
+      if (!(await page.locator("text=שיוך לארוחה").count())) bad.push("מסך הכמות לא נפתח");
+
+      // ✕ בשורת הכותרת: הכפתור האחרון
+      await page.evaluate(() => {
+        const ov = Array.from(document.querySelectorAll("div")).find((d) => getComputedStyle(d).backgroundColor === "rgba(58, 43, 48, 0.4)" && d.style.position === "absolute");
+        const bs = ov.firstElementChild.children[0].querySelectorAll("button");
+        bs[bs.length - 1].click();
+      });
+      await page.waitForTimeout(600);
+      const title = await sheetTitle();
+      if (title === "אין חלון פתוח") bad.push("✕ סגר את הכל במקום לחזור");
+      const left = await page.evaluate(() => { const i = document.querySelector('input[placeholder="חיפוש מזון…"]'); return i ? i.value : ""; });
+      if (left !== "בננה") bad.push("החיפוש לא נשמר, נשאר " + JSON.stringify(left));
+
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `חזרה אל "${title}" · שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
     name: "הסרגל התחתון מוסתר כשחלון פתוח",
     async run(browser, device) {
       const { context, page } = await openApp(browser, device);

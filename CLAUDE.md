@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.39** · עודכן: 28 באוגוסט 2026
+**גרסה נוכחית: v6.40** · עודכן: 28 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -975,6 +975,24 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v6.40** - **הפלוס ירד מתוצאות החיפוש, וה-✕ במסך הכמות כבר לא סוגר הכל.** שתי הערות של רון מבדיקה בטלפון.
+
+### א. הוספה מהירה בכמות של המאגר
+**רון: "ההסתברות שבדיוק מה שרשום במאגר זה בדיוק מה שהיא אכלה היא אפסית, היא חייבת בכל מקרה למלא את הכמויות."**
+
+**הפלוס בתוצאות החיפוש הוסיף את הכמות שכתובה במאגר**, כלומר את המידה שברירת המחדל שלה נקבעה שם ולא על ידה. **עכשיו הקשה בכל מקום בשורה פותחת את מסך הכמות**, ובשורה יש חץ שאומר שהיא נפתחת. **בלי פלוס אין דרך להוסיף מספר שגוי בטעות.**
+
+**והפלוס במועדפים ובאחרונים נשאר בדיוק כפי שהוא, וזה ההבדל שקובע:** שם הכמות היא `lastG`, **כלומר זו שהיא עצמה הזינה בפעם הקודמת**, ולכן היא כמעט תמיד נכונה. בחיפוש היא של המאגר.
+
+### ב. ה-✕ במסך הכמות
+**רון: "לחצתי על המוצר עשיתי איקס, לא חזרתי למסך החיפוש."**
+
+**נמדד בדפדפן ולא נוחש:** חץ החזרה הקטן שלצד שם המוצר כן החזיר לתוצאות עם מה שהוקלד עדיין בשדה, **וה-✕ סגר את החלון כולו.** מבין השניים ה-✕ הוא הבולט.
+
+**עכשיו ✕ במסך הכמות עושה בדיוק מה שהחץ עושה.** המחיר שהתקבל: כדי לצאת מהחלון לגמרי מהמסך הזה צריך שתי הקשות. **בעריכת פריט קיים ✕ ממשיך לסגור**, כי שם אין לאן לחזור.
+
+**`qa/addfood-check.mjs`, 10 בדיקות בלי רשת**, ותרחיש חדש בשכבה 3 שמקיש דווקא על הקצה של השורה, שם ישב הפלוס, ואז על ה-✕. **אומת שיש להם שיניים:** על הקוד שבייצור הבדיקה מחזירה 4 מתוך 10 והתרחיש 0 מתוך 3.
 
 **v6.39** - **חיפוש בתוך "האחרונים והמועדפים שלי", והוא חוצה את שתי הלשוניות.** בקשה של הילה: "כדאי להוסיף חיפוש במאכלים האחרונים שאכלתי."
 
