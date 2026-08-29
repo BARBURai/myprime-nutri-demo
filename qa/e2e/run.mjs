@@ -85,23 +85,23 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false }) {
+async function stubApi(context, { startDate, glow = false, replies = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow });
+    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, ...(replies ? { replies } : {}) });
     if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify({ reply: "רשמתי לך", done: false, items: [] }) }] });
     if (url.includes("/api/catalog") || url.includes("/api/il-food")) return json({ items: [] });
     return json({ ok: true });
   });
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null, replies = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow });
+  await stubApi(context, { startDate, glow, replies });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
@@ -1247,6 +1247,73 @@ const CHECKS = [
                  cr.iosNote === 1 && cr.iosSteps === 0 && sf.iosNote === 0 && sf.iosSteps === 1 &&
                  inst.iosNote === 0 && inst.note === 0 && instProfile.n === 0;
       return { ok, detail: `סמסונג ${sam.note}/${sam.chromeSteps} · כרום ${chr.note}/${chr.chromeSteps} · אייפון-כרום ${cr.iosNote}/${cr.iosSteps} · ספארי ${sf.iosNote}/${sf.iosSteps} · מותקנת ${inst.iosNote} · פרופיל במותקנת ${instProfile.n} (שורה ${instProfile.had})` };
+    },
+  },
+  {
+    // רון שלח לעצמו תשובה וראה עיגול ירוק בלבד. עד עכשיו התשובה חיכתה בתוך הבועה,
+    // ומי שלא הקישה עליה לא ידעה שיש לה תשובה. שלושת השלבים כאן הם ההבטחה כולה:
+    // היא קופצת, "אחר כך" מחזיר אותה בפתיחה הבאה, ו"תודה, הבנתי" סוגר אותה לתמיד.
+    name: "תשובת המשרד קופצת מעצמה, ואחר כך מחזיר אותה בפתיחה הבאה",
+    async run(browser, device) {
+      const replies = [{ id: "r1", text: "בדקנו וזה מטופל, תודה שכתבת." }];
+      const { context, page, errors } = await openApp(browser, device, { replies });
+      const bad = [];
+      const seen = () => page.locator("text=תשובה מצוות מיי פריים").count();
+      if (await seen() !== 1) bad.push("החלונית לא קפצה");
+      const body = await page.evaluate(() => document.body.innerText);
+      if (!body.includes("בדקנו וזה מטופל")) bad.push("הטקסט של התשובה אינו מוצג");
+      await page.getByRole("button", { name: "אחר כך" }).first().click().catch(() => {});
+      await page.waitForTimeout(400);
+      if (await seen() !== 0) bad.push('"אחר כך" לא סגר');
+      // דחייה לסשן הזה בלבד. אם היא נשמרת, התשובה נעלמת ממנה לתמיד בלי שאישרה.
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(2600);
+      await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
+      if (await seen() !== 1) bad.push('החלונית לא חזרה אחרי "אחר כך"');
+      await page.getByRole("button", { name: "תודה, הבנתי" }).first().click().catch(() => {});
+      await page.waitForTimeout(500);
+      if (await seen() !== 0) bad.push('"תודה, הבנתי" לא סגר');
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
+    // אישה שאינה סוגרת את האפליקציה ממשיכה להריץ קוד ישן ימים. כאן מדמים בדיוק
+    // את זה: הדף שבשרת מצביע על קובץ קוד אחר, והיא חוזרת לאפליקציה.
+    name: "פס הרענון מופיע כשיש גרסה חדשה בשרת, ולא לפני",
+    async run(browser, device) {
+      const bad = [];
+      // **שני דפים ולא אחד, וזו לא קפריזה:** הבדיקה מוגבלת לפעם בחמש דקות, ולכן
+      // בדיקה שנייה באותו דף לא הייתה יוצאת כלל והתרחיש היה "עובר" בלי לבדוק כלום.
+      const barCount = (page) => page.locator("text=יש גרסה חדשה של האפליקציה").count();
+
+      // א. הדף בשרת זהה לזה שנטען. הפס חייב לא להופיע, אחרת פס שמופיע תמיד
+      // נראה בדיוק כמו פס שלא מופיע אף פעם.
+      {
+        const { context, page, errors } = await openApp(browser, device);
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await page.waitForTimeout(1200);
+        if (await barCount(page) !== 0) bad.push("הפס הופיע כשאין גרסה חדשה");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+
+      // ב. ועכשיו הדף בשרת מצביע על קובץ קוד אחר, בדיוק כמו אחרי בנייה חדשה.
+      {
+        const { context, page, errors } = await openApp(browser, device);
+        await context.route("**/index.html", (route) => route.fulfill({ status: 200, contentType: "text/html", body: '<script type="module" crossorigin src="/assets/index-NEWBUILD.js"></script>' }));
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await page.waitForTimeout(1500);
+        if (await barCount(page) !== 1) bad.push("הפס לא הופיע אחרי שהגרסה בשרת השתנתה");
+        // ולעולם לא מרעננים לבד: אחרי שהפס מוצג, הדף חייב להישאר אותו דף.
+        const url1 = page.url();
+        await page.waitForTimeout(1200);
+        if (page.url() !== url1) bad.push("הדף רוענן מעצמו");
+        if (await barCount(page) !== 1) bad.push("הפס נעלם מעצמו");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "לפני 0 · אחרי 1 · בלי רענון עצמי" };
     },
   },
 ];

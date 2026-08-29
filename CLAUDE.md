@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.56** · עודכן: 28 באוגוסט 2026
+**גרסה נוכחית: v6.57** · עודכן: 28 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,38 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v6.57** - **התשובה של המשרד קופצת מעצמה, ופס שאומר שיש גרסה חדשה.** שני דברים שרון ביקש באותה שיחה, אחרי שהוא שלח לעצמו תשובה וראה עיגול ירוק בלבד.
+
+### א. "תשובה מצוות מיי פריים"
+**עד עכשיו התשובה חיכתה בתוך בועת ההערות, ומי שלא הקישה עליה לא ידעה שיש לה תשובה.** רון: "שלחתי לעצמי הודעה ולא קיבלתי שום חלונית, מופיע אחד עם סימן בירוק וזהו."
+
+**עכשיו היא קופצת בפתיחת האפליקציה**, עם הטקסט שנשלח לה ושני כפתורים: **"תודה, הבנתי"** ו**"אחר כך"**.
+
+| | |
+|---|---|
+| **מתי היא קופצת** | **רק כשאין שום דבר אחר על המסך.** לא מעל חלון פתוח, לא מעל הסיור, ולא מעל שאלה אחרת |
+| **"אחר כך"** | **דוחה לסשן הזה בלבד ואינו נשמר**, ולכן היא חוזרת בפתיחה הבאה. **תשובה שהיא לא אישרה אינה נעלמת ממנה לעולם** |
+| **מה מסמן למשרד שהיא קראה** | **"תודה, הבנתי" בלבד.** "אחר כך" אינו מסמן כלום |
+| **הבועה** | **לא נגעה.** התשובה ממשיכה לשבת גם שם, עם אותו עיגול ירוק |
+
+### ב. פס "יש גרסה חדשה של האפליקציה"
+**זו משימה 15, ורון נתקל בה בפועל:** "שמתי לב אצל מישהי שהיא נמצאת בגרסה ישנה, כי היא יחסית פעילה בתוך האפליקציה."
+
+**וזו בדיוק הסיבה: היא לא סוגרת את האפליקציה.** האפליקציה נטענת פעם אחת ונשארת בזיכרון של הטלפון, **ולכן דווקא אישה פעילה ממשיכה להריץ קוד ישן ימים.** זה לא מטמון ולא תקלה.
+
+**עכשיו, כשהיא חוזרת לאפליקציה, נבדק בשקט אם יש גרסה חדשה**, ואם כן מופיע פס דק בראש המסך עם כפתור "רענון".
+
+**שלוש החלטות, וכולן של רון:**
+1. **לעולם לא לרענן לבד.** אישה באמצע הקלדה תאבד את מה שכתבה, וזה גרוע מגרסה ישנה.
+2. **פס דק ולא חלונית שחוסמת.** **והוא מוסתר כל עוד יש חלון פתוח**, כדי שלא תקיש "רענון" באמצע הזנה.
+3. **בלי פונקציה חדשה בשרת.** הבדיקה קוראת את הדף עצמו ומשווה את שם קובץ הקוד, שמקבל חתימה חדשה בכל בנייה. **אנחנו על 12 מתוך 12 בוורסל, ולכן זה לא היה פרט.**
+
+**לא יותר מפעם בחמש דקות**, ולמי שלא יוצאת ולא חוזרת גם פעם בחצי שעה. **וכישלון של הבדיקה שקט ואינו מציג כלום.**
+
+**ובסרגל `?dev=1` נוסף כפתור "גרסה חדשה"** שמציג את הפס מיד, אחרת אי אפשר לבדוק אותו בלי לחכות לבנייה הבאה.
+
+**`qa/update-reply-check.mjs`, 28 בדיקות בלי רשת**, ובהן אחת שנופלת אם מישהו יוסיף רענון אוטומטי ואחת שנופלת אם הדחייה של "אחר כך" תישמר במכשיר. **ובשכבה 3 נוספו שני תרחישים:** אחד שעובר את כל מסלול החלונית כולל טעינה מחדש אחרי "אחר כך", ואחד שמדמה גרסה חדשה בשרת ומוודא שהפס מופיע, **ושלפני כן הוא לא מופיע.** **אומת שיש להם שיניים:** על הקוד שאצל הנשים הבדיקה מחזירה 5 מתוך 28.
 
 **v6.56** - **"אפשר להזין פעילות גופנית בכל יום?" נכנסה לשאלות ותשובות ולבנק של המשרד.** משתתפת ביקשה לציין פעילות ספורטיבית בכל הימים ולא רק בימי התוכנית.
 
