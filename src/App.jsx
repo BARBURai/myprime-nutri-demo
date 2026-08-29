@@ -688,7 +688,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.54";
+const VERSION = "6.55";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -6394,17 +6394,24 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [today, setToday] = useState(TODAY);
   useEffect(() => {
-    if (DEV) return; // dev "today" is simulated/fixed; the DevDateBar reloads to change it. Never clobber it with the real date.
-    const sync = () => {
+    // **היום מתעדכן תמיד, והיום הנבחר זז רק כשהיא חוזרת לאפליקציה.**
+    // רון, 29 באוגוסט 2026: "היא לחצה על פלוס שנמצא ביום שישי, מה הקשר בכלל
+    // שהיום עבר לשבת." משתתפת מילאה בשעה מאוחרת של שישי, עבר חצות באמצע,
+    // והאפליקציה העבירה אותה לשבת מתחת לאצבע. עכשיו: בזמן שהיא בפנים שום דבר
+    // לא זז, בחזרה מהרקע היום מתעדכן, ואם יש לה חלון פתוח הוא לא זז גם אז.
+    const sync = (mayMove) => {
       const now = ymd(new Date());
-      if (now !== today) { setToday(now); setSelectedDate((sd) => (sd === today ? now : sd)); }
+      if (now === today) return;
+      setToday(now);
+      if (mayMove && !sheetRef.current && !modalRef.current) setSelectedDate((sd) => (sd === today ? now : sd));
     };
-    const id = setInterval(sync, 60000);
-    const onVis = () => { if (document.visibilityState === "visible") sync(); };
+    const id = setInterval(() => sync(false), 60000);
+    const onVis = () => { if (document.visibilityState === "visible") sync(true); };
+    const onBack = () => sync(true);
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", sync);
-    window.addEventListener("pageshow", sync);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", sync); window.removeEventListener("pageshow", sync); };
+    window.addEventListener("focus", onBack);
+    window.addEventListener("pageshow", onBack);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onBack); window.removeEventListener("pageshow", onBack); };
   }, [today]);
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
