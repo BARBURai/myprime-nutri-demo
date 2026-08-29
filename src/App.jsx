@@ -5127,7 +5127,7 @@ function TrophyCheer({ week, name, streak, level, onClose }) {
         <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
         <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : silver ? "גביע כסף נכנס לארון!" : "גביע השבוע נכנס לארון!"}</div>
         {streak >= 2 && <div style={{ fontSize: 18, fontWeight: 700, color: C.brand, marginTop: 8 }}>{streak} ימים ברצף</div>}
-        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : silver ? `השלמת חמישה ימים מתוך שישה בשבוע ${week}${name && name.trim() ? `, ${name.trim()}` : ""}. יום אחד אפשר לפספס, וזה עדיין שבוע חזק.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : silver ? `השלמת חמישה ימים מתוך שישה בשבוע ${week}${name && name.trim() ? `, ${name.trim()}` : ""}. אם תשלימי גם את היום שנשאר, הגביע יהפוך לזהב.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>{champ ? "סגירה 💜" : "ממשיכות חזק 💜"}</Btn></div>
       </div>
     </div>
