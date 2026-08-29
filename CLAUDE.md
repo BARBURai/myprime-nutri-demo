@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -984,6 +984,10 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **ומה שהופך את זה לגלוי ולא נסתר:** מי שנשארה על אתמול רואה את זה בכותרת, **"אתמול · שישי, 28 באוגוסט"**, והסימון "היום" בסרגל עובר ליום החדש.
 
 **תרחיש חדש בשכבה 3, עם שעון נעוץ ל-23:59:45 שממשיך להתקדם משם:** היא פותחת את חלון הוספת המזון, חצות עובר באמת, היא יוצאת וחוזרת לאפליקציה, מוסיפה פריט, **והפריט חייב לנחות בשישי.** **אומת שיש לו שיניים: על הקוד שבייצור הוא מחזיר 0 מתוך 3.**
+
+**ובאותה גרסה נוסף כפתור "מעבר חצות" בסרגל `?dev=1`.** הוא מזיז את השעון של האפליקציה יממה קדימה ומדמה חזרה מהרקע, **כלומר מפעיל בדיוק את אותו מסלול שרץ בחצות אמיתית**, בלי לחכות לחצות ובלי לגעת בשעון של הטלפון.
+
+**ותוקנה שורה שנשברה בדרך:** ההגנה שמונעת מהיום המדומה להידרס בתאריך האמיתי. **עכשיו בדב היום המדומה הוא הבסיס של השעון**, ולכן הוא יציב, **וגם הכותרת אומרת "היום" על היום המדומה** במקום "אתמול" כפי שהיה עד עכשיו. **`qa/dayflip-check.mjs`, 12 בדיקות, נועלת את שני הדברים; על הקוד שבייצור היא מחזירה 3 מתוך 12.**
 
 **v6.54** - **המשפט בגביע הכסף: המספרים אמיתיים, והמשפט הוא זה שרון אישר.** רון שלח צילום מהשבוע הראשון שלו: **"השלמת חמישה ימים מתוך שישה בשבוע 1".**
 
