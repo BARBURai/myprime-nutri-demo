@@ -966,6 +966,54 @@ const CHECKS = [
     },
   },
   {
+    // משתתפת: "יום שישי הזנתי בטעות את שבת." היא מילאה בשעה מאוחרת, עבר חצות
+    // באמצע, והאפליקציה העבירה אותה ליום החדש מתחת לאצבע. השעון נעוץ ל-23:59:45
+    // והזמן ממשיך משם, ולכן חצות עובר באמת בזמן שהתרחיש רץ.
+    name: "היום לא זז מתחת לאצבע כשעובר חצות",
+    async run(browser, device) {
+      const start = "2026-08-16";
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      const { context, page, errors } = await openApp(browser, device, {
+        startDate: start, clock: "2026-08-28T20:59:45.000Z",   // 23:59:45 בשעון ישראל, יום שישי
+        seed: { profile: prof, weights: [{ date: start, kg: 72 }] },
+      });
+      const bad = [];
+      const line = () => page.evaluate(() => document.querySelector("[data-tut='tracker']")?.innerText.split("\n")[1] || "?");
+      if (!(await line()).includes("28 באוגוסט")) bad.push("לא התחלנו בשישי: " + (await line()));
+      // פותחת את חלון הוספת המזון, ובזמן שהוא פתוח עובר חצות
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(20000);   // חוצה את חצות
+      // והיא קופצת לוואטסאפ באמצע וחוזרת. בקוד הישן זה בדיוק מה שהיה מזיז אותה.
+      await page.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", { get: () => "hidden", configurable: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+        Object.defineProperty(document, "visibilityState", { get: () => "visible", configurable: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+      });
+      await page.waitForTimeout(600);
+      await page.locator("text=חיפוש מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator('input[placeholder="חיפוש מזון…"]').fill("בננה");
+      await page.waitForTimeout(800);
+      await page.locator("text=בננה בינונית").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=/הוסיפי ל/").first().click();
+      await page.waitForTimeout(900);
+      // הפריט חייב לנחות בשישי, היום שממנו היא פתחה
+      const dates = await page.evaluate(() => (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []).map((e) => e.date));
+      if (!dates.includes("2026-08-28")) bad.push("הפריט לא נחת בשישי: " + JSON.stringify(dates));
+      if (dates.includes("2026-08-29")) bad.push("הפריט נחת בשבת");
+      const now = await line();
+      if (!now.includes("28 באוגוסט")) bad.push("היום זז מתחת לאצבע: " + now);
+      if (!now.includes("אתמול")) bad.push("הכותרת אינה אומרת שזה אתמול: " + now);
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `נשארה על ${now} · שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
     // רון: אישה שכמעט לא מילאה קיבלה סיכום שמברך אותה על שבוע מוצלח, ומיד
     // מתחתיו שש שורות של "עוד לא דיווחת". סימן אחד בשבוע הספיק כדי לפתוח אותו.
     name: "שבוע עם דיווח מיום אחד מקבל הודעה במקום סיכום",
