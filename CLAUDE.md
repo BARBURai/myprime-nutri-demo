@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.52** · עודכן: 28 באוגוסט 2026
+**גרסה נוכחית: v6.53** · עודכן: 28 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,32 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v6.53** - **נתוני שימוש לניתוח מקרו, לפי בקשת רון.** "אני רוצה לדעת איפה הן נופלות, איזה משימות קשה להן איתן, ולראות גרף התקדמות. אין שום סיבה שלא אקבל את כל הנתונים כל עוד זה לא נתונים אישיים שלה."
+
+### ומה שטעיתי בו, כי רון תיקן אותי
+**אמרתי לו שזו מגבלת פרטיות. זה לא נכון, והנוסח במסך ההסכמה אומר את ההפך:** "החברה **אינה אוספת מידע אישי** אודות המשתמשות... **החברה אוספת נתוני שימוש באפליקציה בלבד**." **נתוני שימוש מותרים במפורש, והגבול הוא "מידע אישי".**
+
+### מה נאסף מעכשיו
+| | |
+|---|---|
+| **נוכחות** | כל יום שבו נכנסה, כמה זמן שהתה, ובאילו שעות. **זה הנתון החזק ביותר לנשירה** |
+| **התוכנית** | לכל יום: נסגר או לא · **לכל משימה: בכמה ימים סומנה מתוך כמה הייתה פתוחה לה** |
+| **הכלים** | כמה פעמים הפעילה כל דרך להזנת מזון, וכמה פעמים פתחה מתכונים, המלצות, סיכום וארון |
+| **הגעה** | האם התקינה למסך הבית, והאם אישרה התראות |
+
+### הגבול, וזה מה שנשמר
+**הערכים עצמם לעולם אינם נשלחים.** "סימנה שעות שינה" נספר, **"ישנה 4 שעות" לא.** וכך גם מזון, משקל, היקפים, צעדים, מים ושיחות AI, שממשיכים לא לעזוב את המכשיר שלה.
+
+**הכל נוסע על הקריאה שכבר קיימת ל-`api/usage.js`**, בלי פונקציה חדשה ובלי קריאה נוספת. אנחנו על 12 מתוך 12 בוורסל.
+
+**הזמן נספר רק כשהמסך גלוי, ונצבר על המכשיר לשליחה בטעינה הבאה**, כי בטלפון אין רגע אמין לשלוח בו ביציאה. **החלון על המכשיר מוגבל ל-120 ימים.**
+
+**והשרת בונה מחדש כל שדה בגבולות קשיחים**, כי הקריאה אינה מאומתת במפתח: מפתח שאינו תאריך נזרק, שם כלי שאינו ברשימה סגורה נזרק, ומסומן לעולם אינו גדול מזמין.
+
+**`qa/usage-check.mjs`, 37 בדיקות בלי רשת**, מריצה את `api/usage.js` האמיתי מול Redis מדומה ובודקת מה באמת נשמר, **וכן שהמטען מהאפליקציה אינו נושא משקל, מזון, ערכי צעדים ומים או שיחות AI.**
+
+**הנתונים מתחילים להיאסף מהיום שזה עולה.** על מה שהיה עד עכשיו אין היסטוריה. **המסכים שיציגו את זה יבואו בנפרד.**
 
 **v6.52** - **שלושה תיקונים שיצאו מבדיקה של רון: סיכום שבועי למי שכמעט לא מילאה, כסף שהוכרע מוקדם מדי, וזהב שנכנס בשקט.**
 

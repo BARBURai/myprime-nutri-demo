@@ -92,7 +92,7 @@ check("יש כפתור ניקוי לשדה", /aria-label="ניקוי החיפו�
 check("הרשימה הרגילה חוזרת כשמוחקים את החיפוש", /\{list\.map\(\(f\) => histRow\(f, histTab\)\)\}/.test(src));
 check("שורת פריט אחת משמשת את שני המצבים", (src.match(/const histRow = \(f, listId\) => \{/g) || []).length === 1);
 check("והמחיקה יודעת מאיזו רשימה להסיר", /setDelTarget\(\{ item: f, list: listId \}\)/.test(src));
-check("כניסה למסך מנקה חיפוש קודם", /go: \(\) => \{ setHistQ\(""\); setStep\("history"\); \}/.test(src));
+check("כניסה למסך מנקה חיפוש קודם", /setHistQ\(""\); setStep\("history"\);/.test(src));
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
