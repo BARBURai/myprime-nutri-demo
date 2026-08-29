@@ -29,6 +29,43 @@ async function redis(base, token, ...args) {
   return (await r.json()).result;
 }
 
+// כל מה שמגיע נבנה מחדש בגבולות קשיחים ואינו נשמר כמו שהוא, כי הקריאה הזאת
+// אינה מאומתת במפתח. אותו כלל שכבר חל על שאר השדות כאן.
+const MAX_USAGE_DAYS = 200;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const dayMap = (v, max) => {
+  const out = {};
+  if (!v || typeof v !== "object") return out;
+  Object.keys(v).slice(0, MAX_USAGE_DAYS).forEach((k) => { if (DAY_RE.test(k)) out[k] = num(v[k], max); });
+  return out;
+};
+const intList = (v, len, max) => {
+  const out = [];
+  if (!Array.isArray(v)) return out;
+  for (let i = 0; i < len; i++) out.push(num(v[i], max));
+  return out;
+};
+// רשימה סגורה של שמות. שם שאינו ברשימה פשוט נזרק, כדי שהשדה לא יוכל לגדול
+// למשהו אחר ממה שהוסכם עליו.
+const FEAT_KEYS = ["ai", "photo", "barcode", "history", "search", "manual", "recommend", "summary", "cabinet", "weighIn", "tab_day", "tab_report", "tab_recipes", "tab_profile"];
+const featMap = (v) => {
+  const out = {};
+  if (!v || typeof v !== "object") return out;
+  FEAT_KEYS.forEach((k) => { if (v[k] != null) out[k] = num(v[k], 99999); });
+  return out;
+};
+const bitString = (v, max) => String(v == null ? "" : v).replace(/[^01]/g, "").slice(0, max);
+const pairMap = (v, max) => {
+  const out = {};
+  if (!v || typeof v !== "object") return out;
+  Object.keys(v).slice(0, 60).forEach((k) => {
+    if (!/^[a-z]{2,20}$/.test(k) || !Array.isArray(v[k])) return;
+    const total = num(v[k][1], max);
+    if (!total) return;
+    out[k] = [Math.min(num(v[k][0], max), total), total];
+  });
+  return out;
+};
 const num = (v, max) => {
   const n = parseInt(v, 10);
   return Number.isFinite(n) && n >= 0 ? Math.min(n, max) : 0;
@@ -110,6 +147,19 @@ export default async function handler(req, res) {
     glowTotal: num(body && body.glowTotal, 50),
     glowViews: num(body && body.glowViews, 10000),
     glowStarted: !!(body && body.glowStarted),
+    // ── נתוני שימוש לניתוח מקרו, מ-v6.53 ──────────────────────────────────
+    // מספרים על מה שהיא עשתה באפליקציה בלבד: באילו ימים נכנסה, כמה זמן, באילו
+    // שעות, אילו כלים הפעילה, אילו ימים נסגרו ובאילו משימות היא מסמנת.
+    // **הערכים עצמם לעולם אינם מגיעים לכאן**: לא כמה שעות ישנה, לא כמה מים
+    // שתתה, לא כמה צעדה, לא מה אכלה ולא כמה היא שוקלת.
+    opens: dayMap(body && body.opens, 999),
+    mins: dayMap(body && body.mins, 1440),
+    hours: intList(body && body.hours, 24, 99999),
+    feat: featMap(body && body.feat),
+    dayClosed: bitString(body && body.dayClosed, MAX_DAYS),
+    tasksAgg: pairMap(body && body.tasksAgg, MAX_DAYS),
+    standalone: num(body && body.standalone, 1),
+    notif: ["granted", "denied", "default"].includes(body && body.notif) ? body.notif : "",
     at: new Date().toISOString(),
   };
 

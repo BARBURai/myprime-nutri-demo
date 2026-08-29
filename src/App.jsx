@@ -461,7 +461,55 @@ function pendingStepAction(profile, week, ackWeek) {
 const TRACKER_ENABLED = true;
 // Show the fat/carbs/fiber strip under the rings. Off for now (kept for future).
 const SHOW_MACRO_STRIP = false;
-const CHECKIN_UNLOCK = { week: 1, day: 3 };   // starts on day 3 of week 1
+const CHECKIN_UNLOCK = { week: 1, day: 3 };
+
+/* ============================================================
+   נתוני שימוש, לניתוח מקרו של התוכנית
+   רון, 28 באוגוסט 2026: "אני רוצה לדעת איפה הן נופלות, איזה משימות קשה להן
+   איתן, ולראות גרף התקדמות." מסך ההסכמה אומר שהחברה **אינה אוספת מידע אישי**
+   ו**אוספת נתוני שימוש באפליקציה בלבד**, וזה בדיוק הגבול שנשמר כאן:
+   נספר מה היא עשתה באפליקציה, ולעולם לא הערכים עצמם. "סימנה שעות שינה" נספר,
+   "ישנה 4 שעות" לא. וכך גם מזון, משקל, היקפים ושיחות ה-AI, שאינם עוזבים את
+   המכשיר שלה.
+   ============================================================ */
+const USAGE_KEY = "mp_usage_v1";
+const USAGE_KEEP_DAYS = 120;      // חלון הימים שנשמר על המכשיר, כדי שלא יגדל בלי סוף
+function usageLoad() { try { return JSON.parse(localStorage.getItem(USAGE_KEY) || "{}") || {}; } catch (e) { return {}; } }
+function usageSave(u) { try { localStorage.setItem(USAGE_KEY, JSON.stringify(u)); } catch (e) {} }
+// שומר רק את החלון האחרון, לפי מפתח תאריך
+function usageTrim(map, keepFrom) {
+  const out = {};
+  Object.keys(map || {}).forEach((k) => { if (k >= keepFrom) out[k] = map[k]; });
+  return out;
+}
+// יום שבו היא פתחה את האפליקציה, והשעה שבה. זה הנתון החזק ביותר לנשירה.
+function usageOpened(today) {
+  const u = usageLoad();
+  const keepFrom = addDays(today, -USAGE_KEEP_DAYS);
+  u.opens = usageTrim(u.opens, keepFrom);
+  u.opens[today] = Math.min(999, (u.opens[today] || 0) + 1);
+  u.mins = usageTrim(u.mins, keepFrom);
+  u.hours = Array.isArray(u.hours) && u.hours.length === 24 ? u.hours : Array(24).fill(0);
+  const h = new Date().getHours();
+  u.hours[h] = Math.min(99999, (u.hours[h] || 0) + 1);
+  usageSave(u);
+}
+// דקות באפליקציה, נצברות על המכשיר ונשלחות בטעינה הבאה. נספרות רק כשהמסך גלוי.
+function usageAddSeconds(today, sec) {
+  if (!(sec > 0)) return;
+  const u = usageLoad();
+  u.mins = u.mins || {};
+  u.mins[today] = Math.min(1440, Math.round(((u.mins[today] || 0) * 60 + sec) / 60));
+  usageSave(u);
+}
+// שימוש בכלי מסוים. מונה בלבד, בלי מה שהוקלד ובלי מה שנבחר.
+function usageBump(key) {
+  const u = usageLoad();
+  u.feat = u.feat || {};
+  u.feat[key] = Math.min(99999, (u.feat[key] || 0) + 1);
+  usageSave(u);
+}
+   // starts on day 3 of week 1
 const CHECKIN_REVEAL_HOUR = 0;                // 0 = daily report available all day (set to 19 to lock until 19:00)
 const MEDAL_SRC = "/medal.png";
 function trophyForWeek(w, level) {
@@ -640,7 +688,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.52";
+const VERSION = "6.53";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3732,12 +3780,12 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         </div>
         {step === "method" && (
           <>
-            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
-              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
-              { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
-              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => { setHistQ(""); setStep("history"); } },
-              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") },
-              { ic: Pencil, t: "הזנה ידנית", s: "להקליד ערכים מהתווית - בלי AI", bg: "#EDEFF3", color: "#6B7A99", go: () => setStep("manual") }].map((o) => (
+            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { usageBump("ai"); setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
+              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { usageBump("photo"); if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
+              { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => { usageBump("barcode"); setStep("barcode"); } },
+              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => { usageBump("history"); setHistQ(""); setStep("history"); } },
+              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => { usageBump("search"); setStep("list"); } },
+              { ic: Pencil, t: "הזנה ידנית", s: "להקליד ערכים מהתווית - בלי AI", bg: "#EDEFF3", color: "#6B7A99", go: () => { usageBump("manual"); setStep("manual"); } }].map((o) => (
               <div key={o.t} data-tut={o.tut} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
                 <div style={{ width: 46, height: 46, borderRadius: 13, background: o.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 3px 9px ${o.color}55` }}><o.ic size={23} color="#fff" strokeWidth={2.2} /></div>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{o.t}</div><div style={{ fontSize: 14, color: C.sub }}>{o.s}</div></div>
@@ -5127,7 +5175,7 @@ function TrophyCheer({ week, name, streak, level, onClose }) {
         <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
         <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : silver ? "גביע כסף נכנס לארון!" : "גביע השבוע נכנס לארון!"}</div>
         {streak >= 2 && <div style={{ fontSize: 18, fontWeight: 700, color: C.brand, marginTop: 8 }}>{streak} ימים ברצף</div>}
-        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : silver ? `השלמת חמישה ימים מתוך שישה בשבוע ${week}${name && name.trim() ? `, ${name.trim()}` : ""}. יום אחד אפשר לפספס, וזה עדיין שבוע חזק.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : silver ? `השלמת חמישה ימים מתוך שישה בשבוע ${week}${name && name.trim() ? `, ${name.trim()}` : ""}. אם תשלימי גם את היום שנשאר, הגביע יהפוך לזהב.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>{champ ? "סגירה 💜" : "ממשיכות חזק 💜"}</Btn></div>
       </div>
     </div>
@@ -6398,7 +6446,39 @@ export default function App() {
       // בשיעורי הבונוס. הוא כבר אצלנו מהשער, בפורמט 972 נקי, ואינו נשמר אצלנו
       // מעבר למה שכבר קיים.
       let ph = ""; try { ph = localStorage.getItem("myprime_phone") || ""; } catch (e) {}
-      payload = { email: em, ...u, trackerDays, day: TODAY, doneToday, phone: ph };
+      // ── נתוני שימוש לניתוח מקרו ────────────────────────────────────────────
+      // מספרים על מה שהיא עשתה באפליקציה, ולעולם לא הערכים עצמם.
+      const usg = usageLoad();
+      const startD = profile.startDate;
+      let dayClosed = "", tasksAgg = {};
+      if (startD) {
+        for (let n = 1; n <= 70; n++) {
+          const d = addDays(startD, n - 1);
+          if (d > TODAY) break;
+          dayClosed += (checkins[d] && checkins[d]._done) ? "1" : "0";
+          if (!unlockedOn(startD, d, CHECKIN_UNLOCK)) continue;
+          const ts = tasksForDate(startD, d, profile.keepShabbat).filter((t) => !t.optional);
+          if (!ts.length) continue;
+          const ans = checkins[d] || {};
+          const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog);
+          ts.forEach((t) => {
+            const cur = tasksAgg[t.id] || [0, 0];
+            cur[1]++;
+            if (taskDone(t, ans, au)) cur[0]++;
+            tasksAgg[t.id] = cur;
+          });
+        }
+      }
+      let standalone = 0, notif = "";
+      try {
+        standalone = ((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true) ? 1 : 0;
+        notif = (typeof Notification !== "undefined" && Notification.permission) || "";
+      } catch (e) {}
+      payload = {
+        email: em, ...u, trackerDays, day: TODAY, doneToday, phone: ph,
+        opens: usg.opens || {}, mins: usg.mins || {}, hours: usg.hours || [], feat: usg.feat || {},
+        dayClosed, tasksAgg, standalone, notif,
+      };
     } catch (e) { return; }
     fetch("/api/usage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
       .catch(() => { /* a participant must never see this fail */ });
@@ -6423,6 +6503,23 @@ export default function App() {
   const [gateAgree, setGateAgree] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   useEffect(() => { const t = setTimeout(() => setShowSplash(false), 2000); return () => clearTimeout(t); }, []);
+  // נוכחות וזמן באפליקציה. פעם אחת בטעינה, ואחר כך שנייה-שנייה כל עוד המסך גלוי.
+  // נצבר על המכשיר ונשלח בטעינה הבאה, כי בטלפון אין רגע אמין לשלוח בו ביציאה.
+  useEffect(() => {
+    usageOpened(TODAY);
+    let last = Date.now(), acc = 0;
+    const tick = () => {
+      const now = Date.now();
+      if (document.visibilityState === "visible") acc += Math.min(60, (now - last) / 1000);
+      last = now;
+      if (acc >= 30) { usageAddSeconds(TODAY, acc); acc = 0; }
+    };
+    const iv = setInterval(tick, 15000);
+    const flush = () => { tick(); if (acc > 0) { usageAddSeconds(TODAY, acc); acc = 0; } };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => { clearInterval(iv); document.removeEventListener("visibilitychange", flush); window.removeEventListener("pagehide", flush); flush(); };
+  }, []);
   const [installSkipped, setInstallSkipped] = useState(() => { try { return localStorage.getItem("myprime_install_ack") === "1"; } catch (e) { return false; } });
   const appIsPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
   const appStandalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true);
@@ -6892,6 +6989,7 @@ export default function App() {
   }, [programWeek, today, tab, sheet, modal, onboarded, showIntro, profile.fasting, profile.tipsSeen]);
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
   const setWeightForDate = (date, kg) => {
+    usageBump("weighIn");   // שהזינה משקל, ולעולם לא כמה
     const next = [...weights.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1);
     setWeights(next);
     // הבדיקה היא על המשקל העדכני ביותר ולא על מה שהיא הקלידה עכשיו, כדי שמילוי
@@ -7177,7 +7275,7 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={profile.weightKg} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
@@ -7192,7 +7290,7 @@ export default function App() {
                 const active = tab === t.id;
                 const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
-                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); usageBump("tab_" + t.id); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
               {(introLock || preStart)
                 ? <button data-tut="nav-fab" onClick={() => setLockMsg("plus")} aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: "#BBA7AC", opacity: 0.55, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
@@ -7201,7 +7299,7 @@ export default function App() {
                 const active = tab === t.id;
                 const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
-                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); usageBump("tab_" + t.id); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
             </div>
             </div>
