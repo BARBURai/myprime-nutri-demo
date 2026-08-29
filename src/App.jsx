@@ -700,7 +700,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.56";
+const VERSION = "6.57";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5832,6 +5832,71 @@ function GoalBumpModal({ info, name, onClose }) {
 // it. Reads the real numbers on an interval as well as on viewport events, because the
 // whole problem is that iOS sometimes fires no event at all. Screenshot it once while the
 // screen looks right and once while it is jumped, and the difference names the cause.
+// **גרסה חדשה שלא מגיעה אליה, כי היא לא סוגרת את האפליקציה.** האפליקציה נטענת
+// פעם אחת ונשארת בזיכרון של הטלפון, ולכן דווקא אישה פעילה ממשיכה להריץ קוד ישן
+// ימים. הבדיקה: קוראים את הדף מהשרת ומשווים את שם קובץ הקוד, שמקבל חתימה חדשה
+// בכל בנייה. **אין כאן פונקציה חדשה בשרת, ואנחנו על 12 מתוך 12.**
+const CURRENT_BUNDLE = (() => {
+  try { const el = document.querySelector('script[type="module"][src]'); return el ? el.getAttribute("src") : ""; } catch (e) { return ""; }
+})();
+const UPDATE_CHECK_MS = 5 * 60 * 1000;      // לא בודקים יותר מפעם בחמש דקות
+const UPDATE_POLL_MS = 30 * 60 * 1000;      // ולמי שלא יוצאת ולא חוזרת, פעם בחצי שעה
+function UpdateBar({ hidden }) {
+  const [stale, setStale] = useState(false);
+  const lastRef = useRef(0);
+  const staleRef = useRef(false); staleRef.current = stale;
+  useEffect(() => {
+    // **לעולם לא לרענן לבד.** אישה באמצע הקלדה תאבד את מה שכתבה, וזה גרוע
+    // מגרסה ישנה. כל מה שקורה כאן הוא להציג לה פס, וההקשה שלה מרעננת.
+    const force = () => setStale(true);
+    window.addEventListener("mp-update-test", force);
+    if (!CURRENT_BUNDLE) return () => window.removeEventListener("mp-update-test", force);
+    let alive = true;
+    const check = async () => {
+      if (staleRef.current) return;
+      const now = Date.now();
+      if (now - lastRef.current < UPDATE_CHECK_MS) return;
+      lastRef.current = now;
+      try {
+        const r = await fetch("/index.html", { cache: "no-store" });
+        if (!r.ok) return;
+        const html = await r.text();
+        const m = html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/);
+        if (alive && m && m[1] && m[1] !== CURRENT_BUNDLE) setStale(true);
+      } catch (e) {}
+    };
+    const onVis = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", check);
+    const id = setInterval(check, UPDATE_POLL_MS);
+    return () => { alive = false; clearInterval(id); window.removeEventListener("mp-update-test", force); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", check); };
+  }, []);
+  // כשחלון פתוח הפס אינו מוצג, כדי שלא תקיש "רענון" באמצע הזנה ותאבד אותה.
+  if (!stale || hidden) return null;
+  return (
+    <div style={{ position: "absolute", top: DEV ? "calc(env(safe-area-inset-top, 0px) + 42px)" : "env(safe-area-inset-top, 0px)", insetInlineStart: 0, insetInlineEnd: 0, zIndex: 60, background: C.brand, color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 14px", fontFamily: fontStack, direction: "rtl", boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}>
+      <span style={{ fontSize: 15, fontWeight: 600 }}>יש גרסה חדשה של האפליקציה</span>
+      <button onClick={() => { try { window.location.reload(); } catch (e) {} }} style={{ background: "#fff", color: C.brand, border: "none", borderRadius: 999, padding: "5px 17px", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", flexShrink: 0 }}>רענון</button>
+    </div>
+  );
+}
+
+// **התשובה של המשרד קופצת מעצמה ולא מחכה שהיא תקיש על הבועה.** עד עכשיו היה
+// עיגול ירוק בלבד, ומי שלא הקישה עליו לא ידעה שיש לה תשובה. מוצגת רק כשאין שום
+// דבר אחר על המסך, ו"אחר כך" מחזיר אותה בפתיחה הבאה.
+function ReplyPopup({ reply, onAck, onLater }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 56 }}>
+      <div style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 340, fontFamily: fontStack, border: `2.5px solid ${C.brand}`, boxShadow: "0 14px 44px rgba(0,0,0,0.34)", boxSizing: "border-box", maxHeight: "80%", overflowY: "auto" }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.brand, marginBottom: 10, textAlign: "center" }}>תשובה מצוות מיי פריים</div>
+        <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.65, whiteSpace: "pre-wrap", marginBottom: 18 }}>{reply.text}</div>
+        <Btn onClick={onAck}>תודה, הבנתי</Btn>
+        <Btn variant="ghost" onClick={onLater} style={{ marginTop: 8 }}>אחר כך</Btn>
+      </div>
+    </div>
+  );
+}
+
 function DevViewportBar() {
   const [s, setS] = useState({});
   const [bad, setBad] = useState(null);
@@ -5926,6 +5991,7 @@ function DevDateBar({ onAnchor }) {
       <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
       <button onClick={() => setDay(addDays(TODAY, 1))} style={btn}>+1</button>
       <button onClick={crossMidnight} style={{ ...btn, background: "#556" }}>מעבר חצות</button>
+      <button onClick={() => { try { window.dispatchEvent(new Event("mp-update-test")); } catch (e) {} }} style={{ ...btn, background: "#556" }}>גרסה חדשה</button>
       <button onClick={reset} style={btn}>איפוס</button>
       <button onClick={resetGlow} style={{ ...btn, background: "#a45" }}>איפוס Glow</button>
       <button onClick={() => onAnchor && onAnchor()} style={{ ...btn, background: "#0a7" }}>קבע יום 1</button>
@@ -6534,6 +6600,9 @@ export default function App() {
   const [gateBack, setGateBack] = useState("");
   const gatePhone = (() => { try { return localStorage.getItem("myprime_phone") || ""; } catch (e) { return ""; } })();
   const [replies, setReplies] = useState([]);
+  // "אחר כך" דוחה את החלונית לסשן הזה בלבד ואינו נשמר, ולכן היא חוזרת בפתיחה
+  // הבאה. תשובה שהיא לא אישרה לא נעלמת, והיא ממשיכה לחכות גם בבועה.
+  const [replyLater, setReplyLater] = useState([]);
   // Reading one takes it off her bubble here and tells the office she saw it. If the call
   // fails it simply comes back on the next load; nothing of hers depends on it.
   const readReply = (id) => {
@@ -6544,6 +6613,9 @@ export default function App() {
       body: JSON.stringify({ email: gateEmail, noteRead: id }),
     }).catch(() => {});
   };
+  // התשובה הראשונה שהיא עוד לא אישרה ולא דחתה. אחת בכל פעם, כי שתי חלוניות
+  // זו אחרי זו נקראות כהצפה.
+  const replyPop = (replies || []).find((r) => !replyLater.includes(r.id)) || null;
   const [gateAttempts, setGateAttempts] = useState(0);
   const [gateAgree, setGateAgree] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -7305,6 +7377,7 @@ export default function App() {
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
         {DEV && <DevViewportBar />}
+        <UpdateBar hidden={!!(sheet || modal || tour || favPrompt || notifyPrompt)} />
         {showInstallGate ? (
           <InstallGate onSkip={skipInstall} />
         ) : gate !== "ok" ? (
@@ -7456,6 +7529,11 @@ export default function App() {
               <Btn variant="ghost" onClick={dismissNotify} style={{ marginTop: 8 }}>לא עכשיו</Btn>
             </div>
           </div>
+        )}
+        {/* מוצגת אך ורק כשאין שום דבר אחר על המסך. חלונית שנוחתת מעל מסך פתוח או
+            מעל שאלה אחרת נקראת כתקלה, ובמקרה הגרוע גוזלת ממנה פעולה באמצע. */}
+        {gate === "ok" && onboarded && replyPop && !sheet && !modal && !tour && !favPrompt && !notifyPrompt && (
+          <ReplyPopup reply={replyPop} onAck={() => readReply(replyPop.id)} onLater={() => setReplyLater((a) => [...a, replyPop.id])} />
         )}
       </div>
     </div>
