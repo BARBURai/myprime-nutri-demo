@@ -688,7 +688,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.53";
+const VERSION = "6.54";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5159,7 +5159,7 @@ function CheckinCheer({ name, streak, onClose }) {
   );
 }
 
-function TrophyCheer({ week, name, streak, level, onClose }) {
+function TrophyCheer({ week, name, streak, level, days, onClose }) {
   const colors = ["#F4C04A", C.brand, C.amber, C.info, C.macroC];
   const src = trophyForWeek(week, level);
   const silver = level === "silver";
@@ -5175,7 +5175,7 @@ function TrophyCheer({ week, name, streak, level, onClose }) {
         <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
         <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : silver ? "גביע כסף נכנס לארון!" : "גביע השבוע נכנס לארון!"}</div>
         {streak >= 2 && <div style={{ fontSize: 18, fontWeight: 700, color: C.brand, marginTop: 8 }}>{streak} ימים ברצף</div>}
-        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : silver ? `השלמת חמישה ימים מתוך שישה בשבוע ${week}${name && name.trim() ? `, ${name.trim()}` : ""}. אם תשלימי גם את היום שנשאר, הגביע יהפוך לזהב.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : silver ? `השלמת ${days && days.total ? days.done : 5} ימים מתוך ${days && days.total ? days.total : 6} בשבוע ${week}${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>{champ ? "סגירה 💜" : "ממשיכות חזק 💜"}</Btn></div>
       </div>
     </div>
@@ -5215,6 +5215,20 @@ function trackerStats(checkins) {
 // 2026: הדרישה מחמירה מעצמה ככל שהתוכנית מתקדמת, כי מספר המשימות ביום גדל,
 // ועדי כתבה "קיבלתי רק גביע אחד". ההקלה היא על החיים ולא על ההתנהגות: **היום
 // עצמו עדיין חייב להיות שלם**, ומה שמותר הוא לפספס יום.
+// כמה ימים נסגרו מתוך כמה נדרשו באותו שבוע. **בשבוע 1 יש ארבעה ימים ולא שישה**,
+// כי יומן המעקב נפתח ביום 3, ולכן המספרים במסך החגיגה חייבים להיגזר מכאן ולא
+// להיכתב קשיח. רון תפס את זה בצילום: "השלמת חמישה מתוך שישה" בשבוע הראשון.
+function weekDayCounts(checkins, startDate, w, today) {
+  let done = 0, total = 0;
+  for (let dnum = Math.max((w - 1) * 7 + 1, 3); dnum <= w * 7; dnum++) {
+    const date = addDays(startDate, dnum - 1);
+    if (date > today) break;
+    if (parseDay(date).getUTCDay() === 6) continue;
+    total++;
+    if (checkins[date] && checkins[date]._done) done++;
+  }
+  return { done, total };
+}
 function weekTrophyLevel(checkins, startDate, w, today) {
   const fri = addDays(startDate, (w - 1) * 7 + 5);
   if (fri > today) return null;
@@ -7336,7 +7350,7 @@ export default function App() {
             {sheet === "rateCap" && <RateCapSheet onClose={() => setSheet(null)} />}
             {sheet === "resumeOffer" && <ResumeOfferSheet onResume={() => { resumeLoss(); setSheet(null); }} onLater={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
-            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} level={cheerTrophyLevel} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
+            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} level={cheerTrophyLevel} days={weekDayCounts(checkins, profile.startDate, cheerTrophyWeek, today)} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} viewDate={selectedDate} keepShabbat={profile.keepShabbat} stepsByDate={stepsByDate} waterByDate={waterByDate} log={log} targets={targets} cupMl={profile.cupMl} activityLog={activityLog} onClose={() => setSheet(null)} />}

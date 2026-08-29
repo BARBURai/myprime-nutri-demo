@@ -335,7 +335,20 @@ check("שורת ההסבר בארון מסבירה את שתי הדרגות",
   src.includes("גביע זהב נכנס לארון על שבוע שכל ימיו הושלמו, ראשון עד שישי. אם פספסת יום אחד, נכנס גביע כסף. שבת אינה נחשבת."));
 check("וגם המסך של מה נשאר", src.includes("יום אחד אפשר לפספס ועדיין לקבל גביע כסף. שבוע שכולו הושלם מקבל זהב."));
 check("מסך החגיגה של הכסף בקופי שרון אישר",
-  /גביע כסף נכנס לארון!/.test(src) && /אם תשלימי גם את היום שנשאר, הגביע יהפוך לזהב/.test(src));
+  /גביע כסף נכנס לארון!/.test(src) && !/אם תשלימי/.test(src) && /ימים מתוך [\s\S]{0,140}גאה בך/.test(src));
+// בשבוע 1 יש ארבעה ימים ולא שישה, כי היומן נפתח ביום 3. המספרים נגזרים מהשבוע.
+check("המספרים במשפט נגזרים מהשבוע ואינם כתובים קשיח",
+  /\$\{days && days\.total \? days\.done : 5\} ימים מתוך \$\{days && days\.total \? days\.total : 6\}/.test(src));
+{
+  const cnt = new Function(helpers.replace("return weekTrophyEarned;", "") + "\n" +
+    grab(/function weekDayCounts\(checkins, startDate, w, today\) \{[\s\S]*?\n\}/, "weekDayCounts") + "; return weekDayCounts;")();
+  const full = {}; for (const n of [3,4,5,6]) full[d(n)] = { _done: true };
+  check("שבוע 1 סופר ארבעה ימים", cnt(full, START, 1, d(6)).total === 4, JSON.stringify(cnt(full, START, 1, d(6))));
+  delete full[d(5)];
+  check("ומי שפספסה יום בשבוע 1 היא 3 מתוך 4", JSON.stringify(cnt(full, START, 1, d(6))) === '{"done":3,"total":4}', JSON.stringify(cnt(full, START, 1, d(6))));
+  const w2 = {}; for (const n of [8,9,10,11,12,13]) w2[d(n)] = { _done: true };
+  check("ושבוע 2 סופר שישה", cnt(w2, START, 2, d(13)).total === 6);
+}
 check("והחגיגה נורית גם על כסף", /const lv = weekTrophyLevel\(next, profile\.startDate, w, today\)/.test(src));
 check("השאלות ותשובות מסבירות את שתי הדרגות",
   src.includes("מקבלים גביע זהב, ואם פספסת יום אחד מקבלים גביע כסף"));
