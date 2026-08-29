@@ -296,8 +296,20 @@ function pad2(n) { return String(n).padStart(2, "0"); }
 function parseDay(dateStr) { const [y, m, d] = (dateStr || "").split("-").map(Number); return new Date(Date.UTC(y || 1970, (m || 1) - 1, d || 1)); }
 function fmtDay(d) { return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`; }
 function addDays(dateStr, n) { const d = parseDay(dateStr); d.setUTCDate(d.getUTCDate() + n); return fmtDay(d); }
+// הזזת שעון לכלי הבדיקות בלבד, כדי שאפשר יהיה לדמות מעבר חצות בלי לחכות
+// לחצות ובלי לגעת בשעון של הטלפון. בייצור זה תמיד אפס.
+let DEV_CLOCK_SHIFT = 0;
+function nowDate() {
+  // בייצור זה פשוט עכשיו. **בסרגל הבדיקות היום המדומה הוא הבסיס**, ולכן היום
+  // המדומה אינו נדרס בתאריך האמיתי, וכפתור "מעבר חצות" מזיז אותו יממה קדימה
+  // ומפעיל בדיוק את אותו מסלול שרץ בחצות אמיתית.
+  if (!DEV) return new Date(Date.now() + DEV_CLOCK_SHIFT);
+  const t = parseDay(TODAY);
+  const base = new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), 12, 0, 0);
+  return new Date(base.getTime() + DEV_CLOCK_SHIFT);
+}
 function relLabel(dateStr) {
-  const today = ymd(new Date());
+  const today = ymd(nowDate());
   if (dateStr === today) return "היום";
   if (dateStr === addDays(today, -1)) return "אתמול";
   return null;
@@ -5896,6 +5908,16 @@ function DevDateBar({ onAnchor }) {
   // "She has already started watching a bonus lesson" is a one-way flag, so without this
   // there is no way back to the state a new woman sees. Testing tool only.
   const resetGlow = () => { try { window.localStorage.removeItem(GLOW_STARTED_KEY); } catch (e) {} window.location.reload(); };
+  // מדמה מעבר חצות בלי לחכות לחצות: מזיז את השעון של האפליקציה יממה קדימה,
+  // ואז מדמה חזרה לאפליקציה מהרקע. **כלי בדיקה בלבד, ואף משתתפת לא רואה אותו.**
+  const crossMidnight = () => {
+    DEV_CLOCK_SHIFT += 24 * 60 * 60 * 1000;
+    try { window.localStorage.setItem("myprime_dev_today", ymd(nowDate())); } catch (e) {}
+    try {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+    } catch (e) {}
+  };
   const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
   return (
     <div style={{ position: "absolute", top: "env(safe-area-inset-top, 0px)", left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
@@ -5903,6 +5925,7 @@ function DevDateBar({ onAnchor }) {
       <button onClick={() => setDay(addDays(TODAY, -1))} style={btn}>-1</button>
       <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
       <button onClick={() => setDay(addDays(TODAY, 1))} style={btn}>+1</button>
+      <button onClick={crossMidnight} style={{ ...btn, background: "#556" }}>מעבר חצות</button>
       <button onClick={reset} style={btn}>איפוס</button>
       <button onClick={resetGlow} style={{ ...btn, background: "#a45" }}>איפוס Glow</button>
       <button onClick={() => onAnchor && onAnchor()} style={{ ...btn, background: "#0a7" }}>קבע יום 1</button>
@@ -6400,7 +6423,7 @@ export default function App() {
     // והאפליקציה העבירה אותה לשבת מתחת לאצבע. עכשיו: בזמן שהיא בפנים שום דבר
     // לא זז, בחזרה מהרקע היום מתעדכן, ואם יש לה חלון פתוח הוא לא זז גם אז.
     const sync = (mayMove) => {
-      const now = ymd(new Date());
+      const now = ymd(nowDate());
       if (now === today) return;
       setToday(now);
       if (mayMove && !sheetRef.current && !modalRef.current) setSelectedDate((sd) => (sd === today ? now : sd));
