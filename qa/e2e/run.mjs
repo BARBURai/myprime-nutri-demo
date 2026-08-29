@@ -96,12 +96,24 @@ async function stubApi(context, { startDate, glow = false }) {
   });
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
   await stubApi(context, { startDate, glow });
+  // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
+  // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
+  if (clock) {
+    await context.addInitScript((iso) => {
+      const Real = Date;
+      const shift = Real.parse(iso) - Real.now();
+      window.Date = new Proxy(Real, {
+        construct: (t, a) => (a.length === 0 ? new Real(Real.now() + shift) : new Real(...a)),
+        get: (t, k) => (k === "now" ? () => Real.now() + shift : Reflect.get(t, k)),
+      });
+    }, clock);
+  }
   await context.addInitScript(([sd, extra, neverAsked]) => {
     localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
     localStorage.setItem("myprime_access_name", "בדיקה");
@@ -218,6 +230,48 @@ const CHECKS = [
     // that only ever fires looks exactly like a rule that never fires. She crosses the line
     // on a weight she reports, gets the screen, lands in maintenance with the rate list
     // gone, then gains back past the second line and is offered the way back.
+    // v6.01 הפסיקה להציע 500 למי שקרובה לקו, ומי שכבר בחרה 500 המשיכה לקבל את
+    // הגירעון המלא. רון: "אין לי בעיה שתהיה ב-250 בלבד." המספר על המסך שלה עולה
+    // בכ-275 קלוריות, ולכן זה חייב להיאמר לה.
+    name: "מי שבחרה 500 ומתקרבת לקו מועברת ל-250, ורואה על זה מסך",
+    async run(browser, device) {
+      const start = sundayWeeksAgo(1);
+      const prof = { age: 50, heightCm: 165, weightKg: 70, activity: "יושבני", weeklyRateG: 500, goalWeightKg: 60, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done", lossStopAt: null };
+      const { context, page, errors } = await openApp(browser, device, { startDate: start, seed: { profile: prof, weights: [{ date: start, kg: 70 }] } });
+      const state = () => page.evaluate(() => JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").profile || {});
+      const logWeight = async (kg) => {
+        await page.locator("text=דוח").last().click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הזיני משקל").first().click();
+        await page.waitForTimeout(400);
+        await page.locator('input[inputmode="decimal"]').last().fill(String(kg));
+        await page.locator("text=שמור").first().click();
+        await page.waitForTimeout(800);
+      };
+      const bad = [];
+      // בגובה 165 הקו הוא 54.5 ק״ג, ו-5 ק״ג מעליו הם 59.5. 62 עדיין רחוק.
+      await logWeight(62);
+      if ((await state()).weeklyRateG !== 500) bad.push("הקצב זז כשעוד היה מקום");
+      if (await page.locator("text=הקצב שלך עודכן").count()) bad.push("המסך הוצג כשעוד היה מקום");
+
+      // 57 כבר בתוך 5 הקילו, ושם התקרה תופסת
+      await logWeight(57);
+      let body = await page.locator("body").innerText();
+      if (!body.includes("הקצב שלך עודכן")) bad.push("המסך לא הוצג");
+      if (!body.includes("הקצב שלך עודכן ל-250 גרם בשבוע, והיעד הקלורי היומי עלה בהתאם")) bad.push("הקופי אינו כלשונו");
+      const st = await state();
+      if (st.weeklyRateG !== 250) bad.push("הקצב נשאר " + st.weeklyRateG);
+      if (st.lossStopAt) bad.push("היא הועברה לשמירה במקום ל-250");
+      const btn = page.getByRole("button", { name: "הבנתי" }).first();
+      if (await btn.count()) await btn.click();
+      await page.waitForTimeout(500);
+      if (await page.locator("text=הקצב שלך עודכן").count()) bad.push("המסך לא נסגר");
+
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
     name: "חצייה של הקו מעבירה לשמירה, ועלייה חזרה פותחת את הדרך בחזרה",
     async run(browser, device) {
       const start = sundayWeeksAgo(1);
@@ -510,6 +564,59 @@ const CHECKS = [
     },
   },
   {
+    // רון: "ההסתברות שבדיוק מה שרשום במאגר זה בדיוק מה שהיא אכלה היא אפסית."
+    // לכן אין יותר הוספה מהירה בתוצאות החיפוש, והקשה בכל מקום בשורה פותחת את
+    // מסך הכמות. ובאותו תרחיש גם: "לחצתי על המוצר עשיתי איקס, לא חזרתי למסך החיפוש."
+    name: "שורת חיפוש נפתחת לכמות, וה-✕ שם מחזיר לתוצאות ולא סוגר הכל",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const sheetTitle = () => page.evaluate(() => {
+        const ov = Array.from(document.querySelectorAll("div")).find((d) => getComputedStyle(d).backgroundColor === "rgba(58, 43, 48, 0.4)" && d.style.position === "absolute");
+        if (!ov || !ov.firstElementChild) return "אין חלון פתוח";
+        const h = ov.firstElementChild.querySelector("span");
+        return h ? h.innerText.trim() : "?";
+      });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=חיפוש מזון").first().click();
+      await page.waitForTimeout(500);
+      const box = page.locator('input[placeholder="חיפוש מזון…"]');
+      await box.fill("בננה");
+      await page.waitForTimeout(800);
+
+      const bad = [];
+      // בשורת התוצאה אין יותר שום כפתור, ולכן אין דרך להוסיף כמות של המאגר בטעות.
+      const btns = await page.evaluate(() => {
+        const row = Array.from(document.querySelectorAll("div")).find((d) => d.children.length === 2 && d.innerText.startsWith("בננה בינונית"));
+        return row ? row.querySelectorAll("button").length : -1;
+      });
+      if (btns !== 0) bad.push("בשורת התוצאה יש " + btns + " כפתורים");
+      // הקשה על הקצה של השורה, שם ישב הפלוס, פותחת את מסך הכמות
+      const row = page.locator("text=בננה בינונית").first();
+      const box2 = await row.boundingBox();
+      if (box2) await page.mouse.click(box2.x + 10, box2.y + box2.height / 2);
+      await page.waitForTimeout(600);
+      if (!(await page.locator("text=שיוך לארוחה").count())) bad.push("מסך הכמות לא נפתח");
+
+      // ✕ בשורת הכותרת: הכפתור האחרון
+      await page.evaluate(() => {
+        const ov = Array.from(document.querySelectorAll("div")).find((d) => getComputedStyle(d).backgroundColor === "rgba(58, 43, 48, 0.4)" && d.style.position === "absolute");
+        const bs = ov.firstElementChild.children[0].querySelectorAll("button");
+        bs[bs.length - 1].click();
+      });
+      await page.waitForTimeout(600);
+      const title = await sheetTitle();
+      if (title === "אין חלון פתוח") bad.push("✕ סגר את הכל במקום לחזור");
+      const left = await page.evaluate(() => { const i = document.querySelector('input[placeholder="חיפוש מזון…"]'); return i ? i.value : ""; });
+      if (left !== "בננה") bad.push("החיפוש לא נשמר, נשאר " + JSON.stringify(left));
+
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `חזרה אל "${title}" · שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
     name: "הסרגל התחתון מוסתר כשחלון פתוח",
     async run(browser, device) {
       const { context, page } = await openApp(browser, device);
@@ -793,6 +900,237 @@ const CHECKS = [
     },
   },
   {
+    // רעיון של רון: כפתור בארון הגביעים שאומר מה חסר לגביע של השבוע, בשישי ובשבת
+    // בלבד. השעון נעוץ ליום שישי, אחרת התרחיש היה עובר בימים מסוימים ונופל באחרים.
+    name: "בארון הגביעים, מה נשאר לגביע מונה את היום ואת המשימה",
+    async run(browser, device) {
+      // 2026-08-16 הוא יום ראשון. יום 13 בתוכנית הוא שישי של שבוע 2.
+      const start = "2026-08-16";
+      const day = (n) => { const t = new Date(Date.UTC(2026, 7, 16)); t.setUTCDate(t.getUTCDate() + n - 1); return t.toISOString().slice(0, 10); };
+      const THU = day(12);
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      // שבוע 2 מלא, חוץ מאימון הכוח של חמישי. בדיוק המקרה של הילה.
+      const checkins = {}, stepsByDate = {}, waterByDate = {}, log = [];
+      const IDS = "steps journal strength veg mealorder".split(" ");
+      const NUM = new Set(["steps", "veg", "mealorder"]);
+      for (let n = 8; n <= 13; n++) {
+        const d = day(n);
+        stepsByDate[d] = 9000; waterByDate[d] = 2200;
+        log.push({ id: "x" + n, date: d, meal: "בוקר", name: "בדיקה", g: 200, unit: "g", source: "verified", kcal: 400, p: 130, f: 10, c: 20 });
+        const ans = {};
+        for (const id of IDS) ans[id] = NUM.has(id) ? 5 : true;
+        if (d === THU) delete ans.strength;
+        checkins[d] = ans;
+      }
+      const { context, page, errors } = await openApp(browser, device, {
+        startDate: start, clock: "2026-08-28T14:00:00.000Z",
+        seed: { profile: prof, checkins, stepsByDate, waterByDate, log, weights: [{ date: start, kg: 72 }] },
+      });
+      const bad = [];
+      // פותחים את הארון מיומן של יום שישי בשבוע 2, וזה מה שרון עשה
+      await page.locator('[data-tut="cabinet"]').first().click().catch(async () => { await page.locator("text=ארון").first().click(); });
+      await page.waitForTimeout(700);
+      if (!(await page.locator("text=ארון המדליות והגביעים").count())) bad.push("הארון לא נפתח");
+      // הקשה על הגביע של שבוע 2 חייבת לדבר על שבוע 2, וזה מה שרון תפס
+      await page.evaluate(() => { const im = document.querySelector('img[src*="trophy-2"]'); if (im && im.parentElement) im.parentElement.click(); });
+      await page.waitForTimeout(600);
+      const byTrophy = await page.evaluate(() => document.body.innerText);
+      if (!byTrophy.includes("מה נשאר לגביע של שבוע 2?")) bad.push("הקשה על גביע שבוע 2 לא פתחה את שבוע 2");
+      await page.getByRole("button", { name: "סגירה" }).first().click().catch(() => {});
+      await page.waitForTimeout(400);
+      const btn = page.locator("text=/מה נשאר לגביע של שבוע/").first();
+      if (!(await btn.count())) bad.push("הכפתור אינו מוצג בשישי");
+      else if (!(await btn.innerText()).includes("שבוע 2")) bad.push("הכפתור נוקב בשבוע הלא נכון: " + (await btn.innerText()));
+      else {
+        await btn.click();
+        await page.waitForTimeout(500);
+        const body = await page.evaluate(() => document.body.innerText);
+        if (!body.includes("מה נשאר לגביע של שבוע 2?")) bad.push("הכותרת אינה נוקבת בשבוע");
+        // כפתור הסגירה חייב להיות נראה בלי לגלול, אחרת החלונית נראית כאילו נחתכה
+        const seen = await page.evaluate(() => { const b = Array.from(document.querySelectorAll("button")).find((x) => x.innerText.trim() === "סגירה"); if (!b) return false; const r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; });
+        if (!seen) bad.push("כפתור הסגירה אינו נראה");
+        if (!body.includes("יום חמישי · 27.08")) bad.push("היום החסר או התאריך שלו אינם מופיעים");
+        if (!body.includes("אימון כוח")) bad.push("המשימה החסרה אינה מופיעה");
+        if (body.includes("יום רביעי")) bad.push("יום שהושלם מופיע ברשימה");
+        // סוגרים את המסך וחוזרים לארון, לבדוק את גביע הכסף עצמו
+        await page.getByRole("button", { name: "סגירה" }).first().click().catch(() => {});
+        await page.waitForTimeout(400);
+      }
+      // שבוע 2 חסר בו יום אחד, ולכן הוא כסף. שבוע 1 לא מולא כלל ואינו גביע.
+      const silver = await page.evaluate(() => Array.from(document.querySelectorAll("img")).filter((i) => i.src.includes("-silver.webp")).length);
+      if (silver !== 1) bad.push("גביעי כסף על המסך: " + silver);
+      const cab = await page.evaluate(() => document.body.innerText);
+      if (!cab.includes("אם פספסת יום אחד, נכנס גביע כסף")) bad.push("שורת ההסבר אינה מופיעה בארון");
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
+    // רון: אישה שכמעט לא מילאה קיבלה סיכום שמברך אותה על שבוע מוצלח, ומיד
+    // מתחתיו שש שורות של "עוד לא דיווחת". סימן אחד בשבוע הספיק כדי לפתוח אותו.
+    name: "שבוע עם דיווח מיום אחד מקבל הודעה במקום סיכום",
+    async run(browser, device) {
+      const start = "2026-08-16";
+      const day = (n) => { const t = new Date(Date.UTC(2026, 7, 16)); t.setUTCDate(t.getUTCDate() + n - 1); return t.toISOString().slice(0, 10); };
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      // שבוע 2, ובו יום אחד בלבד שמולא. זה בדיוק המצב שרון תיאר: סימן אחד בשבוע.
+      const d1 = day(9);
+      const checkins = { [d1]: { steps: 9000, journal: true, veg: 3 } };
+      const { context, page, errors } = await openApp(browser, device, {
+        startDate: start, clock: "2026-08-28T14:00:00.000Z",
+        seed: { profile: prof, checkins, stepsByDate: { [d1]: 9000 }, waterByDate: { [d1]: 2000 }, log: [{ id: "w1", date: d1, meal: "בוקר", name: "בדיקה", g: 200, unit: "g", source: "verified", kcal: 400, p: 30, f: 10, c: 20 }], weights: [{ date: start, kg: 72 }] },
+      });
+      const bad = [];
+      // "סיכום שבועי" מופיע גם על כרטיס התוכן. זה שבתוך יומן המעקב הוא האחרון.
+      await page.locator("text=סיכום שבועי").last().click().catch(() => {});
+      await page.waitForTimeout(800);
+      const body = await page.evaluate(() => document.body.innerText);
+      if (!body.includes("עוד אין מספיק נתונים לסיכום השבועי")) bad.push("הכרטיס אינו מוצג");
+      if (!body.includes("דיווח מיום אחד בלבד")) bad.push("מספר ימי הדיווח אינו נכון");
+      if (body.includes("הוכחת לעצמך")) bad.push("טקסט השבח עדיין מוצג");
+      if (body.includes("ענת")) bad.push("הכרטיס חתום בשמה של ענת");
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
+    // ובשבת, כשהשבוע כבר נגמר, אותו מצב בדיוק הוא כסף. שני התרחישים נפרדים כי
+    // כל אחד נועץ שעון אחר, וזה מה שכל הכלל תלוי בו.
+    name: "בשבת, שבוע שחסר בו יום אחד מקבל גביע כסף",
+    async run(browser, device) {
+      const start = "2026-08-16";
+      const day = (n) => { const t = new Date(Date.UTC(2026, 7, 16)); t.setUTCDate(t.getUTCDate() + n - 1); return t.toISOString().slice(0, 10); };
+      const THU = day(12);
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      const checkins = {}, stepsByDate = {}, waterByDate = {}, log = [];
+      const IDS = "steps journal strength veg mealorder".split(" ");
+      const NUM = new Set(["steps", "veg", "mealorder"]);
+      for (let n = 8; n <= 13; n++) {
+        const d = day(n);
+        stepsByDate[d] = 9000; waterByDate[d] = 2200;
+        log.push({ id: "s" + n, date: d, meal: "בוקר", name: "בדיקה", g: 200, unit: "g", source: "verified", kcal: 400, p: 130, f: 10, c: 20 });
+        const ans = {};
+        for (const id of IDS) ans[id] = NUM.has(id) ? 5 : true;
+        if (d === THU) delete ans.strength;
+        checkins[d] = ans;
+      }
+      const { context, page, errors } = await openApp(browser, device, {
+        startDate: start, clock: "2026-08-29T14:00:00.000Z",
+        seed: { profile: prof, checkins, stepsByDate, waterByDate, log, weights: [{ date: start, kg: 72 }] },
+      });
+      const bad = [];
+      await page.locator('[data-tut="cabinet"]').first().click().catch(async () => { await page.locator("text=ארון").first().click(); });
+      await page.waitForTimeout(700);
+      const silver = await page.evaluate(() => Array.from(document.querySelectorAll("img")).filter((i) => i.src.includes("-silver.webp")).length);
+      if (silver !== 1) bad.push("גביעי כסף על המסך: " + silver);
+      const cab = await page.evaluate(() => document.body.innerText);
+      if (!cab.includes("כסף")) bad.push("לא כתוב שהגביע כסף");
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
+    // רון: "לחיצה על שאלות ותשובות ועזרה צריכה להוביל ישר לשאלות והתשובות, ואז
+    // בסוף השאלות והתשובות שיהיה קו מפריד ומתחתיו מחיקת כל הנתונים והתנתקות."
+    // ובאותה שיחה: "כל הטקסטים האפורים... אני רוצה אותם שחורים."
+    name: "השורה בפרופיל פותחת ישר את השאלות והתשובות, ובתחתיתן פעולות החשבון",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const bad = [];
+      await page.locator("text=פרופיל").last().click();
+      await page.waitForTimeout(700);
+      // הטקסט המשני בפרופיל צריך להיות שחור כמו הראשי, בלי שום אפור.
+      const grey = await page.evaluate(() => {
+        const bads = [];
+        document.querySelectorAll("div,span").forEach((el) => {
+          if (el.children.length) return;
+          const c = getComputedStyle(el).color;
+          if (c === "rgb(139, 115, 122)" || c === "rgb(187, 167, 172)") bads.push((el.innerText || "").slice(0, 20));
+        });
+        return bads.slice(0, 3);
+      });
+      if (grey.length) bad.push("נשאר טקסט אפור: " + grey.join(" | "));
+
+      await page.locator("text=שאלות, תשובות ועזרה").first().click();
+      await page.waitForTimeout(700);
+      if (!(await page.locator("text=כל מה שכדאי לדעת על השימוש").count())) bad.push("המסך לא נפתח בהקשה אחת");
+      if (await page.locator("text=שאלות ותשובות נפוצות").count()) bad.push("שורת הביניים עדיין קיימת");
+
+      const reset = page.locator("text=מחיקת כל הנתונים והתחלה מחדש").first();
+      const out = page.locator("text=התנתקות מהמכשיר הזה").first();
+      if (!(await reset.count())) bad.push("מחיקת הנתונים אינה בתוך המסך");
+      if (!(await out.count())) bad.push("ההתנתקות אינה בתוך המסך");
+      if (await out.count()) {
+        await out.scrollIntoViewIfNeeded();
+        await out.click();
+        await page.waitForTimeout(500);
+        if (!(await page.locator("text=להתנתק מהמכשיר?").count())) bad.push("חלונית האישור לא נפתחה");
+        const cancel = page.getByRole("button", { name: "ביטול" }).first();
+        if (await cancel.count()) await cancel.click();
+        await page.waitForTimeout(400);
+      }
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
+    // בקשה של הילה: "כדאי להוסיף חיפוש במאכלים האחרונים שאכלתי." ההחלטה של רון:
+    // החיפוש חוצה את שתי הלשוניות, כי מי שמחפשת במועדפים ולא מוצאת לא תחשוב
+    // להחליף לשונית ולחפש שוב. שני הצדדים באותו תרחיש בכוונה: שהחיפוש מוצא בשתי
+    // הרשימות, ושפריט שנמצא בשתיהן מוצג פעם אחת בלבד.
+    name: "החיפוש באחרונים ובמועדפים מוצא בשתי הרשימות, וכפול מוצג פעם אחת",
+    async run(browser, device) {
+      const item = (name, kcal) => ({ id: "fav_" + name, name, per100: { kcal, p: 5, f: 2, c: 10 }, exact: { g: 100, kcal, p: 5, f: 2, c: 10 }, measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }], def: 0, unit: "g", lastG: 100 });
+      const { context, page, errors } = await openApp(browser, device, {
+        seed: {
+          favorites: [item("יוגורט ביו בדיקה", 90), item("יוגורט עם גרנולה בדיקה", 140), item("סלט ירקות בדיקה", 40), item("לחם מלא בדיקה", 240), item("אגוזי מלך בדיקה", 650)],
+          recents: [item("יוגורט יווני בדיקה", 100), item("יוגורט ביו בדיקה", 90), item("ביצה קשה בדיקה", 155), item("אורז בדיקה", 130), item("טונה בדיקה", 116)],
+        },
+      });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=האחרונים והמועדפים שלי").first().click();
+      await page.waitForTimeout(500);
+
+      const bad = [];
+      const box = page.locator('input[placeholder="חיפוש בפריטים שלי…"]');
+      if (!(await box.count())) bad.push("שדה החיפוש לא מוצג אף שיש עשרה פריטים");
+      // כותרת המסך היא "האחרונים והמועדפים שלי", ולכן חיפוש טקסט חופשי תופס גם אותה.
+      const tab = () => page.getByRole("button", { name: "המועדפים שלי", exact: true });
+      const tabsBefore = await tab().count();
+      if (!tabsBefore) bad.push("שתי הלשוניות לא מוצגות לפני החיפוש");
+
+      if (await box.count()) {
+        await box.fill("יוגורט");
+        await page.waitForTimeout(500);
+      }
+      const txt = () => page.evaluate(() => document.body.innerText);
+      let body = await txt();
+      const count = (needle) => body.split(needle).length - 1;
+      if (count("יוגורט ביו בדיקה") !== 1) bad.push("פריט שנמצא בשתי הרשימות מוצג " + count("יוגורט ביו בדיקה") + " פעמים");
+      if (count("יוגורט יווני בדיקה") !== 1) bad.push("הפריט שקיים רק באחרונים אינו מוצג");
+      if (count("סלט ירקות בדיקה") !== 0) bad.push("פריט שאינו תואם נשאר על המסך");
+      if (!body.includes("מועדפים (2)")) bad.push("כותרת המועדפים חסרה");
+      if (!body.includes("אחרונים (1)")) bad.push("כותרת האחרונים חסרה");
+      if (body.indexOf("מועדפים (2)") > body.indexOf("אחרונים (1)")) bad.push("האחרונים מוצגים לפני המועדפים");
+      if (await tab().count()) bad.push("הלשוניות נשארו בזמן חיפוש");
+
+      if (await box.count()) { await box.fill("פסטה"); await page.waitForTimeout(400); }
+      body = await txt();
+      if (!body.includes("לא נמצא פריט בשם הזה")) bad.push("חיפוש בלי תוצאות אינו אומר את זה");
+
+      if (await box.count()) { await box.fill(""); await page.waitForTimeout(400); }
+      if (!(await tab().count())) bad.push("הלשוניות לא חזרו כשמחקו את החיפוש");
+      body = await txt();
+      if (!body.includes("סלט ירקות בדיקה")) bad.push("הרשימה המלאה לא חזרה");
+
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 50) : "אין"}` };
+    },
+  },
+  {
     // בטלפוני סמסונג קישור מוואטסאפ נוחת בדפדפן של סמסונג, ושם ההתקנה נחסמת על
     // ידי אנדרואיד. משתתפת שלחה צילום של Google Play Protect. שני הצדדים באותו
     // תרחיש בכוונה, כי הודעה שמופיעה תמיד נראית בדיוק כמו הודעה שלא מופיעה אף פעם.
@@ -814,10 +1152,10 @@ const CHECKS = [
         const page = await context.newPage();
         await page.goto(BASE, { waitUntil: "domcontentloaded" });
         await page.waitForTimeout(2600);
-        const note = await page.locator("text=את נמצאת בדפדפן של סמסונג").count();
+        const note = await page.locator("text=מתקינים רק דרך Chrome").count();
         const chromeSteps = await page.locator("text=ודאי שאת בדפדפן Chrome").count();
         const copyBtn = await page.getByRole("button", { name: /העתקת הקישור/ }).count();
-        const iosNote = await page.locator("text=/לא בספארי|נפתח בתוך אפליקציה אחרת/").count();
+        const iosNote = await page.locator("text=מתקינים רק דרך Safari").count();
         const iosSteps = await page.locator("text=ודאי שאת בדפדפן Safari").count();
         await context.close();
         return { note, chromeSteps, copyBtn, iosNote, iosSteps };
@@ -852,7 +1190,7 @@ const CHECKS = [
         const row = page.locator("text=התקנת האפליקציה על הטלפון").first();
         const had = await row.count();
         if (had) { await row.click(); await page.waitForTimeout(700); }
-        const n = await page.locator("text=/לא בספארי|נפתח בתוך אפליקציה אחרת|נמצאת בדפדפן של סמסונג/").count();
+        const n = await page.locator("text=/מתקינים רק דרך/").count();
         await context.close();
         return { had, n };
       })();

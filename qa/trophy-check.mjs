@@ -106,12 +106,14 @@ const sim =
   grab(/function taskDone\(task, answers, auto\) \{[\s\S]*?\n\}/, "taskDone") + "\n" +
   grab(/function tasksForDate\(startDate, date, keepShabbat, fasting\) \{[\s\S]*?\n\}/, "tasksForDate") + "\n" +
   grab(/function dayComplete\(startDate, date, keepShabbat[\s\S]*?\n\}/, "dayComplete") + "\n" +
-  grab(/function weekTrophyEarned\(checkins, startDate, w, today\) \{[\s\S]*?\n\}/, "weekTrophyEarned");
+  grab(/function weekTrophyEarned\(checkins, startDate, w, today\) \{[\s\S]*?\n\}/, "weekTrophyEarned") + "\n" +
+  grab(/function missingForWeek\(week, startDate, today[\s\S]*?\n\}/, "missingForWeek") + "\n" +
+  grab(/function weekTrophyLevel\(checkins, startDate, w, today\) \{[\s\S]*?\n\}/, "weekTrophyLevel");
 
 const { activeTasks } = await import("../src/checkins.js");
 const api = new Function("activeTasks",
   "const TRACKER_ENABLED = true; const DEFAULT_CUP_ML = 250; const CHECKIN_UNLOCK = { week: 1, day: 3 };" +
-  sim + "; return { tasksForDate, dayComplete, weekTrophyEarned, programDayNumber, taskDone, autoStatusFor };")(activeTasks);
+  sim + "; return { tasksForDate, dayComplete, weekTrophyEarned, programDayNumber, taskDone, autoStatusFor, missingForWeek, weekTrophyLevel };")(activeTasks);
 
 const TARGETS = { protein: 100 };
 // אישה בשבוע 2 שממלאת הכל: צעדים, מים, יומן, ובכל משימה ידנית מסמנת.
@@ -239,6 +241,105 @@ check("ברשימת המשימות של שישי אין אימון כוח", !fri
   check("ואז גם אין גביע", api.weekTrophyEarned(st2.checkins, START, 2, FRI) === false);
   check("והמסך אומר לה שחסרה שם עוד משימה", /חסרה שם עוד משימה אחת/.test(src));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. "מה נשאר לגביע?" - רעיון של רון, 28 באוגוסט 2026. מוצג בשישי ובשבת בלבד.
+//    המסך אינו מחשב מחדש: הוא מריץ בדיוק את המשימות שסוגרות את היום.
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("\nמה נשאר לגביע");
+{
+  const miss = (st, today) => api.missingForWeek(2, START, today, false, st.checkins, st.stepsByDate, st.waterByDate, st.log, TARGETS, 250, st.activityLog);
+  const full = closeDays(seedWeek(null), FRI);
+  check("שבוע מלא מחזיר רשימה ריקה", miss(full, FRI).length === 0);
+
+  const st = seedWeek(THU);
+  const one = miss(st, FRI);
+  check("יום אחד חסר מחזיר יום אחד", one.length === 1 && one[0].date === THU, JSON.stringify(one));
+  check("ובשמות המשימות, לא במספרים", one.length === 1 && one[0].tasks.includes("אימון כוח"), JSON.stringify(one[0] && one[0].tasks));
+
+  const two = seedWeek(THU);
+  delete two.checkins[THU].veg;
+  const t2 = miss(two, FRI);
+  check("שתי משימות חסרות באותו יום מוצגות שתיהן",
+    t2.length === 1 && t2[0].tasks.length === 2 && t2[0].tasks.includes("צבעים של ירקות היום"), JSON.stringify(t2[0] && t2[0].tasks));
+
+  // שבת אינה נדרשת לגביע, ולכן היא אינה מופיעה ברשימה גם כשלא מולאה
+  const sat = d(14);
+  check("שבת אינה מופיעה ברשימה", miss(seedWeek(null), sat).every((x) => x.date !== sat), sat);
+  // יום שעוד לא הגיע אינו נחשב חסר. ברביעי, חמישי עדיין לא היה.
+  const wed = d(11);
+  check("יום עתידי אינו נחשב חסר", miss(seedWeek(THU), wed).every((x) => x.date <= wed));
+}
+
+console.log("\nהמסך עצמו");
+check("הכפתור מוצג בשישי ובשבת בלבד", /const endOfWeek = dw === 6 \|\| dw === 0;/.test(src));
+check("והשבוע נגזר מהיום שממנו נפתח הארון ולא מהיום הנוכחי",
+  /const dayInView = viewDate \|\| today;/.test(src)
+  && /const dw = dowOf\(dayInView\);/.test(src)
+  && /const week = Math\.min\(programWeekFor\(startDate, dayInView\), 10\);/.test(src));
+check("והארון מקבל את היום שנבחר", /<CollectionModal checkins=\{checkins\} startDate=\{profile\.startDate\} today=\{today\} viewDate=\{selectedDate\}/.test(src));
+check("והקשה על גביע פותחת את השבוע שלו ולא את הנוכחי", /onClick=\{\(\) => \{ if \(started && TRACKER_ENABLED\) setMissWeek\(w\); \}\}/.test(src));
+check("גביע של שבוע שעוד לא התחיל אינו נפתח", /const started = addDays\(startDate, \(w - 1\) \* 7\) <= today;/.test(src));
+check("המסך מחשב לפי השבוע שנפתח", /missingForWeek\(missWeek, startDate, today/.test(src));
+check("וכתוב בארון שאפשר להקיש על גביע", src.includes("הקישי על גביע כדי לראות מה נשאר בשבוע שלו."));
+check("הכותרת נוקבת בשבוע שנפתח", /מה נשאר לגביע של שבוע \{missWeek\}\?/.test(src));
+check("והכפתור נוקב בשבוע הנוכחי", /<Btn variant="ghost" onClick=\{\(\) => setMissWeek\(week\)\}>מה נשאר לגביע של שבוע \{week\}\?<\/Btn>/.test(src));
+check("הרשימה גוללת וההסבר והסגירה נשארים במקומם",
+  /<div style=\{\{ overflowY: "auto", flex: 1, minHeight: 0 \}\}>/.test(src.slice(src.indexOf("מה נשאר לגביע של שבוע {missWeek}?")))
+  && /marginTop: 14, flexShrink: 0 \}\}><Btn onClick=\{\(\) => setMissWeek\(0\)\}>סגירה/.test(src));
+check("ליד כל יום מופיע התאריך שלו", /pad2\(parseDay\(d\.date\)\.getUTCDate\(\)\)\}\.\{pad2\(parseDay\(d\.date\)\.getUTCMonth\(\) \+ 1\)/.test(src));
+check("וכשלא חסר כלום נאמר את זה במפורש", src.includes("לא נשאר כלום, כל ימי השבוע הושלמו."));
+check("שם היום נכתב במלואו", /יום \{HE_DAYS_FULL\[parseDay\(d\.date\)\.getUTCDay\(\)\]\}/.test(src));
+check("משימות אופציונליות אינן נספרות", /tasksForDate\(startDate, date, keepShabbat\)\.filter\(\(t\) => !t\.optional\)/.test(src.slice(src.indexOf("function missingForWeek"))));
+check('"הגביעים שלך" היא כותרת ולא שורת הסבר', /fontSize: 17, fontWeight: 700, color: C\.ink, margin: "10px 0 8px" \}\}>הגביעים שלך/.test(src));
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. גביע כסף. החלטה של רון, 28 באוגוסט 2026: יום אחד אפשר לפספס.
+//    ההקלה היא על החיים ולא על ההתנהגות: היום עצמו עדיין חייב להיות שלם.
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("\nזהב וכסף");
+{
+  const lvl = (st, today) => api.weekTrophyLevel(st.checkins, START, 2, today);
+  check("שבוע שלם הוא זהב", lvl(closeDays(seedWeek(null), FRI), FRI) === "gold");
+  const SAT = d(14);
+  check("יום אחד חסר הוא כסף", lvl(closeDays(seedWeek(THU), FRI), FRI) === "silver", String(lvl(closeDays(seedWeek(THU), FRI), FRI)));
+  check("וגם בשבת", lvl(closeDays(seedWeek(THU), FRI), SAT) === "silver");
+
+  // שני ימים חסרים אינם גביע בכלל
+  const two = seedWeek(THU);
+  delete two.checkins[d(10)];
+  check("שני ימים חסרים אינם גביע", lvl(closeDays(two, FRI), SAT) === null, String(lvl(closeDays(two, FRI), SAT)));
+
+  // לפני שישי אין הכרעה, בדיוק כמו קודם
+  check("לפני שישי אין גביע בכלל", lvl(closeDays(seedWeek(null), d(11)), d(11)) === null);
+
+  // וזהב נשאר בדיוק מה שהיה: weekTrophyEarned לא זז
+  check("שדרוג מכסף לזהב מקפיץ מסך חגיגה משלו",
+    /gcount > \(celebRef\.current\.golds \|\| 0\)/.test(src) && /celebRef = useRef\(\{ mounted: false, trophies: 0, golds: 0 \}\)/.test(src));
+  check("weekTrophyEarned נשאר זהב בלבד",
+    api.weekTrophyEarned(closeDays(seedWeek(THU), FRI).checkins, START, 2, FRI) === false
+    && api.weekTrophyEarned(closeDays(seedWeek(null), FRI).checkins, START, 2, FRI) === true);
+}
+
+console.log("\nהתמונות והמסכים");
+import { existsSync } from "node:fs";
+for (const w of [1, 5, 9, "champion"]) {
+  check("קובץ הכסף קיים: trophy-" + w,
+    existsSync(new URL("../public/medals/trophy-" + w + "-silver.webp", import.meta.url)));
+}
+check("הארון מצייר לפי הדרגה", /const level = weekTrophyLevel\(checkins, startDate, w, today\);/.test(src));
+check("ותמונת הכסף נבחרת מהדרגה", /function trophyForWeek\(w, level\) \{[\s\S]*?level === "silver" \? "-silver" : ""/.test(src));
+check("כתוב מתחת לגביע שהוא כסף", /level === "silver" && <div[^>]*>כסף<\/div>/.test(src));
+check("שורת ההסבר בארון מסבירה את שתי הדרגות",
+  src.includes("גביע זהב נכנס לארון על שבוע שכל ימיו הושלמו, ראשון עד שישי. אם פספסת יום אחד, נכנס גביע כסף. שבת אינה נחשבת."));
+check("וגם המסך של מה נשאר", src.includes("יום אחד אפשר לפספס ועדיין לקבל גביע כסף. שבוע שכולו הושלם מקבל זהב."));
+check("מסך החגיגה של הכסף בקופי שרון אישר",
+  /גביע כסף נכנס לארון!/.test(src) && /אם תשלימי גם את היום שנשאר, הגביע יהפוך לזהב/.test(src));
+check("והחגיגה נורית גם על כסף", /const lv = weekTrophyLevel\(next, profile\.startDate, w, today\)/.test(src));
+check("השאלות ותשובות מסבירות את שתי הדרגות",
+  src.includes("מקבלים גביע זהב, ואם פספסת יום אחד מקבלים גביע כסף"));
+
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);

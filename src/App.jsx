@@ -110,6 +110,14 @@ function rateOptionsFor(weightKg, heightCm, everStopped) {
   const fastOk = !everStopped && room >= FAST_RATE_ROOM_KG;
   return RATE_OPTIONS.filter((g) => g !== 500 || fastOk);   // רשימה אחת, כדי שלא תיסחף
 }
+// מחזירה את הקצב שיש להוריד אליה, או null כשאין מה לשנות. מקום אחד לשני
+// המסלולים, הדוח והפרופיל, כדי שלא יתפצלו.
+function rateCapFor(profile, weightKg) {
+  if (!profile || profile.lossStopAt || !(profile.weeklyRateG > 0)) return null;
+  const opts = rateOptionsFor(weightKg, profile.heightCm, !!profile.lossStopEver);
+  if (opts.includes(profile.weeklyRateG)) return null;
+  return Math.max(...opts);
+}
 // המשקל האחרון שהיא דיווחה, ולא זה של הרישום. זו כל הבעיה שהייתה כאן: הכלל ירה
 // פעם אחת וקרא מספר שקפוא מאותו רגע. מכאן והלאה כל מסך שנוגע במשקל שואל את זה.
 function currentWeightOf(profile, weights) {
@@ -453,12 +461,61 @@ function pendingStepAction(profile, week, ackWeek) {
 const TRACKER_ENABLED = true;
 // Show the fat/carbs/fiber strip under the rings. Off for now (kept for future).
 const SHOW_MACRO_STRIP = false;
-const CHECKIN_UNLOCK = { week: 1, day: 3 };   // starts on day 3 of week 1
+const CHECKIN_UNLOCK = { week: 1, day: 3 };
+
+/* ============================================================
+   נתוני שימוש, לניתוח מקרו של התוכנית
+   רון, 28 באוגוסט 2026: "אני רוצה לדעת איפה הן נופלות, איזה משימות קשה להן
+   איתן, ולראות גרף התקדמות." מסך ההסכמה אומר שהחברה **אינה אוספת מידע אישי**
+   ו**אוספת נתוני שימוש באפליקציה בלבד**, וזה בדיוק הגבול שנשמר כאן:
+   נספר מה היא עשתה באפליקציה, ולעולם לא הערכים עצמם. "סימנה שעות שינה" נספר,
+   "ישנה 4 שעות" לא. וכך גם מזון, משקל, היקפים ושיחות ה-AI, שאינם עוזבים את
+   המכשיר שלה.
+   ============================================================ */
+const USAGE_KEY = "mp_usage_v1";
+const USAGE_KEEP_DAYS = 120;      // חלון הימים שנשמר על המכשיר, כדי שלא יגדל בלי סוף
+function usageLoad() { try { return JSON.parse(localStorage.getItem(USAGE_KEY) || "{}") || {}; } catch (e) { return {}; } }
+function usageSave(u) { try { localStorage.setItem(USAGE_KEY, JSON.stringify(u)); } catch (e) {} }
+// שומר רק את החלון האחרון, לפי מפתח תאריך
+function usageTrim(map, keepFrom) {
+  const out = {};
+  Object.keys(map || {}).forEach((k) => { if (k >= keepFrom) out[k] = map[k]; });
+  return out;
+}
+// יום שבו היא פתחה את האפליקציה, והשעה שבה. זה הנתון החזק ביותר לנשירה.
+function usageOpened(today) {
+  const u = usageLoad();
+  const keepFrom = addDays(today, -USAGE_KEEP_DAYS);
+  u.opens = usageTrim(u.opens, keepFrom);
+  u.opens[today] = Math.min(999, (u.opens[today] || 0) + 1);
+  u.mins = usageTrim(u.mins, keepFrom);
+  u.hours = Array.isArray(u.hours) && u.hours.length === 24 ? u.hours : Array(24).fill(0);
+  const h = new Date().getHours();
+  u.hours[h] = Math.min(99999, (u.hours[h] || 0) + 1);
+  usageSave(u);
+}
+// דקות באפליקציה, נצברות על המכשיר ונשלחות בטעינה הבאה. נספרות רק כשהמסך גלוי.
+function usageAddSeconds(today, sec) {
+  if (!(sec > 0)) return;
+  const u = usageLoad();
+  u.mins = u.mins || {};
+  u.mins[today] = Math.min(1440, Math.round(((u.mins[today] || 0) * 60 + sec) / 60));
+  usageSave(u);
+}
+// שימוש בכלי מסוים. מונה בלבד, בלי מה שהוקלד ובלי מה שנבחר.
+function usageBump(key) {
+  const u = usageLoad();
+  u.feat = u.feat || {};
+  u.feat[key] = Math.min(99999, (u.feat[key] || 0) + 1);
+  usageSave(u);
+}
+   // starts on day 3 of week 1
 const CHECKIN_REVEAL_HOUR = 0;                // 0 = daily report available all day (set to 19 to lock until 19:00)
 const MEDAL_SRC = "/medal.png";
-function trophyForWeek(w) {
-  if (w >= 10) return "/medals/trophy-champion.webp";
-  return "/medals/trophy-" + Math.max(1, Math.min(9, w)) + ".webp";
+function trophyForWeek(w, level) {
+  const sil = level === "silver" ? "-silver" : "";
+  if (w >= 10) return "/medals/trophy-champion" + sil + ".webp";
+  return "/medals/trophy-" + Math.max(1, Math.min(9, w)) + sil + ".webp";
 }
 // Pulls the values the app already tracks so she is not asked twice.
 function autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog) {
@@ -574,6 +631,24 @@ function remainingRequired(startDate, date, keepShabbat, checkins, stepsByDate, 
   const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog);
   return ts.filter((t) => !taskDone(t, ans, au)).length;
 }
+// מה חסר לגביע של שבוע מסוים, יום-יום. אותו מסלול בדיוק שסוגר יום ונותן מדליה,
+// ולכן אין כאן חישוב שני שיכול להתפצל ממנו. שבת אינה נדרשת, בדיוק כמו בגביע.
+function missingForWeek(week, startDate, today, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog) {
+  const out = [];
+  for (let dnum = Math.max((week - 1) * 7 + 1, 3); dnum <= week * 7; dnum++) {
+    const date = addDays(startDate, dnum - 1);
+    if (date > today) break;
+    if (parseDay(date).getUTCDay() === 6) continue;
+    if (!unlockedOn(startDate, date, CHECKIN_UNLOCK)) continue;
+    const ts = tasksForDate(startDate, date, keepShabbat).filter((t) => !t.optional);
+    if (!ts.length) continue;
+    const ans = (checkins && checkins[date]) || {};
+    const au = autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, activityLog);
+    const miss = ts.filter((t) => !taskDone(t, ans, au)).map((t) => t.label);
+    if (miss.length) out.push({ date, tasks: miss });
+  }
+  return out;
+}
 const seedEntry = (id, date, meal, foodId, g, source = "verified") => {
   const f = FOOD_BY_ID[foodId];
   return { id, date, meal, name: f.name, g, source, ...nutritionFor(f, g) };
@@ -596,7 +671,11 @@ function initWeights(currentKg, startDate) {
    THEME - feminine rose palette
    ============================================================ */
 const C = {
-  bg: "#FAF3F4", panel: "#FFFFFF", ink: "#3A2B30", sub: "#8B737A", faint: "#BBA7AC",
+  // רון, 28 באוגוסט 2026: "כל הטקסטים האפורים האלה... לא מספיק שהם קטנים הם גם
+  // אפרפרים, וזה לא מתאים לקהל היעד שלנו. אני רוצה אותם שחורים." לכן sub ו-faint
+  // הם אותו שחור כמו ink, וההיררכיה נשמרת בגודל הפונט ובמשקל בלבד. זו אותה החלטה
+  // שכבר התקבלה על מסך הניהול ב-v4.96.
+  bg: "#FAF3F4", panel: "#FFFFFF", ink: "#3A2B30", sub: "#3A2B30", faint: "#3A2B30",
   line: "#F1E4E7",
   brand: "#D45D79", brandD: "#A8425C", brandBg: "#FBE9EE",
   macroP: "#7E4FB5", proteinTrack: "#EBE1F7", macroF: "#E0986A", macroC: "#A87BB5",
@@ -609,7 +688,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.36";
+const VERSION = "6.53";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1018,18 +1097,19 @@ function BrowserSwitchNote() {
     try { const t = document.createElement("textarea"); t.value = url; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); done(); } catch (e) {}
   };
   if (!ios && !sam) return null;
-  const head = sam ? "את נמצאת בדפדפן של סמסונג"
-    : ios === "דפדפן שנפתח בתוך אפליקציה אחרת" ? "הקישור נפתח בתוך אפליקציה אחרת"
-    : "את נמצאת ב-" + ios + ", לא בספארי";
+  // הכותרת אומרת את הכלל ולא את התסמין. הודעת Google Play Protect אינה מופיעה
+  // בכל מכשיר ובכל גרסה של הדפדפן, ולכן אזכור שלה מבלבל את מי שלא ראתה אותה.
+  // תיקון ניסוח לפי רון, אחרי שהוא עצמו לא קיבל את ההודעה.
+  const head = sam ? "את האפליקציה מתקינים רק דרך Chrome" : "את האפליקציה מתקינים רק דרך Safari";
   const why = sam
-    ? "ההתקנה מהדפדפן הזה נחסמת על ידי אנדרואיד, ומופיעה הודעה של Google Play Protect."
-    : "באייפון אפשר להוסיף אפליקציה למסך הבית רק מספארי.";
-  const blame = sam ? "זו חסימה של הטלפון ולא תקלה באפליקציה." : "זו מגבלה של אפל ולא תקלה באפליקציה.";
-  const what = sam ? "פתחי את אותו קישור בדפדפן Chrome, והתקיני משם." : "פתחי את אותו קישור בדפדפן Safari, והתקיני משם.";
+    ? "את נמצאת בדפדפן של סמסונג, וההתקנה ממנו עלולה להיחסם על ידי הטלפון."
+    : (ios === "דפדפן שנפתח בתוך אפליקציה אחרת" ? "הקישור נפתח בתוך אפליקציה אחרת" : "את נמצאת ב-" + ios) +
+      ", ובאייפון אפשר להוסיף אפליקציה למסך הבית רק מספארי.";
+  const what = sam ? "פתחי את אותו קישור ב-Chrome, והתקיני משם." : "פתחי את אותו קישור ב-Safari, והתקיני משם.";
   return (
     <div style={{ background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 14, padding: "14px 16px", marginBottom: 14, textAlign: "right" }}>
       <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginBottom: 6 }}>{head}</div>
-      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, margin: "0 0 8px" }}>{why} <b>{blame}</b></p>
+      <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.65, margin: "0 0 8px" }}>{why}</p>
       <p style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.65, margin: "0 0 10px", fontWeight: 600 }}>{what}</p>
       <button onClick={copy} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 10, padding: "8px 14px", fontSize: 14.5, color: C.brandD, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>
         {copied ? "הקישור הועתק ✓" : "העתקת הקישור"}
@@ -2270,19 +2350,17 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, onReset, onLogout, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, hasFutureEntries, onClearFuture }) {
+function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const [showLossStop, setShowLossStop] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [showRateCap, setShowRateCap] = useState(false);
   const effStepGoal = effectiveStepGoal(profile.stepGoal, programWeek || 1);
   // The goal only exists from week 2 onward, so before that there is nothing to edit.
   const stepGoalEditable = (programWeek || 1) >= 2;
   const [baseOpen, setBaseOpen] = useState(false);
   const [dietOpen, setDietOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
   // Already installed to the home screen (or on desktop) - the install guide is redundant there.
   const isStandalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true) || !(typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || ""));
   const [newSens, setNewSens] = useState("");
@@ -2328,6 +2406,11 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         next.lossStopEver = true;
         next.resumeOfferAt = null;
         setShowLossStop(true);
+      } else if (pendingWeight.key === "weightKg") {
+        // אותה תקרה, מהמסלול השני. עריכת המשקל בפרופיל הייתה הדלת האחורית של
+        // כלל ה-BMI, והיא גם הדלת האחורית של התקרה.
+        const capped = rateCapFor(next, nextCur);
+        if (capped != null) { next.weeklyRateG = capped; setShowRateCap(true); }
       }
       setProfile(next);
       // המשקל שבפרופיל הוא נקודת הפתיחה של הגרף, ולכן שינוי שלו מזיז גם אותה.
@@ -2530,35 +2613,18 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         </div>)}
       </div>
 
-      {/* Help - questions, install guide and the account actions together. */}
-      <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
-        <div onClick={() => setHelpOpen(!helpOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+      {/* Help - הקשה אחת נכנסת לשאלות ותשובות. פעולות החשבון יושבות בתחתית המסך ההוא. */}
+      <div style={{ background: C.bg, borderRadius: 14, padding: "2px 14px", marginBottom: 8 }}>
+        <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", cursor: "pointer" }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><Info size={18} color={C.brand} /> שאלות, תשובות ועזרה</span>
-          <ChevronDown size={20} color={C.sub} style={{ transform: helpOpen ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+          <ChevronLeft size={18} color={C.faint} />
         </div>
-        {helpOpen && (<div style={{ marginTop: 6 }}>
-          <div onClick={onOpenFaq} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
-            <span style={{ fontSize: 15.5, fontWeight: 600, color: C.ink }}>שאלות ותשובות נפוצות</span>
+        {!isStandalone && (
+          <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 17 }}>📲</span> התקנת האפליקציה על הטלפון</span>
             <ChevronLeft size={18} color={C.faint} />
           </div>
-          {!isStandalone && (
-            <div onClick={onOpenInstall} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15.5, fontWeight: 600, color: C.ink }}><span style={{ fontSize: 17 }}>📲</span> התקנת האפליקציה על הטלפון</span>
-              <ChevronLeft size={18} color={C.faint} />
-            </div>
-          )}
-          {hasFutureEntries && (
-            <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 2 }}>
-              <Btn variant="ghost" onClick={() => onClearFuture && onClearFuture()} style={{ color: C.sub }}>ניקוי נתונים בתאריכים עתידיים</Btn>
-              <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>מוחק יומן, צעדים ומים בתאריכים שאחרי היום בלבד. המועדפים, המשקלים וההישגים נשמרים.</div>
-            </div>
-          )}
-          <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 2 }}>
-            <Btn variant="ghost" onClick={() => setConfirmReset(true)} style={{ color: C.sub }}>מחיקת כל הנתונים והתחלה מחדש</Btn>
-          </div>
-          <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmLogout(true)} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
-          <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>משחרר את המכשיר הזה ומחזיר למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב עם המייל.</div>
-        </div>)}
+        )}
       </div>
 
       <div style={{ textAlign: "center", fontSize: 13, color: C.faint, marginTop: 12 }}>גרסה v{VERSION}</div>
@@ -2617,6 +2683,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         </div>
       )}
       {showLossStop && <LossStopSheet onAck={() => { setShowLossStop(false); onLossAck && onLossAck(); }} />}
+      {showRateCap && <RateCapSheet onClose={() => setShowRateCap(false)} />}
       {pendingWeight && (
         <div onClick={() => setPendingWeight(null)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
@@ -2624,26 +2691,6 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
             <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>את עדכון המשקל השוטף עושים בדוח, לא כאן. השדה הזה הוא הנתון שאיתו התחלת או היעד שלך. למעקב אחרי המשקל בפועל - היכנסי לדוח ולחצי "הזיני משקל".</div>
             <Btn onClick={confirmWeight}>אני רוצה לשנות בכל זאת</Btn>
             <Btn variant="ghost" onClick={() => setPendingWeight(null)} style={{ marginTop: 8 }}>צאי בלי לשנות</Btn>
-          </div>
-        </div>
-      )}
-      {confirmReset && (
-        <div onClick={() => setConfirmReset(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>למחוק הכל ולהתחיל מחדש?</div>
-            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>פעולה זו תמחק את כל מה שהזנת במכשיר הזה - יומן האוכל, המשקל, הצעדים והכל - ותחזיר אותך למסך ההתחלה. אי אפשר לבטל את זה.{profile.backup?.enabled ? " אם הפעלת גיבוי, הנתונים שמורים אצלנו ותוכלי לשחזר עם הקוד שלך." : ""}</div>
-            <Btn onClick={() => { setConfirmReset(false); onReset(); }} style={{ background: "#D7263D" }}>כן, מחקי והתחילי מחדש</Btn>
-            <Btn variant="ghost" onClick={() => setConfirmReset(false)} style={{ marginTop: 8 }}>ביטול</Btn>
-          </div>
-        </div>
-      )}
-      {confirmLogout && (
-        <div onClick={() => setConfirmLogout(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>להתנתק מהמכשיר?</div>
-            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>תתנתקי מהמכשיר הזה ותחזרי למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב בכל רגע עם המייל שלך.</div>
-            <Btn onClick={() => { setConfirmLogout(false); onLogout(); }}>כן, התנתקי</Btn>
-            <Btn variant="ghost" onClick={() => setConfirmLogout(false)} style={{ marginTop: 8 }}>ביטול</Btn>
           </div>
         </div>
       )}
@@ -3419,6 +3466,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [addedKeys, setAddedKeys] = useState([]); // feature: multi-add from favorites
   const [addedMap, setAddedMap] = useState({}); // favId -> created journal entry id (for undo)
   const [histTab, setHistTab] = useState("fav"); // "fav" | "recent" (favorites is the default)
+  const [histQ, setHistQ] = useState(""); // חיפוש בתוך האחרונים והמועדפים, חוצה את שתי הלשוניות
   const [delTarget, setDelTarget] = useState(null); // { item, list } pending delete confirmation
   const [aiAsOne, setAiAsOne] = useState(true); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product (default = one product, recommended)
   const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
@@ -3728,16 +3776,16 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px))" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
-          <button onClick={close} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+          <button onClick={step === "qty" && back ? back : close} aria-label={step === "qty" && back ? "חזרה" : "סגירה"} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
         </div>
         {step === "method" && (
           <>
-            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
-              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
-              { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => setStep("barcode") },
-              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => setStep("history") },
-              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => setStep("list") },
-              { ic: Pencil, t: "הזנה ידנית", s: "להקליד ערכים מהתווית - בלי AI", bg: "#EDEFF3", color: "#6B7A99", go: () => setStep("manual") }].map((o) => (
+            {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { usageBump("ai"); setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
+              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { usageBump("photo"); if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
+              { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => { usageBump("barcode"); setStep("barcode"); } },
+              { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => { usageBump("history"); setHistQ(""); setStep("history"); } },
+              { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => { usageBump("search"); setStep("list"); } },
+              { ic: Pencil, t: "הזנה ידנית", s: "להקליד ערכים מהתווית - בלי AI", bg: "#EDEFF3", color: "#6B7A99", go: () => { usageBump("manual"); setStep("manual"); } }].map((o) => (
               <div key={o.t} data-tut={o.tut} onClick={o.go} style={{ display: "flex", alignItems: "center", gap: 13, background: o.bg, border: "none", borderRadius: 16, padding: 13, marginBottom: 10, cursor: "pointer" }}>
                 <div style={{ width: 46, height: 46, borderRadius: 13, background: o.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 3px 9px ${o.color}55` }}><o.ic size={23} color="#fff" strokeWidth={2.2} /></div>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600, color: C.ink }}>{o.t}</div><div style={{ fontSize: 14, color: C.sub }}>{o.s}</div></div>
@@ -3804,9 +3852,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             {query && filtered.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                <div key={f.id} onClick={() => pickFood(f, g)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
                 </div>
               );
             })}
@@ -3814,9 +3862,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             {query && catResults.filter((f) => !filtered.some((x) => x.name === f.name)).map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, unit: f.unit || "g", source: f.source === "verified" ? "verified" : "estimated", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                <div key={f.id} onClick={() => pickFood(f, g)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
                 </div>
               );
             })}
@@ -3824,9 +3872,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             {query && dbResults.map((f) => {
               const g = f.measures[f.def].g; const n = nutritionFor(f, g);
               return (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
-                  <button onClick={() => commit({ meal, name: f.name, g, source: "verified", ...n })} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={16} /></button>
+                <div key={f.id} onClick={() => pickFood(f, g)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}`, cursor: "pointer" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}</div><div style={{ fontSize: 13, color: C.faint }}>{g} ג׳ · {n.kcal} קק״ל</div></div>
+                  <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
                 </div>
               );
             })}
@@ -3844,45 +3892,81 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
           </>
         )}
         {step === "history" && (() => {
-          const list = histTab === "fav" ? (favorites || []) : (recents || []);
+          const favs = favorites || [];
+          const recs = recents || [];
+          const hq = histQ.trim();
+          const hSearch = hq.length >= 2;
+          const norm = (s) => String(s || "").trim().toLowerCase();
+          const hit = (f) => norm(f.name).includes(norm(hq));
+          const favHits = hSearch ? favs.filter(hit) : [];
+          // פריט שנמצא בשתי הרשימות מוצג פעם אחת בלבד, תחת מועדפים
+          const favNames = new Set(favHits.map((f) => norm(f.name)));
+          const recHits = hSearch ? recs.filter((f) => hit(f) && !favNames.has(norm(f.name))) : [];
+          const list = histTab === "fav" ? favs : recs;
+          // שדה החיפוש מוצג רק כשהרשימה ארוכה מספיק כדי שיהיה קשה למצוא בה
+          const showHistSearch = favs.length + recs.length > 8;
           const quickMeal = (() => { const h = new Date().getHours(); return h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; })();
           const tabBtn = (id, label) => (
             <button onClick={() => setHistTab(id)} style={{ flex: 1, border: "none", cursor: "pointer", borderRadius: 11, padding: "9px 6px", fontFamily: fontStack, fontSize: 16, fontWeight: 600, background: histTab === id ? C.panel : "transparent", color: histTab === id ? C.brandD : C.sub, boxShadow: histTab === id ? "0 1px 4px rgba(168,66,92,0.14)" : "none" }}>{label}</button>
           );
+          const histRow = (f, listId) => {
+            const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
+            const added = addedKeys.includes(f.id);
+            return (
+              <div key={listId + "-" + f.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לביטול - הקישי שוב על הוי · לכמות אחרת - על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
+                <button onClick={() => setDelTarget({ item: f, list: listId })} aria-label="הסרה מהרשימה" style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: "transparent", color: C.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trash2 size={16} /></button>
+                <button onClick={() => {
+                  if (added) {
+                    const eid = addedMap[f.id];
+                    if (eid && onUndoEntry) onUndoEntry(eid);
+                    setAddedKeys((k) => k.filter((x) => x !== f.id));
+                    setAddedMap((m) => { const n = { ...m }; delete n[f.id]; return n; });
+                  } else {
+                    const eid = "n" + Date.now();
+                    commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...servingFields(f, g), ...n, _entryId: eid }, true);
+                    setAddedKeys((k) => [...k, f.id]);
+                    setAddedMap((m) => ({ ...m, [f.id]: eid }));
+                  }
+                }} aria-label={added ? "ביטול הוספה" : "הוספה"} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
+              </div>
+            );
+          };
+          const histHead = (t) => (<div style={{ fontSize: 13.5, fontWeight: 700, color: C.brandD, margin: "12px 0 2px" }}>{t}</div>);
           return (
           <>
-            <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
-              {tabBtn("fav", "המועדפים שלי")}
-              {tabBtn("recent", "אחרונים")}
-            </div>
+            {showHistSearch && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", color: C.faint, marginBottom: 10 }}>
+                <Search size={15} /><input value={histQ} onChange={(e) => setHistQ(e.target.value)} placeholder="חיפוש בפריטים שלי…" style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+                {hq && <button onClick={() => setHistQ("")} aria-label="ניקוי החיפוש" style={{ border: "none", background: "transparent", color: C.faint, fontSize: 17, cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>}
+              </div>
+            )}
+            {!hSearch && (
+              <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 14, padding: 4, marginBottom: 12 }}>
+                {tabBtn("fav", "המועדפים שלי")}
+                {tabBtn("recent", "אחרונים")}
+              </div>
+            )}
             <div style={{ fontSize: 13, color: C.sub, background: C.bg, padding: 10, borderRadius: 10, lineHeight: 1.6, marginBottom: 10 }}>הקישי <b>+</b> להוספה מהירה, או על <b>שם הפריט</b> כדי לבחור כמות אחרת. הפריט ייכנס לארוחה לפי שעת היום, ותמיד אפשר לשנות ביומן.</div>
             {addedKeys.length > 0 && <div style={{ marginBottom: 12 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
-            {list.length === 0 && (
-              <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>{histTab === "fav" ? "עדיין אין לך מועדפים. אחרי שתוסיפי מוצר, נשאל אם לשמור אותו כאן 💜" : "עדיין אין מוצרים אחרונים."}</div>
+            {hSearch ? (
+              <>
+                {favHits.length > 0 && histHead("מועדפים (" + favHits.length + ")")}
+                {favHits.map((f) => histRow(f, "fav"))}
+                {recHits.length > 0 && histHead("אחרונים (" + recHits.length + ")")}
+                {recHits.map((f) => histRow(f, "recent"))}
+                {favHits.length === 0 && recHits.length === 0 && (
+                  <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>לא נמצא פריט בשם הזה.</div>
+                )}
+              </>
+            ) : (
+              <>
+                {list.length === 0 && (
+                  <div style={{ fontSize: 15, color: C.faint, textAlign: "center", padding: "22px 12px", lineHeight: 1.6 }}>{histTab === "fav" ? "עדיין אין לך מועדפים. אחרי שתוסיפי מוצר, נשאל אם לשמור אותו כאן 💜" : "עדיין אין מוצרים אחרונים."}</div>
+                )}
+                {list.map((f) => histRow(f, histTab))}
+              </>
             )}
-            {list.map((f) => {
-              const g = f.lastG ?? f.measures[f.def].g; const n = nutritionFor(f, g);
-              const added = addedKeys.includes(f.id);
-              return (
-                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
-                  <div onClick={() => pickFood(f, g)} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}><div style={{ fontSize: 16, fontWeight: 500, color: C.ink }}>{f.name}{added && <span style={{ fontSize: 13, color: "#4E9E76", marginRight: 6 }}> ✓ נוסף</span>}</div><div style={{ fontSize: 13, color: added ? C.brand : C.faint }}>{added ? "לביטול - הקישי שוב על הוי · לכמות אחרת - על השם" : `${g} ${f.unit === "ml" ? "מ\"ל" : "ג׳"} · ${n.kcal} קק״ל`}</div></div>
-                  <button onClick={() => setDelTarget({ item: f, list: histTab })} aria-label="הסרה מהרשימה" style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: "transparent", color: C.faint, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Trash2 size={16} /></button>
-                  <button onClick={() => {
-                    if (added) {
-                      const eid = addedMap[f.id];
-                      if (eid && onUndoEntry) onUndoEntry(eid);
-                      setAddedKeys((k) => k.filter((x) => x !== f.id));
-                      setAddedMap((m) => { const n = { ...m }; delete n[f.id]; return n; });
-                    } else {
-                      const eid = "n" + Date.now();
-                      commit({ meal: quickMeal, name: f.name, g, unit: f.unit || "g", source: "verified", ...servingFields(f, g), ...n, _entryId: eid }, true);
-                      setAddedKeys((k) => [...k, f.id]);
-                      setAddedMap((m) => ({ ...m, [f.id]: eid }));
-                    }
-                  }} aria-label={added ? "ביטול הוספה" : "הוספה"} style={{ width: 30, height: 30, border: "none", borderRadius: 8, background: added ? "#4E9E76" : C.brand, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{added ? <Check size={16} /> : <Plus size={16} />}</button>
-                </div>
-              );
-            })}
             {addedKeys.length > 0 && <div style={{ marginTop: 14 }}><Btn onClick={close}>סיום · {addedKeys.length} נוספו ליומן</Btn></div>}
             {delTarget && (
               <div onClick={() => setDelTarget(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 30 }}>
@@ -5018,6 +5102,18 @@ function ResumeOfferSheet({ onResume, onLater }) {
 // ירידה מהירה מדי. **קול המערכת ולא קולה של ענת**, כי זו הודעה שהאפליקציה
 // מחליטה עליה מחישוב שעשתה: בלי גוף ראשון, בלי אמוג'י ובלי חתימה. ראה סעיף 8.
 // הקופי של רון, 22 באוגוסט 2026. אינה חוסמת כלום, וזו הזמנה לדבר ולא עצירה.
+function RateCapSheet({ onClose }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
+      <div style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(58,43,48,0.28)" }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, lineHeight: 1.45 }}>הקצב שלך עודכן</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>ככל שמתקרבים למשקל תקין אנחנו ממליצים על ירידה מתונה יותר. הקצב שלך עודכן ל-250 גרם בשבוע, והיעד הקלורי היומי עלה בהתאם.</div>
+        <div style={{ marginTop: 16 }}><Btn onClick={onClose}>הבנתי</Btn></div>
+      </div>
+    </div>
+  );
+}
+
 function FastLossSheet({ onClose }) {
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 46 }}>
@@ -5063,10 +5159,11 @@ function CheckinCheer({ name, streak, onClose }) {
   );
 }
 
-function TrophyCheer({ week, name, streak, onClose }) {
+function TrophyCheer({ week, name, streak, level, onClose }) {
   const colors = ["#F4C04A", C.brand, C.amber, C.info, C.macroC];
-  const src = week >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${Math.max(1, Math.min(9, week))}.webp`;
-  const champ = week >= 10;
+  const src = trophyForWeek(week, level);
+  const silver = level === "silver";
+  const champ = week >= 10 && !silver;
   return (
     <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 47 }}>
       <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
@@ -5076,9 +5173,9 @@ function TrophyCheer({ week, name, streak, onClose }) {
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 24, padding: "28px 24px", textAlign: "center", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(168,66,92,0.35)" }}>
         <img src={src} alt="" width={120} height={120} style={{ display: "block", margin: "0 auto", animation: "medalIn 0.7s cubic-bezier(.2,1.3,.5,1) both" }} />
-        <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : "גביע השבוע נכנס לארון!"}</div>
+        <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, marginTop: 12 }}>{champ ? "סיימת את כל המסע!" : silver ? "גביע כסף נכנס לארון!" : "גביע השבוע נכנס לארון!"}</div>
         {streak >= 2 && <div style={{ fontSize: 18, fontWeight: 700, color: C.brand, marginTop: 8 }}>{streak} ימים ברצף</div>}
-        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
+        <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{champ ? `את אלופה${name && name.trim() ? `, ${name.trim()}` : ""}. עברת את כל עשרת השבועות.` : silver ? `השלמת חמישה ימים מתוך שישה בשבוע ${week}${name && name.trim() ? `, ${name.trim()}` : ""}. אם תשלימי גם את היום שנשאר, הגביע יהפוך לזהב.` : `השלמת שבוע ${week} שלם${name && name.trim() ? `, ${name.trim()}` : ""}. גאה בך.`}<div style={{ marginTop: 2 }}>ענת</div></div>
         <div style={{ marginTop: 18 }}><Btn onClick={onClose}>{champ ? "סגירה 💜" : "ממשיכות חזק 💜"}</Btn></div>
       </div>
     </div>
@@ -5114,6 +5211,24 @@ function trackerStats(checkins) {
 
 // A weekly trophy is earned once the week's weekdays have passed (Friday <= today)
 // and every eligible non-Saturday day of that program week (from day 3) is completed.
+// זהב על שבוע שכל ימיו הושלמו, כסף כשפספסה יום אחד. החלטה של רון, 28 באוגוסט
+// 2026: הדרישה מחמירה מעצמה ככל שהתוכנית מתקדמת, כי מספר המשימות ביום גדל,
+// ועדי כתבה "קיבלתי רק גביע אחד". ההקלה היא על החיים ולא על ההתנהגות: **היום
+// עצמו עדיין חייב להיות שלם**, ומה שמותר הוא לפספס יום.
+function weekTrophyLevel(checkins, startDate, w, today) {
+  const fri = addDays(startDate, (w - 1) * 7 + 5);
+  if (fri > today) return null;
+  let any = false, missed = 0;
+  for (let dnum = Math.max((w - 1) * 7 + 1, 3); dnum <= w * 7; dnum++) {
+    const date = addDays(startDate, dnum - 1);
+    if (date > today) break;
+    if (parseDay(date).getUTCDay() === 6) continue;
+    any = true;
+    if (!(checkins[date] && checkins[date]._done)) missed++;
+  }
+  if (!any) return null;
+  return missed === 0 ? "gold" : missed === 1 ? "silver" : null;
+}
 function weekTrophyEarned(checkins, startDate, w, today) {
   const fri = addDays(startDate, (w - 1) * 7 + 5);
   if (fri > today) return false;
@@ -5128,8 +5243,21 @@ function weekTrophyEarned(checkins, startDate, w, today) {
   return any;
 }
 
-function CollectionModal({ checkins, startDate, today, onClose }) {
+function CollectionModal({ checkins, startDate, today, viewDate, onClose, keepShabbat, stepsByDate, waterByDate, log, targets, cupMl, activityLog }) {
   const { days } = trackerStats(checkins);
+  // **היום שממנו נפתח הארון, ולא "היום".** רון פתח את הארון מיומן של שישי בשבוע 2
+  // וקיבל כפתור שמדבר על שבוע 3, כי הוא נשען על התאריך של היום. הכפתור מדבר על
+  // השבוע של היום שהיא רואה, וזה גם מה שקורה כשהיא פשוט על היום הנוכחי.
+  const dayInView = viewDate || today;
+  const dw = dowOf(dayInView);
+  const endOfWeek = dw === 6 || dw === 0;
+  const week = Math.min(programWeekFor(startDate, dayInView), 10);
+  // נושא את מספר השבוע שנפתח, כדי שהקשה על גביע מסוים תדבר עליו ולא על השבוע
+  // הנוכחי. רון: "לחצתי על הכפתור של שבוע 2 והוא רושם שבוע 3."
+  const [missWeek, setMissWeek] = useState(0);
+  const miss = missWeek
+    ? missingForWeek(missWeek, startDate, today, keepShabbat, checkins, stepsByDate, waterByDate, log, targets, cupMl, activityLog)
+    : [];
   return (
     <SheetShell title="ארון המדליות והגביעים" onClose={onClose}>
       <div style={{ textAlign: "center", padding: "2px 0 8px" }}>
@@ -5143,20 +5271,44 @@ function CollectionModal({ checkins, startDate, today, onClose }) {
         <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginTop: 8 }}>{days} {days === 1 ? "מדליה" : "מדליות"}</div>
         <div style={{ fontSize: 14, color: C.sub, marginTop: 2 }}>כל יום שהשלמת שווה מדליה</div>
       </div>
-      <div style={{ fontSize: 14, color: C.faint, margin: "8px 0 8px" }}>הגביעים שלך</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, margin: "10px 0 8px" }}>הגביעים שלך</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
         {Array.from({ length: 10 }).map((_, i) => {
-          const w = i + 1; const earned = weekTrophyEarned(checkins, startDate, w, today);
-          const src = w >= 10 ? "/medals/trophy-champion.webp" : `/medals/trophy-${w}.webp`;
+          const w = i + 1; const level = weekTrophyLevel(checkins, startDate, w, today);
+          const started = addDays(startDate, (w - 1) * 7) <= today;
           return (
-            <div key={w} style={{ textAlign: "center", opacity: earned ? 1 : 0.32 }}>
-              <img src={src} alt="" width={58} height={58} style={{ filter: earned ? "none" : "grayscale(1)" }} />
-              <div style={{ fontSize: 12, color: earned ? C.brandD : C.faint, marginTop: 2 }}>{w >= 10 ? "אלופה" : `שבוע ${w}`}</div>
+            <div key={w} onClick={() => { if (started && TRACKER_ENABLED) setMissWeek(w); }} style={{ textAlign: "center", opacity: level ? 1 : 0.32, cursor: started ? "pointer" : "default" }}>
+              <img src={trophyForWeek(w, level)} alt="" width={58} height={58} style={{ filter: level ? "none" : "grayscale(1)" }} />
+              <div style={{ fontSize: 12, color: level ? C.brandD : C.faint, marginTop: 2 }}>{w >= 10 ? "אלופה" : `שבוע ${w}`}</div>
+              {level === "silver" && <div style={{ fontSize: 11, color: C.sub }}>כסף</div>}
             </div>
           );
         })}
       </div>
-      <div style={{ fontSize: 13, color: C.faint, marginTop: 14, textAlign: "center", lineHeight: 1.5 }}>גביע נכנס לארון כשמשלימים את ימי השבוע (ראשון עד שישי). שבת לא חובה.</div>
+      {endOfWeek && TRACKER_ENABLED && (
+        <div style={{ marginTop: 14 }}><Btn variant="ghost" onClick={() => setMissWeek(week)}>מה נשאר לגביע של שבוע {week}?</Btn></div>
+      )}
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 10, textAlign: "center", lineHeight: 1.5 }}>הקישי על גביע כדי לראות מה נשאר בשבוע שלו.</div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 6, textAlign: "center", lineHeight: 1.5 }}>גביע זהב נכנס לארון על שבוע שכל ימיו הושלמו, ראשון עד שישי. אם פספסת יום אחד, נכנס גביע כסף. שבת אינה נחשבת.</div>
+      {missWeek > 0 && (
+        <div onClick={() => setMissWeek(0)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, maxHeight: "82%", display: "flex", flexDirection: "column", fontFamily: fontStack }}>
+            <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 12, flexShrink: 0 }}>מה נשאר לגביע של שבוע {missWeek}?</div>
+            <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
+            {miss.length === 0 ? (
+              <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65 }}>לא נשאר כלום, כל ימי השבוע הושלמו.</div>
+            ) : miss.map((d) => (
+              <div key={d.date} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 700, color: C.ink }}>יום {HE_DAYS_FULL[parseDay(d.date).getUTCDay()]} · {pad2(parseDay(d.date).getUTCDate())}.{pad2(parseDay(d.date).getUTCMonth() + 1)}</div>
+                <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginTop: 2 }}>{d.tasks.join(" · ")}</div>
+              </div>
+            ))}
+            </div>
+            <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 4, fontSize: 13.5, color: C.faint, lineHeight: 1.55 }}>יום אחד אפשר לפספס ועדיין לקבל גביע כסף. שבוע שכולו הושלם מקבל זהב.</div>
+            <div style={{ marginTop: 14, flexShrink: 0 }}><Btn onClick={() => setMissWeek(0)}>סגירה</Btn></div>
+          </div>
+        </div>
+      )}
     </SheetShell>
   );
 }
@@ -5468,7 +5620,8 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
     if (d > today) break;
     if (checkins[d] && checkins[d]._done) wkMedals++;
   }
-  const wkTrophy = weekTrophyEarned(checkins, startDate, week, today);
+  const wkLevel = weekTrophyLevel(checkins, startDate, week, today);
+  const wkTrophy = !!wkLevel;
   const achievementsEl = (!hideRewards && (wkMedals > 0 || wkTrophy)) ? (
     <div style={{ background: C.panel, border: `1.5px solid ${C.brand}`, borderRadius: 16, marginTop: 16, padding: "18px 14px", textAlign: "center", boxShadow: "0 2px 10px rgba(168,66,92,0.10)" }}>
       <div style={{ fontSize: 18.5, fontWeight: 800, color: C.brandD, marginBottom: 14 }}>ההישגים שלך השבוע 🏆</div>
@@ -5483,8 +5636,8 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
       )}
       {wkTrophy && (
         <div>
-          <img src={trophyForWeek(week)} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }} />
-          <div style={{ fontSize: 16, color: C.brandD, fontWeight: 800, marginTop: 6 }}>{week >= 10 ? "גביע האלופה נכנס לארון! 🎉" : "גביע השבוע נכנס לארון! 🎉"}</div>
+          <img src={trophyForWeek(week, wkLevel)} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }} />
+          <div style={{ fontSize: 16, color: C.brandD, fontWeight: 800, marginTop: 6 }}>{wkLevel === "silver" ? "גביע כסף נכנס לארון! 🎉" : week >= 10 ? "גביע האלופה נכנס לארון! 🎉" : "גביע השבוע נכנס לארון! 🎉"}</div>
         </div>
       )}
     </div>
@@ -5515,6 +5668,30 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
   ];
   const emptyState = <div style={{ textAlign: "center", color: C.sub, padding: "24px 12px", lineHeight: 1.7 }}>עוד אין נתונים לשבוע הזה.<br />ברגע שתתחילי למלא, הסיכום יופיע כאן.</div>;
   const hasData = (data.avgs && Object.keys(data.avgs).length > 0) || (data.counts && Object.keys(data.counts).length > 0) || !!data.journalDays;
+  // כמה ימים בשבוע יש בהם דיווח כלשהו. סימן אחד בשבוע הספיק כדי לפתוח את כל טקסט
+  // השבח, ואז הוא בירך אותה על שבוע מוצלח ומיד מנה שש שורות של "עוד לא דיווחת".
+  // רון, 28 באוגוסט 2026: "אין לזה קשר למציאות."
+  let reportedDays = 0;
+  for (let dnum = (week - 1) * 7 + 1; dnum <= week * 7; dnum++) {
+    const d = addDays(startDate, dnum - 1);
+    if (d > today) break;
+    const ans = checkins[d] || {};
+    const any = Object.keys(ans).some((k) => k !== "_done")
+      || ((stepsByDate && stepsByDate[d]) > 0)
+      || (waterMlOf(waterByDate ? waterByDate[d] : 0) > 0)
+      || (log || []).some((e) => e.date === d);
+    if (any) reportedDays++;
+  }
+  const thinWeek = hasData && reportedDays < 3;
+  // בקול המערכת ובלי חתימה של ענת: זה חישוב שלנו ולא משהו שהיא אמרה. ובלי
+  // "לא מילאת" ובלי שאלה, לפי החלטת רון.
+  const thinState = (
+    <div style={{ background: C.bg, borderRadius: 14, padding: "18px 16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
+      <div style={{ fontWeight: 800, marginBottom: 8 }}>עוד אין מספיק נתונים לסיכום השבועי</div>
+      <div style={{ color: C.sub }}>הסיכום נבנה ממה שמילאת ביומן המעקב, והשבוע יש דיווח {reportedDays === 1 ? "מיום אחד בלבד" : `מ${sumDays(reportedDays)} בלבד`}.</div>
+      <div style={{ color: C.sub, marginTop: 8 }}>אפשר להשלים ימים שעברו דרך סרגל הימים שלמעלה, והסיכום יופיע.</div>
+    </div>
+  );
   const intro = WK_INTRO[week] || [];
   const outro = WK_OUTRO[week] || { lines: [] };
   const taskLines = (WK_TASKS[week] || []).map((k) => summaryTaskLine(k, week, data, fasting)).filter(Boolean);
@@ -5528,7 +5705,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
   return (
     <SheetShell title={`סיכום שבוע ${week}`} onClose={onClose} className="no-textscale">
       {wk1 ? (
-        !wk1HasData ? emptyState : (
+        !wk1HasData ? emptyState : thinWeek ? thinState : (
           <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
             {titleEl}
             {wk1Lines.map((ln, i) => (<div key={i} style={{ marginBottom: 8 }}>{ln}</div>))}
@@ -5537,7 +5714,7 @@ function WeeklySummaryModal({ date, startDate, today, checkins, log, stepsByDate
             {achievementsEl}
           </div>
         )
-      ) : !hasData ? emptyState : (
+      ) : !hasData ? emptyState : thinWeek ? thinState : (
         <div style={{ background: C.brandBg, borderRadius: 14, padding: "16px", color: C.ink, fontSize: 16, lineHeight: 1.7 }}>
           {titleEl}
           {intro.map((p, i) => (<div key={`i${i}`} style={{ marginBottom: 8 }}>{p}</div>))}
@@ -5783,24 +5960,42 @@ const FAQ_ITEMS = [
   { q: "האפליקציה נראית ישנה או לא מתעדכנת - איך מרעננים?", a: "באנדרואיד אפשר למשוך את המסך כלפי מטה כדי לרענן, או לסגור את האפליקציה ולפתוח שוב. באייפון משיכה למטה לא עובדת - צריך לסגור את האפליקציה לגמרי (להחליק מלמטה למעלה, לעצור באמצע, ולהחליק את הכרטיס של האפליקציה כלפי מעלה), ואז לפתוח שוב מהאייקון. אם גם אחרי זה היא עדיין נראית ישנה, אפשר להסיר אותה ממסך הבית ולהוסיף מחדש - אבל שימי לב שזה מאפס את הנתונים במכשיר, אז כדאי לעשות קודם גיבוי במסך הפרופיל." },
   { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
+  // שש נשים שאלו את זה. מוצגת אך ורק עד שמשימת החלבון נפתחת, כי משם והלאה
+  // הטבעת קיימת ביומן והשאלה עונה על עצמה. החלטה של רון.
+  { q: "למה אני לא רואה כמה חלבון ופחמימות אכלתי כל יום?", a: "מתחת לכל מאכל שרשמת ביומן מופיע הפירוט שלו: חלבון, שומן ופחמימות. זה נמצא שם מהיום הראשון.\n\nהסיכום היומי של החלבון, השומן והפחמימות יופיע החל משבוע 3, יחד עם התחלת משימת החלבון.\n\nעד אז אנחנו מתמקדות במה שקשור למשימות הקיימות, ומוסיפות את הנתונים הרלוונטיים בהתאם למשימות שנפתחות.", untilMacro: true, b: "הסיכום היומי" },
   { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
   { q: "כמה קלוריות מותר לי לאכול היום?", a: "היעד הקלורי היומי מחושב לפי הגיל, המשקל, הגובה ורמת הפעילות שלך, ומופיע בעיגול הקלוריות ('מתוך ...'). אפשר לראות אותו גם במסך הפרופיל." },
   { q: "שכחתי להזין יום שלם - מה עושים?", a: "אפשר לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך, ולמלא בדיעבד." },
+  { q: "סרקתי ברקוד והערכים לא תואמים לאריזה. מה עושים?", a: "הערכים שהופיעו הם של גרסה כללית של המוצר במאגר העולמי, ולא של האריזה הישראלית. במסך שמאשר את הכמות יש שורה קטנה: \"הערכים לא תואמים לאריזה? עדכני מהתווית\". לוחצים עליה ומקלידים את המספרים מהתווית, מהעמודה של 100 גרם. מהרגע הזה המוצר יהיה נכון אצלך גם בפעם הבאה." },
   { q: "איך עורכים או מוחקים פריט שהוספתי?", a: "בהקשה על הפריט ברשימת 'מה שהוזן היום' ביומן אפשר לערוך אותו או למחוק אותו." },
-  { q: "מה זה המדליות והגביעים?", a: "על כל יום שבו תשלימי את כל המשימות מקבלים מדליה, ועל שבוע שלם - גביע. הכל נאסף בארון ההישגים." },
+  { q: "מה זה המדליות והגביעים?", a: "על כל יום שבו השלמת את כל המשימות מקבלים מדליה. על שבוע שכל ימיו הושלמו, ראשון עד שישי, מקבלים גביע זהב, ואם פספסת יום אחד מקבלים גביע כסף. שבת אינה נחשבת. הכל נאסף בארון ההישגים." },
+  { q: "אפשר להזין באפליקציה היקפים?", a: "אין מדידות היקפים כחלק מהמעקב הרשמי בתוכנית. אנחנו רוצות להשאיר את המעקב פשוט ולא להפוך את התהליך לעיסוק בעוד ועוד מספרים ומדידות.\n\nאם חשוב לך לעקוב גם אחרי היקפים, את כמובן יכולה לעשות את זה באופן עצמאי בבית, למשל בתחילת התוכנית ובהמשך להשוות, אבל זה לא חלק שאנחנו דורשות או מנהלות בתוך האפליקציה.\n\nהמטרה שלנו היא להתמקד בתהליך עצמו, בהרגלים, באימונים ובהתקדמות שלך לאורך הדרך." },
   { q: "למה משימות חדשות מופיעות לאורך התוכנית?", a: "המשימות נפתחות בהדרגה כדי לא להעמיס בבת אחת. כל כמה ימים מצטרפת משימה חדשה, צעד אחרי צעד." },
 ];
 
-function FaqModal({ onClose, onStartTour }) {
+// מדגיש ביטוי אחד בתוך תשובה. הטקסט עצמו נשאר מחרוזת אחת, כי אותה מחרוזת בדיוק
+// יושבת גם בבנק התשובות של המשרד, ובדיקה משווה ביניהן מילה במילה.
+function withBold(text, phrase) {
+  if (!phrase) return text;
+  const i = String(text).indexOf(phrase);
+  if (i < 0) return text;
+  return [text.slice(0, i), <b key="b">{phrase}</b>, text.slice(i + phrase.length)];
+}
+function FaqModal({ onClose, onStartTour, startDate, onReset, onLogout, hasFutureEntries, onClearFuture, backupOn }) {
   const [open, setOpen] = useState(-1);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const topics = TIPS.filter((t) => t.key === "cal");
-  const Item = ({ q, a, guide, i }) => (
+  // שאלה שמסומנת untilMacro יורדת מהרשימה ברגע שמשימת החלבון נפתחה.
+  const macroOpen = unlockedOn(startDate, TODAY, MACRO_UNLOCK);
+  const items = FAQ_ITEMS.filter((f) => !f.untilMacro || !macroOpen);
+  const Item = ({ q, a, guide, b, i }) => (
     <div onClick={() => setOpen(open === i ? -1 : i)} style={{ border: `1px solid ${C.line}`, borderRadius: 12, padding: "12px 13px", marginBottom: 8, cursor: "pointer" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 15.5, fontWeight: 600, color: C.ink }}>{q}</span>
         <ChevronDown size={18} color={C.sub} style={{ flexShrink: 0, transform: open === i ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
       </div>
-      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>{a}{guide && <StepGuideLink style={{ marginTop: 10 }} />}</div>}
+      {open === i && <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: 8, whiteSpace: "pre-line" }} onClick={(e) => e.stopPropagation()}>{withBold(a, b)}{guide && <StepGuideLink style={{ marginTop: 10 }} />}</div>}
     </div>
   );
   return (
@@ -5811,10 +6006,41 @@ function FaqModal({ onClose, onStartTour }) {
         {onStartTour
           ? <button onClick={onStartTour} style={{ width: "100%", boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: "none", borderRadius: 12, padding: "13px", marginBottom: 14, background: C.brand, color: "#fff", fontSize: 15.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}><Sparkles size={17} /> סיור באפליקציה <span style={{ fontWeight: 400, fontSize: 13, opacity: 0.9 }}>(מעבר לשבוע ראשון, יום שלישי)</span></button>
           : <div style={{ background: C.brandBg, borderRadius: 12, padding: "12px 13px", marginBottom: 14, fontSize: 14, color: C.brandD, lineHeight: 1.6, textAlign: "center" }}>הסיור המודרך באפליקציה ייפתח כשהתוכנית שלך מתחילה 💜</div>}
-        {FAQ_ITEMS.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} guide={f.guide} i={i} />)}
+        {items.map((f, i) => <Item key={`f${i}`} q={f.q} a={f.a} guide={f.guide} b={f.b} i={i} />)}
         <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, margin: "16px 0 8px" }}>מסכים באפליקציה</div>
         {topics.map((t, j) => <Item key={`t${j}`} q={t.title} a={t.text} i={100 + j} />)}
+        {hasFutureEntries && (
+          <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 14, marginTop: 18 }}>
+            <Btn variant="ghost" onClick={() => onClearFuture && onClearFuture()} style={{ color: C.sub }}>ניקוי נתונים בתאריכים עתידיים</Btn>
+            <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>מוחק יומן, צעדים ומים בתאריכים שאחרי היום בלבד. המועדפים, המשקלים וההישגים נשמרים.</div>
+          </div>
+        )}
+        <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 14, marginTop: hasFutureEntries ? 14 : 18 }}>
+          <Btn variant="ghost" onClick={() => setConfirmReset(true)} style={{ color: C.sub }}>מחיקת כל הנתונים והתחלה מחדש</Btn>
+        </div>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => setConfirmLogout(true)} style={{ color: C.sub }}>התנתקות מהמכשיר הזה</Btn></div>
+        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.55, marginTop: 6, textAlign: "center" }}>משחרר את המכשיר הזה ומחזיר למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב עם המייל.</div>
       </div>
+      {confirmReset && (
+        <div onClick={() => setConfirmReset(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>למחוק הכל ולהתחיל מחדש?</div>
+            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>פעולה זו תמחק את כל מה שהזנת במכשיר הזה - יומן האוכל, המשקל, הצעדים והכל - ותחזיר אותך למסך ההתחלה. אי אפשר לבטל את זה.{backupOn ? " אם הפעלת גיבוי, הנתונים שמורים אצלנו ותוכלי לשחזר עם הקוד שלך." : ""}</div>
+            <Btn onClick={() => { setConfirmReset(false); onReset(); }} style={{ background: "#D7263D" }}>כן, מחקי והתחילי מחדש</Btn>
+            <Btn variant="ghost" onClick={() => setConfirmReset(false)} style={{ marginTop: 8 }}>ביטול</Btn>
+          </div>
+        </div>
+      )}
+      {confirmLogout && (
+        <div onClick={() => setConfirmLogout(false)} style={{ position: "fixed", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 340, fontFamily: fontStack, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 10 }}>להתנתק מהמכשיר?</div>
+            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>תתנתקי מהמכשיר הזה ותחזרי למסך הכניסה. הנתונים שלך נשמרים, ותוכלי להיכנס שוב בכל רגע עם המייל שלך.</div>
+            <Btn onClick={() => { setConfirmLogout(false); onLogout(); }}>כן, התנתקי</Btn>
+            <Btn variant="ghost" onClick={() => setConfirmLogout(false)} style={{ marginTop: 8 }}>ביטול</Btn>
+          </div>
+        </div>
+      )}
     </SheetShell>
   );
 }
@@ -6143,8 +6369,9 @@ export default function App() {
   const [waterByDate, setWaterByDate] = useState(saved?.waterByDate || {});
   const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
   const [checkins, setCheckins] = useState(saved?.checkins || {});
-  const celebRef = useRef({ mounted: false, trophies: 0 });
+  const celebRef = useRef({ mounted: false, trophies: 0, golds: 0 });
   const [cheerTrophyWeek, setCheerTrophyWeek] = useState(1);
+  const [cheerTrophyLevel, setCheerTrophyLevel] = useState("gold");
   const [goalAckWeek, setGoalAckWeek] = useState(saved?.goalAckWeek || 0);
   const [goalBump, setGoalBump] = useState(null);
   const [favorites, setFavorites] = useState(saved?.favorites || []);
@@ -6219,7 +6446,39 @@ export default function App() {
       // בשיעורי הבונוס. הוא כבר אצלנו מהשער, בפורמט 972 נקי, ואינו נשמר אצלנו
       // מעבר למה שכבר קיים.
       let ph = ""; try { ph = localStorage.getItem("myprime_phone") || ""; } catch (e) {}
-      payload = { email: em, ...u, trackerDays, day: TODAY, doneToday, phone: ph };
+      // ── נתוני שימוש לניתוח מקרו ────────────────────────────────────────────
+      // מספרים על מה שהיא עשתה באפליקציה, ולעולם לא הערכים עצמם.
+      const usg = usageLoad();
+      const startD = profile.startDate;
+      let dayClosed = "", tasksAgg = {};
+      if (startD) {
+        for (let n = 1; n <= 70; n++) {
+          const d = addDays(startD, n - 1);
+          if (d > TODAY) break;
+          dayClosed += (checkins[d] && checkins[d]._done) ? "1" : "0";
+          if (!unlockedOn(startD, d, CHECKIN_UNLOCK)) continue;
+          const ts = tasksForDate(startD, d, profile.keepShabbat).filter((t) => !t.optional);
+          if (!ts.length) continue;
+          const ans = checkins[d] || {};
+          const au = autoStatusFor(d, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog);
+          ts.forEach((t) => {
+            const cur = tasksAgg[t.id] || [0, 0];
+            cur[1]++;
+            if (taskDone(t, ans, au)) cur[0]++;
+            tasksAgg[t.id] = cur;
+          });
+        }
+      }
+      let standalone = 0, notif = "";
+      try {
+        standalone = ((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true) ? 1 : 0;
+        notif = (typeof Notification !== "undefined" && Notification.permission) || "";
+      } catch (e) {}
+      payload = {
+        email: em, ...u, trackerDays, day: TODAY, doneToday, phone: ph,
+        opens: usg.opens || {}, mins: usg.mins || {}, hours: usg.hours || [], feat: usg.feat || {},
+        dayClosed, tasksAgg, standalone, notif,
+      };
     } catch (e) { return; }
     fetch("/api/usage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
       .catch(() => { /* a participant must never see this fail */ });
@@ -6244,6 +6503,23 @@ export default function App() {
   const [gateAgree, setGateAgree] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   useEffect(() => { const t = setTimeout(() => setShowSplash(false), 2000); return () => clearTimeout(t); }, []);
+  // נוכחות וזמן באפליקציה. פעם אחת בטעינה, ואחר כך שנייה-שנייה כל עוד המסך גלוי.
+  // נצבר על המכשיר ונשלח בטעינה הבאה, כי בטלפון אין רגע אמין לשלוח בו ביציאה.
+  useEffect(() => {
+    usageOpened(TODAY);
+    let last = Date.now(), acc = 0;
+    const tick = () => {
+      const now = Date.now();
+      if (document.visibilityState === "visible") acc += Math.min(60, (now - last) / 1000);
+      last = now;
+      if (acc >= 30) { usageAddSeconds(TODAY, acc); acc = 0; }
+    };
+    const iv = setInterval(tick, 15000);
+    const flush = () => { tick(); if (acc > 0) { usageAddSeconds(TODAY, acc); acc = 0; } };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => { clearInterval(iv); document.removeEventListener("visibilitychange", flush); window.removeEventListener("pagehide", flush); flush(); };
+  }, []);
   const [installSkipped, setInstallSkipped] = useState(() => { try { return localStorage.getItem("myprime_install_ack") === "1"; } catch (e) { return false; } });
   const appIsPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
   const appStandalone = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true);
@@ -6691,13 +6967,13 @@ export default function App() {
       }
     }
     if (changed) setCheckins(next);
-    let tcount = 0, maxW = 0;
-    for (let w = 1; w <= 10; w++) if (weekTrophyEarned(next, profile.startDate, w, today)) { tcount++; maxW = w; }
-    if (!celebRef.current.mounted) { celebRef.current = { mounted: true, trophies: tcount }; return; }
-    const newTrophy = tcount > celebRef.current.trophies;
-    if (newTrophy) celebRef.current.trophies = tcount;
+    let tcount = 0, gcount = 0, maxW = 0, maxLevel = null;
+    for (let w = 1; w <= 10; w++) { const lv = weekTrophyLevel(next, profile.startDate, w, today); if (lv) { tcount++; if (lv === "gold") gcount++; maxW = w; maxLevel = lv; } }
+    if (!celebRef.current.mounted) { celebRef.current = { mounted: true, trophies: tcount, golds: gcount }; return; }
+    const newTrophy = tcount > celebRef.current.trophies || gcount > (celebRef.current.golds || 0);
+    if (newTrophy) { celebRef.current.trophies = tcount; celebRef.current.golds = gcount; }
     if (!profile.hideRewards) {
-      if (newTrophy) { setCheerTrophyWeek(maxW); setSheet("trophyCheer"); }
+      if (newTrophy) { setCheerTrophyWeek(maxW); setCheerTrophyLevel(maxLevel); setSheet("trophyCheer"); }
       else if (celebrate) setSheet("checkinCheer");
     }
   }, [checkins, log, stepsByDate, waterByDate, activityLog, targets, profile.startDate, profile.keepShabbat, profile.hideRewards, today]);
@@ -6713,6 +6989,7 @@ export default function App() {
   }, [programWeek, today, tab, sheet, modal, onboarded, showIntro, profile.fasting, profile.tipsSeen]);
   const addWaterGlass = () => { setWaterForDate(selectedDate, (waterByDate[selectedDate] || 0) + 1); setSheet(null); };
   const setWeightForDate = (date, kg) => {
+    usageBump("weighIn");   // שהזינה משקל, ולעולם לא כמה
     const next = [...weights.filter((x) => x.date !== date), { date, kg }].sort((a, b) => a.date < b.date ? -1 : 1);
     setWeights(next);
     // הבדיקה היא על המשקל העדכני ביותר ולא על מה שהיא הקלידה עכשיו, כדי שמילוי
@@ -6729,6 +7006,16 @@ export default function App() {
     if (profile.lossStopAt && !profile.resumeOfferAt && canResumeLoss(cur, profile.heightCm)) {
       setProfile((pr) => ({ ...pr, resumeOfferAt: date }));
       setSheet("resumeOffer");
+      return;
+    }
+    // התקרה של v6.01 הפסיקה להציע 500 למי שקרובה לקו, אבל מי שכבר בחרה 500 המשיכה
+    // לקבל את הגירעון המלא, כלומר הרשימה בפרופיל אמרה דבר אחד והיעד הקלורי אמר אחר.
+    // רון, 28 באוגוסט 2026: "אין לי בעיה שתהיה ב-250 בלבד." המספר שעל המסך שלה זז
+    // בכ-275 קלוריות, ולכן זה לעולם לא קורה בשקט.
+    const capped = rateCapFor(profile, cur);
+    if (capped != null) {
+      setProfile((pr) => ({ ...pr, weeklyRateG: capped }));
+      setSheet("rateCap");
       return;
     }
     // ירידה מהירה מדי. לא חוסמת כלום, ולא חוזרת יותר מפעם בשלושה שבועות: התרעה
@@ -6988,10 +7275,10 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => setSheet("recommend")} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => setSheet("collection")} onOpenSummary={() => setSheet("weeklySummary")} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={profile.weightKg} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} onReset={resetDemo} onLogout={logoutDevice} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
             </div>
             {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
                 stayed tappable, rode up with the keyboard eating the space above it, and
@@ -7003,16 +7290,16 @@ export default function App() {
                 const active = tab === t.id;
                 const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
-                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); usageBump("tab_" + t.id); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
               {(introLock || preStart)
-                ? <button data-tut="nav-fab" onClick={() => setLockMsg("plus")} aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: C.faint, opacity: 0.55, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
+                ? <button data-tut="nav-fab" onClick={() => setLockMsg("plus")} aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: "#BBA7AC", opacity: 0.55, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>
                 : <button data-tut="nav-fab" onClick={() => setSheet("menu")} className="fab-center" aria-label="הוספה" style={{ flexShrink: 0, marginTop: -30, width: 60, height: 60, borderRadius: "50%", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", border: "3px solid #fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}><Plus size={28} strokeWidth={2.6} /></button>}
               {tabs.slice(2).map((t) => {
                 const active = tab === t.id;
                 const locked = (introLock || preStart) && (t.id === "report" || t.id === "recipes");
                 if (locked) return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => setLockMsg(t.id)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: "transparent", color: C.faint, opacity: 0.55, fontWeight: 400 }}><t.ic size={20} strokeWidth={2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
-                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
+                return (<button key={t.id} data-tut={`nav-${t.id}`} onClick={() => { if (sheet) setSheet(null); if (modal) setModal(null); usageBump("tab_" + t.id); setTab(t.id); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, border: "none", cursor: "pointer", padding: "5px 12px", borderRadius: 14, background: active ? C.brand : "transparent", color: active ? "#fff" : C.sub, fontWeight: active ? 600 : 400, boxShadow: active ? "0 2px 8px rgba(168,66,92,0.35)" : "none", transition: "background .15s, color .15s" }}><t.ic size={20} strokeWidth={active ? 2.6 : 2} /><span style={{ fontSize: 13 }}>{t.label}</span></button>);
               })}
             </div>
             </div>
@@ -7033,7 +7320,7 @@ export default function App() {
               </div>
             )}
             {sheet === "menu" && <EntryMenu onClose={() => setSheet(null)} onPick={onPickEntry} />}
-            {sheet === "faq" && <FaqModal onClose={() => setSheet(null)} onStartTour={preStart ? null : () => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
+            {sheet === "faq" && <FaqModal startDate={profile.startDate} onReset={resetDemo} onLogout={logoutDevice} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} backupOn={!!profile.backup?.enabled} onClose={() => setSheet(null)} onStartTour={preStart ? null : () => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
             {sheet === "backup" && <BackupModal backup={profile.backup} gateEmail={gateEmail} busy={bkBusy} onEnable={enableBackup} onBackupNow={backupNow} onResetCode={resetBackupCode} onClose={() => setSheet(null)} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
             {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} autoFocusInput={!tour} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
@@ -7046,12 +7333,13 @@ export default function App() {
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "lossStop" && <LossStopSheet onAck={ackLossStop} />}
             {sheet === "fastLoss" && <FastLossSheet onClose={() => setSheet(null)} />}
+            {sheet === "rateCap" && <RateCapSheet onClose={() => setSheet(null)} />}
             {sheet === "resumeOffer" && <ResumeOfferSheet onResume={() => { resumeLoss(); setSheet(null); }} onLater={() => setSheet(null)} />}
             {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
-            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
+            {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} level={cheerTrophyLevel} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
-            {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} onClose={() => setSheet(null)} />}
+            {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} viewDate={selectedDate} keepShabbat={profile.keepShabbat} stepsByDate={stepsByDate} waterByDate={waterByDate} log={log} targets={targets} cupMl={profile.cupMl} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} startGlow={glowDirect} onGlowStart={() => setGlowSeen(true)} onClose={() => { setSheet(null); setGlowDirect(false); }} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
