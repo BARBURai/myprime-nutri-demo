@@ -40,6 +40,10 @@ check("ולא יותר מפעם בחמש דקות", /UPDATE_CHECK_MS = 5 \* 60 \
 // וחזרה בצהריים הייתה מקבלת פס בלי שהיא תקועה על כלום.
 check("ומופיע רק אחרי 12 שעות שהאפליקציה פתוחה אצלה",
   /UPDATE_MIN_OPEN_MS = 12 \* 60 \* 60 \* 1000/.test(app) && /now - LOADED_AT < UPDATE_MIN_OPEN_MS/.test(bar));
+// נמדד בדפדפן: הפס צויר ב-y=55 והכפתור "קבע יום 1" של סרגל הבדיקות ישב מעליו,
+// ולכן הכפתור נראה מת. הסרגל נשבר לשלוש שורות בטלפון, ולכן מספר קבוע לא יעבוד.
+check("בסרגל הבדיקות הוא יושב מתחתיו לפי הגובה האמיתי ולא לפי מספר קבוע",
+  /getElementById\("mp-devbar"\)/.test(bar) && /\$\{devTop\}px/.test(bar) && /id="mp-devbar"/.test(app));
 check("ויש ✕ שמסתיר לסשן הזה בלבד",
   /setDismissed\(true\)/.test(bar) && /if \(!stale \|\| hidden \|\| dismissed\) return null;/.test(bar) &&
   !/dismissed[\s\S]{0,120}localStorage/.test(bar));
