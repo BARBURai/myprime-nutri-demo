@@ -699,7 +699,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.60";
+const VERSION = "6.61";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1235,7 +1235,12 @@ function InstallGate({ onSkip }) {
             <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אייפון (Safari)</div>
             <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
               <li>ודאי שאת בדפדפן Safari.</li>
-              <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions /></li>
+              <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions />
+                {/* **הסרטון מראה מסלול אחד מתוך השניים.** הוא הורכב מצילומי מסך של טלפון
+                    שהסרגל שלו מכווץ, ולכן אישה שרואה סרגל פרוש עם כפתור השיתוף רואה בו
+                    משהו אחר ממה שיש אצלה. **המשפט מופיע רק כאן, במסך היחיד שיש בו סרטון.** */}
+                {vid && <div style={{ fontSize: 14.5, color: C.faint, marginTop: 6 }}>בסרטון רואים את המסלול של שלוש הנקודות.</div>}
+              </li>
               <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
               <li>בחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
