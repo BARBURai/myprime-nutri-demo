@@ -783,6 +783,9 @@ const CHECKS = [
       const plain = await page.locator("text=/^אייפון \\(Safari\\)$|^אנדרואיד \\(Chrome\\)$/").count();
       const list = await page.locator("ol li").count();
       const shots = await page.locator('img[src*="/guides/install-ios-"]').count();
+      // הסרטון הורכב מצילומי מסך של טלפון שהסרגל שלו מכווץ, ולכן הוא מראה מסלול
+      // אחד מתוך השניים. המשפט הזה אומר את זה, ומופיע רק במסך שיש בו סרטון.
+      const vidNote = await page.locator("text=בסרטון רואים את המסלול של שלוש הנקודות").count();
       // הכלל החדש: ההנחיות הכתובות קודם והסרטון אחריהן. הסרטון מצלם מסך טלפון
       // שלם, ולכן כשהוא ראשון הוא דוחף את השלבים אל מחוץ לתמונה, וזה בדיוק מה
       // שרון תפס בבדיקה. השוואת המיקום היא על סדר האלמנטים בדף ולא על העין.
@@ -801,7 +804,9 @@ const CHECKS = [
       // באייפון שתי התמונות של הסרגל חייבות להיות שם, כי בלעדיהן ההנחיה חוזרת
       // לתאר צורה במקום מקום, וזה מה ששלח משתתפת לכפתור ה-AirPlay שעל הסרטון.
       const shotsOk = isIOS ? shots === 2 : true;
-      return { ok: (full || none) && plain === 1 && list >= 4 && shotsOk, detail: `${full ? "סרטון אחרי השלבים" : none ? "בלי סרטון (אין עדיין מזהה)" : `לא עקבי: פתיח ${intro}, נגן ${frame}, השלבים ראשונים ${stepsFirst}`} · ${list} שלבים · תמונות ${shots}` };
+      // ובאנדרואיד הוא לא מופיע כלל, כי שם אין שלב מפוצל ואין מה להבהיר.
+      const noteOk = isIOS ? (full ? vidNote === 1 : vidNote === 0) : vidNote === 0;
+      return { ok: (full || none) && plain === 1 && list >= 4 && shotsOk && noteOk, detail: `${full ? "סרטון אחרי השלבים" : none ? "בלי סרטון (אין עדיין מזהה)" : `לא עקבי: פתיח ${intro}, נגן ${frame}, השלבים ראשונים ${stepsFirst}`} · ${list} שלבים · תמונות ${shots} · הערת הסרטון ${vidNote}` };
     },
   },
   {
