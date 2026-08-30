@@ -296,8 +296,20 @@ function pad2(n) { return String(n).padStart(2, "0"); }
 function parseDay(dateStr) { const [y, m, d] = (dateStr || "").split("-").map(Number); return new Date(Date.UTC(y || 1970, (m || 1) - 1, d || 1)); }
 function fmtDay(d) { return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`; }
 function addDays(dateStr, n) { const d = parseDay(dateStr); d.setUTCDate(d.getUTCDate() + n); return fmtDay(d); }
+// הזזת שעון לכלי הבדיקות בלבד, כדי שאפשר יהיה לדמות מעבר חצות בלי לחכות
+// לחצות ובלי לגעת בשעון של הטלפון. בייצור זה תמיד אפס.
+let DEV_CLOCK_SHIFT = 0;
+function nowDate() {
+  // בייצור זה פשוט עכשיו. **בסרגל הבדיקות היום המדומה הוא הבסיס**, ולכן היום
+  // המדומה אינו נדרס בתאריך האמיתי, וכפתור "מעבר חצות" מזיז אותו יממה קדימה
+  // ומפעיל בדיוק את אותו מסלול שרץ בחצות אמיתית.
+  if (!DEV) return new Date(Date.now() + DEV_CLOCK_SHIFT);
+  const t = parseDay(TODAY);
+  const base = new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), 12, 0, 0);
+  return new Date(base.getTime() + DEV_CLOCK_SHIFT);
+}
 function relLabel(dateStr) {
-  const today = ymd(new Date());
+  const today = ymd(nowDate());
   if (dateStr === today) return "היום";
   if (dateStr === addDays(today, -1)) return "אתמול";
   return null;
@@ -688,7 +700,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.54";
+const VERSION = "6.59";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5820,6 +5832,93 @@ function GoalBumpModal({ info, name, onClose }) {
 // it. Reads the real numbers on an interval as well as on viewport events, because the
 // whole problem is that iOS sometimes fires no event at all. Screenshot it once while the
 // screen looks right and once while it is jumped, and the difference names the cause.
+// **גרסה חדשה שלא מגיעה אליה, כי היא לא סוגרת את האפליקציה.** האפליקציה נטענת
+// פעם אחת ונשארת בזיכרון של הטלפון, ולכן דווקא אישה פעילה ממשיכה להריץ קוד ישן
+// ימים. הבדיקה: קוראים את הדף מהשרת ומשווים את שם קובץ הקוד, שמקבל חתימה חדשה
+// בכל בנייה. **אין כאן פונקציה חדשה בשרת, ואנחנו על 12 מתוך 12.**
+const CURRENT_BUNDLE = (() => {
+  try { const el = document.querySelector('script[type="module"][src]'); return el ? el.getAttribute("src") : ""; } catch (e) { return ""; }
+})();
+const UPDATE_CHECK_MS = 5 * 60 * 1000;      // לא בודקים יותר מפעם בחמש דקות
+const UPDATE_POLL_MS = 30 * 60 * 1000;      // ולמי שלא יוצאת ולא חוזרת, פעם בחצי שעה
+// **הסף שמונע ניג'וז, וזו החלטה של רון.** רון מעלה כמה גרסאות ביום, ובלי הסף
+// אישה שפתחה בבוקר וחזרה בצהריים הייתה מקבלת פס אף שהיא לא "תקועה על גרסה
+// ישנה" אלא פשוט באמצע היום. **הפס נועד למי שלא סוגרת בכלל**, ולכן הוא מופיע
+// רק אחרי שהאפליקציה פתוחה אצלה יותר מ-12 שעות ברציפות. מי שפותחת כל בוקר
+// מקבלת את הגרסה החדשה ממילא, בלי שנאמר לה מילה.
+const UPDATE_MIN_OPEN_MS = 12 * 60 * 60 * 1000;
+const LOADED_AT = Date.now();
+function UpdateBar({ hidden }) {
+  const [stale, setStale] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  // **בסרגל הבדיקות הפס נחבא מתחת לסרגל עצמו**, כי הסרגל נשבר לשתי שורות בטלפון
+  // וגובהו אינו קבוע. נמדד בדפדפן ולא נוחש: הפס צויר ב-y=55 והכפתור "קבע יום 1"
+  // ישב מעליו. לכן מודדים את גובהו בפועל במקום להניח מספר.
+  const [devTop, setDevTop] = useState(0);
+  const lastRef = useRef(0);
+  const staleRef = useRef(false); staleRef.current = stale;
+  useEffect(() => {
+    // **לעולם לא לרענן לבד.** אישה באמצע הקלדה תאבד את מה שכתבה, וזה גרוע
+    // מגרסה ישנה. כל מה שקורה כאן הוא להציג לה פס, וההקשה שלה מרעננת.
+    const force = () => setStale(true);
+    window.addEventListener("mp-update-test", force);
+    if (!CURRENT_BUNDLE) return () => window.removeEventListener("mp-update-test", force);
+    let alive = true;
+    const check = async () => {
+      if (staleRef.current) return;
+      const now = Date.now();
+      if (now - LOADED_AT < UPDATE_MIN_OPEN_MS) return;
+      if (now - lastRef.current < UPDATE_CHECK_MS) return;
+      lastRef.current = now;
+      try {
+        const r = await fetch("/index.html", { cache: "no-store" });
+        if (!r.ok) return;
+        const html = await r.text();
+        const m = html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/);
+        if (alive && m && m[1] && m[1] !== CURRENT_BUNDLE) setStale(true);
+      } catch (e) {}
+    };
+    const onVis = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", check);
+    const id = setInterval(check, UPDATE_POLL_MS);
+    return () => { alive = false; clearInterval(id); window.removeEventListener("mp-update-test", force); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", check); };
+  }, []);
+  useEffect(() => {
+    if (!DEV || !stale) return;
+    const el = document.getElementById("mp-devbar");
+    if (el) setDevTop(el.offsetHeight || 0);
+  }, [stale]);
+  // כשחלון פתוח הפס אינו מוצג, כדי שלא תקיש "רענון" באמצע הזנה ותאבד אותה.
+  if (!stale || hidden || dismissed) return null;
+  return (
+    <div style={{ position: "absolute", top: DEV ? `calc(env(safe-area-inset-top, 0px) + ${devTop}px)` : "env(safe-area-inset-top, 0px)", insetInlineStart: 0, insetInlineEnd: 0, zIndex: 60, background: C.brand, color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 14px", fontFamily: fontStack, direction: "rtl", boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}>
+      <span style={{ fontSize: 15, fontWeight: 600 }}>יש גרסה חדשה של האפליקציה</span>
+      <span style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+        <button onClick={() => { try { window.location.reload(); } catch (e) {} }} style={{ background: "#fff", color: C.brand, border: "none", borderRadius: 999, padding: "5px 17px", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>רענון</button>
+        {/* מסתיר לסשן הזה בלבד, ואינו נשמר: בפתיחה הבאה היא ממילא תקבל את הגרסה החדשה. */}
+        <button onClick={() => setDismissed(true)} aria-label="סגירה" style={{ background: "transparent", color: "#fff", border: "none", fontSize: 19, lineHeight: 1, padding: "2px 6px", cursor: "pointer", opacity: 0.85 }}>✕</button>
+      </span>
+    </div>
+  );
+}
+
+// **התשובה של המשרד קופצת מעצמה ולא מחכה שהיא תקיש על הבועה.** עד עכשיו היה
+// עיגול ירוק בלבד, ומי שלא הקישה עליו לא ידעה שיש לה תשובה. מוצגת רק כשאין שום
+// דבר אחר על המסך, ו"אחר כך" מחזיר אותה בפתיחה הבאה.
+function ReplyPopup({ reply, onAck, onLater }) {
+  return (
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 56 }}>
+      <div style={{ background: C.panel, borderRadius: 18, padding: "22px 20px", width: "100%", maxWidth: 340, fontFamily: fontStack, border: `2.5px solid ${C.brand}`, boxShadow: "0 14px 44px rgba(0,0,0,0.34)", boxSizing: "border-box", maxHeight: "80%", overflowY: "auto" }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: C.brand, marginBottom: 10, textAlign: "center" }}>תשובה מצוות מיי פריים</div>
+        <div style={{ fontSize: 16, color: C.ink, lineHeight: 1.65, whiteSpace: "pre-wrap", marginBottom: 18 }}>{reply.text}</div>
+        <Btn onClick={onAck}>תודה, הבנתי</Btn>
+        <Btn variant="ghost" onClick={onLater} style={{ marginTop: 8 }}>אחר כך</Btn>
+      </div>
+    </div>
+  );
+}
+
 function DevViewportBar() {
   const [s, setS] = useState({});
   const [bad, setBad] = useState(null);
@@ -5896,13 +5995,25 @@ function DevDateBar({ onAnchor }) {
   // "She has already started watching a bonus lesson" is a one-way flag, so without this
   // there is no way back to the state a new woman sees. Testing tool only.
   const resetGlow = () => { try { window.localStorage.removeItem(GLOW_STARTED_KEY); } catch (e) {} window.location.reload(); };
+  // מדמה מעבר חצות בלי לחכות לחצות: מזיז את השעון של האפליקציה יממה קדימה,
+  // ואז מדמה חזרה לאפליקציה מהרקע. **כלי בדיקה בלבד, ואף משתתפת לא רואה אותו.**
+  const crossMidnight = () => {
+    DEV_CLOCK_SHIFT += 24 * 60 * 60 * 1000;
+    try { window.localStorage.setItem("myprime_dev_today", ymd(nowDate())); } catch (e) {}
+    try {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+    } catch (e) {}
+  };
   const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
   return (
-    <div style={{ position: "absolute", top: "env(safe-area-inset-top, 0px)", left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
+    <div id="mp-devbar" style={{ position: "absolute", top: "env(safe-area-inset-top, 0px)", left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
       <span style={{ opacity: 0.7 }}>DEV - יום מדומה</span>
       <button onClick={() => setDay(addDays(TODAY, -1))} style={btn}>-1</button>
       <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
       <button onClick={() => setDay(addDays(TODAY, 1))} style={btn}>+1</button>
+      <button onClick={crossMidnight} style={{ ...btn, background: "#556" }}>מעבר חצות</button>
+      <button onClick={() => { try { window.dispatchEvent(new Event("mp-update-test")); } catch (e) {} }} style={{ ...btn, background: "#556" }}>גרסה חדשה</button>
       <button onClick={reset} style={btn}>איפוס</button>
       <button onClick={resetGlow} style={{ ...btn, background: "#a45" }}>איפוס Glow</button>
       <button onClick={() => onAnchor && onAnchor()} style={{ ...btn, background: "#0a7" }}>קבע יום 1</button>
@@ -5973,6 +6084,7 @@ const FAQ_ITEMS = [
   { q: "איך מתקינים את האפליקציה בטלפון (כמו אפליקציה רגילה)?", a: "באנדרואיד פותחים בדפדפן Chrome, נכנסים לתפריט שלוש הנקודות ובוחרים 'הוספה למסך הבית'. באייפון פותחים ב-Safari, מקישים על שלוש הנקודות בתחתית המסך, בוחרים 'שיתוף' ואז 'הוספה למסך הבית'. כך נוצר אייקון של האפליקציה במסך הבית, ואפשר לפתוח אותה בלחיצה אחת כמו אפליקציה רגילה." },
   { q: "האפליקציה נראית ישנה או לא מתעדכנת - איך מרעננים?", a: "באנדרואיד אפשר למשוך את המסך כלפי מטה כדי לרענן, או לסגור את האפליקציה ולפתוח שוב. באייפון משיכה למטה לא עובדת - צריך לסגור את האפליקציה לגמרי (להחליק מלמטה למעלה, לעצור באמצע, ולהחליק את הכרטיס של האפליקציה כלפי מעלה), ואז לפתוח שוב מהאייקון. אם גם אחרי זה היא עדיין נראית ישנה, אפשר להסיר אותה ממסך הבית ולהוסיף מחדש - אבל שימי לב שזה מאפס את הנתונים במכשיר, אז כדאי לעשות קודם גיבוי במסך הפרופיל." },
   { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
+  { q: "אפשר להזין פעילות גופנית בכל יום?", a: "כן, בכל יום ובלי הגבלה. לוחצים על הפלוס במרכז המסך, בוחרים \"פעילות גופנית\", ומזינים את סוג הפעילות ואת משך הזמן. הקלוריות שנשרפו מתווספות לתקציב היומי שלך באותו יום.\n\nתיבת הסימון \"אימון כוח\" ביומן המעקב מופיעה בראשון, שלישי וחמישי, כי אלה ימי אימוני הכוח בתוכנית. אימון נוסף בכל יום אחר נרשם ונספר בדיוק אותו דבר, פשוט אין לו תיבה לסמן." },
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
   // שש נשים שאלו את זה. מוצגת אך ורק עד שמשימת החלבון נפתחת, כי משם והלאה
   // הטבעת קיימת ביומן והשאלה עונה על עצמה. החלטה של רון.
@@ -6394,17 +6506,24 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [today, setToday] = useState(TODAY);
   useEffect(() => {
-    if (DEV) return; // dev "today" is simulated/fixed; the DevDateBar reloads to change it. Never clobber it with the real date.
-    const sync = () => {
-      const now = ymd(new Date());
-      if (now !== today) { setToday(now); setSelectedDate((sd) => (sd === today ? now : sd)); }
+    // **היום מתעדכן תמיד, והיום הנבחר זז רק כשהיא חוזרת לאפליקציה.**
+    // רון, 29 באוגוסט 2026: "היא לחצה על פלוס שנמצא ביום שישי, מה הקשר בכלל
+    // שהיום עבר לשבת." משתתפת מילאה בשעה מאוחרת של שישי, עבר חצות באמצע,
+    // והאפליקציה העבירה אותה לשבת מתחת לאצבע. עכשיו: בזמן שהיא בפנים שום דבר
+    // לא זז, בחזרה מהרקע היום מתעדכן, ואם יש לה חלון פתוח הוא לא זז גם אז.
+    const sync = (mayMove) => {
+      const now = ymd(nowDate());
+      if (now === today) return;
+      setToday(now);
+      if (mayMove && !sheetRef.current && !modalRef.current) setSelectedDate((sd) => (sd === today ? now : sd));
     };
-    const id = setInterval(sync, 60000);
-    const onVis = () => { if (document.visibilityState === "visible") sync(); };
+    const id = setInterval(() => sync(false), 60000);
+    const onVis = () => { if (document.visibilityState === "visible") sync(true); };
+    const onBack = () => sync(true);
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", sync);
-    window.addEventListener("pageshow", sync);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", sync); window.removeEventListener("pageshow", sync); };
+    window.addEventListener("focus", onBack);
+    window.addEventListener("pageshow", onBack);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", onBack); window.removeEventListener("pageshow", onBack); };
   }, [today]);
   const [modal, setModal] = useState(null);
   const [sheet, setSheet] = useState(null);
@@ -6503,6 +6622,9 @@ export default function App() {
   const [gateBack, setGateBack] = useState("");
   const gatePhone = (() => { try { return localStorage.getItem("myprime_phone") || ""; } catch (e) { return ""; } })();
   const [replies, setReplies] = useState([]);
+  // "אחר כך" דוחה את החלונית לסשן הזה בלבד ואינו נשמר, ולכן היא חוזרת בפתיחה
+  // הבאה. תשובה שהיא לא אישרה לא נעלמת, והיא ממשיכה לחכות גם בבועה.
+  const [replyLater, setReplyLater] = useState([]);
   // Reading one takes it off her bubble here and tells the office she saw it. If the call
   // fails it simply comes back on the next load; nothing of hers depends on it.
   const readReply = (id) => {
@@ -6513,6 +6635,9 @@ export default function App() {
       body: JSON.stringify({ email: gateEmail, noteRead: id }),
     }).catch(() => {});
   };
+  // התשובה הראשונה שהיא עוד לא אישרה ולא דחתה. אחת בכל פעם, כי שתי חלוניות
+  // זו אחרי זו נקראות כהצפה.
+  const replyPop = (replies || []).find((r) => !replyLater.includes(r.id)) || null;
   const [gateAttempts, setGateAttempts] = useState(0);
   const [gateAgree, setGateAgree] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -7274,6 +7399,7 @@ export default function App() {
         {showSplash && <SplashScreen />}
         {DEV && <DevDateBar onAnchor={devAnchorDay1} />}
         {DEV && <DevViewportBar />}
+        <UpdateBar hidden={!!(sheet || modal || tour || favPrompt || notifyPrompt)} />
         {showInstallGate ? (
           <InstallGate onSkip={skipInstall} />
         ) : gate !== "ok" ? (
@@ -7425,6 +7551,11 @@ export default function App() {
               <Btn variant="ghost" onClick={dismissNotify} style={{ marginTop: 8 }}>לא עכשיו</Btn>
             </div>
           </div>
+        )}
+        {/* מוצגת אך ורק כשאין שום דבר אחר על המסך. חלונית שנוחתת מעל מסך פתוח או
+            מעל שאלה אחרת נקראת כתקלה, ובמקרה הגרוע גוזלת ממנה פעולה באמצע. */}
+        {gate === "ok" && onboarded && replyPop && !sheet && !modal && !tour && !favPrompt && !notifyPrompt && (
+          <ReplyPopup reply={replyPop} onAck={() => readReply(replyPop.id)} onLater={() => setReplyLater((a) => [...a, replyPop.id])} />
         )}
       </div>
     </div>

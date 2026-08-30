@@ -85,29 +85,32 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false }) {
+async function stubApi(context, { startDate, glow = false, replies = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow });
+    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, ...(replies ? { replies } : {}) });
     if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify({ reply: "רשמתי לך", done: false, items: [] }) }] });
     if (url.includes("/api/catalog") || url.includes("/api/il-food")) return json({ items: [] });
     return json({ ok: true });
   });
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null, replies = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow });
+  await stubApi(context, { startDate, glow, replies });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
     await context.addInitScript((iso) => {
       const Real = Date;
-      const shift = Real.parse(iso) - Real.now();
+      let shift = Real.parse(iso) - Real.now();
+      // __qaShift מזיז את השעון הלאה אחרי הטעינה, כדי לדמות אפליקציה שפתוחה
+      // אצלה שעות. בלעדיו אי אפשר לבדוק כלל שתלוי בכמה זמן היא בפנים.
+      window.__qaShift = (ms) => { shift += ms; };
       window.Date = new Proxy(Real, {
         construct: (t, a) => (a.length === 0 ? new Real(Real.now() + shift) : new Real(...a)),
         get: (t, k) => (k === "now" ? () => Real.now() + shift : Reflect.get(t, k)),
@@ -966,6 +969,54 @@ const CHECKS = [
     },
   },
   {
+    // משתתפת: "יום שישי הזנתי בטעות את שבת." היא מילאה בשעה מאוחרת, עבר חצות
+    // באמצע, והאפליקציה העבירה אותה ליום החדש מתחת לאצבע. השעון נעוץ ל-23:59:45
+    // והזמן ממשיך משם, ולכן חצות עובר באמת בזמן שהתרחיש רץ.
+    name: "היום לא זז מתחת לאצבע כשעובר חצות",
+    async run(browser, device) {
+      const start = "2026-08-16";
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      const { context, page, errors } = await openApp(browser, device, {
+        startDate: start, clock: "2026-08-28T20:59:45.000Z",   // 23:59:45 בשעון ישראל, יום שישי
+        seed: { profile: prof, weights: [{ date: start, kg: 72 }] },
+      });
+      const bad = [];
+      const line = () => page.evaluate(() => document.querySelector("[data-tut='tracker']")?.innerText.split("\n")[1] || "?");
+      if (!(await line()).includes("28 באוגוסט")) bad.push("לא התחלנו בשישי: " + (await line()));
+      // פותחת את חלון הוספת המזון, ובזמן שהוא פתוח עובר חצות
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(20000);   // חוצה את חצות
+      // והיא קופצת לוואטסאפ באמצע וחוזרת. בקוד הישן זה בדיוק מה שהיה מזיז אותה.
+      await page.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", { get: () => "hidden", configurable: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+        Object.defineProperty(document, "visibilityState", { get: () => "visible", configurable: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+      });
+      await page.waitForTimeout(600);
+      await page.locator("text=חיפוש מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator('input[placeholder="חיפוש מזון…"]').fill("בננה");
+      await page.waitForTimeout(800);
+      await page.locator("text=בננה בינונית").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=/הוסיפי ל/").first().click();
+      await page.waitForTimeout(900);
+      // הפריט חייב לנחות בשישי, היום שממנו היא פתחה
+      const dates = await page.evaluate(() => (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []).map((e) => e.date));
+      if (!dates.includes("2026-08-28")) bad.push("הפריט לא נחת בשישי: " + JSON.stringify(dates));
+      if (dates.includes("2026-08-29")) bad.push("הפריט נחת בשבת");
+      const now = await line();
+      if (!now.includes("28 באוגוסט")) bad.push("היום זז מתחת לאצבע: " + now);
+      if (!now.includes("אתמול")) bad.push("הכותרת אינה אומרת שזה אתמול: " + now);
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `נשארה על ${now} · שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
     // רון: אישה שכמעט לא מילאה קיבלה סיכום שמברך אותה על שבוע מוצלח, ומיד
     // מתחתיו שש שורות של "עוד לא דיווחת". סימן אחד בשבוע הספיק כדי לפתוח אותו.
     name: "שבוע עם דיווח מיום אחד מקבל הודעה במקום סיכום",
@@ -1199,6 +1250,95 @@ const CHECKS = [
                  cr.iosNote === 1 && cr.iosSteps === 0 && sf.iosNote === 0 && sf.iosSteps === 1 &&
                  inst.iosNote === 0 && inst.note === 0 && instProfile.n === 0;
       return { ok, detail: `סמסונג ${sam.note}/${sam.chromeSteps} · כרום ${chr.note}/${chr.chromeSteps} · אייפון-כרום ${cr.iosNote}/${cr.iosSteps} · ספארי ${sf.iosNote}/${sf.iosSteps} · מותקנת ${inst.iosNote} · פרופיל במותקנת ${instProfile.n} (שורה ${instProfile.had})` };
+    },
+  },
+  {
+    // רון שלח לעצמו תשובה וראה עיגול ירוק בלבד. עד עכשיו התשובה חיכתה בתוך הבועה,
+    // ומי שלא הקישה עליה לא ידעה שיש לה תשובה. שלושת השלבים כאן הם ההבטחה כולה:
+    // היא קופצת, "אחר כך" מחזיר אותה בפתיחה הבאה, ו"תודה, הבנתי" סוגר אותה לתמיד.
+    name: "תשובת המשרד קופצת מעצמה, ואחר כך מחזיר אותה בפתיחה הבאה",
+    async run(browser, device) {
+      const replies = [{ id: "r1", text: "בדקנו וזה מטופל, תודה שכתבת." }];
+      const { context, page, errors } = await openApp(browser, device, { replies });
+      const bad = [];
+      const seen = () => page.locator("text=תשובה מצוות מיי פריים").count();
+      if (await seen() !== 1) bad.push("החלונית לא קפצה");
+      const body = await page.evaluate(() => document.body.innerText);
+      if (!body.includes("בדקנו וזה מטופל")) bad.push("הטקסט של התשובה אינו מוצג");
+      await page.getByRole("button", { name: "אחר כך" }).first().click().catch(() => {});
+      await page.waitForTimeout(400);
+      if (await seen() !== 0) bad.push('"אחר כך" לא סגר');
+      // דחייה לסשן הזה בלבד. אם היא נשמרת, התשובה נעלמת ממנה לתמיד בלי שאישרה.
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(2600);
+      await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
+      if (await seen() !== 1) bad.push('החלונית לא חזרה אחרי "אחר כך"');
+      await page.getByRole("button", { name: "תודה, הבנתי" }).first().click().catch(() => {});
+      await page.waitForTimeout(500);
+      if (await seen() !== 0) bad.push('"תודה, הבנתי" לא סגר');
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
+    // אישה שאינה סוגרת את האפליקציה ממשיכה להריץ קוד ישן ימים. כאן מדמים בדיוק
+    // את זה: הדף שבשרת מצביע על קובץ קוד אחר, והיא חוזרת לאפליקציה.
+    name: "פס הרענון מופיע כשיש גרסה חדשה בשרת, ולא לפני",
+    async run(browser, device) {
+      const bad = [];
+      // **שני דפים ולא אחד, וזו לא קפריזה:** הבדיקה מוגבלת לפעם בחמש דקות, ולכן
+      // בדיקה שנייה באותו דף לא הייתה יוצאת כלל והתרחיש היה "עובר" בלי לבדוק כלום.
+      const barCount = (page) => page.locator("text=יש גרסה חדשה של האפליקציה").count();
+
+      const NEW_HTML = '<script type="module" crossorigin src="/assets/index-NEWBUILD.js"></script>';
+      const CLOCK = "2026-08-26T09:00:00.000Z";
+
+      // א. הדף בשרת זהה לזה שנטען. הפס חייב לא להופיע, אחרת פס שמופיע תמיד
+      // נראה בדיוק כמו פס שלא מופיע אף פעם.
+      {
+        const { context, page, errors } = await openApp(browser, device, { clock: CLOCK });
+        await page.evaluate(() => window.__qaShift(13 * 3600 * 1000));
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await page.waitForTimeout(1200);
+        if (await barCount(page) !== 0) bad.push("הפס הופיע כשאין גרסה חדשה");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+
+      // ב. יש גרסה חדשה, אבל האפליקציה נפתחה לפני רגע. **הסף של רון:** מי שפותחת
+      // כל בוקר מקבלת את הגרסה החדשה ממילא, ואין סיבה להציג לה פס.
+      {
+        const { context, page, errors } = await openApp(browser, device, { clock: CLOCK });
+        await context.route("**/index.html", (route) => route.fulfill({ status: 200, contentType: "text/html", body: NEW_HTML }));
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await page.waitForTimeout(1200);
+        if (await barCount(page) !== 0) bad.push("הפס הופיע אף שהאפליקציה נפתחה זה עתה");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+
+      // ג. ואצל מי שהאפליקציה פתוחה אצלה 13 שעות, הפס כן מופיע.
+      {
+        const { context, page, errors } = await openApp(browser, device, { clock: CLOCK });
+        await context.route("**/index.html", (route) => route.fulfill({ status: 200, contentType: "text/html", body: NEW_HTML }));
+        await page.evaluate(() => window.__qaShift(13 * 3600 * 1000));
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await page.waitForTimeout(1500);
+        if (await barCount(page) !== 1) bad.push("הפס לא הופיע אחרי שהגרסה בשרת השתנתה");
+        // ולעולם לא מרעננים לבד: אחרי שהפס מוצג, הדף חייב להישאר אותו דף.
+        const url1 = page.url();
+        await page.waitForTimeout(1200);
+        if (page.url() !== url1) bad.push("הדף רוענן מעצמו");
+        if (await barCount(page) !== 1) bad.push("הפס נעלם מעצמו");
+        // וה-✕ מסתיר אותו לסשן הזה, בלי לרענן.
+        await page.locator('button[aria-label="סגירה"]').first().click().catch(() => {});
+        await page.waitForTimeout(400);
+        if (await barCount(page) !== 0) bad.push("ה-✕ לא הסתיר את הפס");
+        if (page.url() !== url1) bad.push("ה-✕ רענן את הדף");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "בלי גרסה חדשה 0 · נפתחה עכשיו 0 · פתוחה 13 שעות 1 · ✕ מסתיר" };
     },
   },
 ];
