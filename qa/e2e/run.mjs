@@ -107,7 +107,10 @@ async function openApp(browser, device, { day = 10, startDate: fixedStart = null
   if (clock) {
     await context.addInitScript((iso) => {
       const Real = Date;
-      const shift = Real.parse(iso) - Real.now();
+      let shift = Real.parse(iso) - Real.now();
+      // __qaShift מזיז את השעון הלאה אחרי הטעינה, כדי לדמות אפליקציה שפתוחה
+      // אצלה שעות. בלעדיו אי אפשר לבדוק כלל שתלוי בכמה זמן היא בפנים.
+      window.__qaShift = (ms) => { shift += ms; };
       window.Date = new Proxy(Real, {
         construct: (t, a) => (a.length === 0 ? new Real(Real.now() + shift) : new Real(...a)),
         get: (t, k) => (k === "now" ? () => Real.now() + shift : Reflect.get(t, k)),
@@ -1287,10 +1290,14 @@ const CHECKS = [
       // בדיקה שנייה באותו דף לא הייתה יוצאת כלל והתרחיש היה "עובר" בלי לבדוק כלום.
       const barCount = (page) => page.locator("text=יש גרסה חדשה של האפליקציה").count();
 
+      const NEW_HTML = '<script type="module" crossorigin src="/assets/index-NEWBUILD.js"></script>';
+      const CLOCK = "2026-08-26T09:00:00.000Z";
+
       // א. הדף בשרת זהה לזה שנטען. הפס חייב לא להופיע, אחרת פס שמופיע תמיד
       // נראה בדיוק כמו פס שלא מופיע אף פעם.
       {
-        const { context, page, errors } = await openApp(browser, device);
+        const { context, page, errors } = await openApp(browser, device, { clock: CLOCK });
+        await page.evaluate(() => window.__qaShift(13 * 3600 * 1000));
         await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
         await page.waitForTimeout(1200);
         if (await barCount(page) !== 0) bad.push("הפס הופיע כשאין גרסה חדשה");
@@ -1298,10 +1305,23 @@ const CHECKS = [
         await context.close();
       }
 
-      // ב. ועכשיו הדף בשרת מצביע על קובץ קוד אחר, בדיוק כמו אחרי בנייה חדשה.
+      // ב. יש גרסה חדשה, אבל האפליקציה נפתחה לפני רגע. **הסף של רון:** מי שפותחת
+      // כל בוקר מקבלת את הגרסה החדשה ממילא, ואין סיבה להציג לה פס.
       {
-        const { context, page, errors } = await openApp(browser, device);
-        await context.route("**/index.html", (route) => route.fulfill({ status: 200, contentType: "text/html", body: '<script type="module" crossorigin src="/assets/index-NEWBUILD.js"></script>' }));
+        const { context, page, errors } = await openApp(browser, device, { clock: CLOCK });
+        await context.route("**/index.html", (route) => route.fulfill({ status: 200, contentType: "text/html", body: NEW_HTML }));
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await page.waitForTimeout(1200);
+        if (await barCount(page) !== 0) bad.push("הפס הופיע אף שהאפליקציה נפתחה זה עתה");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+
+      // ג. ואצל מי שהאפליקציה פתוחה אצלה 13 שעות, הפס כן מופיע.
+      {
+        const { context, page, errors } = await openApp(browser, device, { clock: CLOCK });
+        await context.route("**/index.html", (route) => route.fulfill({ status: 200, contentType: "text/html", body: NEW_HTML }));
+        await page.evaluate(() => window.__qaShift(13 * 3600 * 1000));
         await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
         await page.waitForTimeout(1500);
         if (await barCount(page) !== 1) bad.push("הפס לא הופיע אחרי שהגרסה בשרת השתנתה");
@@ -1310,10 +1330,15 @@ const CHECKS = [
         await page.waitForTimeout(1200);
         if (page.url() !== url1) bad.push("הדף רוענן מעצמו");
         if (await barCount(page) !== 1) bad.push("הפס נעלם מעצמו");
+        // וה-✕ מסתיר אותו לסשן הזה, בלי לרענן.
+        await page.locator('button[aria-label="סגירה"]').first().click().catch(() => {});
+        await page.waitForTimeout(400);
+        if (await barCount(page) !== 0) bad.push("ה-✕ לא הסתיר את הפס");
+        if (page.url() !== url1) bad.push("ה-✕ רענן את הדף");
         if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
         await context.close();
       }
-      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "לפני 0 · אחרי 1 · בלי רענון עצמי" };
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "בלי גרסה חדשה 0 · נפתחה עכשיו 0 · פתוחה 13 שעות 1 · ✕ מסתיר" };
     },
   },
 ];

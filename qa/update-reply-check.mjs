@@ -26,7 +26,7 @@ check("הרענון היחיד הוא בהקשה על הכפתור",
 check("אין רענון בטיימר ואין רענון באפקט",
   !/setTimeout\([^)]*reload/.test(bar) && !/setInterval\([^)]*reload/.test(bar));
 check("הפס מוסתר כשחלון פתוח, כדי שלא תקיש רענון באמצע הזנה",
-  /if \(!stale \|\| hidden\) return null;/.test(bar) &&
+  /if \(!stale \|\| hidden \|\| dismissed\) return null;/.test(bar) &&
   /<UpdateBar hidden=\{!!\(sheet \|\| modal \|\| tour \|\| favPrompt \|\| notifyPrompt\)\} \/>/.test(app));
 
 console.log("\nאיך הוא מזהה גרסה חדשה\n");
@@ -36,6 +36,13 @@ check("בלי פונקציה חדשה בשרת: הבדיקה היא על הדף 
 check("נבדק בחזרה לאפליקציה ולא בלולאה",
   /visibilitychange/.test(bar) && /addEventListener\("focus", check\)/.test(bar));
 check("ולא יותר מפעם בחמש דקות", /UPDATE_CHECK_MS = 5 \* 60 \* 1000/.test(app) && /now - lastRef\.current < UPDATE_CHECK_MS/.test(bar));
+// **הסף שמונע ניג'וז.** רון מעלה כמה גרסאות ביום, ובלי זה אישה שפתחה בבוקר
+// וחזרה בצהריים הייתה מקבלת פס בלי שהיא תקועה על כלום.
+check("ומופיע רק אחרי 12 שעות שהאפליקציה פתוחה אצלה",
+  /UPDATE_MIN_OPEN_MS = 12 \* 60 \* 60 \* 1000/.test(app) && /now - LOADED_AT < UPDATE_MIN_OPEN_MS/.test(bar));
+check("ויש ✕ שמסתיר לסשן הזה בלבד",
+  /setDismissed\(true\)/.test(bar) && /if \(!stale \|\| hidden \|\| dismissed\) return null;/.test(bar) &&
+  !/dismissed[\s\S]{0,120}localStorage/.test(bar));
 check("וכשלון של הבדיקה שקט ואינו מציג כלום", /\} catch \(e\) \{\}/.test(bar));
 check("הקופי שאושר, מילה במילה", bar.includes("יש גרסה חדשה של האפליקציה") && bar.includes(">רענון<"));
 
