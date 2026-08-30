@@ -699,7 +699,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.62";
+const VERSION = "6.66";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3217,8 +3217,9 @@ const ONBOARD_SLIDES = [
   { img: "/pdf/onboard-2.jpg", text: "בכל יום יחכו לך כאן הסרטונים והתכנים של אותו יום. כדי לפתוח אותם, פשוט לוחצים על הכרטיס 'הסרטונים שלך היום' במסך הראשי." },
   { img: "/pdf/onboard-4.jpg", text: "לאחר קריאת ההנחיות שכתבתי לך, לוחצים על הסרטון כדי להתחיל לצפות. אחרי שתסיימי, הסרטון יסומן כהושלם באופן אוטומטי - את לא צריכה לעשות דבר 💜 ואם תרצי, תמיד אפשר לסמן שהשלמת גם בעצמך." },
   { img: "/pdf/onboard-5.jpg", text: "אהבת סרטון במיוחד ותרצי לחזור אליו בקלות? סמני אותו בלב, והוא יישמר לך ברשימת המועדפים - כך תמצאי אותו בכל רגע." },
-  { img: "/pdf/onboard-9.jpg", text: "בכל סרטון יש כמה אפשרויות נוחות: אפשר להגדיל אותו למסך מלא בלחיצה על הריבוע שבפינה - מומלץ מאוד לצפייה נעימה 💜 וגם לשלוט בעוצמת הקול לפי מה שנוח לך." },
-  { img: "/pdf/onboard-6.jpg", text: "בתוך מסך הסרטונים יש שתי תצוגות: 'היום' - התכנים של היום הנוכחי. 'כל התוכנית' - כל מה שכבר נפתח, מסודר לפי שבוע ויום. שם גם קל למצוא בנפרד את המשימות, האימונים, השיעורים והמועדפים שלך." },
+  { img: "/pdf/onboard-sound.jpg", text: "לשינוי עוצמת הקול: מקישים פעם אחת על הסרטון, ואז מקישים פעם אחת על סמל הרמקול, או על בורר הקול שנמצא בפס שלידו, והקול חוזר 💜", b: "לשינוי עוצמת הקול" },
+  { img: "/pdf/onboard-9.jpg", text: "ואפשר להגדיל את הסרטון למסך מלא, בלחיצה על הריבוע שבפינה. מומלץ מאוד לצפייה נעימה 💜", b: "להגדיל את הסרטון למסך מלא" },
+  { img: "/pdf/onboard-6.jpg", text: "בתוך מסך הסרטונים יש שתי תצוגות: 'היום' - התכנים של היום הנוכחי. 'כל התוכנית' - כל מה שכבר נפתח, מסודר לפי שבוע ויום. שם גם קל למצוא בנפרד את המשימות, האימונים, השיעורים והמועדפים שלך.", b: "מסך הסרטונים" },
   { img: "/pdf/onboard-7.jpg", text: "הפס הקטן שעל כרטיס הסרטונים מראה כמה מהתכנים של היום כבר השלמת. ככל שתתקדמי הוא יתמלא - דרך נחמדה לעקוב אם פספסת משהו 💜" },
   { img: "/pdf/onboard-8.jpg", text: "זהו, את מוכנה 🌸 בהמשך השבוע ובמהלך התוכנית יתווספו דברים חדשים לאפליקציה לפי ההתקדמות. אל דאגה - ברגע שמשהו חדש מתחיל, יהיה לך הסבר מסודר עליו. נשאר רק להתחיל. אני כאן איתך בכל צעד בדרך. בהצלחה 💜 ענת" },
 ];
@@ -3233,8 +3234,9 @@ const CATCHUP_GUIDE = [
   { img: "/pdf/onboard-2.jpg", title: "הסרטונים שלך היום", text: "בכל יום יחכו לך כאן הסרטונים והתכנים של אותו יום. כדי לפתוח אותם, פשוט לוחצים על הכרטיס 'הסרטונים שלך היום' במסך הראשי." },
   { img: "/pdf/onboard-4.jpg", title: "איך צופים", text: "לאחר קריאת ההנחיות שכתבתי לך, לוחצים על הסרטון כדי להתחיל לצפות. אחרי שתסיימי, הסרטון יסומן כהושלם באופן אוטומטי - את לא צריכה לעשות דבר 💜 ואם תרצי, תמיד אפשר לסמן שהשלמת גם בעצמך." },
   { img: "/pdf/onboard-5.jpg", title: "מועדפים", text: "אהבת סרטון במיוחד ותרצי לחזור אליו בקלות? סמני אותו בלב, והוא יישמר לך ברשימת המועדפים - כך תמצאי אותו בכל רגע." },
-  { img: "/pdf/onboard-9.jpg", title: "אפשרויות הנגן", text: "בכל סרטון יש כמה אפשרויות נוחות: אפשר להגדיל אותו למסך מלא בלחיצה על הריבוע שבפינה - מומלץ מאוד לצפייה נעימה 💜 וגם לשלוט בעוצמת הקול לפי מה שנוח לך." },
-  { img: "/pdf/onboard-6.jpg", title: "היום מול כל התוכנית", text: "בתוך מסך הסרטונים יש שתי תצוגות: 'היום' - התכנים של היום הנוכחי. 'כל התוכנית' - כל מה שכבר נפתח, מסודר לפי שבוע ויום. שם גם קל למצוא בנפרד את המשימות, האימונים, השיעורים והמועדפים שלך." },
+  { img: "/pdf/onboard-sound.jpg", title: "אין קול?", text: "לשינוי עוצמת הקול: מקישים פעם אחת על הסרטון, ואז מקישים פעם אחת על סמל הרמקול, או על בורר הקול שנמצא בפס שלידו, והקול חוזר 💜", b: "לשינוי עוצמת הקול" },
+  { img: "/pdf/onboard-9.jpg", title: "הגדלת המסך", text: "ואפשר להגדיל את הסרטון למסך מלא, בלחיצה על הריבוע שבפינה. מומלץ מאוד לצפייה נעימה 💜", b: "להגדיל את הסרטון למסך מלא" },
+  { img: "/pdf/onboard-6.jpg", title: "היום מול כל התוכנית", text: "בתוך מסך הסרטונים יש שתי תצוגות: 'היום' - התכנים של היום הנוכחי. 'כל התוכנית' - כל מה שכבר נפתח, מסודר לפי שבוע ויום. שם גם קל למצוא בנפרד את המשימות, האימונים, השיעורים והמועדפים שלך.", b: "מסך הסרטונים" },
   { img: "/pdf/onboard-7.jpg", title: "מעקב ההתקדמות", text: "הפס הקטן שעל כרטיס הסרטונים מראה כמה מהתכנים של היום כבר השלמת. ככל שתתקדמי הוא יתמלא - דרך נחמדה לעקוב אם פספסת משהו 💜" },
   { img: "/pdf/onboard-8.jpg", title: "וזהו", text: "זהו, עכשיו את מכירה את האפליקציה 🌸 ככל שתתקדמי בתוכנית יתווספו עוד דברים, וכשמשהו חדש מתחיל יהיה לך הסבר עליו. אני כאן איתך בכל צעד בדרך. בהצלחה 💜 ענת" },
 ];
@@ -3253,7 +3255,7 @@ const CATCHUP_SLIDES = [
 // A screenshot framed like a phone, so guide slides read as "this is your screen".
 function PhoneShot({ src, max = 270 }) {
   return (
-    <div style={{ width: "100%", maxWidth: max, margin: "0 auto 15px", background: "#2C2226", borderRadius: 22, padding: "9px 7px", boxShadow: "0 8px 22px rgba(60,30,40,0.26)" }}>
+    <div style={{ width: "100%", maxWidth: max, margin: "0 auto 10px", background: "#2C2226", borderRadius: 22, padding: "9px 7px", boxShadow: "0 8px 22px rgba(60,30,40,0.26)" }}>
       <div style={{ height: 4, width: 42, background: "#4A3B40", borderRadius: 99, margin: "0 auto 6px" }} />
       <img src={src} alt="" style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 14, display: "block", background: C.bg }} />
       <div style={{ height: 4, width: 66, background: "#4A3B40", borderRadius: 99, margin: "7px auto 1px" }} />
@@ -3273,22 +3275,22 @@ function CatchupModal({ progDay, onClose }) {
   const s = slides[Math.min(i, n - 1)];
   const last = i >= n - 1;
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18, zIndex: 48 }}>
-      <div style={{ background: C.panel, borderRadius: 22, width: "100%", maxWidth: 420, maxHeight: "90%", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: fontStack, boxShadow: "0 16px 48px rgba(0,0,0,0.34)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px 4px" }}>
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 8, zIndex: 48 }}>
+      <div style={{ background: C.panel, borderRadius: 22, width: "100%", maxWidth: 420, maxHeight: "98%", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: fontStack, boxShadow: "0 16px 48px rgba(0,0,0,0.34)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 16px 2px" }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: C.brandD }}>הדרכה וסקירה קצרה</span>
           <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={22} /></button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 22px 18px", textAlign: s.guide ? "center" : "right" }}>
-          {s.guide && s.img && <PhoneShot src={s.img} max={260} />}
-          {!s.guide && <div style={{ fontSize: 13, fontWeight: 700, color: C.brand, marginBottom: 6 }}>{s.when}</div>}
-          <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.4, marginBottom: 10 }}>{s.title}</div>
-          <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>{s.text}</p>
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 10px", textAlign: s.guide ? "center" : "right" }}>
+          {s.guide && s.img && <PhoneShot src={s.img} max={240} />}
+          {!s.guide && <div style={{ fontSize: 13, fontWeight: 700, color: C.brand, marginBottom: 3 }}>{s.when}</div>}
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.3, marginBottom: 6 }}>{s.title}</div>
+          <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.5, margin: 0 }}>{withBold(s.text, s.b)}</p>
         </div>
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, padding: "6px 0 2px", fontSize: 13, color: C.faint }}>
           <span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{i + 1} / {n}</span>
         </div>
-        <div style={{ display: "flex", gap: 10, padding: "10px 18px max(14px, env(safe-area-inset-bottom))" }}>
+        <div style={{ display: "flex", gap: 10, padding: "8px 18px max(10px, env(safe-area-inset-bottom))" }}>
           {i > 0 && <button onClick={() => setI(i - 1)} style={{ flex: 1, border: `1.5px solid ${C.brand}`, background: C.panel, color: C.brandD, borderRadius: 12, padding: "12px 0", fontSize: 16, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
           <button onClick={() => (last ? onClose() : setI(i + 1))} style={{ flex: 2, border: "none", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", borderRadius: 12, padding: "12px 0", fontSize: 16, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{last ? "סיימתי 💜" : "הבא"}</button>
         </div>
@@ -3313,22 +3315,22 @@ function OnboardingModal({ onClose }) {
     if (dx > 0 && i > 0) setI(i - 1);
   };
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18, zIndex: 48 }}>
-      <div style={{ background: C.panel, borderRadius: 22, width: "100%", maxWidth: 420, maxHeight: "90%", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: fontStack, boxShadow: "0 16px 48px rgba(0,0,0,0.34)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px 4px" }}>
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 8, zIndex: 48 }}>
+      <div style={{ background: C.panel, borderRadius: 22, width: "100%", maxWidth: 420, maxHeight: "98%", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: fontStack, boxShadow: "0 16px 48px rgba(0,0,0,0.34)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 16px 2px" }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: C.brandD }}>הדרכה ראשונית</span>
           <button onClick={onClose} aria-label="סגירה" style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={22} /></button>
         </div>
-        <div onTouchStart={onTS} onTouchEnd={onTE} style={{ flex: 1, overflowY: "auto", padding: "6px 20px 16px", textAlign: "center" }}>
-          <PhoneShot src={s.img} max={280} />
-          <p style={{ fontSize: 16.5, color: C.ink, lineHeight: 1.75, margin: 0, whiteSpace: "pre-line" }}>{s.text}</p>
+        <div onTouchStart={onTS} onTouchEnd={onTE} style={{ flex: 1, overflowY: "auto", padding: "4px 20px 10px", textAlign: "center" }}>
+          <PhoneShot src={s.img} max={240} />
+          <p style={{ fontSize: 16.5, color: C.ink, lineHeight: 1.5, margin: 0, whiteSpace: "pre-line" }}>{withBold(s.text, s.b)}</p>
         </div>
         <div style={{ display: "flex", justifyContent: "center", gap: 7, padding: "4px 0 2px" }}>
           {ONBOARD_SLIDES.map((_, k) => (
             <span key={k} onClick={() => setI(k)} style={{ width: k === i ? 22 : 8, height: 8, borderRadius: 999, background: k === i ? C.brand : C.line, cursor: "pointer", transition: "width .2s, background .2s" }} />
           ))}
         </div>
-        <div style={{ display: "flex", gap: 10, padding: "10px 18px max(14px, env(safe-area-inset-bottom))" }}>
+        <div style={{ display: "flex", gap: 10, padding: "8px 18px max(10px, env(safe-area-inset-bottom))" }}>
           {i > 0 && <button onClick={() => setI(i - 1)} style={{ flex: 1, border: `1.5px solid ${C.brand}`, background: C.panel, color: C.brandD, borderRadius: 12, padding: "12px 0", fontSize: 16, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>הקודם</button>}
           <button onClick={() => (last ? onClose() : setI(i + 1))} style={{ flex: 2, border: "none", background: `linear-gradient(135deg, ${C.brand}, ${C.brandD})`, color: "#fff", borderRadius: 12, padding: "12px 0", fontSize: 16, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>{last ? "מתחילות! 💜" : "הבא"}</button>
         </div>
@@ -6090,6 +6092,7 @@ function tourLastOnly() { return [TOUR_TAIL[TOUR_TAIL.length - 1]]; }
 const FAQ_ITEMS = [
   { q: "איך מתקינים את האפליקציה בטלפון (כמו אפליקציה רגילה)?", a: "באנדרואיד פותחים בדפדפן Chrome, נכנסים לתפריט שלוש הנקודות ובוחרים 'הוספה למסך הבית'. באייפון פותחים ב-Safari, מקישים על שלוש הנקודות בתחתית המסך, בוחרים 'שיתוף' ואז 'הוספה למסך הבית'. כך נוצר אייקון של האפליקציה במסך הבית, ואפשר לפתוח אותה בלחיצה אחת כמו אפליקציה רגילה." },
   { q: "האפליקציה נראית ישנה או לא מתעדכנת - איך מרעננים?", a: "באנדרואיד אפשר למשוך את המסך כלפי מטה כדי לרענן, או לסגור את האפליקציה ולפתוח שוב. באייפון משיכה למטה לא עובדת - צריך לסגור את האפליקציה לגמרי (להחליק מלמטה למעלה, לעצור באמצע, ולהחליק את הכרטיס של האפליקציה כלפי מעלה), ואז לפתוח שוב מהאייקון. אם גם אחרי זה היא עדיין נראית ישנה, אפשר להסיר אותה ממסך הבית ולהוסיף מחדש - אבל שימי לב שזה מאפס את הנתונים במכשיר, אז כדאי לעשות קודם גיבוי במסך הפרופיל." },
+  { q: "אין קול בסרטון, מה עושים?", a: "לשינוי עוצמת הקול: מקישים פעם אחת על הסרטון, ואז מקישים פעם אחת על סמל הרמקול, או על בורר הקול שנמצא בפס שלידו." },
   { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
   { q: "אפשר להזין פעילות גופנית בכל יום?", a: "כן, בכל יום ובלי הגבלה. לוחצים על הפלוס במרכז המסך, בוחרים \"פעילות גופנית\", ומזינים את סוג הפעילות ואת משך הזמן. הקלוריות שנשרפו מתווספות לתקציב היומי שלך באותו יום.\n\nתיבת הסימון \"אימון כוח\" ביומן המעקב מופיעה בראשון, שלישי וחמישי, כי אלה ימי אימוני הכוח בתוכנית. אימון נוסף בכל יום אחר נרשם ונספר בדיוק אותו דבר, פשוט אין לו תיבה לסמן." },
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },

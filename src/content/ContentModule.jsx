@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Play, Maximize2, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
+import { Play, Maximize2, VolumeX, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
 import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted } from "./glow";
 export { contentForDay } from "./data";
@@ -159,6 +159,13 @@ function BunnyPlayer({ videoId, C, font, onReach80, onStart }) {
   return (<>
     <div style={{ fontSize: 14, fontWeight: 700, color: C.brandD, marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", lineHeight: 1.6 }}>
       <span>לחצי</span><Play size={15} /><span>לצפייה, ולאחר מכן לחצי על</span><Maximize2 size={15} /><span>הגדלת המסך</span>
+    </div>
+    {/* **הסרטון נפתח מושתק, וזה הדפדפן ולא אנחנו.** שתי משתתפות עם סמסונג לא מצאו
+        את הכפתור, ורון ביקש שההנחיה תהיה מפורשת: על מה מקישים, ובאיזה סדר. השורה
+        הזאת יושבת מתחת לכל סרטון, כי ההדרכה מוצגת פעם אחת ביום הראשון והבעיה
+        קורית בשבוע השלישי. */}
+    <div style={{ fontSize: 14, color: C.sub, marginBottom: 10, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", lineHeight: 1.6 }}>
+      <span><b>אין קול?</b> הקישי פעם אחת על הסרטון, ואז פעם אחת על</span><VolumeX size={15} /><span>או על בורר הקול שנמצא בפס שלידו.</span>
     </div>
     <div ref={boxRef} style={box}><iframe ref={iframeRef} src={url} loading="lazy" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture" allowFullScreen style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }} title="סרטון" /></div>
   </>);
