@@ -700,7 +700,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.57";
+const VERSION = "6.58";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5841,8 +5841,16 @@ const CURRENT_BUNDLE = (() => {
 })();
 const UPDATE_CHECK_MS = 5 * 60 * 1000;      // לא בודקים יותר מפעם בחמש דקות
 const UPDATE_POLL_MS = 30 * 60 * 1000;      // ולמי שלא יוצאת ולא חוזרת, פעם בחצי שעה
+// **הסף שמונע ניג'וז, וזו החלטה של רון.** רון מעלה כמה גרסאות ביום, ובלי הסף
+// אישה שפתחה בבוקר וחזרה בצהריים הייתה מקבלת פס אף שהיא לא "תקועה על גרסה
+// ישנה" אלא פשוט באמצע היום. **הפס נועד למי שלא סוגרת בכלל**, ולכן הוא מופיע
+// רק אחרי שהאפליקציה פתוחה אצלה יותר מ-12 שעות ברציפות. מי שפותחת כל בוקר
+// מקבלת את הגרסה החדשה ממילא, בלי שנאמר לה מילה.
+const UPDATE_MIN_OPEN_MS = 12 * 60 * 60 * 1000;
+const LOADED_AT = Date.now();
 function UpdateBar({ hidden }) {
   const [stale, setStale] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const lastRef = useRef(0);
   const staleRef = useRef(false); staleRef.current = stale;
   useEffect(() => {
@@ -5855,6 +5863,7 @@ function UpdateBar({ hidden }) {
     const check = async () => {
       if (staleRef.current) return;
       const now = Date.now();
+      if (now - LOADED_AT < UPDATE_MIN_OPEN_MS) return;
       if (now - lastRef.current < UPDATE_CHECK_MS) return;
       lastRef.current = now;
       try {
@@ -5872,11 +5881,15 @@ function UpdateBar({ hidden }) {
     return () => { alive = false; clearInterval(id); window.removeEventListener("mp-update-test", force); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", check); };
   }, []);
   // כשחלון פתוח הפס אינו מוצג, כדי שלא תקיש "רענון" באמצע הזנה ותאבד אותה.
-  if (!stale || hidden) return null;
+  if (!stale || hidden || dismissed) return null;
   return (
     <div style={{ position: "absolute", top: DEV ? "calc(env(safe-area-inset-top, 0px) + 42px)" : "env(safe-area-inset-top, 0px)", insetInlineStart: 0, insetInlineEnd: 0, zIndex: 60, background: C.brand, color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 14px", fontFamily: fontStack, direction: "rtl", boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}>
       <span style={{ fontSize: 15, fontWeight: 600 }}>יש גרסה חדשה של האפליקציה</span>
-      <button onClick={() => { try { window.location.reload(); } catch (e) {} }} style={{ background: "#fff", color: C.brand, border: "none", borderRadius: 999, padding: "5px 17px", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", flexShrink: 0 }}>רענון</button>
+      <span style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+        <button onClick={() => { try { window.location.reload(); } catch (e) {} }} style={{ background: "#fff", color: C.brand, border: "none", borderRadius: 999, padding: "5px 17px", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>רענון</button>
+        {/* מסתיר לסשן הזה בלבד, ואינו נשמר: בפתיחה הבאה היא ממילא תקבל את הגרסה החדשה. */}
+        <button onClick={() => setDismissed(true)} aria-label="סגירה" style={{ background: "transparent", color: "#fff", border: "none", fontSize: 19, lineHeight: 1, padding: "2px 6px", cursor: "pointer", opacity: 0.85 }}>✕</button>
+      </span>
     </div>
   );
 }
