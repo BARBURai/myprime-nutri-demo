@@ -699,7 +699,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.64";
+const VERSION = "6.65";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3255,7 +3255,7 @@ const CATCHUP_SLIDES = [
 // A screenshot framed like a phone, so guide slides read as "this is your screen".
 function PhoneShot({ src, max = 270 }) {
   return (
-    <div style={{ width: "100%", maxWidth: max, margin: "0 auto 15px", background: "#2C2226", borderRadius: 22, padding: "9px 7px", boxShadow: "0 8px 22px rgba(60,30,40,0.26)" }}>
+    <div style={{ width: "100%", maxWidth: max, margin: "0 auto 10px", background: "#2C2226", borderRadius: 22, padding: "9px 7px", boxShadow: "0 8px 22px rgba(60,30,40,0.26)" }}>
       <div style={{ height: 4, width: 42, background: "#4A3B40", borderRadius: 99, margin: "0 auto 6px" }} />
       <img src={src} alt="" style={{ width: "100%", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: 14, display: "block", background: C.bg }} />
       <div style={{ height: 4, width: 66, background: "#4A3B40", borderRadius: 99, margin: "7px auto 1px" }} />
@@ -3283,8 +3283,8 @@ function CatchupModal({ progDay, onClose }) {
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 22px 18px", textAlign: s.guide ? "center" : "right" }}>
           {s.guide && s.img && <PhoneShot src={s.img} max={260} />}
-          {!s.guide && <div style={{ fontSize: 13, fontWeight: 700, color: C.brand, marginBottom: 6 }}>{s.when}</div>}
-          <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.4, marginBottom: 10 }}>{s.title}</div>
+          {!s.guide && <div style={{ fontSize: 13, fontWeight: 700, color: C.brand, marginBottom: 3 }}>{s.when}</div>}
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.3, marginBottom: 6 }}>{s.title}</div>
           <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.5, margin: 0 }}>{s.text}</p>
         </div>
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 8, padding: "6px 0 2px", fontSize: 13, color: C.faint }}>
