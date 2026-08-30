@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.62** · עודכן: 28 באוגוסט 2026
+**גרסה נוכחית: v6.63** · עודכן: 28 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,24 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v6.63** - **"אין קול?" מתחת לכל סרטון, ושקופית משלו בהדרכה.** שתי משתתפות עם סמסונג לא מצאו את כפתור הקול בנגן. רון: "מסתבר שהן לא מבינות איפה הכפתור של הווליום שנמצא בתוך הסרטון".
+
+### מה שהיה בהדרכה, ולמה הוא לא הספיק
+**כן הייתה התייחסות, והיא הייתה שגויה ולא רק חסרה.** שקופית "אפשרויות הנגן" הסתיימה ב"וגם לשלוט בעוצמת הקול לפי מה שנוח לך", **כלומר היא מנוסחת כאילו הקול עובד והיא רק מכווננת אותו.** בפועל הסרטון נפתח מושתק, וזה משפט אחר לגמרי.
+
+**ובתמונה של אותה שקופית מסומן רק כפתור הגדלת המסך.** סמל הרמקול נמצא בה, ליד הזמן, **ואינו מסומן בכלל.**
+
+### מה נכנס
+**שלושה חלקים, והשלישי הוא העיקר:**
+
+1. **תמונה חדשה, `onboard-sound.jpg`**, נגזרת מאותו צילום, **שמסמנת את סמל הרמקול בעיגול אדום ואת בורר הקול שלידו במסגרת.**
+2. **שקופית קול בהדרכה, לפני זו של הגדלת המסך**, בשני המקומות: ההדרכה הראשונית והמדריך למצטרפת מאוחרת. **הנוסח של רון:** "מקישים פעם אחת על הסרטון, ואז מקישים פעם אחת על סמל הרמקול, או על בורר הקול שנמצא בפס שלידו, והקול חוזר."
+3. **ושורה מתחת לכל סרטון**, מיד אחרי "לחצי לצפייה": **"אין קול? הקישי פעם אחת על הסרטון, ואז פעם אחת על 🔇 או על בורר הקול שנמצא בפס שלידו."**
+
+**החלק השלישי הוא מה שבאמת פותר, ומשתי סיבות:** ההדרכה מוצגת פעם אחת ביום הראשון והבעיה קורית בשבוע השלישי, **ומי שכבר בתוכנית לא תראה את ההדרכה שוב בכלל.** השורה מתחת לנגן מגיעה לכולן מיד.
+
+**`qa/sound-note-check.mjs`, 17 בדיקות בלי רשת**, ואחת מהן נופלת אם הנוסח הישן יחזור. **אומת שיש להן שיניים: על הקוד שאצל הנשים הן מחזירות 3 מתוך 17.**
 
 **v6.62** - **חזרה מהקפאה לשבוע הנוכחי ולשבועות שכבר עברו.** רון: "אני רוצה להכניס מישהי מהקפאה לשבוע הקיים והיא נכנסת בשבוע השני שלה, וכשאני לוחץ על הקפאה אני לא מקבל את השבוע הנוכחי וגם לא שבועות שהיו".
 
