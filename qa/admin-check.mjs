@@ -394,6 +394,42 @@ console.log("\nהקפאה");
   check("סיום ההקפאה מחזיר אותה פנימה", !w3.frozen && (await callAccess(EM)).body.allowed === true);
   check("ותאריך ההתחלה שנקבע לה נשאר", JSON.parse(store.hash["admin:overrides"][EM]).start === "2026-09-20");
   check("שתי הפעולות נרשמו ביומן", (w3.log || []).filter((L) => L.field === "freeze").length >= 2);
+
+  // **חזרה לשבוע הנוכחי ולשבועות שכבר עברו.** רון: "אני רוצה להכניס מישהי מהקפאה
+  // לשבוע הקיים... אני לא מקבל את השבוע הנוכחי וגם לא שבועות שהיו." תאריך של
+  // היום או של העבר פירושו שהיא חוזרת מיד, והשער חוסם רק כל עוד היום קטן ממנו.
+  {
+    const today = (await callAdmin({ key: KEY })).body.today;
+    const sunOf = (d) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - x.getUTCDay()); return x.toISOString().slice(0, 10); };
+    const cur = sunOf(today);
+    const past = (() => { const x = new Date(cur + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - 14); return x.toISOString().slice(0, 10); })();
+    await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: cur, week: 2 }, phone: "9731", by: "רון" });
+    const a1 = await callAccess(EM);
+    check("חזרה בשבוע הנוכחי מכניסה אותה מיד", a1.body.allowed === true, JSON.stringify(a1.body));
+    check("ותאריך ההתחלה מחושב לשבוע שנבחר", JSON.parse(store.hash["admin:overrides"][EM]).start === (() => { const x = new Date(cur + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() - 7); return x.toISOString().slice(0, 10); })());
+    await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: past, week: 3 }, phone: "9731", by: "רון" });
+    check("וגם תאריך שכבר עבר מכניס אותה מיד", (await callAccess(EM)).body.allowed === true);
+    await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { off: true }, phone: "9731", by: "רון" });
+  }
+
+  // הרשימה במסך עצמה, נמשכת מ-admin.html ולא מועתקת.
+  {
+    const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+    const m = html.match(/function freezeSundays\(\)\{[\s\S]*?\n\}/);
+    check("freezeSundays קיימת ב-admin.html", !!m);
+    if (m) {
+      const DATA = { today: "2026-08-30" };
+      const fn = new Function("DATA", m[0] + "; return freezeSundays();");
+      const list = fn(DATA);
+      check("חמישה עשר תאריכים", list.length === 15, String(list.length));
+      check("כולל את יום ראשון של השבוע הנוכחי", list.includes("2026-08-30"));
+      check("וארבעה ימי ראשון שכבר עברו", list[0] === "2026-08-02" && list.filter((d) => d < "2026-08-30").length === 4);
+      check("ועשרה קדימה", list[list.length - 1] === "2026-11-08");
+    }
+    check("והרשימה בתפריט היא זו ולא ימי ראשון עתידיים בלבד",
+      /freezeSundays\(\)\.map/.test(html) && !/sundaysN\(10\)/.test(html));
+    check("והמסך אומר שתאריך כזה מחזיר אותה מיד", html.includes("מחזיר אותה מיד"));
+  }
   CSV2 = null;
   delete process.env.MANYCHAT_TOKEN;
   delete store.hash["admin:overrides"][EM];

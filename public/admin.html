@@ -768,8 +768,20 @@ function mcBlock(w){
 // places, so the dates are computed here and never typed.
 function sundaysN(n){
   var out=[], base=new Date(DATA.today+"T00:00:00Z");
-  base.setUTCDate(base.getUTCDate()-base.getUTCDay()+7);   // freezing always returns on a FUTURE Sunday
+  base.setUTCDate(base.getUTCDate()-base.getUTCDay()+7);
   for(var i=0;i<n;i++){ var d=new Date(base.getTime()); d.setUTCDate(d.getUTCDate()+i*7); out.push(d.toISOString().slice(0,10)); }
+  return out;
+}
+
+// תאריכי החזרה מהקפאה. **לא רק ימי ראשון עתידיים.** רון, 30 באוגוסט 2026: "אני
+// רוצה להכניס מישהי מהקפאה לשבוע הקיים והיא נכנסת בשבוע השני שלה, וכשאני לוחץ
+// על הקפאה אני לא מקבל את השבוע הנוכחי וגם לא שבועות שהיו."
+// **תאריך של היום או של העבר פירושו שהיא חוזרת מיד**, וזה עובד מעצמו: השער חוסם
+// אותה רק כל עוד היום קטן מתאריך החזרה. ארבעה אחורה, הנוכחי, ועשרה קדימה.
+function freezeSundays(){
+  var out=[], base=new Date(DATA.today+"T00:00:00Z");
+  base.setUTCDate(base.getUTCDate()-base.getUTCDay()-4*7);
+  for(var i=0;i<15;i++){ var d=new Date(base.getTime()); d.setUTCDate(d.getUTCDate()+i*7); out.push(d.toISOString().slice(0,10)); }
   return out;
 }
 
@@ -1168,7 +1180,7 @@ function render(){
         ? '<div class="control">'+
             '<select class="field sm" style="width:200px" id="fb_'+esc(w.email)+'">'+
               '<option value="">עוד לא יודעת</option>'+
-              sundaysN(10).map(function(d){ return '<option value="'+d+'"'+((w.freeze&&w.freeze.back===d)?" selected":"")+'>'+il(d)+'</option>'; }).join("")+
+              freezeSundays().map(function(d){ return '<option value="'+d+'"'+((w.freeze&&w.freeze.back===d)?" selected":"")+'>'+il(d)+(d===sundays()[0]?" · השבוע הנוכחי":(d<DATA.today?" · כבר עבר":""))+'</option>'; }).join("")+
             '</select>'+
             '<select class="field sm" style="width:150px" id="fw_'+esc(w.email)+'">'+
               '<option value="">עוד לא יודעת</option>'+
@@ -1177,7 +1189,7 @@ function render(){
             '<button class="btn p" data-savefreeze="'+esc(w.email)+'">שמירה</button>'+
             '<button class="btn ghost" data-nofreeze="1">ביטול</button>'+
           '</div>'+
-          '<div class="note">בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב והתגית "הקפאה" נכתבים גם למניצ\'ט</b>, וסיום ההקפאה מסיר את התגית.</div>'
+          '<div class="note">תאריך חזרה של <b>השבוע הנוכחי או של שבוע שכבר עבר מחזיר אותה מיד</b>, והיא נכנסת לשבוע שבחרת. בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב והתגית "הקפאה" נכתבים גם למניצ\'ט</b>, וסיום ההקפאה מסיר את התגית.</div>'
         : '<div class="control">'+
             '<button class="btn" data-freeze="'+esc(w.email)+'">'+(w.freeze?"שינוי ההקפאה":"הכנסה להקפאה")+'</button>'+
             (w.freeze?'<button class="btn dng" data-unfreeze="'+esc(w.email)+'">סיום ההקפאה</button>':'')+
