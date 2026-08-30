@@ -700,7 +700,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.58";
+const VERSION = "6.59";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5851,6 +5851,10 @@ const LOADED_AT = Date.now();
 function UpdateBar({ hidden }) {
   const [stale, setStale] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  // **בסרגל הבדיקות הפס נחבא מתחת לסרגל עצמו**, כי הסרגל נשבר לשתי שורות בטלפון
+  // וגובהו אינו קבוע. נמדד בדפדפן ולא נוחש: הפס צויר ב-y=55 והכפתור "קבע יום 1"
+  // ישב מעליו. לכן מודדים את גובהו בפועל במקום להניח מספר.
+  const [devTop, setDevTop] = useState(0);
   const lastRef = useRef(0);
   const staleRef = useRef(false); staleRef.current = stale;
   useEffect(() => {
@@ -5880,10 +5884,15 @@ function UpdateBar({ hidden }) {
     const id = setInterval(check, UPDATE_POLL_MS);
     return () => { alive = false; clearInterval(id); window.removeEventListener("mp-update-test", force); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", check); };
   }, []);
+  useEffect(() => {
+    if (!DEV || !stale) return;
+    const el = document.getElementById("mp-devbar");
+    if (el) setDevTop(el.offsetHeight || 0);
+  }, [stale]);
   // כשחלון פתוח הפס אינו מוצג, כדי שלא תקיש "רענון" באמצע הזנה ותאבד אותה.
   if (!stale || hidden || dismissed) return null;
   return (
-    <div style={{ position: "absolute", top: DEV ? "calc(env(safe-area-inset-top, 0px) + 42px)" : "env(safe-area-inset-top, 0px)", insetInlineStart: 0, insetInlineEnd: 0, zIndex: 60, background: C.brand, color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 14px", fontFamily: fontStack, direction: "rtl", boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}>
+    <div style={{ position: "absolute", top: DEV ? `calc(env(safe-area-inset-top, 0px) + ${devTop}px)` : "env(safe-area-inset-top, 0px)", insetInlineStart: 0, insetInlineEnd: 0, zIndex: 60, background: C.brand, color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 14px", fontFamily: fontStack, direction: "rtl", boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}>
       <span style={{ fontSize: 15, fontWeight: 600 }}>יש גרסה חדשה של האפליקציה</span>
       <span style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
         <button onClick={() => { try { window.location.reload(); } catch (e) {} }} style={{ background: "#fff", color: C.brand, border: "none", borderRadius: 999, padding: "5px 17px", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>רענון</button>
@@ -5998,7 +6007,7 @@ function DevDateBar({ onAnchor }) {
   };
   const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
   return (
-    <div style={{ position: "absolute", top: "env(safe-area-inset-top, 0px)", left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
+    <div id="mp-devbar" style={{ position: "absolute", top: "env(safe-area-inset-top, 0px)", left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
       <span style={{ opacity: 0.7 }}>DEV - יום מדומה</span>
       <button onClick={() => setDay(addDays(TODAY, -1))} style={btn}>-1</button>
       <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
