@@ -1341,6 +1341,48 @@ const CHECKS = [
       return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "בלי גרסה חדשה 0 · נפתחה עכשיו 0 · פתוחה 13 שעות 1 · ✕ מסתיר" };
     },
   },
+  {
+    // רון: "אל תשים שם בכלל יעדים, פשוט תרשום סכימה של מה שהיא אכלה". שני הצדדים
+    // באותו תרחיש: לפני שמשימת החלבון נפתחת אין רצועה בכלל, ואחריה יש בה סכומים
+    // בלבד. רצועה שמופיעה תמיד נראית בדיוק כמו רצועה שלא מופיעה אף פעם.
+    name: "סכימת המאקרו נפתחת עם משימת החלבון, בלי יעדים ובלי סיבים",
+    async run(browser, device) {
+      const bad = [];
+      const food = (d) => [
+        { id: "a", date: d, meal: "בוקר", name: "יוגורט", g: 200, unit: "g", source: "verified", kcal: 180, p: 20, f: 5, c: 14 },
+        { id: "b", date: d, meal: "צהריים", name: "עוף ואורז", g: 300, unit: "g", source: "verified", kcal: 520, p: 45, f: 14, c: 52 },
+      ];
+      // לפני יום 18 אין רצועה.
+      {
+        const { context, page } = await openApp(browser, device, { day: 12 });
+        const today = await page.evaluate(() => new Date().toISOString().slice(0, 10));
+        await context.close();
+        const { context: c2, page: p2, errors } = await openApp(browser, device, { day: 12, seed: { log: food(today) } });
+        if (await p2.locator("text=פחמימות").count() !== 0) bad.push("הרצועה מופיעה לפני שמשימת החלבון נפתחה");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await c2.close();
+      }
+      // ואחרי יום 18 יש, עם סכומים בלבד.
+      {
+        const { context, page } = await openApp(browser, device, { day: 25 });
+        const today = await page.evaluate(() => new Date().toISOString().slice(0, 10));
+        await context.close();
+        const { context: c2, page: p2, errors } = await openApp(browser, device, { day: 25, seed: { log: food(today) } });
+        const body = await p2.evaluate(() => document.body.innerText);
+        if (await p2.locator("text=פחמימות").count() === 0) bad.push("הרצועה אינה מופיעה");
+        if (!/65 ג׳/.test(body)) bad.push("סכום החלבון אינו מוצג");
+        if (/סיבים/.test(body)) bad.push("סיבים מוצגים");
+        if (/ג׳ *\/ */.test(body)) bad.push("מוצג יעד ולא רק סכום");
+        // מתחת ליומן המעקב ומעל "מה שהוזן היום", וזה מה שרון ביקש.
+        const top = async (t) => { const b = await p2.locator("text=" + t).first().boundingBox().catch(() => null); return b ? Math.round(b.y) : null; };
+        const order = { tracker: await top("יומן המעקב שלי"), strip: await top("פחמימות"), list: await top("מה שהוזן היום") };
+        if (!(order.tracker != null && order.strip != null && order.list != null && order.tracker < order.strip && order.strip < order.list)) bad.push("הסדר על המסך אינו נכון: " + JSON.stringify(order));
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await c2.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "לפני 0 · אחרי 1 · בלי יעד ובלי סיבים · הסדר נכון" };
+    },
+  },
 ];
 
 /* ---------- run ---------- */

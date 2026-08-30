@@ -472,7 +472,6 @@ function pendingStepAction(profile, week, ackWeek) {
 // Master switch - set to false to hide the whole tracker everywhere.
 const TRACKER_ENABLED = true;
 // Show the fat/carbs/fiber strip under the rings. Off for now (kept for future).
-const SHOW_MACRO_STRIP = false;
 const CHECKIN_UNLOCK = { week: 1, day: 3 };
 
 /* ============================================================
@@ -700,7 +699,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.59";
+const VERSION = "6.60";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1890,18 +1889,22 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           {macroOpen && <div data-tut="protein" style={{ gridColumn: 1, gridRow: 2 }}><ProteinRing consumed={macros.p} target={targets.protein} size={124} /></div>}
           {waterOpen && <div data-tut="water" style={{ gridColumn: 2, gridRow: 2 }}><MetricRing value={waterMl} goal={WATER_TARGET_ML} bigText={String(waterCups)} verb="שתית" color={C.water} track={C.waterBg} label="כוסות מים" sub={`${waterMl.toLocaleString()} מ"ל מתוך ${targetCups} כוסות`} onPlus={onWater} size={124} /></div>}
         </div>
-        {SHOW_MACRO_STRIP && macroOpen && (
-          <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", margin: "0 0 16px" }}>
-            {[{ label: "שומן", v: macros.f, t: targets.fat, color: C.macroF }, { label: "פחמימות", v: macros.c, t: targets.carbs, color: C.macroC }, { label: "סיבים", v: macros.fib, t: FIBER_TARGET, color: C.info }].map((m, i) => (
-              <div key={m.label} style={{ flex: 1, textAlign: "center", padding: "5px 4px", borderInlineStart: i ? `1px solid ${C.line}` : "none" }}>
+        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} phaseWeek={week} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} hideRewards={!!profile.hideRewards} freeze={freeze} startDate={profile.startDate} />}
+
+        {/* **סכימה של מה שאכלה, בלי יעדים.** החלטה של רון, 30 באוגוסט 2026: "אל תשים
+            שם בכלל יעדים, פשוט תרשום סכימה של מה שהיא אכלה, שומן פחמימות חלבון, ובלי
+            סיבים." יעד קיים רק לחלבון, והוא כבר יושב בטבעת שמעל. נפתחת ביום שמשימת
+            החלבון נפתחת, ולא לפני. */}
+        {macroOpen && (
+          <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", margin: "14px 0 0" }}>
+            {[{ label: "חלבון", v: macros.p, color: C.macroP }, { label: "שומן", v: macros.f, color: C.macroF }, { label: "פחמימות", v: macros.c, color: C.macroC }].map((m, i) => (
+              <div key={m.label} style={{ flex: 1, textAlign: "center", padding: "7px 4px", borderInlineStart: i ? `1px solid ${C.line}` : "none" }}>
                 <div style={{ fontSize: 12.5, color: C.sub, display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: m.color }} />{m.label}</div>
-                <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, marginTop: 1 }}>{m.v} / {m.t} ג׳</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginTop: 1 }}>{Math.round(m.v)} ג׳</div>
               </div>
             ))}
           </div>
         )}
-
-        {checkinOpen && ciTasks.length > 0 && <CheckinCard date={date} today={today} week={ciWeek} phaseWeek={week} tasks={ciTasks} answers={ciAnswers} auto={ciAuto} locked={ciLocked} onOpen={onOpenCheckin} onOpenCollection={onOpenCollection} onOpenSummary={onOpenSummary} hideRewards={!!profile.hideRewards} freeze={freeze} startDate={profile.startDate} />}
 
         {dayAct.length > 0 && (
           <>
@@ -2523,7 +2526,6 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
           <span style={{ fontSize: 14, color: C.brandD }}>יעד קלורי יומי</span>
           <span style={{ fontWeight: 600, color: C.brandD, display: "flex", alignItems: "center", gap: 6 }}>{calNow.toLocaleString()} קק״ל {profile.calorieOverride ? "" : <span style={{ fontSize: 12, color: C.sub }}>(מומלץ)</span>} <Pencil size={13} color={C.faint} /></span>
         </div>
-        {unlockedOn(profile.startDate, TODAY, MACRO_UNLOCK) && <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}><MacroRow p={targets.protein} f={targets.fat} c={targets.carbs} tp={targets.protein} tf={targets.fat} tc={targets.carbs} headline /></div>}
       </div>
 
       <div onClick={stepGoalEditable ? () => open({ key: "stepGoal", label: "יעד צעדים יומי", type: "num", step: 500, min: 0, suffix: "צעדים", init: effStepGoal != null ? effStepGoal : 2000 }) : undefined} style={{ background: C.amberBg, borderRadius: 12, padding: 12, marginBottom: 14, cursor: stepGoalEditable ? "pointer" : "default", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
