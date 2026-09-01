@@ -699,7 +699,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.66";
+const VERSION = "6.67";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -6183,6 +6183,12 @@ function FaqModal({ onClose, onStartTour, startDate, onReset, onLogout, hasFutur
 
 function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
   const [rect, setRect] = useState(null);
+  // **גובה החלונית עצמה.** בלעדיו אי אפשר לדעת אם היא נכנסת, והיא הייתה יושבת
+  // מתחת לכרטיס המסומן וממשיכה אל מחוץ למסך. משתתפת נתקעה כך ב-1 בספטמבר 2026:
+  // הכפתור היה מתחת לקצה המסך, והשכבה המוחשכת בולעת כל הקשה אחרת, ולכן לא הייתה
+  // לה שום דרך לצאת. סיבוב הטלפון לרוחב שחרר אותה.
+  const [bubbleH, setBubbleH] = useState(0);
+  const bubbleRef = useRef(null);
   const cur = steps[idx];
   useEffect(() => {
     let cancelled = false;
@@ -6217,11 +6223,29 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
   }, [idx, cur.sel]);
   const frameEl = typeof document !== "undefined" ? document.querySelector(".phone-frame") : null;
   const vh = frameEl ? frameEl.getBoundingClientRect().height : (typeof window !== "undefined" ? window.innerHeight : 800);
+  useEffect(() => {
+    const m = () => { if (bubbleRef.current) setBubbleH(bubbleRef.current.getBoundingClientRect().height); };
+    const raf = requestAnimationFrame(m);
+    const t = setTimeout(m, 200);
+    window.addEventListener("resize", m);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); window.removeEventListener("resize", m); };
+  }, [idx, rect]);
   const tap = !!cur.tap;
   const stop = (e) => e.stopPropagation();
   // Bubble position: nav-bar steps sit just above the bottom bar; element high -> below it; element low -> pinned to top.
   const isNav = cur.sel && (cur.sel.indexOf("nav-") === 0);
-  const bubblePos = !rect ? { bottom: 28 } : (isNav ? { bottom: vh - rect.top + 12 } : (rect.top < vh * 0.5 ? { top: rect.bottom + 12 } : { top: 12 }));
+  const bubbleRaw = !rect ? { bottom: 28 } : (isNav ? { bottom: vh - rect.top + 12 } : (rect.top < vh * 0.5 ? { top: rect.bottom + 12 } : { top: 12 }));
+  // **וכאן העלייה למעלה, וזה כל התיקון.** המיקום נשאר בדיוק כפי שהיה כל עוד
+  // החלונית נכנסת במסך. רק כשהיא הייתה גולשת מתחת לקצה, היא מורמת בדיוק כמה
+  // שצריך כדי שתחתיתה תישאר בפנים, ולא יותר. ומעל 12 מלמעלה אין לאן להרים,
+  // ולכן שם היא גם מקבלת תקרת גובה ואפשר לגלול בתוכה.
+  const bubblePos = (() => {
+    if (bubbleRaw.top == null || !bubbleH) return bubbleRaw;
+    const maxTop = vh - 12 - bubbleH;
+    if (bubbleRaw.top <= maxTop) return bubbleRaw;
+    return { top: Math.max(12, maxTop) };
+  })();
+  const bubbleCap = { maxHeight: Math.max(120, vh - 24), overflowY: "auto" };
   const pad = 8;
   const hT = rect ? Math.max(0, rect.top - pad) : 0, hB = rect ? rect.bottom + pad : 0, hL = rect ? Math.max(0, rect.left - pad) : 0, hR = rect ? rect.right + pad : 0;
   return (
@@ -6242,7 +6266,7 @@ function TutorialOverlay({ steps, idx, onNext, onChoice, onEnd, onBack }) {
           {!rect && !tap && <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 99997 }} />}
         </>
       )}
-      <div style={{ position: "absolute", left: 16, right: 16, ...bubblePos, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
+      <div ref={bubbleRef} style={{ position: "absolute", left: 16, right: 16, ...bubblePos, ...bubbleCap, zIndex: 99999, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 10px 34px rgba(0,0,0,0.32)", direction: "rtl", textAlign: "right" }}>
         {cur.text && <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, marginBottom: 12 }}>{cur.text}</div>}
         {cur.guide && <StepGuideLink linkOnly style={{ marginBottom: 12 }} />}
         {cur.prompt && <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 12 }}>{cur.prompt}</div>}
