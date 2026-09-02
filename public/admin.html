@@ -1012,10 +1012,17 @@ function render(){
     pool.push(w);
   });
 
-  // Women still missing a group letter. Deliberately outside the app filter: one who started
-  // this week and has not opened the app yet reads as Kajabi, and she is exactly the one to
-  // catch. Turning this on becomes an ordinary filter, not a separate screen.
-  var missing = DATA.women.filter(function(w){ return w.needsGroup; });
+  // מי שעדיין אין לה אות קבוצה. **מסונן כמו כל שאר המסך**, כלומר כברירת מחדל
+  // מציג את האפליקציה החדשה בלבד.
+  //
+  // עד v6.69 זה חצה את סינון האפליקציה בכוונה, כי אישה שהתחילה השבוע ועוד לא
+  // פתחה את האפליקציה נקראת קג'אבי, והיא בדיוק זו שצריך לשבץ. **הנימוק הזה נפל
+  // כשנוספה עמודת "אפליקציית תזונה" בגיליון**, שמסומנת כבר ברישום, ולכן היא
+  // מזוהה כאפליקציה החדשה לפני שפתחה אותה אי פעם. רון, 2 בספטמבר 2026: "בחסרות
+  // קבוצה יש נשים לא רלוונטיות כי הן לא עם האפליקציה החדשה."
+  //
+  // ואף אחת לא נעלמת: בחירת "כל האפליקציות" בסינון מחזירה את כולן.
+  var missing = pool.filter(function(w){ return w.needsGroup; });
   var noDate = DATA.women.filter(function(w){ return w.frozen && !!w.freezeTodo; });
   var backSoon = DATA.women.filter(function(w){ return w.backSoon; });
   var notesWaiting = DATA.women.filter(function(w){ return w.notes > 0; });
@@ -1105,7 +1112,7 @@ function render(){
         '<span class="chip'+(VIEW==="add"?" on":"")+'" data-v="add">הוספת משתתפת</span>'+
       '</div>'+
       // Say what the list covers, so a woman who is missing from it does not read as a bug.
-      (MISSING ? '<div class="note">מוצגות רק נשים ללא אות קבוצה במחזור של השבוע ובמחזור של השבוע הבא.</div>' : '')+
+      (MISSING ? '<div class="note">מוצגות רק נשים ללא אות קבוצה במחזור של השבוע ובמחזור של השבוע הבא, <b>ובאפליקציה שנבחרה בסינון</b>. כברירת מחדל זו האפליקציה החדשה בלבד, ו"כל האפליקציות" מציג גם את קג\'אבי.</div>' : '')+
       (VIEW==="nodate" ? '<div class="note">מוקפאות שחסר להן תאריך חזרה, שבוע חזרה או שניהם. <b>הן לא נכנסות לאפליקציה עד שיושלם.</b></div>' : '')+
       (VIEW==="notes" ? '<div class="note">נשים שכתבו הערה מתוך האפליקציה ועוד לא קיבלו תשובה. <b>הכרטיס שלהן נפתח בלשונית "הערות".</b>'+
         (notesOff ? ' מתוכן '+notesOff+' של נשים שאינן ברשימה, כי בשורה שלהן בגיליון אין מייל.' : '')+'</div>' : '')+
@@ -1134,7 +1141,9 @@ function render(){
           '<option value="6"'+(PROG==="6"?" selected":"")+'>סולו 6 ('+nS6+')</option>'+
           '<option value="12"'+(PROG==="12"?" selected":"")+'>סולו 12 ('+nS12+')</option>'+
         '</select></span>')+
-        (MISSING ? '' : '<span class="sel"><select id="fApp" aria-label="אפליקציה">'+
+        // הבורר הזה מוצג גם ב"חסרות קבוצה", כי מ-v6.69 הוא מסנן אותה. בלעדיו
+        // אי אפשר היה להחזיר משם את מי שאינה באפליקציה החדשה.
+        ('<span class="sel"><select id="fApp" aria-label="אפליקציה">'+
           '<option value="new"'+(APP==="new"?" selected":"")+'>אפליקציה חדשה ('+nNew+')</option>'+
           '<option value="old"'+(APP==="old"?" selected":"")+'>קג\'אבי ('+nOld+')</option>'+
           '<option value=""'+(APP===""?" selected":"")+'>כל האפליקציות ('+(nNew+nOld)+')</option>'+
