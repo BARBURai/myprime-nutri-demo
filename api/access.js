@@ -225,6 +225,28 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(200).json({ allowed: false, reason: "fetch_failed", configured: true });
   }
+  // A woman the office added by hand, or one whose row in the file carries no address until
+  // a clerk supplied one. The file is tried first and always wins; this is consulted only
+  // when the file does not hold her, which is exactly the window between the office fixing
+  // it and ManyChat's next export. Never a gate of its own: an unreachable store simply
+  // leaves the file in charge, and she gets the same answer she would have got anyway.
+  if (!found) {
+    try {
+      const raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:manual", email);
+      if (raw) {
+        const m = JSON.parse(raw) || {};
+        if (m.start) {
+          found = true;
+          startStr = m.start;
+          phone = String(m.phone || "").replace(/[^\d]/g, "");
+          glow = !!m.glow;
+          solo = (m.solo === 6 || m.solo === 12) ? m.solo : 0;
+          const mm = parseInt(m.months, 10);
+          if (Number.isFinite(mm) && mm > 0) extraMonths = mm;
+        }
+      }
+    } catch (e) { /* the file stays in charge */ }
+  }
   if (!found) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
   if (cancelled) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
 

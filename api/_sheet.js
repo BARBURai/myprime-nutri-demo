@@ -123,6 +123,11 @@ export async function loadSheet(csvUrl) {
   // the screen showed 103, and there was no way to see where the other twenty went. These
   // counters are what the screen uses to say it out loud instead of leaving a silent gap.
   const skipped = { noEmail: 0, duplicate: 0, newAppNoEmail: 0, newAppDuplicate: 0 };
+  // Rows with no address at all. Everything downstream is keyed on the address - the gate,
+  // her backup, her notes - so such a row is invisible to every screen and to her. They are
+  // collected here, keyed by phone, so the office can see that she exists and put the
+  // address in, instead of never learning she is missing.
+  const noEmail = [];
   let sheetNewAppRows = 0;
   lines.forEach((line, idx) => {
     if (idx === 0) return;
@@ -135,7 +140,33 @@ export async function loadSheet(csvUrl) {
 
     const email = (cell(col.email).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) ||
       line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0];
-    if (!email) { skipped.noEmail++; if (rowNewApp) skipped.newAppNoEmail++; return; }
+    if (!email) {
+      skipped.noEmail++;
+      if (rowNewApp) skipped.newAppNoEmail++;
+      const noEmPhone = cell(col.phone).replace(/[^\d]/g, "");
+      // Without a phone there is nothing to identify her by and nothing to write back to
+      // ManyChat with, so such a row stays counted and unlisted.
+      if (noEmPhone && noEmail.length < 200) {
+        let sStr = (cell(col.start).match(DATE_IN) || [])[0] || "";
+        if (!sStr) sStr = (line.match(DATE_IN) || [])[0] || "";
+        const sSun = parseDateToSunday(sStr);
+        const mRaw = cell(col.months).replace(/[^\d]/g, "");
+        const m = mRaw ? parseInt(mRaw, 10) : null;
+        noEmail.push({
+          phone: noEmPhone,
+          first: cell(col.first),
+          last: cell(col.last),
+          group: cell(col.group),
+          start: sSun ? ymd(sSun) : "",
+          months: Number.isFinite(m) && m > 0 ? m : null,
+          cancelled: col.cancel !== -1 ? isTrue(cells[col.cancel]) : false,
+          sheetNewApp: rowNewApp,
+          glow: col.glow !== -1 ? isTrue(cells[col.glow]) : false,
+          solo: soloOf(cells, col),
+        });
+      }
+      return;
+    }
     const em = email.toLowerCase();
     // The same address really does sit on more than one row here, so the first one wins and
     // the rest are dropped. Without counting them, a marked woman simply vanishes.
@@ -175,5 +206,5 @@ export async function loadSheet(csvUrl) {
   // The sheet's own header row, echoed back so a renamed column can be mapped from what the
   // file actually says instead of by guessing. Guessing is what put email addresses on the
   // admin screen where first and last names belong.
-  return { women, headers, skipped, sheetNewAppRows, rawHeaders: header.map((h) => String(h || "").trim()).filter(Boolean) };
+  return { women, noEmail, headers, skipped, sheetNewAppRows, rawHeaders: header.map((h) => String(h || "").trim()).filter(Boolean) };
 }

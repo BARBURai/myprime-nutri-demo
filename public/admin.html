@@ -620,6 +620,46 @@ function bankLoad(then){
     .catch(function(){ BANK = BANK_SEED.slice(); if(then) then(); render(); });
 }
 
+// למה פעולה נכשלה, במילים של הפקידה. שגיאה שלא מוסברת נקראת כתקלה אצלנו, וגורמת
+// לה לנסות שוב את אותו דבר בדיוק.
+function mcWhy(d){
+  var e = (d && (d.error || d.mc)) || "";
+  if(e === "email_taken") return "הכתובת הזאת כבר רשומה על מישהי אחרת.";
+  if(e === "row_gone")    return "לא מצאתי את השורה שלה בגיליון לפי הטלפון הזה.";
+  if(e === "bad_email")   return "כתובת המייל לא תקינה.";
+  if(e === "bad_phone")   return "מספר הטלפון לא תקין.";
+  if(e === "mc_off")      return "החיבור למניצ'ט לא מוגדר.";
+  if(e === "not_found")   return "לא נמצאה במניצ'ט רשומה לפי הטלפון הזה.";
+  if(String(e).indexOf("emailfail:") === 0) return "מניצ'ט לא קיבל את הכתובת: " + String(e).slice(10);
+  if(e === "store_failed") return "נשמר במניצ'ט אבל לא אצלנו. נסי שוב.";
+  return "נסי שוב.";
+}
+function addWhy(d){
+  var e = (d && d.error) || "";
+  if(e === "email_taken") return "הכתובת הזאת כבר קיימת.";
+  if(e === "bad_email")   return "כתובת המייל לא תקינה.";
+  if(e === "bad_start")   return "תאריך ההתחלה לא תקין.";
+  if(e === "not_sunday")  return "מחזור מתחיל תמיד ביום ראשון.";
+  if(e === "bad_group")   return "הקבוצה חייבת להיות אות אחת, א עד ה.";
+  if(e === "no_name")     return "צריך שם.";
+  if(e === "sheet_failed") return "לא הצלחתי לקרוא את הגיליון כדי לוודא שהכתובת פנויה.";
+  return "נסי שוב.";
+}
+function draftWhy(d){
+  var e = (d && d.error) || "";
+  if(e === "no_key")   return "הניסוח האוטומטי לא מוגדר בשרת.";
+  if(e === "bad_json") return "התשובה חזרה בצורה שלא הצלחתי לקרוא. נסי שוב.";
+  if(e === "empty")    return "אין טקסט להערה.";
+  return "הניסוח נכשל. נסי שוב.";
+}
+// על מה הטיוטה נשענת. זה מה שאומר לפקידה כמה לבדוק אותה לפני ששולחים.
+var BASED = {
+  kb:     "לפי מה שידוע על האפליקציה.",
+  bank:   "לפי תשובה שכבר נשלחה בעבר.",
+  office: "זו שאלה של המשרד ולא של האפליקציה.",
+  guess:  "⚠ ניחוש. אין על זה חומר, קראי לפני ששולחת.",
+};
+
 // דירוג פשוט לפי מילים משותפות, בלי AI ובלי עלות: הבנק קטן, וההצעה היא נקודת פתיחה
 // לניסוח ולא תשובה שנשלחת לבד. מילות קישור מדולגות, כי הן מופיעות בכל משפט ומייצרות
 // התאמות שווא, והתאמה בשאלה שוקלת כפול מהתאמה בגוף התשובה.
@@ -979,8 +1019,16 @@ function render(){
   var noDate = DATA.women.filter(function(w){ return w.frozen && !!w.freezeTodo; });
   var backSoon = DATA.women.filter(function(w){ return w.backSoon; });
   var notesWaiting = DATA.women.filter(function(w){ return w.notes > 0; });
-  // הספירה היא של הערות ולא של נשים, כדי שהאריח והתור יאמרו את אותו מספר.
-  var notesCount = notesWaiting.reduce(function(n, w){ return n + (parseInt(w.notes, 10) || 0); }, 0);
+  // הספירה מגיעה מהשרת ומאותו מקום שהתור קורא ממנו. קודם היא נספרה מהרשימה שעל
+  // המסך בלבד, ולכן אישה שכתבה הערה ואינה ברשימה, למשל כי בשורה שלה אין מייל,
+  // נספרה בתור ולא באריח. רון ראה 9 באריח ו-12 בתור.
+  var notesCount = (typeof DATA.notesTotal === "number")
+    ? DATA.notesTotal
+    : notesWaiting.reduce(function(n, w){ return n + (parseInt(w.notes, 10) || 0); }, 0);
+  var notesOff = DATA.notesOff || 0;
+  // שורות בגיליון שיש בהן טלפון ואין בהן כתובת מייל. כל מה ששמור אצלנו על אישה
+  // מתויק תחת המייל שלה, ולכן בלעדיו היא לא נכנסת לאפליקציה ואינה מופיעה בשום מסך.
+  var noMail = DATA.noEmail || [];
   var base = MISSING ? missing : (VIEW==="nodate" ? noDate : VIEW==="backsoon" ? backSoon : VIEW==="notes" ? notesWaiting : pool);
 
   // מחזור אחד ברשימה נפתחת, במקום שלוש שורות של צ'יפים לשנה, לחודש ולמחזור.
@@ -1032,7 +1080,7 @@ function render(){
 
   // הפס הכהה, אחר כך סרגל אחד שבתוכו שני אזורים נפרדים: מה שדורש טיפול, ומה שרק מצמצם
   // את הרשימה. הם חולקים סרגל אבל לא נראים אותו דבר, כדי שאף אחת לא תחשוב שזה סינון.
-  var nWork = missing.length + noDate.length + backSoon.length;
+  var nWork = missing.length + noDate.length + backSoon.length + noMail.length;
   var html = '<div class="topbar"><h1>ניהול משתתפות</h1>'+
       '<span class="cnt">'+list.length+' משתתפות'+(DATA.version?' · v'+esc(DATA.version):'')+'</span>'+
       '<span class="who">'+esc(DATA.me||WHO||"?")+(DATA.owner?" · מנהל":"")+'</span>'+
@@ -1052,16 +1100,21 @@ function render(){
         '<span class="chip'+(VIEW==="backsoon"?" on":"")+'" data-v="backsoon">חוזרות מהקפאה השבוע ('+backSoon.length+')</span>'+
         '<span class="chip'+(notesWaiting.length?" warn":"")+(VIEW==="notes"?" on":"")+'" data-v="notes">'+
           (notesCount?"⚠ ":"")+'הערות ממתינות ('+notesCount+')</span>'+
+        '<span class="chip'+(noMail.length?" warn":"")+(VIEW==="nomail"?" on":"")+'" data-v="nomail">'+
+          (noMail.length?"⚠ ":"")+'חסר מייל ('+noMail.length+')</span>'+
+        '<span class="chip'+(VIEW==="add"?" on":"")+'" data-v="add">הוספת משתתפת</span>'+
       '</div>'+
       // Say what the list covers, so a woman who is missing from it does not read as a bug.
       (MISSING ? '<div class="note">מוצגות רק נשים ללא אות קבוצה במחזור של השבוע ובמחזור של השבוע הבא.</div>' : '')+
       (VIEW==="nodate" ? '<div class="note">מוקפאות שחסר להן תאריך חזרה, שבוע חזרה או שניהם. <b>הן לא נכנסות לאפליקציה עד שיושלם.</b></div>' : '')+
-      (VIEW==="notes" ? '<div class="note">נשים שכתבו הערה מתוך האפליקציה ועוד לא קיבלו תשובה. <b>הכרטיס שלהן נפתח בלשונית "הערות".</b></div>' : '')+
+      (VIEW==="notes" ? '<div class="note">נשים שכתבו הערה מתוך האפליקציה ועוד לא קיבלו תשובה. <b>הכרטיס שלהן נפתח בלשונית "הערות".</b>'+
+        (notesOff ? ' מתוכן '+notesOff+' של נשים שאינן ברשימה, כי בשורה שלהן בגיליון אין מייל.' : '')+'</div>' : '')+
+      (VIEW==="nomail" ? '<div class="note">שורות בגיליון שיש בהן טלפון ואין בהן כתובת מייל. <b>בלי מייל היא לא יכולה להיכנס לאפליקציה כלל</b>, ושום דבר עליה לא מופיע במסך הזה.</div>' : '')+
       (VIEW==="backsoon" ? '<div class="note">חוזרות מהקפאה בשבוע הקרוב. <b>ליד כל אחת כתוב לאיזה מחזור להכניס אותה</b>, כדי שתדעי לאיזו קבוצת וואטסאפ היא שייכת.</div>' : '')+
       '</div>'+
       // שלוש רשימות נפתחות בשורה אחת, במקום חמש שורות של צ'יפים שתפסו חצי מסך
       // לפני שהגענו לשם הראשון ברשימה. בתור המענה אין מה לסנן, ולכן כולו יורד.
-      (VIEW === "notes" ? '' :
+      (VIEW === "notes" || VIEW === "nomail" || VIEW === "add" ? '' :
       '<div class="zone filt"><span class="zlab">סינון</span>'+
       '<div class="frow">'+
         '<span class="sel"><select id="fCohort" aria-label="מחזור">'+
@@ -1237,6 +1290,12 @@ function render(){
                 '<i class="use">\u2190 להשתמש בתשובה הזאת</i></button>';
             }).join("")+'</div>')+
         '<div class="flabel" style="margin-top:10px">התשובה שהיא תראה באפליקציה</div>'+
+        // ניסוח טיוטה. היא נכתבת לתוך התיבה שמתחת, והפקידה עורכת ושולחת. שום דבר
+        // ממנה לא מגיע למשתתפת בלי שאדם קרא אותו ולחץ "שלחי לה".
+        '<div class="control" style="margin:0 0 8px">'+
+          '<button class="btn" data-drafta="'+esc(n.id)+'" data-for="'+esc(w.email)+'">✎ נסחי לי תשובה</button>'+
+          '<span class="nhint" id="dw_'+esc(n.id)+'" style="margin:0"></span>'+
+        '</div>'+
         '<textarea class="field" rows="3" id="rp_'+esc(n.id)+'" placeholder="כתבי כאן...">'+esc(DRAFT[n.id]||"")+'</textarea>'+
         '<div class="nhint">היא תראה את הטקסט הזה בדיוק כמו שכתבת, בתוך בועת ההערות באפליקציה. <b>אחרי השליחה אי אפשר לבטל.</b></div>'+
         '<div class="control">'+
@@ -1284,6 +1343,77 @@ function render(){
           '</span></div>')+
         (w.override?'<div class="manual">שונה ידנית · בגיליון: '+(w.sheetEnd?il(w.sheetEnd):"לא ידוע")+'</div>':'')
       : '<div class="note">היא מנוהלת בקג\'אבי, ולכן <b>תאריך סיום הגישה ונתוני השימוש אינם רלוונטיים כאן</b> ואינם מוצגים. כל השאר נכון גם לגביה, כי הוא נשמר במניצ\'ט ובגיליון.</div>');
+  }
+
+  // שורות בגיליון שיש בהן טלפון ואין בהן מייל. הן לא נשים במסך הזה, כי כל מה ששמור
+  // אצלנו מתויק תחת המייל, ולכן זה מסך משלו ולא סינון של הרשימה. הפקידה משלימה את
+  // הכתובת, היא נכתבת למניצ'ט שממנו הגיליון מיוצא, וגם נשמרת אצלנו מיד כדי שהאישה
+  // תוכל להיכנס עוד היום ולא כשהייצוא הבא ירוץ.
+  function nomailScreen(){
+    var rows = DATA.noEmail || [];
+    if(!rows.length) return '<div class="empty">אין שורות בלי מייל. הכל תקין 🌸</div>';
+    return '<div class="qhead">'+rows.length+' שורות בגיליון עם טלפון ובלי כתובת מייל. '+
+        '<b>כל עוד אין מייל היא לא נכנסת לאפליקציה</b>, וכל מה שנשמר עליה מתויק תחת הכתובת.</div>'+
+      rows.map(function(r){
+        var name = ((r.first||"")+" "+(r.last||"")).trim();
+        return '<div class="qitem">'+
+          '<div class="qwho">'+
+            '<b>'+esc(name || "בלי שם")+'</b>'+
+            '<span class="mono">'+esc(r.phone)+'</span>'+
+            '<button class="btn sm" data-copy="'+esc(r.phone)+'">העתקה</button>'+
+            '<a class="btn sm wa" href="https://wa.me/'+esc(r.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>'+
+            (r.group?'<span class="grp">קבוצה '+esc(r.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+          '</div>'+
+          '<div class="qinfo">'+
+            '<div><span class="flabel">מחזור</span> '+(r.start?esc(il(r.start)):"<b>אין תאריך התחלה בשורה</b>")+
+              (r.end?' · גישה עד '+esc(il(r.end)):'')+'</div>'+
+            '<div class="flabel" style="margin-top:8px">כתובת המייל שלה</div>'+
+            '<input class="field" dir="ltr" id="nm_'+esc(r.phone)+'" placeholder="name@example.com" autocomplete="off">'+
+            '<div class="control">'+
+              '<button class="btn p" data-fixmail="'+esc(r.phone)+'">שמירת המייל</button>'+
+            '</div>'+
+            '<div class="nhint">הכתובת נכתבת למניצ\'ט, ולכן <b>הגיליון יתעדכן מעצמו בייצוא הבא</b>. '+
+              'עד אז היא נשמרת גם אצלנו, וזה מה שמאפשר לה להיכנס לאפליקציה כבר עכשיו.'+
+              (r.start ? '' : ' <b>בשורה שלה אין תאריך התחלה, ולכן היא עדיין לא תיכנס.</b> את התאריך משלימים במניצ\'ט.')+
+            '</div>'+
+          '</div>'+
+        '</div>';
+      }).join("");
+  }
+
+  // הוספת משתתפת שאינה בגיליון כלל. **נשמר אצלנו בלבד.** החלטה של רון: שום דבר
+  // מכאן אינו נכתב למניצ'ט, כלומר לא נוצרת שם רשומה ואף אוטומציה לא יכולה לרוץ.
+  // ברגע שהייצוא כן יביא אותה, השורה שבגיליון היא זו שעל המסך והרשומה כאן מפסיקה
+  // להישאל. חלון הגישה הוא הרגיל: תאריך ההתחלה, ועוד 70 יום ועוד שלושה חודשים.
+  function addScreen(){
+    var days = freezeSundays();
+    return '<div class="qitem">'+
+      '<div class="qhead" style="margin:0 0 12px">הוספת משתתפת שאינה בגיליון</div>'+
+      '<div class="qinfo">'+
+        '<div class="flabel">שם פרטי</div><input class="field" id="ad_first" autocomplete="off">'+
+        '<div class="flabel" style="margin-top:8px">שם משפחה</div><input class="field" id="ad_last" autocomplete="off">'+
+        '<div class="flabel" style="margin-top:8px">טלפון (אפשר להשאיר ריק)</div>'+
+        '<input class="field" dir="ltr" id="ad_phone" placeholder="972501234567" autocomplete="off">'+
+        '<div class="flabel" style="margin-top:8px">כתובת מייל</div>'+
+        '<input class="field" dir="ltr" id="ad_email" placeholder="name@example.com" autocomplete="off">'+
+        '<div class="flabel" style="margin-top:8px">מחזור</div>'+
+        '<select class="field" id="ad_start">'+
+          days.map(function(d){
+            var tag = d === weekSundays().cur ? " · השבוע הנוכחי" : (d < DATA.today ? " · כבר עבר" : "");
+            return '<option value="'+esc(d)+'"'+(d===weekSundays().cur?" selected":"")+'>'+esc(il(d))+esc(tag)+'</option>';
+          }).join("")+
+        '</select>'+
+        '<div class="flabel" style="margin-top:8px">קבוצה (אפשר להשאיר ריק)</div>'+
+        '<select class="field" id="ad_group">'+
+          '<option value="">ללא קבוצה</option>'+
+          ["א","ב","ג","ד","ה"].map(function(g){ return '<option value="'+g+'">קבוצה '+g+'</option>'; }).join("")+
+        '</select>'+
+        '<div class="control"><button class="btn p" id="ad_save">הוספה</button></div>'+
+        '<div class="nhint"><b>נשמר אצלנו בלבד.</b> שום דבר לא נכתב למניצ\'ט ולא לגיליון, ולכן אף '+
+          'אוטומציה לא תרוץ ואף הודעה לא תישלח אליה. היא תוכל להיכנס לאפליקציה מיד, וברגע '+
+          'שהיא תופיע בגיליון הנתונים משם הם שיוצגו.</div>'+
+      '</div>'+
+    '</div>';
   }
 
   // תור המענה. כל הערה פתוחה, עם שם האישה מעליה, אחת מתחת לשנייה. עונים לאחת והיא
@@ -1417,6 +1547,20 @@ function render(){
   var sel = list.filter(function(w){ return w.email === SEL; })[0]
          || DATA.women.filter(function(w){ return w.email === SEL; })[0];
 
+  if(VIEW === "nomail" && !searching){
+    html += nomailScreen();
+    app.innerHTML = html;
+    wire();
+    return;
+  }
+
+  if(VIEW === "add" && !searching){
+    html += addScreen();
+    app.innerHTML = html;
+    wire();
+    return;
+  }
+
   if(VIEW === "notes" && !searching){
     html += queueScreen();
     html += '<div class="note">שינוי כאן נשמר אצלנו וגובר על הגיליון. <b>הגיליון הראשי לא משתנה</b>, כי הוא הקובץ ש-ManyChat עובד איתו.</div>';
@@ -1470,6 +1614,74 @@ function render(){
     var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; SEL=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-copy]").forEach(function(el){ el.onclick=function(){
     copyText(el.getAttribute("data-copy"), el); }; });
+
+  // השלמת מייל לשורה שאין בה. הכתובת נכתבת קודם למניצ'ט ורק אם היא באמת נחתה שם
+  // נשמר גם אצלנו, בדיוק כמו בשינוי כתובת: מניצ'ט עונה 200 גם כשהוא נכשל.
+  app.querySelectorAll("[data-fixmail]").forEach(function(el){ el.onclick=function(){
+    var ph = el.getAttribute("data-fixmail");
+    var box = document.getElementById("nm_"+ph);
+    var mail = (box ? box.value : "").trim().toLowerCase();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)){ alert("כתובת המייל לא נראית תקינה."); return; }
+    if(!confirm("לשמור את "+mail+" בתור המייל שלה?\n\nהכתובת תיכתב למניצ'ט, ומשם היא תגיע לגיליון בייצוא הבא.")) return;
+    el.disabled = true;
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({ fixEmail:mail, phone:ph, by:WHO })})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok) throw new Error(mcWhy(d));
+        if(d.noStart) alert("הכתובת נשמרה במניצ'ט.\n\nבשורה שלה אין תאריך התחלה, ולכן היא עדיין לא תוכל להיכנס. את התאריך משלימים במניצ'ט.");
+        return load().then(render);
+      })
+      .catch(function(err){ el.disabled = false; alert("השמירה נכשלה. "+(err && err.message ? err.message : "נסי שוב.")); });
+  }; });
+
+  var adSave = document.getElementById("ad_save");
+  if(adSave) adSave.onclick = function(){
+    var val = function(id){ var e=document.getElementById(id); return e ? e.value.trim() : ""; };
+    var body = { addWoman: {
+      first: val("ad_first"), last: val("ad_last"), phone: val("ad_phone").replace(/[^\d]/g,""),
+      email: val("ad_email").toLowerCase(), start: val("ad_start"), group: val("ad_group"),
+    }, by: WHO };
+    if(!body.addWoman.first && !body.addWoman.last){ alert("צריך שם."); return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.addWoman.email)){ alert("כתובת המייל לא נראית תקינה."); return; }
+    if(!confirm("להוסיף את "+body.addWoman.email+"?\n\nהיא נשמרת אצלנו בלבד ותוכל להיכנס לאפליקציה מיד. שום דבר לא נכתב למניצ'ט ולא לגיליון.")) return;
+    adSave.disabled = true;
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(body)})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok) throw new Error(addWhy(d));
+        VIEW = ""; SEL = body.addWoman.email;
+        return load().then(render);
+      })
+      .catch(function(err){ adSave.disabled = false; alert("ההוספה נכשלה. "+(err && err.message ? err.message : "נסי שוב.")); });
+  };
+
+  // טיוטת תשובה. היא נכתבת לתוך התיבה שהפקידה עורכת, ולעולם אינה נשלחת בעצמה.
+  app.querySelectorAll("[data-drafta]").forEach(function(el){ el.onclick=function(){
+    var id = el.getAttribute("data-drafta"), em = el.getAttribute("data-for");
+    var box = document.getElementById("rp_"+id);
+    var w = (DATA.women||[]).filter(function(x){ return x.email === em; })[0] || {};
+    var note = (NOTE_TEXT[id] || "").replace(/^\[נכתב [^\]]*\]\s*/, "");
+    if(!note){ alert("אין טקסט להערה."); return; }
+    var lab = el.textContent; el.disabled = true; el.textContent = "מנסחת...";
+    var why = document.getElementById("dw_"+id);
+    if(why) why.innerHTML = "";
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({
+        draftFor: note, by: WHO,
+        about: { day: dayInProgram(w), week: "", screen: NOTE_SCREEN[id] || "" },
+        nearby: bankSuggest(note).map(function(e){ return { q:e.q, a:e.a }; }),
+      })})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        el.disabled = false; el.textContent = lab;
+        if(!d || !d.ok){ alert(draftWhy(d)); return; }
+        if(box){ box.value = d.answer; DRAFT[id] = d.answer; box.focus(); }
+        if(why) why.innerHTML = '<b>'+esc(BASED[d.based] || "טיוטה")+'</b> '+esc(d.why||"");
+      })
+      .catch(function(){ el.disabled = false; el.textContent = lab; alert("הניסוח נכשל. נסי שוב."); });
+  }; });
   app.querySelectorAll("[data-stats]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-stats"); STATS = (STATS===em ? "" : em); render(); }; });
   // usagePanel נשען על STATS כדי לדעת שהוא פתוח. עכשיו הוא לשונית, ולכן זה נקבע כאן.
