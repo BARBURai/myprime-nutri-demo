@@ -1035,7 +1035,23 @@ function render(){
   var notesOff = DATA.notesOff || 0;
   // שורות בגיליון שיש בהן טלפון ואין בהן כתובת מייל. כל מה ששמור אצלנו על אישה
   // מתויק תחת המייל שלה, ולכן בלעדיו היא לא נכנסת לאפליקציה ואינה מופיעה בשום מסך.
-  var noMail = DATA.noEmail || [];
+  //
+  // **מסונן לפי אותו בורר אפליקציה כמו כל שאר המסך.** רון, 2 בספטמבר 2026: "כל
+  // ה-10 נשים שרשומות שמה זה נשים שהם בקג'אבי, זה לא רלוונטי לי." אישה בקג'אבי
+  // אינה נכנסת לאפליקציה שלנו בכלל, ולכן מייל חסר אצלה אינו חוסם אותה משום דבר.
+  //
+  // **הסימן היחיד שיש כאן הוא עמודת "אפליקציית תזונה" בגיליון**, כי כל שאר דרכי
+  // הזיהוי מתויקות תחת המייל וממילא אין לה אחד. העמודה מסומנת כבר ברישום.
+  var noMailAll = DATA.noEmail || [];
+  var noMail = noMailAll.filter(function(r){
+    if(APP === "new") return !!r.sheetNewApp;
+    if(APP === "old") return !r.sheetNewApp;
+    return true;
+  });
+  // המספרים שליד כל אפשרות בבורר הם של השורות האלה ולא של הנשים ברשימה, אחרת
+  // הם היו אומרים משהו אחר לגמרי ממה שמוצג מתחתיהם.
+  var nmNew = noMailAll.filter(function(r){ return !!r.sheetNewApp; }).length;
+  var nmOld = noMailAll.length - nmNew;
   var base = MISSING ? missing : (VIEW==="nodate" ? noDate : VIEW==="backsoon" ? backSoon : VIEW==="notes" ? notesWaiting : pool);
 
   // מחזור אחד ברשימה נפתחת, במקום שלוש שורות של צ'יפים לשנה, לחודש ולמחזור.
@@ -1116,12 +1132,23 @@ function render(){
       (VIEW==="nodate" ? '<div class="note">מוקפאות שחסר להן תאריך חזרה, שבוע חזרה או שניהם. <b>הן לא נכנסות לאפליקציה עד שיושלם.</b></div>' : '')+
       (VIEW==="notes" ? '<div class="note">נשים שכתבו הערה מתוך האפליקציה ועוד לא קיבלו תשובה. <b>הכרטיס שלהן נפתח בלשונית "הערות".</b>'+
         (notesOff ? ' מתוכן '+notesOff+' של נשים שאינן ברשימה, כי בשורה שלהן בגיליון אין מייל.' : '')+'</div>' : '')+
-      (VIEW==="nomail" ? '<div class="note">שורות בגיליון שיש בהן טלפון ואין בהן כתובת מייל. <b>בלי מייל היא לא יכולה להיכנס לאפליקציה כלל</b>, ושום דבר עליה לא מופיע במסך הזה.</div>' : '')+
+      (VIEW==="nomail" ? '<div class="note">שורות בגיליון שיש בהן טלפון ואין בהן כתובת מייל. <b>בלי מייל היא לא יכולה להיכנס לאפליקציה כלל</b>, ושום דבר עליה לא מופיע במסך הזה. מוצגות לפי האפליקציה שנבחרה בסינון, וכברירת מחדל <b>האפליקציה החדשה בלבד</b>, לפי עמודת "אפליקציית תזונה" בגיליון.</div>' : '')+
       (VIEW==="backsoon" ? '<div class="note">חוזרות מהקפאה בשבוע הקרוב. <b>ליד כל אחת כתוב לאיזה מחזור להכניס אותה</b>, כדי שתדעי לאיזו קבוצת וואטסאפ היא שייכת.</div>' : '')+
       '</div>'+
       // שלוש רשימות נפתחות בשורה אחת, במקום חמש שורות של צ'יפים שתפסו חצי מסך
       // לפני שהגענו לשם הראשון ברשימה. בתור המענה אין מה לסנן, ולכן כולו יורד.
-      (VIEW === "notes" || VIEW === "nomail" || VIEW === "add" ? '' :
+      // בתור המענה ובהוספה אין מה לסנן. ב"חסר מייל" כן, ולכן שם מוצג בורר
+      // האפליקציה בלבד: בלעדיו מי שסוננה החוצה הייתה בלתי נגישה לגמרי.
+      (VIEW === "nomail" ?
+      '<div class="zone filt"><span class="zlab">סינון</span>'+
+      '<div class="frow">'+
+        '<span class="sel"><select id="fApp" aria-label="אפליקציה">'+
+          '<option value="new"'+(APP==="new"?" selected":"")+'>אפליקציה חדשה ('+nmNew+')</option>'+
+          '<option value="old"'+(APP==="old"?" selected":"")+'>קג\'אבי ('+nmOld+')</option>'+
+          '<option value=""'+(APP===""?" selected":"")+'>כל האפליקציות ('+noMailAll.length+')</option>'+
+        '</select></span>'+
+      '</div></div>' :
+      VIEW === "notes" || VIEW === "add" ? '' :
       '<div class="zone filt"><span class="zlab">סינון</span>'+
       '<div class="frow">'+
         '<span class="sel"><select id="fCohort" aria-label="מחזור">'+
@@ -1358,9 +1385,10 @@ function render(){
   // אצלנו מתויק תחת המייל, ולכן זה מסך משלו ולא סינון של הרשימה. הפקידה משלימה את
   // הכתובת, היא נכתבת למניצ'ט שממנו הגיליון מיוצא, וגם נשמרת אצלנו מיד כדי שהאישה
   // תוכל להיכנס עוד היום ולא כשהייצוא הבא ירוץ.
-  function nomailScreen(){
-    var rows = DATA.noEmail || [];
-    if(!rows.length) return '<div class="empty">אין שורות בלי מייל. הכל תקין 🌸</div>';
+  function nomailScreen(rows){
+    if(!rows.length) return '<div class="empty">'+
+      (noMailAll.length ? 'אין שורות בלי מייל באפליקציה החדשה. יש '+noMailAll.length+' בקג\'אבי, ואפשר לראות אותן דרך הסינון שלמעלה.'
+                        : 'אין שורות בלי מייל. הכל תקין 🌸')+'</div>';
     return '<div class="qhead">'+rows.length+' שורות בגיליון עם טלפון ובלי כתובת מייל. '+
         '<b>כל עוד אין מייל היא לא נכנסת לאפליקציה</b>, וכל מה שנשמר עליה מתויק תחת הכתובת.</div>'+
       rows.map(function(r){
@@ -1557,7 +1585,7 @@ function render(){
          || DATA.women.filter(function(w){ return w.email === SEL; })[0];
 
   if(VIEW === "nomail" && !searching){
-    html += nomailScreen();
+    html += nomailScreen(noMail);
     app.innerHTML = html;
     wire();
     return;
