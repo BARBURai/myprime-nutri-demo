@@ -39,6 +39,20 @@ const WOMEN = [
     newApp: true, cancelled: false, glow: false, sheetGlow: false, solo: 6,
     months: 3, expired: false, notes: 0, log: [], needsGroup: false,
   },
+  // שתי נשים בלי אות קבוצה במחזור הנוכחי, אחת באפליקציה החדשה ואחת בקג'אבי.
+  // זה מה שמבדיל בין אריח שמסנן לאריח שאינו מסנן.
+  {
+    email: "hadas@test.com", first: "הדס", last: "קהלני", phone: "972503333333",
+    group: "", start: "2026-08-23", until: "2026-12-01", sheetEnd: "2026-12-01",
+    newApp: true, cancelled: false, glow: false, sheetGlow: false, solo: 0,
+    months: 3, expired: false, notes: 0, log: [], needsGroup: true,
+  },
+  {
+    email: "kajabi@test.com", first: "עדי", last: "מזרחי", phone: "972504444444",
+    group: "", start: "2026-08-23", until: "2026-12-01", sheetEnd: "2026-12-01",
+    newApp: false, cancelled: false, glow: false, sheetGlow: false, solo: 0,
+    months: 3, expired: false, notes: 0, log: [], needsGroup: true,
+  },
 ];
 // שורה בגיליון שיש בה טלפון ואין בה מייל, וספירת הערות שגדולה ממה שיש ברשימה:
 // שלוש מתוך החמש שייכות לאישה שאינה ברשימה בכלל, וזה בדיוק הפער שהאריח החמיץ.
@@ -107,12 +121,14 @@ const CHECKS = [
     name: "המסך נטען וכרטיס נפתח, בלי שגיאת JavaScript",
     async run(browser, device) {
       const { ctx, page, errors } = await open(browser, device);
+      // שלוש מתוך ארבע, כי ברירת המחדל של המסך היא האפליקציה החדשה בלבד
+      // והרביעית היא בקג'אבי.
       const rows = await page.locator("[data-open]").count();
       await page.locator("[data-open]").first().click();
       await page.waitForTimeout(400);
       const card = await page.locator(".card.open").count();
       await ctx.close();
-      return { ok: rows === 2 && card === 1 && errors.length === 0, detail: `שורות ${rows} · כרטיס ${card} · שגיאות ${errors[0] || "אין"}` };
+      return { ok: rows === 3 && card === 1 && errors.length === 0, detail: `שורות ${rows} · כרטיס ${card} · שגיאות ${errors[0] || "אין"}` };
     },
   },
   {
@@ -264,6 +280,30 @@ CHECKS.push(
     },
   },
 );
+
+CHECKS.push({
+  // רון, 2 בספטמבר 2026: "בחסרות קבוצה יש נשים לא רלוונטיות כי הן לא עם
+  // האפליקציה החדשה." שני הצדדים באותה בדיקה בכוונה: אריח שמסנן תמיד נראה
+  // בדיוק כמו אריח שאינו מסנן אף פעם.
+  name: "חסרות קבוצה מסונן לאפליקציה החדשה, ואפשר להחזיר את השאר",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device);
+    const tile = () => page.locator('[data-m="1"]').first().innerText();
+    const before = await tile();
+    await page.locator('[data-m="1"]').first().click();
+    await page.waitForTimeout(400);
+    const rowsNew = await page.locator("[data-open]").count();
+    const hasPicker = await page.locator("#fApp").count();
+    await page.locator("#fApp").selectOption("");
+    await page.waitForTimeout(400);
+    const rowsAll = await page.locator("[data-open]").count();
+    await ctx.close();
+    return {
+      ok: /\(1\)/.test(before) && rowsNew === 1 && hasPicker === 1 && rowsAll === 2 && errors.length === 0,
+      detail: `האריח "${before.trim()}" · חדשה ${rowsNew} · הכל ${rowsAll} · בורר ${hasPicker} · שגיאות ${errors[0] || "אין"}`,
+    };
+  },
+});
 
 const browser = await chromium.launch({ executablePath: BROWSER });
 const ONLY = process.env.E2E_ONLY || "";
