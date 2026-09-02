@@ -447,6 +447,55 @@ const CHECKS = [
     },
   },
   {
+    // משתתפת דיווחה: "כשנכנסים לאוכל בקטגוריה של אחרונים, לחיצה על back מחזירה
+    // למסך הראשי במקום למסך הקודם." חלון ההוספה היה שכבה אחת בעיני כפתור החזרה,
+    // ולכן לחיצה מתוך מסך הכמות סגרה את כולו. שלוש הלחיצות כאן הן שלוש השכבות.
+    name: "חזרה מתוך מסך הכמות מחזירה לרשימת האחרונים ולא ליומן",
+    async run(browser, device) {
+      const recent = {
+        id: "fav_יוגורט", name: "יוגורט",
+        per100: { kcal: 60, p: 10, f: 1, c: 4 },
+        exact: { g: 150, kcal: 90, p: 15, f: 2, c: 6 },
+        measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
+        def: 0, unit: "g", lastG: 150,
+      };
+      const { context, page, errors } = await openApp(browser, device, { day: 15, seed: { recents: [recent] } });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=האחרונים והמועדפים שלי").first().click();
+      await page.waitForTimeout(500);
+      // כפתור הלשונית בדיוק, ולא כותרת המסך שמכילה את אותה מילה.
+      await page.getByRole("button", { name: "אחרונים", exact: true }).click();
+      await page.waitForTimeout(300);
+      const onList = await page.locator("text=יוגורט").count();
+      await page.locator("text=יוגורט").first().click();
+      await page.waitForTimeout(400);
+      // מסך הכמות: כפתור ההוספה ליומן קיים רק שם.
+      const inQty = await page.locator("text=/הוסיפי ל/").count();
+      await page.goBack();
+      await page.waitForTimeout(500);
+      // אחרי לחיצה אחת: חזרה לרשימת האחרונים, והחלון עדיין פתוח.
+      const backOnList = (await page.locator("text=יוגורט").count()) > 0
+        && (await page.locator("text=/הוסיפי ל/").count()) === 0;
+      await page.goBack();
+      await page.waitForTimeout(500);
+      // לחיצה שנייה: חזרה לבחירת הדרך, בתוך אותו חלון.
+      const onMethod = (await page.locator("text=חיפוש מזון").count()) > 0;
+      await page.goBack();
+      await page.waitForTimeout(500);
+      // לחיצה שלישית: החלון נסגר, ורק אז חוזרים ליומן.
+      const closed = (await page.locator("text=חיפוש מזון").count()) === 0;
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: onList > 0 && inQty > 0 && backOnList && onMethod && closed && bad.length === 0,
+        detail: `ברשימה ${onList} · במסך הכמות ${inQty} · חזרה לרשימה ${backOnList} · לבחירת הדרך ${onMethod} · נסגר ${closed} · שגיאות ${bad[0] || "אין"}`,
+      };
+    },
+  },
+  {
     // A participant reported that back from inside a recipe landed her on the diary instead
     // of the recipe list. The open recipe was not a layer the back handler could see. This
     // is the one part of the Android back button a desktop browser can actually reproduce,
