@@ -56,8 +56,11 @@ const WOMEN = [
 ];
 // שורה בגיליון שיש בה טלפון ואין בה מייל, וספירת הערות שגדולה ממה שיש ברשימה:
 // שלוש מתוך החמש שייכות לאישה שאינה ברשימה בכלל, וזה בדיוק הפער שהאריח החמיץ.
+// שתי שורות בלי מייל, אחת מסומנת באפליקציה החדשה ואחת לא. זה מה שמבדיל בין
+// אריח שמסנן לאריח שאינו מסנן, וזה מה שרון ראה: עשר נשים שכולן בקג'אבי.
 const NOEMAIL = [
-  { phone: "972502222222", first: "נילי", last: "לביא", group: "ב", start: "2026-08-16", end: "2026-11-24", months: 3, solo: 0, cancelled: false },
+  { phone: "972502222222", first: "נילי", last: "לביא", group: "ב", start: "2026-08-16", end: "2026-11-24", months: 3, solo: 0, cancelled: false, sheetNewApp: true },
+  { phone: "972508888888", first: "אתי", last: "רון", group: "א", start: "2026-08-16", end: "2026-11-24", months: 3, solo: 0, cancelled: false, sheetNewApp: false },
 ];
 const DATA = { ok: true, today: TODAY, me: "רון", owner: true, version: "test", women: WOMEN, headers: {}, skipped: {}, rawHeaders: [],
   noEmail: NOEMAIL, notesTotal: 5, notesOff: 3 };
@@ -301,6 +304,30 @@ CHECKS.push({
     return {
       ok: /\(1\)/.test(before) && rowsNew === 1 && hasPicker === 1 && rowsAll === 2 && errors.length === 0,
       detail: `האריח "${before.trim()}" · חדשה ${rowsNew} · הכל ${rowsAll} · בורר ${hasPicker} · שגיאות ${errors[0] || "אין"}`,
+    };
+  },
+});
+
+CHECKS.push({
+  // רון, 2 בספטמבר 2026: "כל ה-10 נשים שרשומות שמה זה נשים שהם בקג'אבי, זה
+  // לא רלוונטי לי." שני הצדדים באותה בדיקה, כמו באריח חסרות קבוצה.
+  name: "חסר מייל מסונן לאפליקציה החדשה, ואפשר להחזיר את השאר",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device);
+    const tile = await page.locator('[data-v="nomail"]').first().innerText();
+    await page.locator('[data-v="nomail"]').first().click();
+    await page.waitForTimeout(400);
+    const rowsNew = await page.locator("[data-fixmail]").count();
+    await page.locator("#fApp").selectOption("");
+    await page.waitForTimeout(400);
+    const rowsAll = await page.locator("[data-fixmail]").count();
+    await page.locator("#fApp").selectOption("old");
+    await page.waitForTimeout(400);
+    const rowsOld = await page.locator("[data-fixmail]").count();
+    await ctx.close();
+    return {
+      ok: /\(1\)/.test(tile) && rowsNew === 1 && rowsAll === 2 && rowsOld === 1 && errors.length === 0,
+      detail: `האריח "${tile.trim()}" · חדשה ${rowsNew} · הכל ${rowsAll} · קג'אבי ${rowsOld} · שגיאות ${errors[0] || "אין"}`,
     };
   },
 });
