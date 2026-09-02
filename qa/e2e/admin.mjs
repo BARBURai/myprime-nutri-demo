@@ -39,8 +39,28 @@ const WOMEN = [
     newApp: true, cancelled: false, glow: false, sheetGlow: false, solo: 6,
     months: 3, expired: false, notes: 0, log: [], needsGroup: false,
   },
+  // שתי נשים בלי אות קבוצה במחזור הנוכחי, אחת באפליקציה החדשה ואחת בקג'אבי.
+  // זה מה שמבדיל בין אריח שמסנן לאריח שאינו מסנן.
+  {
+    email: "hadas@test.com", first: "הדס", last: "קהלני", phone: "972503333333",
+    group: "", start: "2026-08-23", until: "2026-12-01", sheetEnd: "2026-12-01",
+    newApp: true, cancelled: false, glow: false, sheetGlow: false, solo: 0,
+    months: 3, expired: false, notes: 0, log: [], needsGroup: true,
+  },
+  {
+    email: "kajabi@test.com", first: "עדי", last: "מזרחי", phone: "972504444444",
+    group: "", start: "2026-08-23", until: "2026-12-01", sheetEnd: "2026-12-01",
+    newApp: false, cancelled: false, glow: false, sheetGlow: false, solo: 0,
+    months: 3, expired: false, notes: 0, log: [], needsGroup: true,
+  },
 ];
-const DATA = { ok: true, today: TODAY, me: "רון", owner: true, version: "test", women: WOMEN, headers: {}, skipped: {}, rawHeaders: [] };
+// שורה בגיליון שיש בה טלפון ואין בה מייל, וספירת הערות שגדולה ממה שיש ברשימה:
+// שלוש מתוך החמש שייכות לאישה שאינה ברשימה בכלל, וזה בדיוק הפער שהאריח החמיץ.
+const NOEMAIL = [
+  { phone: "972502222222", first: "נילי", last: "לביא", group: "ב", start: "2026-08-16", end: "2026-11-24", months: 3, solo: 0, cancelled: false },
+];
+const DATA = { ok: true, today: TODAY, me: "רון", owner: true, version: "test", women: WOMEN, headers: {}, skipped: {}, rawHeaders: [],
+  noEmail: NOEMAIL, notesTotal: 5, notesOff: 3 };
 
 const DEVICES = [
   { name: "טלפון", viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" },
@@ -55,9 +75,14 @@ const record = (device, name, ok, detail, skip) => {
 
 async function open(browser, device) {
   const ctx = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+  const posts = [];
   await ctx.route("**/api/**", (route) => {
     const url = route.request().url();
     const json = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+    if (route.request().method() === "POST") {
+      try { posts.push(JSON.parse(route.request().postData() || "{}")); } catch (e) { posts.push({}); }
+      return json({ ok: true });
+    }
     if (url.includes("notes=")) return json({ ok: true, notes: [], replies: [] });
     if (url.includes("bank=1")) return json({ ok: true, bank: [] });
     if (url.includes("mc=")) return json({ ok: true, found: false });
@@ -71,10 +96,13 @@ async function open(browser, device) {
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e.message || e)));
+  // כל אישור במסך הזה שואל לפני. בלי המאזין הזה הדפדפן דוחה אותו והפעולה
+  // פשוט לא קורית, כלומר הבדיקה הייתה נכשלת מסיבה שאינה קשורה למה שהיא בודקת.
+  page.on("dialog", (d) => d.accept().catch(() => {}));
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(700);
   await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
-  return { ctx, page, errors };
+  return { ctx, page, errors, posts };
 }
 
 // שבע האפשרויות בתפריט, ולאיזה שדה כל אחת אמורה לקפוץ.
@@ -93,12 +121,14 @@ const CHECKS = [
     name: "המסך נטען וכרטיס נפתח, בלי שגיאת JavaScript",
     async run(browser, device) {
       const { ctx, page, errors } = await open(browser, device);
+      // שלוש מתוך ארבע, כי ברירת המחדל של המסך היא האפליקציה החדשה בלבד
+      // והרביעית היא בקג'אבי.
       const rows = await page.locator("[data-open]").count();
       await page.locator("[data-open]").first().click();
       await page.waitForTimeout(400);
       const card = await page.locator(".card.open").count();
       await ctx.close();
-      return { ok: rows === 2 && card === 1 && errors.length === 0, detail: `שורות ${rows} · כרטיס ${card} · שגיאות ${errors[0] || "אין"}` };
+      return { ok: rows === 3 && card === 1 && errors.length === 0, detail: `שורות ${rows} · כרטיס ${card} · שגיאות ${errors[0] || "אין"}` };
     },
   },
   {
@@ -188,6 +218,92 @@ const CHECKS = [
     },
   },
 ];
+
+
+// שלושת המסכים החדשים של v6.68. הם קוד שרץ בדפדפן, וזו הצורה של v6.32: הבדיקות
+// שקוראות את הקוד לא תופסות שגיאת ריצה, ולכן כל אחת מהן נופלת גם על שגיאה.
+CHECKS.push(
+  {
+    // האריח ספר את הרשימה שעל המסך, והתור ספר את כל ההערות הפתוחות. רון ראה
+    // 9 באריח ו-12 בתור. עכשיו שניהם קוראים את אותו מספר מהשרת.
+    name: "אריח ההערות אומר את המספר שהשרת אמר",
+    async run(browser, device) {
+      const { ctx, page, errors } = await open(browser, device);
+      const txt = await page.locator('[data-v="notes"]').first().innerText();
+      await ctx.close();
+      return { ok: /\(5\)/.test(txt) && errors.length === 0, detail: `האריח אומר "${txt.trim()}"` };
+    },
+  },
+  {
+    name: "אריח חסר מייל נפתח, והשמירה שולחת את הטלפון והכתובת",
+    async run(browser, device) {
+      const { ctx, page, errors, posts } = await open(browser, device);
+      await page.locator('[data-v="nomail"]').first().click();
+      await page.waitForTimeout(400);
+      const rows = await page.locator("[data-fixmail]").count();
+      await page.locator("#nm_972502222222").fill("nili@test.com");
+      await page.locator("[data-fixmail]").first().click();
+      await page.waitForTimeout(600);
+      await ctx.close();
+      const sent = posts.filter((p) => p.fixEmail);
+      return {
+        ok: rows === 1 && sent.length === 1 && sent[0].fixEmail === "nili@test.com" &&
+            sent[0].phone === "972502222222" && errors.length === 0,
+        detail: `שורות ${rows} · נשלח ${JSON.stringify(sent[0] || null)} · שגיאות ${errors[0] || "אין"}`,
+      };
+    },
+  },
+  {
+    // ההחלטה של רון: ההוספה נשמרת אצלנו בלבד. הבדיקה כאן היא שמה שהוזן הוא
+    // מה שנשלח, ושלא נשלחה שום בקשה נוספת מלבדה.
+    name: "הוספת משתתפת שולחת בדיוק את מה שהוזן",
+    async run(browser, device) {
+      const { ctx, page, errors, posts } = await open(browser, device);
+      await page.locator('[data-v="add"]').first().click();
+      await page.waitForTimeout(400);
+      await page.locator("#ad_first").fill("דנה");
+      await page.locator("#ad_last").fill("אבידן");
+      await page.locator("#ad_email").fill("dana@test.com");
+      await page.locator("#ad_group").selectOption("ג");
+      const start = await page.locator("#ad_start").inputValue();
+      await page.locator("#ad_save").click();
+      await page.waitForTimeout(600);
+      await ctx.close();
+      const sent = posts.filter((p) => p.addWoman);
+      const a = sent[0] && sent[0].addWoman;
+      return {
+        ok: sent.length === 1 && a && a.first === "דנה" && a.email === "dana@test.com" &&
+            a.group === "ג" && a.start === start &&
+            new Date(start + "T00:00:00Z").getUTCDay() === 0 && errors.length === 0,
+        detail: `נשלח ${JSON.stringify(a || null)} · מחזור ${start} · שגיאות ${errors[0] || "אין"}`,
+      };
+    },
+  },
+);
+
+CHECKS.push({
+  // רון, 2 בספטמבר 2026: "בחסרות קבוצה יש נשים לא רלוונטיות כי הן לא עם
+  // האפליקציה החדשה." שני הצדדים באותה בדיקה בכוונה: אריח שמסנן תמיד נראה
+  // בדיוק כמו אריח שאינו מסנן אף פעם.
+  name: "חסרות קבוצה מסונן לאפליקציה החדשה, ואפשר להחזיר את השאר",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device);
+    const tile = () => page.locator('[data-m="1"]').first().innerText();
+    const before = await tile();
+    await page.locator('[data-m="1"]').first().click();
+    await page.waitForTimeout(400);
+    const rowsNew = await page.locator("[data-open]").count();
+    const hasPicker = await page.locator("#fApp").count();
+    await page.locator("#fApp").selectOption("");
+    await page.waitForTimeout(400);
+    const rowsAll = await page.locator("[data-open]").count();
+    await ctx.close();
+    return {
+      ok: /\(1\)/.test(before) && rowsNew === 1 && hasPicker === 1 && rowsAll === 2 && errors.length === 0,
+      detail: `האריח "${before.trim()}" · חדשה ${rowsNew} · הכל ${rowsAll} · בורר ${hasPicker} · שגיאות ${errors[0] || "אין"}`,
+    };
+  },
+});
 
 const browser = await chromium.launch({ executablePath: BROWSER });
 const ONLY = process.env.E2E_ONLY || "";

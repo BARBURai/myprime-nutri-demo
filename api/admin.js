@@ -10,11 +10,16 @@
 //   admin:overrides  field = email, value = JSON({ until, group, glow, by, at, log[] })
 //   admin:seen       field = email, value = "YYYY-MM-DD" of her last app open
 //   admin:usage      field = email, value = JSON from api/usage.js (counts only)
+//   admin:manual     field = email, value = JSON({ first, last, phone, group, start, ... })
+//                    Women the office entered by hand, and women whose row in the file
+//                    carries no address until a clerk supplies one. The file always wins:
+//                    the moment its export carries her, this record stops being consulted.
 //
 // GET  /api/admin?key=<ADMIN_KEY>              -> { ok, women[], headers, today }
 // POST /api/admin?key=<ADMIN_KEY>              -> { email, until, by }   ("" clears it)
 
 import { loadSheet, israelDay, accessEnd, ymd } from "./_sheet.js";
+import { KB } from "./_kb.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -30,7 +35,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "6.66";
+const ADMIN_VERSION = "6.69";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -409,6 +414,211 @@ export default async function handler(req, res) {
   // the key everything else is filed under, so it writes to ManyChat FIRST and only moves
   // our records once that has actually landed. The other way round would leave her records
   // under an address the source never adopted.
+  // "נסחי לי תשובה". A draft for the clerk to read, correct and send - it is never sent to a
+  // participant by itself, and nothing here writes anything anywhere. Three things go into
+  // it: the knowledge brief in api/_kb.js, which is the only source about how the app
+  // behaves; the answer bank, which is what Ron and Tali actually approved and sent before,
+  // so their corrections are what the next draft is built on; and where she is in the
+  // programme, because the same question has a different answer in week 1 and in week 5.
+  //
+  // Office matters are deliberately out of scope. Ron: "השאלות של המשרד לא קשורות ולא
+  // רלוונטיות בכלל... שאלות שקשורות במשרד צריכות להגיע לוואטסאפ המשרדי." So payment,
+  // cancellation, freezing, cohort dates and the WhatsApp group are not answered here at
+  // all; the draft says so in one line and stops.
+  if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("draftFor") : req.body.draftFor)) {
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+    const note = String((body && body.draftFor) || "").trim().slice(0, 2000);
+    if (!note) return res.status(400).json({ ok: false, error: "empty" });
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) return res.status(200).json({ ok: false, error: "no_key" });
+
+    const about = (body && body.about) || {};
+    const where = [
+      about.day ? "היא ביום " + String(about.day).slice(0, 12) + " בתוכנית" : "",
+      about.week ? "שבוע " + String(about.week).slice(0, 4) : "",
+      about.screen ? 'ההערה נכתבה מהמסך "' + String(about.screen).slice(0, 40) + '"' : "",
+    ].filter(Boolean).join(", ");
+
+    // The corrections. Saved answers first, because they are the ones a person approved.
+    let bank = [];
+    try {
+      const raw = await redis(RU, RT, "GET", "admin:faq");
+      bank = raw ? JSON.parse(raw) : [];
+    } catch (e) { bank = []; }
+    const nearby = Array.isArray(body && body.nearby) ? body.nearby.slice(0, 4) : [];
+    const pairs = bank.slice(-30).concat(nearby)
+      .filter((e) => e && e.q && e.a)
+      .map((e) => "ש: " + String(e.q).slice(0, 300) + "\nת: " + String(e.a).slice(0, 900))
+      .join("\n\n");
+
+    const system = [
+      { type: "text", text:
+`את מנסחת טיוטת תשובה עבור המשרד של מיי פריים. משתתפת כתבה הערה מתוך האפליקציה,
+ורון או טלי יקראו את מה שתכתבי, יתקנו אותו, וישלחו אותה בעצמם. את לא מדברת איתה.
+
+## החומר שממנו עונים
+${KB}
+
+## תשובות שכבר נשלחו בעבר, אחרי שאדם אישר אותן
+אם אחת מהן עונה על השאלה, קחי את הניסוח שלה כמעט כמו שהוא. הן מתקנות אותך.
+
+${pairs || "(אין עדיין)"}
+
+## כללים
+1. עברית, פנייה בגוף שני נקבה, חם אבל עובדתי. שתיים עד ארבע שורות.
+2. **בלי חתימה ובלי שם.** התשובה נכתבת בשם המשרד, ולעולם לא בשמה של ענת.
+3. **בלי להבטיח תיקון שלא קרה.** אם היא מדווחת על תקלה, אל תכתבי "תיקנו" ואל
+   תבטיחי מתי. אפשר לומר שרשמנו ושזה נבדק.
+4. **רק שאלות על האפליקציה.** כסף, ביטול, החזר, הקפאה, תאריך התחלה, מעבר מחזור,
+   קבוצת הוואטסאפ, והליווי עצמו הם ענייני משרד. אל תעני עליהם, ואל תמציאי מדיניות.
+   במקרה כזה כתבי שורה אחת שמפנה אותה לוואטסאפ של המשרד, וסמני office.
+5. **ייעוץ רפואי, תרופות, מצב רפואי והריון: לא עונים.** מפנים לרופא או לדיאטנית.
+6. אל תמציאי מסך, כפתור או פיצ'ר שלא כתוב עליו בחומר למעלה. אם החומר לא מכסה,
+   מותר לך לחשוב ולהציע תשובה סבירה, אבל אז סמני guess ואמרי במשפט מה לא ידעת.
+7. אמוג'י אחד לכל היותר, ורק אם הוא מתאים.
+
+## הפלט
+JSON בלבד, בלי שום טקסט אחר:
+{"answer":"<הטיוטה>","based":"kb"|"bank"|"office"|"guess","why":"<משפט קצר לפקידה: על מה זה נשען, או מה לא ידעת>"}`,
+        cache_control: { type: "ephemeral" } },
+    ];
+
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": key,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: process.env.AI_MODEL || "claude-sonnet-4-6",
+          max_tokens: 700,
+          system,
+          messages: [{ role: "user", content: (where ? where + ".\n\n" : "") + "ההערה שלה:\n" + note }],
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) return res.status(200).json({ ok: false, error: "ai_failed", detail: (j && j.error && j.error.message) || "" });
+      const txt = ((j.content || []).find((c) => c.type === "text") || {}).text || "";
+      const m = txt.match(/\{[\s\S]*\}/);
+      let out = null;
+      if (m) { try { out = JSON.parse(m[0]); } catch (e) { out = null; } }
+      if (!out || !out.answer) return res.status(200).json({ ok: false, error: "bad_json" });
+      return res.status(200).json({
+        ok: true,
+        answer: String(out.answer).slice(0, 1500),
+        based: ["kb", "bank", "office", "guess"].includes(out.based) ? out.based : "guess",
+        why: String(out.why || "").slice(0, 300),
+      });
+    } catch (e) { return res.status(200).json({ ok: false, error: "ai_failed" }); }
+  }
+
+  // A row in the file that carries a phone and no address. She is registered, she paid, and
+  // nothing about her exists on any screen, because every record we hold is filed under an
+  // address. The clerk supplies one here. It is written into ManyChat, which is where the
+  // sheet is exported from, so the file heals itself on the next export; and it is stored on
+  // our side at once, so she can sign in tonight rather than whenever that export runs.
+  if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("fixEmail") : req.body.fixEmail)) {
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+    const phone = String((body && body.phone) || "").replace(/[^\d]/g, "");
+    const to = String((body && body.fixEmail) || "").trim().toLowerCase();
+    const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;
+    if (!phone || phone.length < 9) return res.status(400).json({ ok: false, error: "bad_phone" });
+    if (!EMAIL_RE.test(to)) return res.status(400).json({ ok: false, error: "bad_email" });
+    if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+    // The row itself is read again here rather than trusted from the browser: her start date
+    // decides her whole window, and it must come from the file and not from the screen.
+    let row = null, taken = false;
+    try {
+      const sheetNow = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
+      taken = sheetNow.women.some((w) => w.email === to);
+      row = (sheetNow.noEmail || []).find((r) => r.phone === phone) || null;
+    } catch (e) { return res.status(502).json({ ok: false, error: "sheet_failed" }); }
+    if (taken) return res.status(409).json({ ok: false, error: "email_taken" });
+    if (!row) return res.status(409).json({ ok: false, error: "row_gone" });
+    // Two rows on one address is a state the sheet reader silently drops one of, so it is
+    // never created from here. The manual store is checked for the same reason.
+    try {
+      const already = await redis(RU, RT, "HGET", "admin:manual", to);
+      if (already) return res.status(409).json({ ok: false, error: "email_taken" });
+    } catch (e) {}
+    if (!process.env.MANYCHAT_TOKEN) return res.status(500).json({ ok: false, error: "mc_off" });
+    const mcState = await mcPush({ phone, newEmail: to });
+    if (String(mcState).indexOf("ok") !== 0) return res.status(200).json({ ok: false, mc: mcState });
+    const rec = {
+      first: row.first || "", last: row.last || "", phone,
+      group: row.group || "", start: row.start || "",
+      months: row.months || null, solo: row.solo || 0, glow: !!row.glow,
+      by, at: new Date().toISOString(), src: "noemail",
+    };
+    // No start date in her row means there is nothing to open the programme on, and the
+    // address is still worth writing: ManyChat has it now, and the sheet will carry it.
+    if (!rec.start) return res.status(200).json({ ok: true, mc: "ok", noStart: true });
+    try { await redis(RU, RT, "HSET", "admin:manual", to, JSON.stringify(rec)); }
+    catch (e) { return res.status(200).json({ ok: false, error: "store_failed", mc: "ok" }); }
+    try {
+      let cur = {};
+      const old = await redis(RU, RT, "HGET", "admin:overrides", to);
+      if (old) cur = JSON.parse(old) || {};
+      const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
+      log.unshift({ at: rec.at, by, field: "fixemail", from: phone, to });
+      cur.log = log.slice(0, 20);
+      await redis(RU, RT, "HSET", "admin:overrides", to, JSON.stringify(cur));
+    } catch (e) {}
+    return res.status(200).json({ ok: true, mc: "ok" });
+  }
+
+  // A woman the file does not hold at all. Ron's decision: this writes to our side only, and
+  // NOTHING is sent to ManyChat - no record is created there and no automation can fire from
+  // it. She gets the standard window, start plus 70 days plus three months, and the moment
+  // the export does carry her the file's row is the one on screen and this record stops
+  // being consulted. Tali may do this too, like every other action on this screen.
+  if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("addWoman") : req.body.addWoman)) {
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+    const a = (body && body.addWoman) || {};
+    const email = String(a.email || "").trim().toLowerCase();
+    const start = String(a.start || "").trim();
+    const phone = String(a.phone || "").replace(/[^\d]/g, "");
+    const first = String(a.first || "").trim().slice(0, 60);
+    const last = String(a.last || "").trim().slice(0, 60);
+    const group = String(a.group || "").trim();
+    const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ ok: false, error: "bad_email" });
+    if (!DATE_RE.test(start)) return res.status(400).json({ ok: false, error: "bad_start" });
+    // A cohort always begins on a Sunday. A start on any other day splits the two things the
+    // app derives from it - her day in the programme and the day of the week the tasks open
+    // on - and her diary card opens with no tasks at all.
+    if (new Date(start + "T00:00:00Z").getUTCDay() !== 0) return res.status(400).json({ ok: false, error: "not_sunday" });
+    if (group && !GROUP_RE.test(group)) return res.status(400).json({ ok: false, error: "bad_group" });
+    if (!first && !last) return res.status(400).json({ ok: false, error: "no_name" });
+    if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+    try {
+      const sheetNow = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
+      if (sheetNow.women.some((w) => w.email === email)) return res.status(409).json({ ok: false, error: "email_taken" });
+    } catch (e) { return res.status(502).json({ ok: false, error: "sheet_failed" }); }
+    try {
+      const already = await redis(RU, RT, "HGET", "admin:manual", email);
+      if (already) return res.status(409).json({ ok: false, error: "email_taken" });
+    } catch (e) {}
+    const rec = { first, last, phone, group, start, months: null, solo: 0, glow: false, by, at: new Date().toISOString(), src: "add" };
+    try { await redis(RU, RT, "HSET", "admin:manual", email, JSON.stringify(rec)); }
+    catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+    try {
+      let cur = {};
+      const old = await redis(RU, RT, "HGET", "admin:overrides", email);
+      if (old) cur = JSON.parse(old) || {};
+      const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
+      log.unshift({ at: rec.at, by, field: "added", to: start });
+      cur.log = log.slice(0, 20);
+      await redis(RU, RT, "HSET", "admin:overrides", email, JSON.stringify(cur));
+    } catch (e) {}
+    return res.status(200).json({ ok: true });
+  }
+
   if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("newEmail") : req.body.newEmail)) {
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
@@ -695,7 +905,7 @@ export default async function handler(req, res) {
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
-  let overrides = {}, seen = {}, usage = {}, emailMap = {}, emailOld = {};
+  let overrides = {}, seen = {}, usage = {}, emailMap = {}, emailOld = {}, manual = {};
   const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
@@ -706,6 +916,9 @@ export default async function handler(req, res) {
     try { overrides = flat(await redis(RU, RT, "HGETALL", "admin:overrides")); } catch (e) {}
     try { emailMap = flat(await redis(RU, RT, "HGETALL", "admin:emailmap")); } catch (e) {}
     try { emailOld = flat(await redis(RU, RT, "HGETALL", "admin:emailold")); } catch (e) {}
+    // Women the office entered by hand, and women whose sheet row carries no address until
+    // the clerk supplies one. Ours alone: the registration sheet is never written to.
+    try { manual = flat(await redis(RU, RT, "HGETALL", "admin:manual")); } catch (e) {}
     try { seen = flat(await redis(RU, RT, "HGETALL", "admin:seen")); } catch (e) {}
     try { usage = flat(await redis(RU, RT, "HGETALL", "admin:usage")); } catch (e) {}
 
@@ -764,7 +977,38 @@ export default async function handler(req, res) {
     return d.toISOString().slice(0, 10);
   };
   const thisWeek = sundayOfWeek(0), nextWeek = sundayOfWeek(1);
-  const women = sheet.women.map((w) => {
+
+  // Manual records, added last and only where the file has nothing. The sheet always wins:
+  // the moment ManyChat's export carries her, the file's row is the one on screen and the
+  // record here simply stops being consulted. Nothing is deleted, so a row that disappears
+  // from the file again does not take her with it.
+  const inSheet = new Set(sheet.women.map((w) => w.email));
+  const manualRows = [];
+  for (const em of Object.keys(manual)) {
+    if (inSheet.has(em)) continue;
+    let m = null;
+    try { m = JSON.parse(manual[em]); } catch (e) { m = null; }
+    if (!m || !m.start) continue;
+    const st = new Date(m.start + "T00:00:00Z");
+    const mMonths = (Number.isFinite(m.months) && m.months > 0) ? m.months : null;
+    const mSolo = (m.solo === 6 || m.solo === 12) ? m.solo : 0;
+    manualRows.push({
+      email: em,
+      first: m.first || "",
+      last: m.last || "",
+      phone: String(m.phone || "").replace(/[^\d]/g, ""),
+      group: m.group || "",
+      start: m.start,
+      months: mMonths,
+      cancelled: false,
+      sheetNewApp: true,
+      glow: !!m.glow,
+      solo: mSolo,
+      sheetEnd: ymd(accessEnd(st, mMonths, mSolo)),
+      manual: { by: m.by || "", at: m.at || "", src: m.src || "add" },
+    });
+  }
+  const women = sheet.women.concat(manualRows).map((w) => {
     let ovr = null;
     const raw = overrides[w.email];
     if (raw) { try { ovr = JSON.parse(raw); } catch (e) {} }
@@ -858,5 +1102,31 @@ export default async function handler(req, res) {
   }
   women.forEach((w) => { const n = parseInt(pending[w.email], 10); if (n > 0) w.notes = n; });
 
-  return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women });
+  // The tile and the queue must say the same number. The tile used to add up only the women
+  // the list itself holds, and the queue reads the pending hash straight, so a woman who
+  // wrote a note and is not on the list - no address in her row, or a row the reader had to
+  // drop - was counted by one and not by the other. Ron saw 9 on the tile and 12 in the
+  // queue. Counted here, once, from the source the queue uses.
+  const onList = new Set(women.map((w) => w.email));
+  let notesTotal = 0, notesOff = 0;
+  Object.keys(pending).forEach((em) => {
+    const n = parseInt(pending[em], 10);
+    if (!(n > 0)) return;
+    notesTotal += n;
+    if (!onList.has(em)) notesOff += n;
+  });
+
+  // Rows in the file with a phone and no address. Everything we hold about a woman is filed
+  // under her address, so until one exists she cannot sign in and nothing about her is
+  // visible anywhere. Cancelled rows are left out: there is nothing to fix there.
+  // A phone the office has already supplied an address for drops off this list at once,
+  // even though her row in the file still has none. Otherwise the clerk would keep seeing
+  // her there for as long as the export takes and would fill it in a second time.
+  const fixedPhones = new Set(manualRows.map((r) => r.phone).filter(Boolean));
+  const noEmail = (sheet.noEmail || []).filter((r) => !r.cancelled && !fixedPhones.has(r.phone)).map((r) => ({
+    ...r,
+    end: r.start ? ymd(accessEnd(new Date(r.start + "T00:00:00Z"), r.months, r.solo)) : "",
+  }));
+
+  return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women, notesTotal, notesOff, noEmail });
 }

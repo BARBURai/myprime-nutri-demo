@@ -1388,6 +1388,49 @@ const CHECKS = [
       return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "לפני 0 · אחרי 1 · בלי יעד ובלי סיבים · הסדר נכון" };
     },
   },
+  {
+    // משתתפת נתקעה ב-1 בספטמבר 2026: חלונית הטיפ ישבה מתחת לכרטיס יומן המעקב
+    // והמשיכה אל מחוץ למסך, הכפתור היה מתחת לקצה, והשכבה המוחשכת בולעת כל הקשה
+    // אחרת. לא הייתה לה שום דרך לצאת, וסיבוב הטלפון לרוחב שחרר אותה.
+    // **המסך מוקטן כאן בכוונה**, כי בגובה של הפרופילים הרגילים החלונית נכנסת
+    // ממילא, והתרחיש היה עובר גם על הקוד השבור.
+    name: "חלונית הטיפ נשארת בתוך המסך, גם כשאין מקום מתחת לכרטיס",
+    async run(browser, device) {
+      if (!device.isMobile) return { skip: true, detail: "נבדק בטלפון" };
+      const start = "2026-08-16";
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 9000, stepBaseline: 7000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      // שבוע 2 יום 3, היום שבו נפתחת משימת אימון הכוח וטיפ ה-trackerfill יורה.
+      // המסך קטן כבר בטעינה ולא משנים אותו אחר כך, כדי שהמדידה תרוץ על המצב
+      // הסופי ולא תלויה בשאלה מתי הדפדפן מדווח על שינוי הגודל.
+      const small = { ...device, viewport: { width: 360, height: 480 } };
+      const { context, page, errors } = await openApp(browser, small, { startDate: start, clock: "2026-08-25T09:00:00.000Z", seed: { profile: prof } });
+      const bad = [];
+      await page.waitForTimeout(600);
+      const body = await page.evaluate(() => document.body.innerText);
+      if (!body.includes("מהיום אנחנו מתחילות")) bad.push("הטיפ אינו מוצג");
+      const r = await page.evaluate(() => {
+        const fr = document.querySelector(".phone-frame").getBoundingClientRect();
+        const bub = [...document.querySelectorAll("div")].find((d) => d.style && d.style.zIndex === "99999");
+        if (!bub) return null;
+        const btns = [...bub.querySelectorAll("button")];
+        const last = btns[btns.length - 1];
+        if (!last) return null;
+        const lb = last.getBoundingClientRect();
+        return { btnBottom: Math.round(lb.bottom - fr.top), frameH: Math.round(fr.height), top: Math.round(bub.getBoundingClientRect().top - fr.top) };
+      });
+      if (!r) bad.push("החלונית או הכפתור לא נמצאו");
+      else if (r.btnBottom > r.frameH) bad.push(`הכפתור מתחת לקצה המסך: ${r.btnBottom} מתוך ${r.frameH}`);
+      // ושהיא באמת ניתנת ללחיצה, ולא רק נמצאת שם
+      const btn = page.locator('div[style*="z-index: 99999"] button').last();
+      await btn.click({ timeout: 4000 }).catch(() => bad.push("אי אפשר להקיש על הכפתור"));
+      await page.waitForTimeout(500);
+      const after = await page.evaluate(() => document.body.innerText);
+      if (after.includes("מהיום אנחנו מתחילות")) bad.push("הטיפ לא נסגר אחרי ההקשה");
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : `הכפתור ב-${r.btnBottom} מתוך ${r.frameH}, ונסגר בהקשה` };
+    },
+  },
 ];
 
 /* ---------- run ---------- */
