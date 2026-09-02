@@ -699,7 +699,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.71";
+const VERSION = "6.72";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3472,7 +3472,7 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, on
 // so nothing outlives the session and nothing is written to storage.
 const AI_OPENING = () => ([{ role: "assistant", text: "היי! ספרי לי מה אכלת ואעזור להעריך את הקלוריות 😋\nכדי שאוכל לדייק כבר מההתחלה, נסי לפרט כמה שיותר: איך האוכל הוכן (מטוגן / אפוי / מבושל / על הגריל), אם הוספת שמן / חמאה / רוטב, מה שתית, וכמות משוערת (גרמים, כוסות או כפות).\nככל שתפרטי יותר, ההערכה תהיה מדויקת יותר. אפשר לדבר או לכתוב." }]);
 let aiSession = null;
-function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onUndoEntry, onTourEvent, startDate }) {
+function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onUndoEntry, onTourEvent, startDate, backRef }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
   const kbOpen = useTyping();
   const [meal, setMeal] = useState(state.editEntry?.meal || state.preMeal || (() => { const h = new Date().getHours(); return h < 11 ? "בוקר" : h < 16 ? "צהריים" : h < 21 ? "ערב" : "נשנושים"; })());
@@ -3792,6 +3792,17 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const unitLabel = unitLabelFor(food?.unit);
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
   const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
+  // כפתור החזרה של הטלפון, שכבה אחת בכל לחיצה. בלי זה האפליקציה ידעה רק שחלון
+  // ההוספה פתוח, ולחיצה מתוך מסך הכמות סגרה את כולו והחזירה אותה ליומן, כמה
+  // מסכים אחורה ממה שביקשה. משתתפת דיווחה על זה מרשימת האחרונים.
+  //
+  // **זו בדיוק אותה פונקציה שחץ החזרה שעל המסך קורא לה**, ולא חישוב שני שיכול
+  // להתפצל ממנה, וזה העיקרון שנקבע ב-v5.27.
+  useEffect(() => {
+    if (!backRef) return undefined;
+    backRef.current = back ? () => { back(); return true; } : null;
+    return () => { backRef.current = null; };
+  });
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px))" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
@@ -6714,6 +6725,9 @@ export default function App() {
   // favourites views). Rather than lift all of them, it hands us a closer that shuts one
   // level and says whether it took the press.
   const contentBackRef = useRef(null);
+  // אותו דבר בתוך חלון הוספת המזון: חיפוש, האחרונים והמועדפים, ומסך הכמות הם
+  // שכבות, ולחיצה על חזור סוגרת אחת מהן ולא את החלון כולו.
+  const addBackRef = useRef(null);
   const tabRef = useRef(tab); tabRef.current = tab;
   // Android's back button, rebuilt in v4.82 after a participant reported that it always
   // asked whether to leave MyPrime, from any screen, and that answering "leave" did nothing.
@@ -6738,7 +6752,13 @@ export default function App() {
       // Innermost first, one level per press, and each level does exactly what its own
       // on-screen back arrow does. Anything else and the press skips past a screen she is
       // still looking at.
-      if (modalRef.current) setModal(null);
+      if (modalRef.current && addBackRef.current && addBackRef.current()) {
+        // שכבה בתוך החלון נסגרה והחלון עצמו נשאר פתוח, כלומר שום מצב שלנו לא
+        // השתנה והאפקט שלמעלה לא ירוץ. דוחפים כאן את הרשומה הבאה, אחרת הלחיצה
+        // הבאה הייתה יוצאת מהאפליקציה.
+        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+      }
+      else if (modalRef.current) setModal(null);
       else if (sheetRef.current === "content" && contentBackRef.current && contentBackRef.current()) {
         // A level inside the content module closed and the sheet itself is still open, so
         // no state of ours changed and the effect above will not run. Push the next entry
@@ -7522,7 +7542,7 @@ export default function App() {
 
             {modal && (modal.kind === "recipe"
               ? <RecipeAddModal recipe={modal.recipe} editEntry={modal.editEntry} onSave={(payload) => { commit(payload); setModal(null); }} onClose={() => setModal(null)} onDelete={modal.editEntry ? () => { deleteEntry(modal.editEntry.id); setModal(null); } : null} />
-              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} recents={recents} onDeleteFavorite={deleteFavorite} onDeleteRecent={deleteRecent} onUndoEntry={deleteEntry} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} />)}
+              : <AddModal state={modal} close={() => setModal(null)} commit={commit} favorites={favorites} recents={recents} onDeleteFavorite={deleteFavorite} onDeleteRecent={deleteRecent} onUndoEntry={deleteEntry} removeAndClose={() => { deleteEntry(modal.editEntry.id); setModal(null); }} onTourEvent={tourEvent} startDate={profile.startDate} backRef={addBackRef} />)}
             {sheet === "install" && <InstallGuideModal onClose={() => setSheet(null)} />}
 
             {futureConfirm && (

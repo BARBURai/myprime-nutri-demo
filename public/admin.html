@@ -991,7 +991,13 @@ function jumpTo(id){
 }
 
 function render(){
-  var q = (document.getElementById("q") ? document.getElementById("q").value : "").trim().toLowerCase();
+  // מה שהיא הקלידה, כפי שהיא הקלידה אותו, ומה שמחפשים לפיו. **שני דברים שונים,
+  // וזה מה שהיה שבור:** השדה צויר מחדש בכל הקשה עם הערך המנוקה, ולכן רווח בסוף
+  // נמחק ברגע שהוקלד ואי אפשר היה לכתוב שם פרטי ושם משפחה. רון, 2 בספטמבר 2026:
+  // "הוא לא נותן לי לרשום רווח, משהו מוזר." ובדרך גם כל אות גדולה הפכה לקטנה
+  // מתחת לאצבע. **הערך המנוקה משמש להתאמה בלבד ולעולם לא נכתב חזרה לשדה.**
+  var qRaw = document.getElementById("q") ? document.getElementById("q").value : "";
+  var q = qRaw.trim().toLowerCase();
 
   // A group is a cohort AND a letter together. Every cohort runs א..ה (two to five of them),
   // so "קבוצה ב" of the January intake and "קבוצה ב" of the April intake are different
@@ -1110,7 +1116,7 @@ function render(){
     '</div>'+
     teamBlock()+
     '<div class="toolbar'+(SEL?" picked":"")+'">'+
-    '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(q)+'">'+
+    '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(qRaw)+'">'+
     '<div class="qhint">אפשר להדביק מספר טלפון בכל צורה, עם + עם רווחים או עם מקפים.</div>'+
     (searching ? '<div class="note">תוצאות חיפוש מכל הרשומות בגיליון, בלי סינון לפי מחזור, קבוצה או אפליקציה.</div>' :
       '<div class="zone work'+(nWork?"":" calm")+'"><span class="zlab">לטיפול</span>'+

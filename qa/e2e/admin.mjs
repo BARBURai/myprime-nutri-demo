@@ -332,6 +332,35 @@ CHECKS.push({
   },
 });
 
+CHECKS.push({
+  // רון, 2 בספטמבר 2026: "למה בשורת החיפוש אני לא יכול לרשום שם בעברית ושם
+  // משפחה עם רווח ביניהם, הוא לא נותן לי לרשום רווח." השדה צויר מחדש בכל הקשה
+  // עם הערך המנוקה, ולכן הרווח בסוף נמחק ברגע שהוקלד.
+  //
+  // ההקלדה כאן היא תו-תו ולא fill, כי fill כותב את המחרוזת בבת אחת ומדלג בדיוק
+  // על המסלול השבור.
+  name: "אפשר להקליד שם מלא עם רווח בשורת החיפוש",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device);
+    if (device.isMobile) { await ctx.close(); return { ok: true, skip: true, detail: "נבדק במחשב" }; }
+    await page.locator("#q").click();
+    await page.keyboard.type("אורלי לוי", { delay: 60 });
+    await page.waitForTimeout(500);
+    const val = await page.locator("#q").inputValue();
+    const rows = await page.locator("[data-open]").count();
+    // ואות גדולה נשארת גדולה מתחת לאצבע, כי גם היא נמחקה שם.
+    await page.locator("#q").fill("");
+    await page.keyboard.type("Lior", { delay: 60 });
+    await page.waitForTimeout(400);
+    const caps = await page.locator("#q").inputValue();
+    await ctx.close();
+    return {
+      ok: val === "אורלי לוי" && rows === 1 && caps === "Lior" && errors.length === 0,
+      detail: `בשדה "${val}" · תוצאות ${rows} · אותיות גדולות "${caps}" · שגיאות ${errors[0] || "אין"}`,
+    };
+  },
+});
+
 const browser = await chromium.launch({ executablePath: BROWSER });
 const ONLY = process.env.E2E_ONLY || "";
 const RUN = CHECKS.filter((c) => !ONLY || c.name.includes(ONLY));
