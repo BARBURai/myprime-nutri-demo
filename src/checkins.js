@@ -32,7 +32,9 @@ export const CHECKIN_TASKS = [
   { id: "drinkbefore", label: "שתיתי לפני כל ארוחה", type: "bool", group: "drink", startWeek: 3, startDow: 2, recur: "daily" },
   { id: "protein", label: "הקפדתי על חלבון בכל ארוחה", type: "bool", group: "food", auto: "protein", startWeek: 3, startDow: 4, recur: "daily" },
 
-  { id: "sleephours", label: "שעות שינה", type: "number", group: "calm", startWeek: 4, startDow: 2, recur: "daily" },
+  // decimal: המונה נשאר בשלמים, והמספר שביניהם הוא שדה שאפשר להקליד בו חצאים.
+  // בקשה של משתתפת: "כדאי להוסיף אפשרות לדווח חצאים ולא רק מספר עגול".
+  { id: "sleephours", label: "שעות שינה", type: "number", group: "calm", startWeek: 4, startDow: 2, recur: "daily", decimal: true, max: 24 },
   { id: "noscreens", label: "בלי מסכים לפני השינה", type: "bool", group: "calm", startWeek: 4, startDow: 2, recur: "daily" },
   { id: "stopeating", label: "הפסקתי לאכול שעתיים לפני השינה", type: "bool", group: "calm", startWeek: 4, startDow: 2, recur: "daily" },
   { id: "breathing", label: "תרגול נשימה", type: "bool", group: "calm", startWeek: 4, startDow: 4, recur: "daily" },
