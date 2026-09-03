@@ -575,6 +575,85 @@ const CHECKS = [
     },
   },
   {
+    // בקשה של משתתפת: "לא רואה את סך הקלוריות שאכלתי בכל ארוחה". התרחיש בודק את
+    // שני הצדדים באותה הרצה, כי שורה שמופיעה תמיד נראית בדיוק כמו שורה שאינה
+    // מופיעה אף פעם: בסדר ההזנה אין סיכום, ובלחיצה על "לפי הארוחה" יש.
+    // יום 15 הוא לפני שמשימת החלבון נפתחת, ולכן כאן גם נבדק שאין שם חלבון.
+    name: "סך הקלוריות בכל ארוחה מופיע רק בסידור לפי הארוחה",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device, { day: 15 });
+      const add = async (q, pick) => {
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator("text=חיפוש מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator('input[type="text"], input:not([type])').first().fill(q);
+        await page.waitForTimeout(700);
+        await page.locator("text=" + pick).first().click();
+        await page.waitForTimeout(400);
+        await page.locator("text=/הוסיפי ל/").first().click();
+        await page.waitForTimeout(700);
+        const fav = await page.locator("text=לא תודה").count();
+        if (fav) { await page.locator("text=לא תודה").first().click(); await page.waitForTimeout(400); }
+      };
+      await add("בננה", "בננה בינונית");
+      await add("ביצה", "ביצה גדולה");
+      // בסדר ההזנה אין שורת סיכום בכלל.
+      const before = await page.locator('text=/^בוקר$/').count();
+      await page.locator("text=לפי הארוחה").first().click();
+      await page.waitForTimeout(500);
+      const head = page.locator('text=/^\\d[\\d,]* קק״ל$/');
+      const heads = await head.count();
+      const txt = heads ? await head.first().innerText() : "";
+      const sum = parseInt(txt.replace(/[^\d]/g, ""), 10);
+      // הסכום נמדד מול מה שבאמת רשום בשורות, ולא מול מספר קבוע.
+      const rows = await page.locator("text=/· \\d+ קק״ל/").allInnerTexts();
+      const want = rows.reduce((a, t) => a + (parseInt((t.match(/(\d+) קק״ל/) || [])[1] || "0", 10)), 0);
+      const protein = await page.locator("text=/ג׳ חלבון/").count();
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: before === 0 && heads === 1 && sum > 0 && sum === want && protein === 0 && bad.length === 0,
+        detail: `לפני ${before} · כותרות ${heads} · "${txt}" מול ${want} · חלבון ${protein} · שגיאות ${bad[0] || "אין"}`,
+      };
+    },
+  },
+  {
+    // בקשה של משתתפת: "כדאי להוסיף אפשרות לדווח חצאים ולא רק מספר עגול של שעות
+    // שינה." המספר שבין הפלוס למינוס הוא שדה, והפלוס עצמו נשאר בשלמים.
+    // משימת השינה נפתחת בשבוע 4 יום 2, ולכן היום נבנה מיום ראשון של שבוע 4.
+    name: "שעות שינה מקבלות חצאים בהקלדה, והפלוס נשאר בשלמים",
+    async run(browser, device) {
+      // תאריך קבוע: 26.07 הוא יום ראשון, ו-26.08 הוא רביעי של שבוע 5. משימת השינה
+      // נפתחת בשבוע 4 יום 2, ובשבת אין משימות כלל, ולכן בלי שעון נעוץ התרחיש היה
+      // עובר בימים מסוימים ונופל באחרים.
+      const { context, page, errors } = await openApp(browser, device, { startDate: "2026-07-26", clock: "2026-08-26T09:00:00.000Z" });
+      await page.locator("text=הקישי למילוי המעקב").first().click();
+      await page.waitForTimeout(600);
+      const row = page.locator('text="שעות שינה"').first();
+      const has = await row.count();
+      const box = page.locator('input[inputmode="decimal"]').first();
+      const isField = await box.count();
+      await box.fill("6.5");
+      await page.waitForTimeout(400);
+      const typed = await box.inputValue();
+      // הפלוס מוסיף שעה שלמה על גבי החצי, ולא חצי שעה.
+      // בסדר ה-DOM: מינוס, שדה, פלוס. ב-RTL ה"ימני" חזותית הוא דווקא המינוס,
+      // ולכן הבחירה היא לפי הסדר בקוד ולא לפי המיקום על המסך.
+      await page.locator('input[inputmode="decimal"]').first().locator("xpath=following-sibling::button").first().click();
+      await page.waitForTimeout(400);
+      const afterPlus = await box.inputValue();
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: has > 0 && isField === 1 && typed === "6.5" && afterPlus === "7.5" && bad.length === 0,
+        detail: `שורה ${has} · שדה ${isField} · הוקלד "${typed}" · אחרי פלוס "${afterPlus}" · שגיאות ${bad[0] || "אין"}`,
+      };
+    },
+  },
+  {
     // A participant reported that back from inside a recipe landed her on the diary instead
     // of the recipe list. The open recipe was not a layer the back handler could see. This
     // is the one part of the Android back button a desktop browser can actually reproduce,
@@ -1488,7 +1567,7 @@ const CHECKS = [
       // לפני יום 18 אין רצועה.
       {
         const { context, page } = await openApp(browser, device, { day: 12 });
-        const today = await page.evaluate(() => new Date().toISOString().slice(0, 10));
+        const today = await page.evaluate(() => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Jerusalem" }));
         await context.close();
         const { context: c2, page: p2, errors } = await openApp(browser, device, { day: 12, seed: { log: food(today) } });
         if (await p2.locator("text=פחמימות").count() !== 0) bad.push("הרצועה מופיעה לפני שמשימת החלבון נפתחה");
@@ -1498,7 +1577,7 @@ const CHECKS = [
       // ואחרי יום 18 יש, עם סכומים בלבד.
       {
         const { context, page } = await openApp(browser, device, { day: 25 });
-        const today = await page.evaluate(() => new Date().toISOString().slice(0, 10));
+        const today = await page.evaluate(() => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Jerusalem" }));
         await context.close();
         const { context: c2, page: p2, errors } = await openApp(browser, device, { day: 25, seed: { log: food(today) } });
         const body = await p2.evaluate(() => document.body.innerText);

@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.74";
+const VERSION = "6.75";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -990,12 +990,36 @@ function Header({ title, onBack }) {
     </div>
   );
 }
-function Stepper({ value, set, step = 1, min = 0, suffix }) {
+// editable: המספר שבין הפלוס למינוס הוא שדה שאפשר להקליד בו, כולל חצאים. הפלוס
+// והמינוס לא זזים ונשארים בשלמים, ולכן מי שמקישה ממשיכה בדיוק כמו קודם ומי שרוצה
+// 6.5 מקלידה אותו. `txt` מחזיק את מה שהאצבע כתבה כל עוד השדה בפוקוס, כדי ש-"6."
+// באמצע ההקלדה לא ייבלע.
+function Stepper({ value, set, step = 1, min = 0, max, suffix, editable }) {
+  const [txt, setTxt] = useState(null);
+  const cap = (v) => Math.max(min, Math.min(max == null ? Infinity : max, Math.round(v * 10) / 10));
+  const bump = (d) => { setTxt(null); set(cap(value + d)); };
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <button onClick={() => set(Math.max(min, Math.round((value - step) * 10) / 10))} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Minus size={15} /></button>
-      <span style={{ minWidth: 78, textAlign: "center", fontSize: 22, fontWeight: 600, color: C.ink }}>{value}{suffix ? <span style={{ fontSize: 15, color: C.sub, fontWeight: 400 }}> {suffix}</span> : null}</span>
-      <button onClick={() => set(Math.round((value + step) * 10) / 10)} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Plus size={15} /></button>
+      <button onClick={() => bump(-step)} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Minus size={15} /></button>
+      {editable ? (
+        <input
+          value={txt == null ? String(value) : txt}
+          inputMode="decimal"
+          dir="ltr"
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => {
+            const raw = e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
+            setTxt(raw);
+            const n = parseFloat(raw);
+            set(raw === "" || isNaN(n) ? 0 : cap(n));
+          }}
+          onBlur={() => setTxt(null)}
+          style={{ width: 78, textAlign: "center", fontSize: 22, fontWeight: 600, color: C.ink, fontFamily: fontStack, border: `1px solid ${C.line}`, borderRadius: 9, padding: "3px 0", background: C.panel, outline: "none" }}
+        />
+      ) : (
+        <span style={{ minWidth: 78, textAlign: "center", fontSize: 22, fontWeight: 600, color: C.ink }}>{value}{suffix ? <span style={{ fontSize: 15, color: C.sub, fontWeight: 400 }}> {suffix}</span> : null}</span>
+      )}
+      <button onClick={() => bump(step)} style={{ width: 34, height: 34, border: `1px solid ${C.line}`, borderRadius: 9, background: C.panel, cursor: "pointer", color: C.ink }}><Plus size={15} /></button>
     </span>
   );
 }
@@ -1701,6 +1725,11 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   // sort יציב, ולכן בתוך כל ארוחה נשמר סדר ההזנה. ארוחה שאינה ברשימה יורדת לסוף
   // במקום לעלות לראש, וזה מה שקורה כש-indexOf מחזיר מינוס אחת.
   const shownLog = byMeal ? dayLog.slice().sort((a, b) => mealRank(a.meal) - mealRank(b.meal)) : dayLog;
+  // בקשה של משתתפת: "רואים רשימה ארוכה, אומנם מסווגים, אבל לא רואה את סך הקלוריות
+  // שאכלתי בכל ארוחה". הסכומים מוצגים בשורת כותרת מעל כל ארוחה, ובמצב "לפי הארוחה"
+  // בלבד. בסדר ההזנה הפריטים של אותה ארוחה אינם צמודים, ולכן אין שם מה לסכם.
+  const mealSums = {};
+  dayLog.forEach((e) => { const m = mealSums[e.meal] || (mealSums[e.meal] = { kcal: 0, p: 0 }); m.kcal += e.kcal || 0; m.p += e.p || 0; });
   const consumed = dayLog.reduce((s, e) => s + (e.kcal || 0), 0);
   const dayAct = activityLog.filter((a) => a.date === date);
   const actKcal = dayAct.reduce((s, a) => s + (a.kcal || 0), 0);
@@ -1943,8 +1972,20 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
           )}
         </div>
         {dayLog.length === 0 && dayAct.length === 0 && <div style={{ fontSize: 16, color: C.faint, padding: "16px 0", textAlign: "center" }}>עדיין לא הוזן דבר ביום זה - הקישי על כפתור ה־+ להוספה</div>}
-        {shownLog.map((e) => (
-          <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+        {shownLog.map((e, i) => {
+        // שורת הכותרת נפתחת בכל פעם שהארוחה מתחלפת. הפריט הראשון בכל קבוצה מוותר על
+        // הקו העליון שלו, כדי שלא ייווצרו שני קווים צמודים מתחת לכותרת.
+        const head = byMeal && (i === 0 || shownLog[i - 1].meal !== e.meal);
+        const ms = head ? (mealSums[e.meal] || { kcal: 0, p: 0 }) : null;
+        return (
+        <React.Fragment key={e.id}>
+        {head && (
+          <div style={{ display: "flex", alignItems: "baseline", gap: 7, padding: "13px 0 5px", borderTop: `1px solid ${C.line}` }}>
+            <span style={{ fontSize: 14.5, fontWeight: 700, color: C.ink }}>{e.meal}</span>
+            <span style={{ fontSize: 13.5, color: C.sub }}>{Math.round(ms.kcal).toLocaleString()} קק״ל{macroOpen ? ` · ${Math.round(ms.p)} ג׳ חלבון` : ""}</span>
+          </div>
+        )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: head ? "none" : `1px solid ${C.line}` }}>
             <div onClick={() => editEntry(e)} style={{ flex: 1, cursor: "pointer" }}>
               <div style={{ fontSize: 16, color: C.ink, display: "flex", alignItems: "center", gap: 6 }}>{e.name} <SrcBadge source={e.source} /></div>
               <div style={{ fontSize: 14, color: C.faint }}>{e.meal} · {e.unit === "serving" ? `${e.servings} ${e.servings === 1 ? (e.pieceUnit || "מנה") : (e.pieceUnit === "חתיכה" ? "חתיכות" : "מנות")}` : `${e.g} ${e.unit === "ml" ? "מ\"ל" : "ג׳"}`} · {e.kcal} קק״ל</div>
@@ -1955,7 +1996,9 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
             <button onClick={() => editEntry(e)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Pencil size={15} /></button>
             <button onClick={() => deleteEntry(e.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, padding: 4 }}><Trash2 size={15} /></button>
           </div>
-        ))}
+        </React.Fragment>
+        );
+        })}
         <div style={{ textAlign: "center", fontSize: 12.5, color: C.faint, marginTop: 22 }}>MyPrime · v{VERSION}</div>
       </div>
       )}
@@ -5078,7 +5121,7 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
                     ) : strengthAuto ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, color: C.brandD, background: C.brandBg, padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}><Check size={14} />אוטומטי</span>
                     ) : t.type === "number" ? (
-                      <Stepper value={answers[t.id] || 0} set={(v) => setValue(t.id, v)} step={1} min={0} />
+                      <Stepper value={answers[t.id] || 0} set={(v) => setValue(t.id, v)} step={1} min={0} max={t.max} editable={!!t.decimal} />
                     ) : (
                       <button onClick={() => setValue(t.id, answers[t.id] === true ? null : true)} aria-label={t.label} style={{ width: 30, height: 30, borderRadius: 9, border: `1.5px solid ${answers[t.id] === true ? C.brand : C.line}`, background: answers[t.id] === true ? C.brand : C.panel, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{answers[t.id] === true ? <Check size={16} /> : null}</button>
                     )}
@@ -5462,7 +5505,14 @@ function weeklySummaryData(week, startDate, today, checkins, log, stepsByDate, w
     }
   }
   const avgs = {};
-  for (const id in sums) avgs[id] = { avg: Math.round(sums[id] / ns[id]), n: ns[id] };
+  // משימה שמסומנת decimal מדווחת בחצאים, ולכן ממוצע מעוגל לשלם היה מוחק בדיוק את
+  // מה שהיא דיווחה: מי שישנה 6.5 כל לילה הייתה קוראת "בממוצע 7". עשרוני אחד, ובכל
+  // שאר המשימות שום דבר לא זז (ממוצע צעדים בעשרוני הוא רעש).
+  for (const id in sums) {
+    const dec = CHECKIN_TASKS.some((t) => t.id === id && t.decimal);
+    const a = sums[id] / ns[id];
+    avgs[id] = { avg: dec ? Math.round(a * 10) / 10 : Math.round(a), n: ns[id] };
+  }
   return {
     days: dates.length, counts, avgs,
     journalDays: calN, sleepDays, grainsDays,
@@ -6124,6 +6174,9 @@ const FAQ_ITEMS = [
   { q: "שכחתי להזין יום שלם - מה עושים?", a: "אפשר לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך, ולמלא בדיעבד." },
   { q: "סרקתי ברקוד והערכים לא תואמים לאריזה. מה עושים?", a: "הערכים שהופיעו הם של גרסה כללית של המוצר במאגר העולמי, ולא של האריזה הישראלית. במסך שמאשר את הכמות יש שורה קטנה: \"הערכים לא תואמים לאריזה? עדכני מהתווית\". לוחצים עליה ומקלידים את המספרים מהתווית, מהעמודה של 100 גרם. מהרגע הזה המוצר יהיה נכון אצלך גם בפעם הבאה." },
   { q: "איך עורכים או מוחקים פריט שהוספתי?", a: "בהקשה על הפריט ברשימת 'מה שהוזן היום' ביומן אפשר לערוך אותו או למחוק אותו." },
+  // בקשה של משתתפת. השאלה נשארת ברשימה תמיד, כי הכפתור עצמו קשה לגילוי.
+  // התשובה זהה מילה במילה לזו שבבנק של המשרד, ובדיקה משווה ביניהן.
+  { q: "איך רואים כמה קלוריות אכלתי בכל ארוחה?", a: "ברשימת \"מה שהוזן היום\" יש כפתור \"לפי הארוחה\". בהקשה עליו הפריטים מסתדרים לפי סדר הארוחות, ומעל כל ארוחה מופיע סך הקלוריות שלה.", b: "לפי הארוחה" },
   { q: "מה זה המדליות והגביעים?", a: "על כל יום שבו השלמת את כל המשימות מקבלים מדליה. על שבוע שכל ימיו הושלמו, ראשון עד שישי, מקבלים גביע זהב, ואם פספסת יום אחד מקבלים גביע כסף. שבת אינה נחשבת. הכל נאסף בארון ההישגים." },
   { q: "אפשר להזין באפליקציה היקפים?", a: "אין מדידות היקפים כחלק מהמעקב הרשמי בתוכנית. אנחנו רוצות להשאיר את המעקב פשוט ולא להפוך את התהליך לעיסוק בעוד ועוד מספרים ומדידות.\n\nאם חשוב לך לעקוב גם אחרי היקפים, את כמובן יכולה לעשות את זה באופן עצמאי בבית, למשל בתחילת התוכנית ובהמשך להשוות, אבל זה לא חלק שאנחנו דורשות או מנהלות בתוך האפליקציה.\n\nהמטרה שלנו היא להתמקד בתהליך עצמו, בהרגלים, באימונים ובהתקדמות שלך לאורך הדרך." },
   { q: "למה משימות חדשות מופיעות לאורך התוכנית?", a: "המשימות נפתחות בהדרגה כדי לא להעמיס בבת אחת. כל כמה ימים מצטרפת משימה חדשה, צעד אחרי צעד." },
