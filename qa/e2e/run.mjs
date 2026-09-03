@@ -496,6 +496,85 @@ const CHECKS = [
     },
   },
   {
+    // משתתפת, 2 בספטמבר 2026: "אם דיווחתי אימון כוח האינדיקציה של אימון כוח
+    // צריכה להתמלא אוטומטית, כמו שאחרי שהזנתי מספר צעדים האינדיקציה מתעדכנת."
+    //
+    // הכלל היה בקוד ולא יכול היה לירות, כי הפעילות נשמרת עם משך הזמן בתוך השם.
+    // שני הצדדים באותו תרחיש, כי תיבה שמסומנת תמיד נראית כמו תיבה שאף פעם לא.
+    //
+    // השעון נעוץ ליום שלישי של שבוע 2, שהוא יום 10 בתוכנית, כי רק בראשון,
+    // שלישי וחמישי יש בכלל משימת אימון כוח, והיא נפתחת ביום 10.
+    name: "אימון כוח שדווח מסמן את המשימה ביומן המעקב לבד",
+    async run(browser, device) {
+      const opts = { startDate: "2026-08-16", clock: "2026-08-25T09:00:00.000Z" };
+      const { context, page, errors } = await openApp(browser, device, opts);
+      const openTracker = async () => {
+        await page.locator("text=הקישי למילוי המעקב").first().click();
+        await page.waitForTimeout(600);
+      };
+      // לפני שדיווחה: אין שום סימן אוטומטי על אימון הכוח.
+      await openTracker();
+      const before = await page.locator("text=נרשם ביומן הפעילות").count();
+      // סוגרים את היומן דרך כפתור החזרה, בדיוק כמו שהיא הייתה עושה, אחרת הוא
+      // נשאר פרוש מעל כפתור הפלוס וההקשה הבאה לא מגיעה אליו.
+      await page.goBack();
+      await page.waitForTimeout(500);
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=פעילות גופנית").first().click();
+      await page.waitForTimeout(500);
+      await page.getByText("אימון כוח", { exact: true }).first().click();
+      await page.waitForTimeout(250);
+      await page.locator("text=הוסף פעילות").first().click();
+      await page.waitForTimeout(700);
+      // ואחרי: המשימה מסומנת לבד ואומרת מאיפה זה הגיע.
+      await openTracker();
+      const after = await page.locator("text=נרשם ביומן הפעילות").count();
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: before === 0 && after > 0 && bad.length === 0,
+        detail: `לפני ${before} · אחרי ${after} · שגיאות ${bad[0] || "אין"}`,
+      };
+    },
+  },
+  {
+    // אותה משתתפת: "כינוי לארוחה, כמו שיש אפשרות בכרטיסי אשראי לתת שם כינוי
+    // לכרטיס." ורון: "לא מבין למה לא לרשום גם ביומן." לכן הכינוי נבדק כאן
+    // דווקא ביומן, ולא רק במועדפים.
+    name: "כינוי שניתן בשמירה למועדפים מופיע גם ביומן",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=חיפוש מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator('input[type="text"], input:not([type])').first().fill("בננה");
+      await page.waitForTimeout(700);
+      await page.locator("text=בננה בינונית").first().click();
+      await page.waitForTimeout(400);
+      await page.locator("text=/הוסיפי ל/").first().click();
+      await page.waitForTimeout(800);
+      // החלונית קופצת מעצמה, והשדה מגיע מלא מראש בשם הקיים.
+      const asked = await page.locator("text=לשמור למועדפים?").count();
+      const box = page.locator('input[maxlength="60"]').first();
+      const prefill = await box.inputValue();
+      await box.fill("הבננה של הבוקר");
+      await page.locator("text=כן, שמרי").first().click();
+      await page.waitForTimeout(800);
+      const renamed = await page.locator("text=הבננה של הבוקר").count();
+      const oldName = await page.locator("text=בננה בינונית").count();
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: asked > 0 && prefill === "בננה בינונית" && renamed > 0 && oldName === 0 && bad.length === 0,
+        detail: `חלונית ${asked} · מולא מראש "${prefill}" · ביומן ${renamed} · השם הישן ${oldName} · שגיאות ${bad[0] || "אין"}`,
+      };
+    },
+  },
+  {
     // A participant reported that back from inside a recipe landed her on the diary instead
     // of the recipe list. The open recipe was not a layer the back handler could see. This
     // is the one part of the Android back button a desktop browser can actually reproduce,
