@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.73";
+const VERSION = "6.74";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -7629,7 +7629,8 @@ export default function App() {
               <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 12 }}>אפשר לתת לזה שם משלך, כדי שתזהי אותו בפעם הבאה.</div>
               <input value={favName} onChange={(e) => setFavName(e.target.value)} dir="auto" maxLength={60}
                 onKeyDown={(e) => { if (e.key === "Enter") saveFavorite(); }}
-                style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", textAlign: "center", marginBottom: 16 }} />
+                style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", textAlign: "center", marginBottom: 10 }} />
+              <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginBottom: 16 }}>כדי שתוכלי להוסיף אותו שוב בהקשה אחת.</div>
               <Btn onClick={saveFavorite}>כן, שמרי</Btn>
               <Btn variant="ghost" onClick={() => { setFavPrompt(null); setFavName(""); }} style={{ marginTop: 8 }}>לא תודה</Btn>
             </div>
