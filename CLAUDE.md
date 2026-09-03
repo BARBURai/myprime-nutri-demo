@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.72** · עודכן: 28 באוגוסט 2026
+**גרסה נוכחית: v6.73** · עודכן: 28 באוגוסט 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -970,6 +970,28 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
 
+**v6.73** - **שתי בקשות של אותה משתתפת, ובאחת מהן כלל שקיים בקוד ולא יכול היה לירות מעולם.**
+
+### א. אימון כוח שדווח לא סימן את המשימה
+**היא: "אם דיווחתי אימון כוח, האינדיקציה של אימון כוח צריכה להתמלא אוטומטית, כמו שאחרי שהזנתי מספר צעדים האינדיקציה של צעדים מתעדכנת."**
+
+**והכלל הזה כבר היה בקוד, עם הערה שמסבירה אותו.** מה שלא היה נכון הוא ההשוואה: **הפעילות נשמרת עם משך הזמן בתוך השם, כלומר "אימון כוח 30 דק׳", והכלל חיפש "אימון כוח" בלבד בהשוואה מדויקת.** שתי המחרוזות אינן זהות, **ולכן הסימון האוטומטי לא ירה אצל אף אחת, אף פעם.** שתי השורות קיימות מאותה נקודה בהיסטוריה של הקוד, כלומר זה לא נשבר אלא מעולם לא עבד.
+
+**מעכשיו הפעילות נושאת סימן משלה כשנבחר "אימון כוח" מהרשימה, ותחילת השם נבדקת גם היא**, כדי שאימונים שהיא כבר דיווחה בעבר ייתפסו ולא רק אלה שמכאן והלאה.
+
+**ותיקון לרישום שלי:** ב-v6.56 כתבתי כאן שהבחירה מהרשימה מסמנת את התיבה לבד. **זה לא היה נכון.** באפליקציה עצמה, בשאלות ותשובות ובסיור, כתוב לה שזו משימה ידנית, **ולכן לא הובטח לה דבר שלא קיים** - אבל היא ציפתה לזה בצדק, כי ככה הצעדים עובדים.
+
+### ב. כינוי לארוחה
+**היא: "כינוי לארוחה, כמו שיש אפשרות בכרטיסי אשראי לתת שם כינוי לכרטיס."**
+
+**בחלונית "לשמור למועדפים?" יש עכשיו שדה, מלא מראש בשם הקיים.** מי שלא נוגעת בו מקבלת בדיוק את מה שהיה עד היום.
+
+**והכינוי חל על מה שהיא הרגע הוסיפה בכל שלושת המקומות שאליהם הוא נכנס: המועדף, השורה ביומן, והרשימה של האחרונים.** רון: "לא מבין למה לא לרשום גם ביומן". **הוא צדק, וההמלצה הראשונה שלי הייתה שגויה:** אמרתי שזה שינוי "למפרע", בעוד הפריט נרשם לפני שנייה באותה פעולה והיא עוד מסתכלת עליו. **ולו הייתי עושה כמו שהצעתי, היא הייתה נותנת שם ורואה ביומן שם אחר.**
+
+**המאגר המשותף אינו נוגע בזה**, כי הוא נכתב עם השם המקורי עוד לפני שהחלונית נפתחה. **הכינוי הוא שלה ולא של המוצר.**
+
+**`qa/strength-fav-check.mjs`, 23 בדיקות בלי רשת**, מושכת את הפונקציות מ-`src/App.jsx` ואינה מעתיקה אותן. **ובשכבה 3 שני תרחישים**, וכל אחד בודק את שני הצדדים באותו תרחיש: לפני הדיווח אין סימון ואחריו יש, ולפני הכינוי השם הישן ואחריו החדש. **אומת שיש להם שיניים: על הקוד שבייצור הבדיקה מחזירה 8 מתוך 23 ושני התרחישים 0 מתוך 3.**
+
 **v6.72** - **שני באגים: כפתור החזרה סגר את כל חלון הוספת המזון, ושורת החיפוש במסך הניהול מחקה כל רווח.**
 
 ### א. חזרה מתוך מסך הכמות החזירה ליומן
@@ -1245,7 +1267,7 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 
 **ומה שהתברר בקוד: זה כבר עובד.** `addActivity` כותב ליום שהיא נמצאת עליו, **בלי שום הגבלה לימי התוכנית**, והקלוריות נוספות לתקציב של אותו יום.
 
-**מה שכן מוגבל לשלושה ימים בשבוע הוא רק תיבת הסימון "אימון כוח" ביומן המעקב**, ואימון נוסף בכל יום אחר נרשם ונספר בדיוק אותו דבר. **ובחירה דווקא ב"אימון כוח" מהרשימה מסמנת את התיבה לבד.**
+**מה שכן מוגבל לשלושה ימים בשבוע הוא רק תיבת הסימון "אימון כוח" ביומן המעקב**, ואימון נוסף בכל יום אחר נרשם ונספר בדיוק אותו דבר. **ובחירה דווקא ב"אימון כוח" מהרשימה אמורה הייתה לסמן את התיבה לבד, וזה לא עבד. ראה v6.73.**
 
 **התשובה זהה מילה במילה בשני המקומות, והשאלות שונות בכוונה:** בבנק היא הלשון שבה המשתתפת כתבה, כי זה מה שהדירוג נתפס עליו, ובאפליקציה היא מנוסחת כשאלה. `qa/admin-check.mjs` עלתה מ-280 ל-282.
 

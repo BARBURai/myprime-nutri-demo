@@ -534,7 +534,16 @@ function autoStatusFor(date, stepsByDate, waterByDate, log, targets, cupMl, acti
   const cups = Math.round((waterMlOf(waterByDate ? waterByDate[date] : 0) / (cupMl || DEFAULT_CUP_ML)) * 10) / 10;
   const dayLog = (log || []).filter((e) => e.date === date);
   const proteinHad = dayLog.reduce((s, e) => s + (e.p || 0), 0);
-  const strengthLogged = (activityLog || []).some((a) => a.date === date && a.name === "אימון כוח");
+  // **ההשוואה המדויקת כאן מעולם לא ירתה.** הפעילות נשמרת עם משך הזמן בתוך השם,
+  // כלומר "אימון כוח 30 דק׳", והכלל חיפש "אימון כוח" בלבד. שתי המחרוזות אינן
+  // זהות, ולכן הסימון האוטומטי לא עבד אצל אף אחת מהיום הראשון. משתתפת דיווחה
+  // על זה ב-2 בספטמבר 2026: "אם דיווחתי אימון כוח האינדיקציה צריכה להתמלא
+  // אוטומטית כמו שאחרי שהזנתי מספר צעדים".
+  //
+  // מעכשיו הפעילות נושאת סימן משלה, ו**תחילת השם נבדקת גם היא** כדי שאימונים
+  // שהיא כבר דיווחה בעבר ייתפסו ולא רק אלה שמכאן והלאה.
+  const strengthLogged = (activityLog || []).some((a) => a.date === date &&
+    (a.strength === true || String(a.name || "").startsWith("אימון כוח")));
   return {
     steps: steps > 0 ? steps : null,
     water: cups > 0 ? cups : null,
@@ -699,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.72";
+const VERSION = "6.73";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4333,7 +4342,7 @@ function ActivityModal({ onClose, onAdd, weightKg }) {
         <span style={{ fontSize: 15, color: C.sub }}>נשרף בערך</span>
         <span style={{ fontSize: 18, fontWeight: 600, color: C.brandD }}>{kcal} קק״ל</span>
       </div>
-      <Btn onClick={() => onAdd({ name: `${baseName} ${minutes} דק׳`, kcal })}>הוסף פעילות</Btn>
+      <Btn onClick={() => onAdd({ name: `${baseName} ${minutes} דק׳`, kcal, strength: sel >= 0 && acts[sel].name === "אימון כוח" })}>הוסף פעילות</Btn>
       <div style={{ fontSize: 12, color: C.faint, textAlign: "center", marginTop: 8 }}>הערכה לפי סוג הפעילות, המשקל שלך ({weightKg || 70} ק״ג) ומשך הזמן</div>
     </SheetShell>
   );
@@ -6548,6 +6557,9 @@ export default function App() {
   const [favorites, setFavorites] = useState(saved?.favorites || []);
   const [recents, setRecents] = useState(saved?.recents || []);
   const [favPrompt, setFavPrompt] = useState(null); // {entry} offered to save to favorites
+  // הכינוי שהיא נותנת לארוחה. מגיע מלא מראש בשם הקיים, ומי שלא נוגעת בו מקבלת
+  // בדיוק את מה שהיה עד היום.
+  const [favName, setFavName] = useState("");
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [today, setToday] = useState(TODAY);
   useEffect(() => {
@@ -7112,13 +7124,34 @@ export default function App() {
   const deleteEntry = (id, type) => { if (type === "activity") setActivityLog((l) => l.filter((a) => a.id !== id)); else setLog((l) => l.filter((e) => e.id !== id)); };
   const deleteFavorite = (id) => setFavorites((fs) => fs.filter((x) => x.id !== id));
   const deleteRecent = (id) => setRecents((rs) => rs.filter((x) => x.id !== id));
-  const saveFavorite = () => { if (favPrompt) setFavorites((fs) => [favPrompt, ...fs.filter((x) => x.name !== favPrompt.name)]); setFavPrompt(null); };
+  // הכינוי חל על מה שהיא הרגע הוסיפה, **בכל שלושת המקומות שאליהם הוא נכנס**:
+  // המועדף, השורה ביומן, והרשימה של האחרונים. רון, 3 בספטמבר 2026: "לא מבין למה
+  // לא לרשום גם ביומן". שם אחד לדבר אחד, אחרת היא נותנת שם ורואה שם אחר.
+  //
+  // **המאגר המשותף אינו נוגע בזה**, כי הוא כבר נכתב עם השם המקורי לפני שהחלונית
+  // בכלל נפתחה. הכינוי הוא שלה ולא של המוצר.
+  const saveFavorite = () => {
+    if (!favPrompt) { setFavName(""); return; }
+    const orig = favPrompt.name;
+    const name = favName.trim().slice(0, 60) || orig;
+    const fav = { ...favPrompt, name, id: "fav_" + name, entryId: undefined };
+    setFavorites((fs) => [fav, ...fs.filter((x) => x.name !== name)]);
+    if (name !== orig) {
+      if (favPrompt.entryId) setLog((l) => l.map((e) => (e.id === favPrompt.entryId ? { ...e, name } : e)));
+      setRecents((rs) => rs.map((r) => (r.name === orig ? { ...r, name, id: "fav_" + name } : r)));
+    }
+    setFavPrompt(null); setFavName("");
+  };
   const commit = (payload, keepOpen) => {
     const date = modal?.editEntry ? modal.editEntry.date : selectedDate;
     if (modal?.editEntry) setLog((l) => l.map((e) => e.id === modal.editEntry.id ? { ...e, ...payload, date } : e));
     else {
       const items = Array.isArray(payload) ? payload : [payload];
-      setLog((l) => [...l, ...items.map((p, i) => ({ id: p._entryId || ("n" + Date.now() + i), date, ...p, _entryId: undefined }))]);
+      // השורות נבנות כאן ולא בתוך העדכון עצמו, כדי שנחזיק את המזהה של מה שהיא
+      // הרגע הוסיפה. בלעדיו אי אפשר לתת לזה כינוי אחרי כן.
+      const stamp = Date.now();
+      const rows = items.map((p, i) => ({ id: p._entryId || ("n" + stamp + i), date, ...p, _entryId: undefined }));
+      setLog((l) => [...l, ...rows]);
       // Recently used list (auto, capped). Favorites are chosen by the user, not auto-filled.
       setRecents((rs) => {
         let next = rs.slice();
@@ -7129,8 +7162,13 @@ export default function App() {
       // After a regular add (not a quick-add from the list), offer to save a single new
       // item to favorites - only if it is not already a favorite.
       if (!keepOpen) {
-        const cands = items.map(foodEntryFromPayload).filter(Boolean).filter((e) => !favorites.some((f) => f.name === e.name));
-        if (cands.length === 1) setFavPrompt(cands[0]);
+        const cands = items.map((p, i) => ({ fav: foodEntryFromPayload(p), row: rows[i] }))
+          .filter((x) => x.fav)
+          .filter((x) => !favorites.some((f) => f.name === x.fav.name));
+        if (cands.length === 1) {
+          setFavPrompt({ ...cands[0].fav, entryId: cands[0].row.id });
+          setFavName(cands[0].fav.name);
+        }
       }
     }
     if (!keepOpen) setModal(null);
@@ -7141,7 +7179,7 @@ export default function App() {
     else setLog((l) => [...l, { id: "n" + Date.now(), date: selectedDate, ...payload }]);
     setModal(null);
   };
-  const addActivity = (a) => { setActivityLog((l) => [...l, { id: "a" + Date.now(), date: selectedDate, name: a.name, kcal: Math.round(a.kcal) }]); setSheet(null); };
+  const addActivity = (a) => { setActivityLog((l) => [...l, { id: "a" + Date.now(), date: selectedDate, name: a.name, kcal: Math.round(a.kcal), strength: !!a.strength }]); setSheet(null); };
   const setWaterForDate = (date, n) => setWaterByDate((w) => ({ ...w, [date]: Math.max(0, n) }));
   const setStepsForDate = (date, n) => setStepsByDate((s) => ({ ...s, [date]: Math.max(0, Math.round(n || 0)) }));
   const setCheckinValue = (date, taskId, value) => setCheckins((c) => { const day = { ...(c[date] || {}) }; if (value === null || value === undefined || value === "") delete day[taskId]; else day[taskId] = value; return { ...c, [date]: day }; });
@@ -7584,13 +7622,16 @@ export default function App() {
             her first session. The condition is dropped until IntroOverlay comes back. */}
         {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} email={gateEmail} phone={gatePhone} replies={replies} onReadReply={readReply} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {favPrompt && (
-          <div onClick={() => setFavPrompt(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
+          <div onClick={() => { setFavPrompt(null); setFavName(""); }} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
               <div style={{ fontSize: 30, marginBottom: 4 }}>💜</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 6 }}>לשמור למועדפים?</div>
-              <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 18 }}>{favPrompt.name}<br />כדי שתוכלי להוסיף אותו שוב בהקשה אחת.</div>
+              <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, marginBottom: 12 }}>אפשר לתת לזה שם משלך, כדי שתזהי אותו בפעם הבאה.</div>
+              <input value={favName} onChange={(e) => setFavName(e.target.value)} dir="auto" maxLength={60}
+                onKeyDown={(e) => { if (e.key === "Enter") saveFavorite(); }}
+                style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", textAlign: "center", marginBottom: 16 }} />
               <Btn onClick={saveFavorite}>כן, שמרי</Btn>
-              <Btn variant="ghost" onClick={() => setFavPrompt(null)} style={{ marginTop: 8 }}>לא תודה</Btn>
+              <Btn variant="ghost" onClick={() => { setFavPrompt(null); setFavName(""); }} style={{ marginTop: 8 }}>לא תודה</Btn>
             </div>
           </div>
         )}
