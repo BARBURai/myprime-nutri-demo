@@ -193,11 +193,18 @@ console.log("\nמניצ'ט: כמה רשומות נושאות את הטלפון")
 console.log("\nמה שהמסך מציג");
 {
   const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
-  check('יש צ׳יפ סינון "כפילות בגיליון"', /data-v="dup"/.test(html) && html.indexOf("כפילות בגיליון (") !== -1);
-  check("והוא מסנן את הרשימה", /VIEW==="dup" \? dupList/.test(html));
-  check("הרשימה נבנית משתי הכפילויות",
-    /dupList = pool\.filter\(function\(w\)\{ return w\.dupRows > 1 \|\| \(w\.dupPhone && w\.dupPhone\.length\); \}\)/.test(html));
-  check("ויש שורת הסבר לתצוגה", /VIEW==="dup" \? '<div class="note">/.test(html));
+  // שני סוגי הבעיות בקובץ יושבים בכפתור אחד מ-v6.78, לפי בקשת רון.
+  check('יש כפתור אחד, "בעיות בגיליון"', /data-v="probs"/.test(html) && html.indexOf("בעיות בגיליון (") !== -1);
+  check("והמספר שלו הוא סכום השניים", /\(noMail\.length\+dupList\.length\)\+'\)/.test(html));
+  check("ושני הכפתורים הישנים ירדו", !/data-v="nomail"/.test(html) && !/data-v="dup"/.test(html));
+  check("המסך מציג את שני החלקים", /probsScreen\(noMail, dupList\)/.test(html) &&
+    /return '<div class="psec">חסר מייל \('\+nm\.length\+'\)<\/div>'\+ nomailScreen\(nm\)\+/.test(html));
+  check("הכפילות מסוננת לפי בורר האפליקציה בלבד",
+    /dupAll = DATA\.women\.filter/.test(html) && /dupList = dupAll\.filter/.test(html));
+  check("ויש שורת הסבר לתצוגה", /VIEW==="probs" \? '<div class="note">/.test(html));
+  // חלק ריק אומר את זה במפורש ולא נעלם. הכלל של v5.07: היעדר שורה אינו תשובה.
+  check("חלק ריק אומר את זה במפורש", html.indexOf("אין כפילויות. כל אישה יושבת על שורה אחת") !== -1);
+  check("ופתיחת כרטיס מתוך המסך יוצאת ממנו", /if\(VIEW === "probs"\)\{ VIEW = ""/.test(html));
   check("ובשורה ברשימה יש תג", /dupRows>1\|\|\(w\.dupPhone&&w\.dupPhone\.length\)\)\?'<span class="grp warnpill">כפילות בגיליון/.test(html));
 
   const fn = html.match(/  function dupBox\(w\)\{[\s\S]*?\n  \}/);

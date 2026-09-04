@@ -261,10 +261,10 @@ CHECKS.push(
     },
   },
   {
-    name: "אריח חסר מייל נפתח, והשמירה שולחת את הטלפון והכתובת",
+    name: "חלק חסר המייל נפתח, והשמירה שולחת את הטלפון והכתובת",
     async run(browser, device) {
       const { ctx, page, errors, posts } = await open(browser, device);
-      await page.locator('[data-v="nomail"]').first().click();
+      await page.locator('[data-v="probs"]').first().click();
       await page.waitForTimeout(400);
       const rows = await page.locator("[data-fixmail]").count();
       await page.locator("#nm_972502222222").fill("nili@test.com");
@@ -334,59 +334,60 @@ CHECKS.push({
 CHECKS.push({
   // רון, 2 בספטמבר 2026: "כל ה-10 נשים שרשומות שמה זה נשים שהם בקג'אבי, זה
   // לא רלוונטי לי." שני הצדדים באותה בדיקה, כמו באריח חסרות קבוצה.
-  name: "חסר מייל מסונן לאפליקציה החדשה, ואפשר להחזיר את השאר",
+  // בורר אחד לשני החלקים, ולכן הבדיקה סופרת את שניהם בכל מצב. חלק שמסנן תמיד
+  // נראה בדיוק כמו חלק שאינו מסנן אף פעם.
+  name: "בעיות בגיליון מסונן לאפליקציה החדשה, ואפשר להחזיר את השאר",
   async run(browser, device) {
     const { ctx, page, errors } = await open(browser, device);
-    const tile = await page.locator('[data-v="nomail"]').first().innerText();
-    await page.locator('[data-v="nomail"]').first().click();
+    const tile = await page.locator('[data-v="probs"]').first().innerText();
+    await page.locator('[data-v="probs"]').first().click();
     await page.waitForTimeout(400);
-    const rowsNew = await page.locator("[data-fixmail]").count();
+    const at = async () => [await page.locator("[data-fixmail]").count(), await page.locator(".qitem [data-open]").count()];
+    const [mNew, dNew] = await at();
     await page.locator("#fApp").selectOption("");
     await page.waitForTimeout(400);
-    const rowsAll = await page.locator("[data-fixmail]").count();
+    const [mAll, dAll] = await at();
     await page.locator("#fApp").selectOption("old");
     await page.waitForTimeout(400);
-    const rowsOld = await page.locator("[data-fixmail]").count();
+    const [mOld, dOld] = await at();
     await ctx.close();
     return {
-      ok: /\(1\)/.test(tile) && rowsNew === 1 && rowsAll === 2 && rowsOld === 1 && errors.length === 0,
-      detail: `האריח "${tile.trim()}" · חדשה ${rowsNew} · הכל ${rowsAll} · קג'אבי ${rowsOld} · שגיאות ${errors[0] || "אין"}`,
+      ok: /\(4\)/.test(tile) && mNew === 1 && dNew === 3 && mAll === 2 && dAll === 3 &&
+          mOld === 1 && dOld === 0 && errors.length === 0,
+      detail: `האריח "${tile.trim()}" · חדשה ${mNew}+${dNew} · הכל ${mAll}+${dAll} · קג'אבי ${mOld}+${dOld} · שגיאות ${errors[0] || "אין"}`,
     };
   },
 });
 
 CHECKS.push({
-  // רון, 2 בספטמבר 2026: "למה בשורת החיפוש אני לא יכול לרשום שם בעברית ושם
-  // משפחה עם רווח ביניהם, הוא לא נותן לי לרשום רווח." השדה צויר מחדש בכל הקשה
-  // עם הערך המנוקה, ולכן הרווח בסוף נמחק ברגע שהוקלד.
-  //
-  // ההקלדה כאן היא תו-תו ולא fill, כי fill כותב את המחרוזת בבת אחת ומדלג בדיוק
-  // על המסלול השבור.
-  name: "אריח הכפילות מסנן, והכרטיס אומר בדיוק מה כפול",
+  // הכל בתוך המסך ולא בכרטיס. רון, 4 בספטמבר 2026: "אי אפשר לצרף כבר את אלה
+  // שחסרות מייל לאותו כפתור של כל הבעיות בקובץ?"
+  name: "בעיות בגיליון: שני החלקים במסך אחד, וכל כפילות אומרת מה כפול",
   async run(browser, device) {
     const { ctx, page, errors } = await open(browser, device);
-    const chip = page.locator('[data-v="dup"]').first();
+    const chip = page.locator('[data-v="probs"]').first();
     const label = (await chip.innerText()).trim();
     await chip.click();
     await page.waitForTimeout(400);
-    const rows = await page.locator("[data-open]").count();
-    // המייל הכפול: הכרטיס חייב לומר בכמה שורות היא יושבת, מה כתוב בכל אחת,
-    // ובאיזו מהן המסך והאפליקציה משתמשים בפועל.
-    await page.locator('[data-open="dup@test.com"]').click();
+    const secs = await page.locator(".psec").allInnerTexts();
+    const mail = await page.locator("[data-fixmail]").count();
+    const box = async (em) => (await page.locator(".qitem", { has: page.locator(`[data-open="${em}"]`) })
+      .locator(".dupbox").first().innerText()).replace(/\s+/g, " ");
+    // המייל הכפול: בכמה שורות היא יושבת, מה כתוב בכל אחת, ובאיזו משתמשים.
+    const boxA = await box("dup@test.com");
+    // הטלפון הכפול: הכתובת השנייה שיושבת על אותו מספר.
+    const boxB = await box("twin-a@test.com");
+    // ופתיחת הכרטיס מתוך המסך חייבת באמת לצאת ממנו.
+    await page.locator('[data-open="dup@test.com"]').first().click();
     await page.waitForTimeout(400);
-    const boxA = (await page.locator(".dupbox").first().innerText()).replace(/\s+/g, " ");
-    await page.locator('[data-back="1"]').first().click().catch(() => {});
-    await page.waitForTimeout(300);
-    // הטלפון הכפול: שתי הנשים מוצגות בנפרד, וכל אחת יודעת על השנייה.
-    await page.locator('[data-open="twin-a@test.com"]').click();
-    await page.waitForTimeout(400);
-    const boxB = (await page.locator(".dupbox").first().innerText()).replace(/\s+/g, " ");
+    const card = await page.locator(".card.open").count();
     await ctx.close();
+    const okSec = secs.length === 2 && secs[0].includes("חסר מייל (1)") && secs[1].includes("כפילות בגיליון (3)");
     const okA = boxA.includes("ב-2 שורות") && boxA.includes("14.06.2026") && boxA.includes("13.09.2026");
     const okB = boxB.includes("כתובת מייל אחרת") && boxB.includes("twin-b@test.com");
     return {
-      ok: /\(3\)/.test(label) && rows === 3 && okA && okB && errors.length === 0,
-      detail: `האריח "${label}" · שורות ${rows} · מייל ${okA ? "אומר" : boxA} · טלפון ${okB ? "אומר" : boxB} · שגיאות ${errors[0] || "אין"}`,
+      ok: /\(4\)/.test(label) && okSec && mail === 1 && okA && okB && card === 1 && errors.length === 0,
+      detail: `האריח "${label}" · חלקים ${JSON.stringify(secs)} · מייל ${okA ? "אומר" : boxA} · טלפון ${okB ? "אומר" : boxB} · כרטיס ${card} · שגיאות ${errors[0] || "אין"}`,
     };
   },
 }, {
