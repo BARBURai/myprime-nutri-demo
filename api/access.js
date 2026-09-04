@@ -178,6 +178,14 @@ export default async function handler(req, res) {
       headerFound = cancelCol !== -1 || startCol !== -1;
     }
 
+    // כל השורות שנושאות את הכתובת שלה, ולא הראשונה או האחרונה שנתקלנו בה. אישה
+    // אחת יכולה לשבת על כמה שורות בגיליון, ולכן ההכרעה נעשית אחרי המעבר על כולן.
+    //
+    // עד 4 בספטמבר 2026 כל שורה תואמת דרסה את הקודמת, כלומר **האחרונה בקובץ
+    // ניצחה כאן, בעוד מסך הניהול לקח את הראשונה.** לכן המסך הציג מחזור אחד
+    // והאפליקציה נתנה לה אחר, ואף מסך לא אמר שיש שתי שורות. **החוק עכשיו זהה
+    // בשני הקבצים: תאריך ההתחלה המאוחר ביותר**, וזה `pickRow` ב-`api/_sheet.js`.
+    const hits = [];
     lines.forEach((line, idx) => {
       if (idx === 0 && headerFound) return; // skip header row
       // Her address is the CF_EMAIL column, and only if that cell holds nothing usable do we
@@ -191,37 +199,58 @@ export default async function handler(req, res) {
       if (!em || em.toLowerCase() !== lookFor) return;
       found = true;
       const cells = parseCsvLine(line);
-
-      if (phoneCol !== -1 && cells[phoneCol]) phone = String(cells[phoneCol]).replace(/[^\d]/g, "");
-      if (glowCol !== -1) glow = /^(true|yes|1|כן|✓|v)$/i.test(String(cells[glowCol] || "").trim());
       const isYes = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
-      if (solo12Col !== -1 && isYes(cells[solo12Col])) solo = 12;
-      else if (solo6Col !== -1 && isYes(cells[solo6Col])) solo = 6;
+
+      const hit = { phone: "", glow: false, solo: 0, months: null, cancelled: false, start: null };
+      if (phoneCol !== -1 && cells[phoneCol]) hit.phone = String(cells[phoneCol]).replace(/[^\d]/g, "");
+      if (glowCol !== -1) hit.glow = isYes(cells[glowCol]);
+      if (solo12Col !== -1 && isYes(cells[solo12Col])) hit.solo = 12;
+      else if (solo6Col !== -1 && isYes(cells[solo6Col])) hit.solo = 6;
 
       // Start date: prefer the exact column; else first date-looking token in the row.
+      let raw = null;
       if (startCol !== -1 && cells[startCol]) {
-        const dm = (cells[startCol].match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0];
-        if (dm) startStr = dm;
+        raw = (cells[startCol].match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0] || null;
       }
-      if (!startStr) {
-        const dm = (line.match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0];
-        if (dm) startStr = dm;
-      }
+      if (!raw) raw = (line.match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0] || null;
+      // ההשוואה בין השורות היא על יום ראשון של המחזור ולא על המחרוזת עצמה, כי
+      // בקובץ יושבות שתי צורות תאריך ומחרוזות כאלה אינן ניתנות להשוואה.
+      hit.start = raw;
+      hit.sun = raw ? parseDateToSunday(raw) : null;
 
       // Cancellation: read ONLY the "ביטלה" column when known. This fixes the bug where
       // a TRUE in any other boolean column (e.g. "הורידה אפליקציה") wrongly blocked a user.
       if (cancelCol !== -1) {
-        if (isTrue(cells[cancelCol])) cancelled = true;
+        if (isTrue(cells[cancelCol])) hit.cancelled = true;
       } else if (/(^|,)\s*TRUE\s*(,|$)/i.test(line)) {
-        cancelled = true; // fallback only when the header wasn't found
+        hit.cancelled = true; // fallback only when the header wasn't found
       }
 
       // Extra access months (overrides the default 3). Blank / invalid keeps the default.
       if (monthsCol !== -1 && cells[monthsCol] != null && String(cells[monthsCol]).trim() !== "") {
         const n = parseInt(String(cells[monthsCol]).replace(/[^\d]/g, ""), 10);
-        if (Number.isFinite(n) && n > 0) extraMonths = n;
+        if (Number.isFinite(n) && n > 0) hit.months = n;
       }
+      hits.push(hit);
     });
+
+    if (hits.length) {
+      // **הביטול נספר מכל השורות ולא מהמנצחת בלבד.** החלטת רון, 4 בספטמבר 2026:
+      // "אם מישהי ביטלה ויש לה שתי שורות אז היא ביטלה, ולא צריך להיות לה שום
+      // גישה, וזה לא משנה אם יש שתי שורות או שמונה מאות."
+      cancelled = hits.some((h) => h.cancelled);
+      let win = hits[0];
+      for (let k = 1; k < hits.length; k++) {
+        const h = hits[k];
+        if (!h.sun) continue;
+        if (!win.sun || h.sun.getTime() > win.sun.getTime()) win = h;
+      }
+      startStr = win.start;
+      phone = win.phone;
+      glow = win.glow;
+      solo = win.solo;
+      extraMonths = win.months;
+    }
   } catch (e) {
     return res.status(200).json({ allowed: false, reason: "fetch_failed", configured: true });
   }

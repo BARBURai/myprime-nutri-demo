@@ -85,6 +85,24 @@ function soloOf(cells, col) {
   return 0;
 }
 
+// שורה אחת מנצחת כשלאישה יש כמה שורות בגיליון, וזה החוק היחיד לכל הקוד:
+// **תאריך ההתחלה המאוחר ביותר.** סדר השורות בקובץ אינו אומר דבר, ותאריך מאוחר
+// יותר הוא ההחלטה החדשה יותר. שורה בלי תאריך לעולם אינה מנצחת שורה שיש בה תאריך.
+//
+// עד 4 בספטמבר 2026 מסך הניהול לקח את השורה הראשונה והשער את האחרונה, ולכן
+// המסך הציג מחזור אחד והאפליקציה נתנה לה אחר, בלי ששום דבר אמר שיש שתי שורות.
+// **`api/access.js` מיישם את אותו חוק בדיוק**, ובדיקה מריצה את שניהם ונופלת אם
+// הם חולקים.
+export function pickRow(rows) {
+  let best = rows[0];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r.start) continue;
+    if (!best.start || r.start > best.start) best = r;
+  }
+  return best;
+}
+
 // Reads the published CSV and returns one object per registered woman.
 // `headers` reports which columns were located, so a renamed column shows up as a missing
 // field on screen instead of silently reading as blank.
@@ -118,7 +136,6 @@ export async function loadSheet(csvUrl) {
   };
 
   const women = [];
-  const seenEmail = new Set();
   // Why a row in the file never reaches the screen. Ron marked 123 women in the sheet and
   // the screen showed 103, and there was no way to see where the other twenty went. These
   // counters are what the screen uses to say it out loud instead of leaving a silent gap.
@@ -128,7 +145,11 @@ export async function loadSheet(csvUrl) {
   // collected here, keyed by phone, so the office can see that she exists and put the
   // address in, instead of never learning she is missing.
   const noEmail = [];
+  const noEmailSeen = new Map();
   let sheetNewAppRows = 0;
+  // כל השורות של אותה כתובת, לפי סדר הופעתן בקובץ. אי אפשר להכריע שורה-שורה, כי
+  // אישה אחת יכולה לשבת על כמה שורות והתשובה עליה נגזרת מכולן יחד.
+  const byEmail = new Map();
   lines.forEach((line, idx) => {
     if (idx === 0) return;
     if (!line.trim()) return;
@@ -138,68 +159,100 @@ export async function loadSheet(csvUrl) {
     const rowNewApp = col.newapp !== -1 ? isTrue(cells[col.newapp]) : false;
     if (rowNewApp) sheetNewAppRows++;
 
-    const email = (cell(col.email).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) ||
-      line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0];
-    if (!email) {
-      skipped.noEmail++;
-      if (rowNewApp) skipped.newAppNoEmail++;
-      const noEmPhone = cell(col.phone).replace(/[^\d]/g, "");
-      // Without a phone there is nothing to identify her by and nothing to write back to
-      // ManyChat with, so such a row stays counted and unlisted.
-      if (noEmPhone && noEmail.length < 200) {
-        let sStr = (cell(col.start).match(DATE_IN) || [])[0] || "";
-        if (!sStr) sStr = (line.match(DATE_IN) || [])[0] || "";
-        const sSun = parseDateToSunday(sStr);
-        const mRaw = cell(col.months).replace(/[^\d]/g, "");
-        const m = mRaw ? parseInt(mRaw, 10) : null;
-        noEmail.push({
-          phone: noEmPhone,
-          first: cell(col.first),
-          last: cell(col.last),
-          group: cell(col.group),
-          start: sSun ? ymd(sSun) : "",
-          months: Number.isFinite(m) && m > 0 ? m : null,
-          cancelled: col.cancel !== -1 ? isTrue(cells[col.cancel]) : false,
-          sheetNewApp: rowNewApp,
-          glow: col.glow !== -1 ? isTrue(cells[col.glow]) : false,
-          solo: soloOf(cells, col),
-        });
-      }
-      return;
-    }
-    const em = email.toLowerCase();
-    // The same address really does sit on more than one row here, so the first one wins and
-    // the rest are dropped. Without counting them, a marked woman simply vanishes.
-    if (seenEmail.has(em)) { skipped.duplicate++; if (rowNewApp) skipped.newAppDuplicate++; return; }
-    seenEmail.add(em);
-
     // The start cell carries a time ("2026-01-04 0:00:00"), so pull the date out of it
     // rather than parsing the whole cell. Parsing it whole is what made every woman read
     // as having no start date, which in turn emptied the participants list.
     let startStr = (cell(col.start).match(DATE_IN) || [])[0] || "";
     if (!startStr) startStr = (line.match(DATE_IN) || [])[0] || "";
     const startSunday = parseDateToSunday(startStr);
-
     const monthsRaw = cell(col.months).replace(/[^\d]/g, "");
-    const months = monthsRaw ? parseInt(monthsRaw, 10) : null;
-
-    women.push({
-      email: em,
+    const monthsN = monthsRaw ? parseInt(monthsRaw, 10) : null;
+    const rec = {
       first: cell(col.first),
       last: cell(col.last),
       phone: cell(col.phone).replace(/[^\d]/g, ""),
       group: cell(col.group),
       start: startSunday ? ymd(startSunday) : "",
-      months: Number.isFinite(months) && months > 0 ? months : null,
+      months: Number.isFinite(monthsN) && monthsN > 0 ? monthsN : null,
       cancelled: col.cancel !== -1 ? isTrue(cells[col.cancel]) : false,
-      sheetNewApp: col.newapp !== -1 ? isTrue(cells[col.newapp]) : false,
+      sheetNewApp: rowNewApp,
       // מיי פריים Glow bonus lessons. Optional column: absent means nobody has it.
       glow: col.glow !== -1 ? isTrue(cells[col.glow]) : false,
       // 6, 12, או 0. אם שתי העמודות מסומנות מנצחת הארוכה, כי אין סיבה לקצר לה.
       solo: soloOf(cells, col),
-      sheetEnd: startSunday ? ymd(accessEnd(startSunday, months, soloOf(cells, col))) : "",
+    };
+
+    const email = (cell(col.email).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) ||
+      line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0];
+    if (!email) {
+      skipped.noEmail++;
+      if (rowNewApp) skipped.newAppNoEmail++;
+      // Without a phone there is nothing to identify her by and nothing to write back to
+      // ManyChat with, so such a row stays counted and unlisted.
+      if (!rec.phone) return;
+      // אותו טלפון על כמה שורות בלי מייל הוא אישה אחת. קודם היא הופיעה באריח
+      // פעמיים, והכתובת שהפקידה הקלידה נכנסה לאחת מהן באקראי.
+      const at = noEmailSeen.get(rec.phone);
+      if (at != null) { noEmail[at].rows++; return; }
+      if (noEmail.length >= 200) return;
+      noEmailSeen.set(rec.phone, noEmail.length);
+      noEmail.push({
+        phone: rec.phone, first: rec.first, last: rec.last, group: rec.group,
+        start: rec.start, months: rec.months, cancelled: rec.cancelled,
+        sheetNewApp: rec.sheetNewApp, glow: rec.glow, solo: rec.solo, rows: 1,
+      });
+      return;
+    }
+    const em = email.toLowerCase();
+    // The same address really does sit on more than one row here. Every row is kept, and
+    // pickRow decides which one answers; counting them is what lets the screen say so.
+    const arr = byEmail.get(em);
+    if (arr) { arr.push(rec); skipped.duplicate++; if (rowNewApp) skipped.newAppDuplicate++; }
+    else byEmail.set(em, [rec]);
+  });
+
+  byEmail.forEach((rows, em) => {
+    const win = pickRow(rows);
+    women.push({
+      email: em,
+      first: win.first,
+      last: win.last,
+      phone: win.phone,
+      group: win.group,
+      start: win.start,
+      months: win.months,
+      // **הביטול הוא היוצא מן הכלל היחיד, והוא נספר מכל השורות.** החלטת רון,
+      // 4 בספטמבר 2026: "אם מישהי ביטלה ויש לה שתי שורות אז היא ביטלה, ולא צריך
+      // להיות לה שום גישה, וזה לא משנה אם יש שתי שורות או שמונה מאות."
+      // **השער כבר עשה בדיוק את זה**, והמסך הוא זה שהציג אותה כרגילה.
+      cancelled: rows.some((r) => r.cancelled),
+      // אותו היגיון: סימון באחת השורות מספיק, אחרת שורה ישנה בלי סימון הייתה
+      // מוציאה אותה מהאפליקציה החדשה.
+      sheetNewApp: rows.some((r) => r.sheetNewApp),
+      glow: win.glow,
+      solo: win.solo,
+      sheetEnd: win.start ? ymd(accessEnd(parseDateToSunday(win.start), win.months, win.solo)) : "",
+      // כמה שורות יש לה, ומה תאריך ההתחלה בכל אחת. בלי זה שתי שורות נראות בדיוק
+      // כמו שורה אחת, ואף אחד לא יודע שיש שם מה לתקן.
+      dupRows: rows.length > 1 ? rows.length : 0,
+      dupStarts: rows.length > 1 ? rows.map((r) => r.start || "") : null,
     });
   });
+
+  // אותו טלפון על שתי כתובות מייל שונות הוא אישה אחת שמוצגת כאן כשתי משתתפות
+  // נפרדות, כל אחת עם מחזור, גישה ויומן משלה. **וכתיבה למניצ'ט מגיעה לרשומה אחת
+  // בלבד מבין השתיים**, כי הזיהוי שם הוא לפי הטלפון ולא לפי המייל.
+  const byPhone = new Map();
+  women.forEach((w) => {
+    if (!w.phone) return;
+    const a = byPhone.get(w.phone);
+    if (a) a.push(w.email); else byPhone.set(w.phone, [w.email]);
+  });
+  women.forEach((w) => {
+    const a = w.phone ? byPhone.get(w.phone) : null;
+    w.dupPhone = a && a.length > 1 ? a.filter((e) => e !== w.email) : null;
+  });
+
 
   const headers = {};
   for (const k of Object.keys(col)) headers[k] = col[k] !== -1;

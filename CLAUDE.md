@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.76** · עודכן: 4 בספטמבר 2026
+**גרסה נוכחית: v6.77** · עודכן: 4 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,40 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v6.77** - **אישה אחת על שתי שורות בגיליון: המסך והאפליקציה חלקו עליה, ואף אחד לא ידע.** רון: "הייתה רשומה ב-2 שורות... באדמין היה נראה שהכל בסדר ואצלה באפליקציה היא הייתה במחזור לא נכון".
+
+### הסיבה, ושני קבצים שבחרו שורה הפוכה
+| מי קורא | איזו שורה ניצחה |
+|---|---|
+| **מסך הניהול**, `api/_sheet.js` | **הראשונה בקובץ.** השנייה נזרקה בשקט |
+| **השער**, `api/access.js` | **האחרונה בקובץ.** כל שורה תואמת דרסה את הקודמת |
+
+**זה בדיוק מה שרון ראה:** במסך הכל תקין, ובאפליקציה מחזור אחר. **ואף מסך לא אמר שיש שתי שורות בכלל.**
+
+**החוק עכשיו אחד לשני הקבצים: תאריך ההתחלה המאוחר ביותר.** הוא יושב ב-`pickRow` ב-`api/_sheet.js`, **וסדר השורות בקובץ אינו אומר דבר**: במקרה של רון דווקא הראשונה הייתה הנכונה. שורה בלי תאריך לעולם אינה מנצחת שורה שיש בה תאריך.
+
+### הביטול הוא היוצא מן הכלל, והוא נספר מכל השורות
+**רון: "אם מישהי ביטלה ויש לה שתי שורות אז היא ביטלה, ולא צריך להיות לה שום גישה, וזה לא משנה אם יש שתי שורות או 800 שורות."**
+
+**והשער כבר עשה בדיוק את זה. המסך הוא זה שלא**, כי הוא קרא ביטלה מהשורה הראשונה בלבד. **כלומר אישה שביטלה ויש לה שורה כפולה נחסמה באפליקציה והוצגה במסך כרגילה**, והמשרד היה מסתכל ולא רואה כלום. **הצעתי להסיר את ההידבקות, ורון פסל, ובצדק.**
+
+### טלפון כפול הוא באג אחר לגמרי, ורון העלה אותו
+**שלוש נקודות, וכולן היו שקטות:**
+1. **בקובץ** הזיהוי הכפול נעשה על המייל בלבד, ולכן **שתי שורות עם אותו טלפון ושני מיילים הן שתי נשים נפרדות במסך**, כל אחת עם מחזור וגישה משלה.
+2. **בכתיבה למניצ'ט, וזו הגרועה:** `mcFind` לקחה את הרשומה הראשונה בשקט, **ולכן שינוי יכול היה לנחות על הרשומה הלא נכונה והמסך היה אומר "נשמר ✓".** זו הצורה של v5.43.
+3. **באריח "חסר מייל"** שתי שורות עם אותו טלפון הופיעו פעמיים, והכתובת שהוקלדה נכנסה לאחת מהן באקראי.
+
+### מה שהמסך מציג עכשיו
+**אריח "⚠ כפילות בגיליון", והלחיצה עליו מסננת את הרשימה**, כמו "חסרות קבוצה". מסונן לפי בורר האפליקציה, ו"כל האפליקציות" מחזיר את כולן.
+
+**ועל הכרטיס קופסה כתומה לכל מקרה:** במייל כפול, בכמה שורות היא יושבת, מה התאריך בכל אחת ובאיזה משתמשים; בטלפון כפול, הכתובת השנייה **ושכתיבה למניצ'ט מגיעה לרשומה אחת בלבד**. **ובשמירה, כשמניצ'ט מחזיר יותר מרשומה אחת, נאמר את זה גם כשהכתיבה הצליחה**, כי דווקא שם זה נראה תקין ואינו.
+
+### ומה שלא נבנה, בכוונה
+**מיזוג אוטומטי של שתי נשים לאחת.** מיזוג פירושו להחליט איזה יומן ואיזה גיבוי שורדים, וזה בלתי הפיך. **החיווי מספיק, וההכרעה נשארת אצל רון במניצ'ט.**
+
+### הבדיקות
+**`qa/dup-rows-check.mjs`, 47 בדיקות בלי רשת**, **מריצה את `api/_sheet.js` ואת `api/access.js` האמיתיים על אותו קובץ מדומה ונופלת אם הם חולקים ולו פעם אחת**, כולל בסדר השורות ההפוך. **ובשכבה 3 תרחיש שפותח את האריח ואת שני סוגי הקופסה.** **אומת שיש להם שיניים: על הקוד שבייצור הבדיקה מחזירה 14 מתוך 47**, ובתוכה בדיוק השורה שמתארת את הבאג של רון: השער אמר תאריך אחד והמסך אמר אחר.
 
 **v6.76** - מספור בלבד, אחרי ש-v6.75 עלתה לייצור. **המספר בייצור תמיד גבוה מכל מה שכבר עלה לשם, ולכן דב חייב להישאר מעליו.**
 

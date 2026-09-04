@@ -53,6 +53,29 @@ const WOMEN = [
     newApp: false, cancelled: false, glow: false, sheetGlow: false, solo: 0,
     months: 3, expired: false, notes: 0, log: [], needsGroup: true,
   },
+  // אישה אחת על שתי שורות בגיליון, ושתי נשים שחולקות טלפון. שני המקרים באותה
+  // רשימה, כי אריח שסופר תמיד נראה בדיוק כמו אריח שאינו סופר אף פעם.
+  {
+    email: "dup@test.com", first: "מיכל", last: "לוי", phone: "972505555555",
+    group: "ג", start: "2026-09-13", sheetStart: "2026-09-13", until: "2026-12-22", sheetEnd: "2026-12-22",
+    newApp: true, cancelled: false, glow: false, sheetGlow: false, solo: 0,
+    months: 3, expired: false, notes: 0, log: [], needsGroup: false,
+    dupRows: 2, dupStarts: ["2026-06-14", "2026-09-13"], dupPhone: null,
+  },
+  {
+    email: "twin-a@test.com", first: "תמר", last: "שדה", phone: "972507777777",
+    group: "א", start: "2026-08-16", sheetStart: "2026-08-16", until: "2026-11-24", sheetEnd: "2026-11-24",
+    newApp: true, cancelled: false, glow: false, sheetGlow: false, solo: 0,
+    months: 3, expired: false, notes: 0, log: [], needsGroup: false,
+    dupRows: 0, dupStarts: null, dupPhone: ["twin-b@test.com"],
+  },
+  {
+    email: "twin-b@test.com", first: "תמר", last: "שדה", phone: "972507777777",
+    group: "ב", start: "2026-08-23", sheetStart: "2026-08-23", until: "2026-12-01", sheetEnd: "2026-12-01",
+    newApp: true, cancelled: false, glow: false, sheetGlow: false, solo: 0,
+    months: 3, expired: false, notes: 0, log: [], needsGroup: false,
+    dupRows: 0, dupStarts: null, dupPhone: ["twin-a@test.com"],
+  },
 ];
 // שורה בגיליון שיש בה טלפון ואין בה מייל, וספירת הערות שגדולה ממה שיש ברשימה:
 // שלוש מתוך החמש שייכות לאישה שאינה ברשימה בכלל, וזה בדיוק הפער שהאריח החמיץ.
@@ -124,14 +147,14 @@ const CHECKS = [
     name: "המסך נטען וכרטיס נפתח, בלי שגיאת JavaScript",
     async run(browser, device) {
       const { ctx, page, errors } = await open(browser, device);
-      // שלוש מתוך ארבע, כי ברירת המחדל של המסך היא האפליקציה החדשה בלבד
-      // והרביעית היא בקג'אבי.
+      // שש מתוך שבע, כי ברירת המחדל של המסך היא האפליקציה החדשה בלבד ואחת
+      // מהן בקג'אבי.
       const rows = await page.locator("[data-open]").count();
       await page.locator("[data-open]").first().click();
       await page.waitForTimeout(400);
       const card = await page.locator(".card.open").count();
       await ctx.close();
-      return { ok: rows === 3 && card === 1 && errors.length === 0, detail: `שורות ${rows} · כרטיס ${card} · שגיאות ${errors[0] || "אין"}` };
+      return { ok: rows === 6 && card === 1 && errors.length === 0, detail: `שורות ${rows} · כרטיס ${card} · שגיאות ${errors[0] || "אין"}` };
     },
   },
   {
@@ -339,6 +362,34 @@ CHECKS.push({
   //
   // ההקלדה כאן היא תו-תו ולא fill, כי fill כותב את המחרוזת בבת אחת ומדלג בדיוק
   // על המסלול השבור.
+  name: "אריח הכפילות מסנן, והכרטיס אומר בדיוק מה כפול",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device);
+    const chip = page.locator('[data-v="dup"]').first();
+    const label = (await chip.innerText()).trim();
+    await chip.click();
+    await page.waitForTimeout(400);
+    const rows = await page.locator("[data-open]").count();
+    // המייל הכפול: הכרטיס חייב לומר בכמה שורות היא יושבת, מה כתוב בכל אחת,
+    // ובאיזו מהן המסך והאפליקציה משתמשים בפועל.
+    await page.locator('[data-open="dup@test.com"]').click();
+    await page.waitForTimeout(400);
+    const boxA = (await page.locator(".dupbox").first().innerText()).replace(/\s+/g, " ");
+    await page.locator('[data-back="1"]').first().click().catch(() => {});
+    await page.waitForTimeout(300);
+    // הטלפון הכפול: שתי הנשים מוצגות בנפרד, וכל אחת יודעת על השנייה.
+    await page.locator('[data-open="twin-a@test.com"]').click();
+    await page.waitForTimeout(400);
+    const boxB = (await page.locator(".dupbox").first().innerText()).replace(/\s+/g, " ");
+    await ctx.close();
+    const okA = boxA.includes("ב-2 שורות") && boxA.includes("14.06.2026") && boxA.includes("13.09.2026");
+    const okB = boxB.includes("כתובת מייל אחרת") && boxB.includes("twin-b@test.com");
+    return {
+      ok: /\(3\)/.test(label) && rows === 3 && okA && okB && errors.length === 0,
+      detail: `האריח "${label}" · שורות ${rows} · מייל ${okA ? "אומר" : boxA} · טלפון ${okB ? "אומר" : boxB} · שגיאות ${errors[0] || "אין"}`,
+    };
+  },
+}, {
   name: "אפשר להקליד שם מלא עם רווח בשורת החיפוש",
   async run(browser, device) {
     const { ctx, page, errors } = await open(browser, device);
