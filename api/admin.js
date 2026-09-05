@@ -35,7 +35,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "6.75";
+const ADMIN_VERSION = "6.78";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -121,16 +121,25 @@ async function mcFind(phone) {
   if (r.off || !r.ok) return null;
   const d = r.j && r.j.data;
   const first = Array.isArray(d) ? d[0] : d;
-  return first && first.id ? first : null;
+  if (!first || !first.id) return null;
+  // כמה רשומות נושאות את הטלפון הזה. עד 4 בספטמבר 2026 נלקחה הראשונה בשקט, ולכן
+  // שינוי שם, מייל, קבוצה או תאריך התחלה יכול היה לנחות על הרשומה הלא נכונה
+  // **והמסך היה אומר "נשמר במניצ'ט ✓"**. זו בדיוק הצורה של v5.43.
+  first.__count = Array.isArray(d) ? d.length : 1;
+  return first;
 }
 
 // Push the same change into ManyChat. Runs after the local write and never blocks it: if
 // ManyChat is unreachable the clerk's change still takes effect in the app, which is the
 // thing she is looking at. The screen reports which of the two actually happened.
-async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on, freezeTag, hasName, first, last }) {
+async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on, freezeTag, hasName, first, last, out }) {
   let sub;
   try { sub = await mcFind(phone); } catch (e) { return "failed"; }
   if (!sub) return "not_found";
+  // כמה רשומות במניצ'ט נושאות את הטלפון הזה. נמסר החוצה בשדה נפרד ולא בתוך
+  // מחרוזת התוצאה, כי המסך קורא אותה לפי תחילית ולפי חיתוך, ותוספת בסופה
+  // הייתה נבלעת בתוך ההודעה שהוא מציג.
+  if (out) out.multi = sub.__count > 1 ? sub.__count : 0;
   let startEcho = "";
   let startErr = "";
   try {
@@ -883,14 +892,15 @@ JSON בלבד, בלי שום טקסט אחר:
       // the app reads within seconds; ManyChat is what makes the change permanent and
       // carries it to WhatsApp and to the sheet.
       let mcState = "off";
+      const mcOut = {};
       // The computed start date travels to ManyChat exactly like a cohort move, because the
       // automations there hang off her start date and not off the day she comes back.
       const mcStart = hasStart ? start : freezeStart;
       const freezeTag = hasFreeze ? (freeze ? "on" : "off") : "";
       if (process.env.MANYCHAT_TOKEN && (hasGroup || mcStart || glow === "1" || glow === "0" || tag || freezeTag || hasName)) {
-        mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", tag, on, freezeTag, hasName, first, last });
+        mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", tag, on, freezeTag, hasName, first, last, out: mcOut });
       }
-      return res.status(200).json({ ok: true, mc: mcState });
+      return res.status(200).json({ ok: true, mc: mcState, mcMulti: mcOut.multi || 0 });
     } catch (e) {
       return res.status(500).json({ ok: false, error: "write_failed" });
     }
@@ -1087,6 +1097,13 @@ JSON בלבד, בלי שום טקסט אחר:
       log: (ovr && Array.isArray(ovr.log)) ? ovr.log : [],
       expired: !!until && today > until,
       needsGroup: !w.cancelled && !group && !w.solo && (start === thisWeek || start === nextWeek),
+      // כפילות בגיליון. `dupRows` הוא כמה שורות נושאות את הכתובת שלה ו-`dupStarts`
+      // מה כתוב בכל אחת, ו-`dupPhone` הוא הכתובות האחרות שיושבות על אותו טלפון.
+      // בלי שתי השורות האלה שתי שורות נראות בדיוק כמו שורה אחת, וזה בדיוק מה
+      // שגרם למסך להציג מחזור אחד ולאפליקציה לתת מחזור אחר.
+      dupRows: w.dupRows || 0,
+      dupStarts: w.dupStarts || null,
+      dupPhone: w.dupPhone || null,
     };
   });
 

@@ -144,6 +144,20 @@
     font-size:13px;color:var(--warn);background:var(--warnbg);border-radius:7px;
     padding:5px 9px;margin-top:2px;
   }
+  /* כפילות בגיליון: אותה כתובת מייל בכמה שורות, או אותו טלפון על כמה כתובות.
+     הקופסה יושבת על הכרטיס שלה, כי שתי שורות נראות בדיוק כמו שורה אחת. */
+  /* כותרת חלק בתוך מסך "בעיות בגיליון". שני סוגי בעיות באותו מסך, ולכן חייב
+     להיות ברור איפה אחד נגמר והשני מתחיל. */
+  .psec{
+    font-family:Heebo,system-ui,sans-serif;font-weight:700;font-size:15px;color:var(--ink);
+    margin:22px 0 10px;padding-bottom:7px;border-bottom:2px solid var(--line);
+  }
+  .psec:first-child{margin-top:0}
+  .dupbox{
+    font-size:13px;color:var(--warn);background:var(--warnbg);border-radius:9px;
+    padding:8px 10px;margin-top:8px;line-height:1.65;
+  }
+  .dupbox b{display:block}
   .btn.back{display:none;margin-bottom:11px}
   /* טלפון: פחות ריווח, ובלי הכרטיס הריק שתופס חצי מסך כשלא נבחרה אף אחת. */
   @media (max-width:640px){
@@ -724,6 +738,12 @@ function mcLoad(email){
 // held back by the other. So when the second half fails the clerk has to be told exactly
 // that, otherwise she walks away believing the sheet will catch up on its own.
 function mcWarn(r){
+  // אותו טלפון על כמה רשומות במניצ'ט. הכתיבה מגיעה לראשונה בלבד, ולכן היא יכולה
+  // לנחות על הרשומה הלא נכונה **בזמן שהכל נראה כמו הצלחה**. נאמר לפני כל דבר
+  // אחר, וגם כשהכתיבה הצליחה, כי דווקא שם זה נראה תקין ואינו.
+  if(r && r.mcMulti > 1){
+    alert("⚠ במניצ'ט יש "+r.mcMulti+" רשומות עם הטלפון הזה. הכתיבה הגיעה לראשונה בלבד.\n\nכדאי לוודא שם שהשינוי נחת על הרשומה הנכונה.");
+  }
   if(!r || r.mc === "ok" || r.mc === "off" || !r.mc) return;
   if(String(r.mc).indexOf("ok:") === 0) return;
   if(String(r.mc).indexOf("startfail:") === 0) return;   // has a message of its own
@@ -1033,6 +1053,21 @@ function render(){
   //
   // ואף אחת לא נעלמת: בחירת "כל האפליקציות" בסינון מחזירה את כולן.
   var missing = pool.filter(function(w){ return w.needsGroup; });
+  // אישה שיושבת על יותר משורה אחת בגיליון. **מסונן לפי בורר האפליקציה בלבד**,
+  // בדיוק כמו "חסר מייל", כי שניהם יושבים באותו מסך ואינם יכולים לציית לשני
+  // סינונים שונים. בורר המחזור והתוכנית אינו חל כאן.
+  var dupAll = DATA.women.filter(function(w){
+    if(w.cancelled && !SHOWCANCELLED) return false;
+    if(!w.start) return false;
+    return w.dupRows > 1 || (w.dupPhone && w.dupPhone.length);
+  });
+  var dupNew = dupAll.filter(function(w){ return !!w.newApp; }).length;
+  var dupOld = dupAll.length - dupNew;
+  var dupList = dupAll.filter(function(w){
+    if(APP === "new") return !!w.newApp;
+    if(APP === "old") return !w.newApp;
+    return true;
+  });
   var noDate = DATA.women.filter(function(w){ return w.frozen && !!w.freezeTodo; });
   var backSoon = DATA.women.filter(function(w){ return w.backSoon; });
   var notesWaiting = DATA.women.filter(function(w){ return w.notes > 0; });
@@ -1113,7 +1148,7 @@ function render(){
 
   // הפס הכהה, אחר כך סרגל אחד שבתוכו שני אזורים נפרדים: מה שדורש טיפול, ומה שרק מצמצם
   // את הרשימה. הם חולקים סרגל אבל לא נראים אותו דבר, כדי שאף אחת לא תחשוב שזה סינון.
-  var nWork = missing.length + noDate.length + backSoon.length + noMail.length;
+  var nWork = missing.length + noDate.length + backSoon.length + noMail.length + dupList.length;
   var html = '<div class="topbar"><h1>ניהול משתתפות</h1>'+
       '<span class="cnt">'+list.length+' משתתפות'+(DATA.version?' · v'+esc(DATA.version):'')+'</span>'+
       '<span class="who">'+esc(DATA.me||WHO||"?")+(DATA.owner?" · מנהל":"")+'</span>'+
@@ -1133,8 +1168,10 @@ function render(){
         '<span class="chip'+(VIEW==="backsoon"?" on":"")+'" data-v="backsoon">חוזרות מהקפאה השבוע ('+backSoon.length+')</span>'+
         '<span class="chip'+(notesWaiting.length?" warn":"")+(VIEW==="notes"?" on":"")+'" data-v="notes">'+
           (notesCount?"⚠ ":"")+'הערות ממתינות ('+notesCount+')</span>'+
-        '<span class="chip'+(noMail.length?" warn":"")+(VIEW==="nomail"?" on":"")+'" data-v="nomail">'+
-          (noMail.length?"⚠ ":"")+'חסר מייל ('+noMail.length+')</span>'+
+        // שני סוגי בעיות בקובץ, בכפתור אחד. רון, 4 בספטמבר 2026: "אי אפשר לצרף
+        // כבר את אלה שחסרות מייל לאותו כפתור של כל הבעיות בקובץ?"
+        '<span class="chip'+((noMail.length+dupList.length)?" warn":"")+(VIEW==="probs"?" on":"")+'" data-v="probs">'+
+          ((noMail.length+dupList.length)?"⚠ ":"")+'בעיות בגיליון ('+(noMail.length+dupList.length)+')</span>'+
         '<span class="chip'+(VIEW==="add"?" on":"")+'" data-v="add">הוספת משתתפת</span>'+
       '</div>'+
       // Say what the list covers, so a woman who is missing from it does not read as a bug.
@@ -1142,20 +1179,20 @@ function render(){
       (VIEW==="nodate" ? '<div class="note">מוקפאות שחסר להן תאריך חזרה, שבוע חזרה או שניהם. <b>הן לא נכנסות לאפליקציה עד שיושלם.</b></div>' : '')+
       (VIEW==="notes" ? '<div class="note">נשים שכתבו הערה מתוך האפליקציה ועוד לא קיבלו תשובה. <b>הכרטיס שלהן נפתח בלשונית "הערות".</b>'+
         (notesOff ? ' מתוכן '+notesOff+' של נשים שאינן ברשימה, כי בשורה שלהן בגיליון אין מייל.' : '')+'</div>' : '')+
-      (VIEW==="nomail" ? '<div class="note">שורות בגיליון שיש בהן טלפון ואין בהן כתובת מייל. <b>בלי מייל היא לא יכולה להיכנס לאפליקציה כלל</b>, ושום דבר עליה לא מופיע במסך הזה. מוצגות לפי האפליקציה שנבחרה בסינון, וכברירת מחדל <b>האפליקציה החדשה בלבד</b>, לפי עמודת "אפליקציית תזונה" בגיליון.</div>' : '')+
+      (VIEW==="probs" ? '<div class="note">שורות בקובץ שדורשות תיקון: שורות שאין בהן כתובת מייל, ונשים שיושבות על יותר משורה אחת. מוצגות לפי האפליקציה שנבחרה בסינון, וכברירת מחדל <b>האפליקציה החדשה בלבד</b>, לפי עמודת "אפליקציית תזונה" בגיליון.</div>' : '')+
       (VIEW==="backsoon" ? '<div class="note">חוזרות מהקפאה בשבוע הקרוב. <b>ליד כל אחת כתוב לאיזה מחזור להכניס אותה</b>, כדי שתדעי לאיזו קבוצת וואטסאפ היא שייכת.</div>' : '')+
       '</div>'+
       // שלוש רשימות נפתחות בשורה אחת, במקום חמש שורות של צ'יפים שתפסו חצי מסך
       // לפני שהגענו לשם הראשון ברשימה. בתור המענה אין מה לסנן, ולכן כולו יורד.
       // בתור המענה ובהוספה אין מה לסנן. ב"חסר מייל" כן, ולכן שם מוצג בורר
       // האפליקציה בלבד: בלעדיו מי שסוננה החוצה הייתה בלתי נגישה לגמרי.
-      (VIEW === "nomail" ?
+      (VIEW === "probs" ?
       '<div class="zone filt"><span class="zlab">סינון</span>'+
       '<div class="frow">'+
         '<span class="sel"><select id="fApp" aria-label="אפליקציה">'+
-          '<option value="new"'+(APP==="new"?" selected":"")+'>אפליקציה חדשה ('+nmNew+')</option>'+
-          '<option value="old"'+(APP==="old"?" selected":"")+'>קג\'אבי ('+nmOld+')</option>'+
-          '<option value=""'+(APP===""?" selected":"")+'>כל האפליקציות ('+noMailAll.length+')</option>'+
+          '<option value="new"'+(APP==="new"?" selected":"")+'>אפליקציה חדשה ('+(nmNew+dupNew)+')</option>'+
+          '<option value="old"'+(APP==="old"?" selected":"")+'>קג\'אבי ('+(nmOld+dupOld)+')</option>'+
+          '<option value=""'+(APP===""?" selected":"")+'>כל האפליקציות ('+(noMailAll.length+dupAll.length)+')</option>'+
         '</select></span>'+
       '</div></div>' :
       VIEW === "notes" || VIEW === "add" ? '' :
@@ -1395,6 +1432,42 @@ function render(){
   // אצלנו מתויק תחת המייל, ולכן זה מסך משלו ולא סינון של הרשימה. הפקידה משלימה את
   // הכתובת, היא נכתבת למניצ'ט שממנו הגיליון מיוצא, וגם נשמרת אצלנו מיד כדי שהאישה
   // תוכל להיכנס עוד היום ולא כשהייצוא הבא ירוץ.
+  // שני סוגי בעיות בקובץ במסך אחד, כי שניהם אותה עבודה: שורה שצריך לתקן.
+  // הם נשארים שני חלקים מופרדים, כי הפעולה בכל אחד שונה לגמרי.
+  function probsScreen(nm, dup){
+    return '<div class="psec">חסר מייל ('+nm.length+')</div>'+ nomailScreen(nm)+
+           '<div class="psec">כפילות בגיליון ('+dup.length+')</div>'+ dupSection(dup);
+  }
+
+  // אישה אחת על כמה שורות. **הכל בבלוק ולא בכרטיס**, כי מעבר לכרטיס מוציא
+  // מהמסך וזה בדיוק מה שהפריע לרון בתור המענה.
+  function dupSection(rows){
+    if(!rows.length) return '<div class="empty">'+
+      (dupAll.length ? 'אין כפילויות באפליקציה החדשה. יש '+dupAll.length+' בקג\'אבי, ואפשר לראות אותן דרך הסינון שלמעלה.'
+                     : 'אין כפילויות. כל אישה יושבת על שורה אחת 🌸')+'</div>';
+    return rows.map(function(w){
+      var name = ((w.first||"")+" "+(w.last||"")).trim();
+      return '<div class="qitem">'+
+        '<div class="qwho">'+
+          '<b>'+esc(name || w.email)+'</b>'+
+          (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+          (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
+          (w.cancelled?'<span class="grp dngpill">ביטלה</span>':'')+
+        '</div>'+
+        '<div class="qinfo">'+
+          '<div><span class="flabel">טלפון</span> <span class="mono">'+esc(w.phone||"אין")+'</span>'+
+            (w.phone?' <button class="btn sm" data-copy="'+esc(w.phone)+'">העתקה</button>'+
+              ' <a class="btn sm wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+'</div>'+
+          '<div><span class="flabel">מייל</span> <span class="mono">'+esc(w.email)+'</span>'+
+            ' <button class="btn sm" data-copy="'+esc(w.email)+'">העתקה</button></div>'+
+          '<div><span class="flabel">מחזור</span> '+esc(il(w.start||""))+' · '+esc(dayInProgram(w))+'</div>'+
+          dupBox(w)+
+          '<div class="control"><button class="btn sm" data-open="'+esc(w.email)+'">פתיחת הכרטיס שלה</button></div>'+
+        '</div>'+
+      '</div>';
+    }).join("");
+  }
+
   function nomailScreen(rows){
     if(!rows.length) return '<div class="empty">'+
       (noMailAll.length ? 'אין שורות בלי מייל באפליקציה החדשה. יש '+noMailAll.length+' בקג\'אבי, ואפשר לראות אותן דרך הסינון שלמעלה.'
@@ -1541,6 +1614,24 @@ function render(){
     '</div>';
   }
 
+  // הקופסה שאומרת בדיוק מה כפול. בלעדיה שתי שורות נראות בדיוק כמו שורה אחת, וזה
+  // מה שגרם למסך להציג מחזור אחד ולאפליקציה לתת לה מחזור אחר.
+  function dupBox(w){
+    var out = "";
+    if(w.dupRows > 1){
+      var st = (w.dupStarts||[]).map(function(d){ return d ? il(d) : "בלי תאריך"; });
+      out += '<div class="dupbox"><b>המייל הזה מופיע ב-'+w.dupRows+' שורות בגיליון</b>'+
+        'תאריכי ההתחלה בשורות: '+esc(st.join(" · "))+'. המסך והאפליקציה משתמשים ב-'+esc(il(w.sheetStart||""))+'.'+
+        (w.cancelled?' <b>אחת השורות מסומנת ביטלה, ולכן היא חסומה.</b>':'')+'</div>';
+    }
+    if(w.dupPhone && w.dupPhone.length){
+      out += '<div class="dupbox"><b>הטלפון הזה מופיע גם על כתובת מייל אחרת</b>'+
+        esc(w.dupPhone.join(" · "))+'. שתיהן מוצגות כאן כשתי משתתפות נפרדות, ולכל אחת מחזור וגישה משלה. '+
+        'כתיבה למניצ\'ט מכאן מגיעה לרשומה אחת בלבד מבין השתיים.</div>';
+    }
+    return out;
+  }
+
   function womanCard(w){
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
     var body = TAB==="notes"  ? tabNotes(w)
@@ -1562,6 +1653,7 @@ function render(){
         '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+
           (w.newApp?' · גישה עד <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+(w.expired?" (הסתיימה)":""):"")+'</div>'+
         ((w.backSoon && w.backCohort)?'<div class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></div>':'')+
+        dupBox(w)+
         quickActs(w)+
       '</div>'+
       '<div class="tabs" role="tablist">'+TABS.map(function(t){
@@ -1584,6 +1676,7 @@ function render(){
       (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
       (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+
       (w.notes?'<span class="grp notepill">'+(w.notes>1?w.notes+' הערות ממתינות':'הערה ממתינה')+'</span>':'')+
+      ((w.dupRows>1||(w.dupPhone&&w.dupPhone.length))?'<span class="grp warnpill">כפילות בגיליון</span>':'')+
       '</span>'+
       '<span class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</span>'+
       ((w.backSoon && w.backCohort)?'<span class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></span>':'')+
@@ -1594,8 +1687,8 @@ function render(){
   var sel = list.filter(function(w){ return w.email === SEL; })[0]
          || DATA.women.filter(function(w){ return w.email === SEL; })[0];
 
-  if(VIEW === "nomail" && !searching){
-    html += nomailScreen(noMail);
+  if(VIEW === "probs" && !searching){
+    html += probsScreen(noMail, dupList);
     app.innerHTML = html;
     wire();
     return;
@@ -1743,6 +1836,9 @@ function render(){
       // מתוך התור: פתיחת אישה חייבת לצאת מהתור, אחרת render מצייר את התור מחדש
       // והלחיצה נראית כאילו לא עשתה כלום. דווח על ידי רון.
       if(VIEW === "notes"){ VIEW = ""; TAB = "notes"; if(!NOTES[em]) notesLoad(em); render(); return; }
+      // ואותו דבר מ"בעיות בגיליון": בלי זה המסך מצויר מחדש והלחיצה נראית כאילו
+      // לא עשתה כלום, בדיוק כמו הבאג שתוקן ב-v5.92.
+      if(VIEW === "probs"){ VIEW = ""; TAB = "info"; if(!MC[em]) mcLoad(em); render(); return; }
       // מי שנבחרה מתוך "הערות ממתינות" נפתחת ישר על ההערה שלה, כי זו הסיבה שנכנסו אליה.
       TAB = (VIEW === "notes") ? "notes" : "info";
       if(TAB === "notes" && !NOTES[em]) notesLoad(em);
