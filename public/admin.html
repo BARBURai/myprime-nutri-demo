@@ -153,6 +153,16 @@
     margin:22px 0 10px;padding-bottom:7px;border-bottom:2px solid var(--line);
   }
   .psec:first-child{margin-top:0}
+  /* השורה שאומרת כמה הוסתרו. היא מוצגת תמיד כשיש מוסתרות, גם כשלא פתחו אותן:
+     אריח שמסתיר בלי לומר הוא בדיוק מה שגורם לפספס בעיה אמיתית. */
+  .ignline{
+    font-size:13px;color:var(--soft);margin:10px 0 2px;display:flex;gap:9px;align-items:center;
+  }
+  .ignback{
+    font-size:13px;color:var(--warn);background:var(--warnbg);border-radius:7px;
+    padding:5px 9px;margin-top:8px;
+  }
+  .ignwas{font-size:12.5px;color:var(--soft);margin-top:8px}
   .dupbox{
     font-size:13px;color:var(--warn);background:var(--warnbg);border-radius:9px;
     padding:8px 10px;margin-top:8px;line-height:1.65;
@@ -884,6 +894,8 @@ function appGap(){
 }
 
 var CODES = null, CODESOPEN = false, FREEZING = "", VIEW = "";
+// אילו מהחלקים במסך "בעיות בגיליון" מציגים גם את המוסתרות. לסשן הזה בלבד.
+var IGNOPEN = { mail: false, dup: false };
 var NAMING = "";   // הכרטיס שבו שדה השם פתוח לעריכה
 var SEL = "";   // המשתתפת שהכרטיס שלה פתוח. במחשב הוא יושב בצד, בטלפון הוא תופס את המסך
 var TAB = "info";   // הלשונית הפתוחה בכרטיס
@@ -1097,6 +1109,16 @@ function render(){
   // הם היו אומרים משהו אחר לגמרי ממה שמוצג מתחתיהם.
   var nmNew = noMailAll.filter(function(r){ return !!r.sheetNewApp; }).length;
   var nmOld = noMailAll.length - nmNew;
+  // התעלמות: מה שהמשרד ביקש לא לראות. **ההתעלמות תקפה למצב שהיה כשלחצו עליה**,
+  // ולכן `ign.on` מגיע מהשרת ולא מהמסך, ו-`ign.stale` אומר שהיא חזרה כי השורות
+  // שלה בגיליון השתנו. החלטת רון, 5 בספטמבר 2026: "שתחזור."
+  var isIgn = function(x){ return !!(x.ign && x.ign.on); };
+  var noMailOn = noMail.filter(function(r){ return !isIgn(r); });
+  var noMailOff = noMail.filter(isIgn);
+  var dupOn = dupList.filter(function(w){ return !isIgn(w); });
+  var dupOff = dupList.filter(isIgn);
+  var probsN = noMailOn.length + dupOn.length;
+
   var base = MISSING ? missing : (VIEW==="nodate" ? noDate : VIEW==="backsoon" ? backSoon : VIEW==="notes" ? notesWaiting : pool);
 
   // מחזור אחד ברשימה נפתחת, במקום שלוש שורות של צ'יפים לשנה, לחודש ולמחזור.
@@ -1148,7 +1170,7 @@ function render(){
 
   // הפס הכהה, אחר כך סרגל אחד שבתוכו שני אזורים נפרדים: מה שדורש טיפול, ומה שרק מצמצם
   // את הרשימה. הם חולקים סרגל אבל לא נראים אותו דבר, כדי שאף אחת לא תחשוב שזה סינון.
-  var nWork = missing.length + noDate.length + backSoon.length + noMail.length + dupList.length;
+  var nWork = missing.length + noDate.length + backSoon.length + probsN;
   var html = '<div class="topbar"><h1>ניהול משתתפות</h1>'+
       '<span class="cnt">'+list.length+' משתתפות'+(DATA.version?' · v'+esc(DATA.version):'')+'</span>'+
       '<span class="who">'+esc(DATA.me||WHO||"?")+(DATA.owner?" · מנהל":"")+'</span>'+
@@ -1170,8 +1192,8 @@ function render(){
           (notesCount?"⚠ ":"")+'הערות ממתינות ('+notesCount+')</span>'+
         // שני סוגי בעיות בקובץ, בכפתור אחד. רון, 4 בספטמבר 2026: "אי אפשר לצרף
         // כבר את אלה שחסרות מייל לאותו כפתור של כל הבעיות בקובץ?"
-        '<span class="chip'+((noMail.length+dupList.length)?" warn":"")+(VIEW==="probs"?" on":"")+'" data-v="probs">'+
-          ((noMail.length+dupList.length)?"⚠ ":"")+'בעיות בגיליון ('+(noMail.length+dupList.length)+')</span>'+
+        '<span class="chip'+(probsN?" warn":"")+(VIEW==="probs"?" on":"")+'" data-v="probs">'+
+          (probsN?"⚠ ":"")+'בעיות בגיליון ('+probsN+')</span>'+
         '<span class="chip'+(VIEW==="add"?" on":"")+'" data-v="add">הוספת משתתפת</span>'+
       '</div>'+
       // Say what the list covers, so a woman who is missing from it does not read as a bug.
@@ -1435,8 +1457,26 @@ function render(){
   // שני סוגי בעיות בקובץ במסך אחד, כי שניהם אותה עבודה: שורה שצריך לתקן.
   // הם נשארים שני חלקים מופרדים, כי הפעולה בכל אחד שונה לגמרי.
   function probsScreen(nm, dup){
-    return '<div class="psec">חסר מייל ('+nm.length+')</div>'+ nomailScreen(nm)+
-           '<div class="psec">כפילות בגיליון ('+dup.length+')</div>'+ dupSection(dup);
+    return '<div class="psec">חסר מייל ('+nm.length+')</div>'+
+             nomailScreen(IGNOPEN.mail ? nm.concat(noMailOff) : nm)+ ignLine("mail", noMailOff.length)+
+           '<div class="psec">כפילות בגיליון ('+dup.length+')</div>'+
+             dupSection(IGNOPEN.dup ? dup.concat(dupOff) : dup)+ ignLine("dup", dupOff.length);
+  }
+
+  // כמה הוסתרו, תמיד על המסך. בלי השורה הזאת הסתרה היא בדיוק הדרך לפספס בעיה.
+  function ignLine(kind, n){
+    if(!n) return "";
+    return '<div class="ignline"><span>'+n+' מוסתרות</span>'+
+      '<button class="btn sm" data-ignopen="'+kind+'">'+(IGNOPEN[kind]?"הסתרה":"הצגה")+'</button></div>';
+  }
+
+  // הכפתור שעל כל בלוק, ומה שנאמר על מי שכבר מוסתרת או שחזרה מעצמה.
+  function ignBtn(kind, id, x){
+    if(isIgn(x)) return '<div class="ignwas">הוסתרה על ידי '+esc(x.ign.by||"?")+' · '+esc(stamp(x.ign.at))+'</div>'+
+      '<div class="control"><button class="btn sm" data-ignoff="'+kind+':'+esc(id)+'">ביטול ההתעלמות</button></div>';
+    return (x.ign && x.ign.stale
+        ? '<div class="ignback">חזרה לרשימה: המצב שלה בגיליון השתנה מאז שהתעלמת ממנה.</div>' : '')+
+      '<div class="control"><button class="btn sm" data-ignon="'+kind+':'+esc(id)+'">התעלמות</button></div>';
   }
 
   // אישה אחת על כמה שורות. **הכל בבלוק ולא בכרטיס**, כי מעבר לכרטיס מוציא
@@ -1463,6 +1503,7 @@ function render(){
           '<div><span class="flabel">מחזור</span> '+esc(il(w.start||""))+' · '+esc(dayInProgram(w))+'</div>'+
           dupBox(w)+
           '<div class="control"><button class="btn sm" data-open="'+esc(w.email)+'">פתיחת הכרטיס שלה</button></div>'+
+          ignBtn("dup", w.email, w)+
         '</div>'+
       '</div>';
     }).join("");
@@ -1496,6 +1537,7 @@ function render(){
               'עד אז היא נשמרת גם אצלנו, וזה מה שמאפשר לה להיכנס לאפליקציה כבר עכשיו.'+
               (r.start ? '' : ' <b>בשורה שלה אין תאריך התחלה, ולכן היא עדיין לא תיכנס.</b> את התאריך משלימים במניצ\'ט.')+
             '</div>'+
+            ignBtn("mail", r.phone, r)+
           '</div>'+
         '</div>';
       }).join("");
@@ -1688,7 +1730,7 @@ function render(){
          || DATA.women.filter(function(w){ return w.email === SEL; })[0];
 
   if(VIEW === "probs" && !searching){
-    html += probsScreen(noMail, dupList);
+    html += probsScreen(noMailOn, dupOn);
     app.innerHTML = html;
     wire();
     return;
@@ -1773,6 +1815,29 @@ function render(){
         return load().then(render);
       })
       .catch(function(err){ el.disabled = false; alert("השמירה נכשלה. "+(err && err.message ? err.message : "נסי שוב.")); });
+  }; });
+
+  app.querySelectorAll("[data-ignopen]").forEach(function(el){ el.onclick=function(){
+    var k = el.getAttribute("data-ignopen");
+    IGNOPEN[k] = !IGNOPEN[k];
+    render();
+  }; });
+
+  // התעלמות וביטולה. **שום דבר מכאן לא נוגע בגיליון, במניצ'ט או באישה עצמה**:
+  // זו החלטה של המשרד על מה להציג לו, והיא הפיכה בלחיצה אחת.
+  app.querySelectorAll("[data-ignon],[data-ignoff]").forEach(function(el){ el.onclick=function(){
+    var on = el.hasAttribute("data-ignon");
+    var v = el.getAttribute(on ? "data-ignon" : "data-ignoff");
+    var i = v.indexOf(":");
+    el.disabled = true;
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({ ignore:{ kind: v.slice(0,i), id: v.slice(i+1), on: on }, by: WHO })})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok) throw new Error(d && d.error === "row_gone" ? "השורה כבר לא בקובץ." : "");
+        return load().then(render);
+      })
+      .catch(function(err){ el.disabled = false; alert("לא נשמר. "+(err && err.message ? err.message : "נסי שוב.")); });
   }; });
 
   var adSave = document.getElementById("ad_save");

@@ -35,7 +35,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "6.79";
+const ADMIN_VERSION = "6.80";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -238,6 +238,25 @@ function makeCode() {
   let s = "";
   for (let i = 0; i < 8; i++) { if (i === 4) s += "-"; s += CODE_ABC[Math.floor(Math.random() * CODE_ABC.length)]; }
   return s;
+}
+
+// טביעת האצבע של הבעיה כפי שהיא נראית עכשיו. **ההתעלמות תקפה למצב הזה בלבד**,
+// ולכן ברגע שהשורות שלה בגיליון משתנות היא חוזרת לרשימה מעצמה. החלטת רון,
+// 5 בספטמבר 2026: "שתחזור."
+//
+// היא נבנית מאותם נתונים שהבלוק מציג, ולא מיותר מזה: אחרת שינוי בשדה שאינו
+// מוצג היה מחזיר אותה בלי שאיש רואה למה.
+export function probSig(kind, x) {
+  if (kind === "dup") {
+    return ["d", x.dupRows || 0, (x.dupStarts || []).join(","), x.cancelled ? 1 : 0,
+      (x.dupPhone || []).slice().sort().join(",")].join("|");
+  }
+  return ["m", x.rows || 1, x.start || "", x.cancelled ? 1 : 0, x.group || ""].join("|");
+}
+
+export function ignoreKey(kind, id) {
+  return kind === "dup" ? "dup:" + String(id).trim().toLowerCase()
+                        : "mail:" + String(id).replace(/[^\d]/g, "");
 }
 
 async function whoIs(key, RU, RT) {
@@ -522,6 +541,43 @@ JSON בלבד, בלי שום טקסט אחר:
         why: String(out.why || "").slice(0, 300),
       });
     } catch (e) { return res.status(200).json({ ok: false, error: "ai_failed" }); }
+  }
+
+  // התעלמות משורה במסך "בעיות בגיליון". נשמרת אצלנו בלבד ולעולם לא נוגעת
+  // בגיליון, במניצ'ט או באישה עצמה: **זו החלטה של המשרד על מה להציג לו.**
+  if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("ignore") : req.body.ignore)) {
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+    const ig = body.ignore || {};
+    const kind = ig.kind === "dup" ? "dup" : "mail";
+    const id = String(ig.id || "").trim();
+    const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;
+    if (!id) return res.status(400).json({ ok: false, error: "bad_id" });
+    if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+    const field = ignoreKey(kind, id);
+    if (ig.on === false) {
+      try { await redis(RU, RT, "HDEL", "admin:ignore", field); } catch (e) { return res.status(500).json({ ok: false, error: "write_failed" }); }
+      return res.status(200).json({ ok: true });
+    }
+    // החתימה נלקחת מהקובץ עצמו ולא ממה שהדפדפן שלח, כי היא זו שקובעת מתי
+    // ההתעלמות פגה, ואסור שהמסך יוכל לקבוע לה תוקף ארוך יותר.
+    let sig = "";
+    try {
+      const sheetNow = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
+      if (kind === "dup") {
+        const w = sheetNow.women.find((x) => x.email === id.toLowerCase());
+        if (!w) return res.status(409).json({ ok: false, error: "row_gone" });
+        sig = probSig("dup", w);
+      } else {
+        const r = (sheetNow.noEmail || []).find((x) => x.phone === field.slice(5));
+        if (!r) return res.status(409).json({ ok: false, error: "row_gone" });
+        sig = probSig("mail", r);
+      }
+    } catch (e) { return res.status(502).json({ ok: false, error: "sheet_failed" }); }
+    try {
+      await redis(RU, RT, "HSET", "admin:ignore", field, JSON.stringify({ sig, by, at: new Date().toISOString() }));
+    } catch (e) { return res.status(500).json({ ok: false, error: "write_failed" }); }
+    return res.status(200).json({ ok: true });
   }
 
   // A row in the file that carries a phone and no address. She is registered, she paid, and
@@ -1144,6 +1200,32 @@ JSON בלבד, בלי שום טקסט אחר:
     ...r,
     end: r.start ? ymd(accessEnd(new Date(r.start + "T00:00:00Z"), r.months, r.solo)) : "",
   }));
+
+  // מי שהמשרד ביקש להתעלם ממנה במסך "בעיות בגיליון". קריאה אחת לכולן.
+  //
+  // **ההתעלמות תקפה למצב שהיה כשלחצו עליה בלבד.** אם השורות שלה בגיליון
+  // השתנו מאז, היא חוזרת לרשימה ונאמר לה למה. **הרשומה עצמה נשארת** ואינה
+  // נמחקת כאן: מחיקה במסלול קריאה הייתה מוחקת החלטה של המשרד בכל פעם
+  // שחישוב החתימה זז ולו במעט.
+  let ign = {};
+  if (RU && RT) {
+    try { ign = (await redis(RU, RT, "HGETALL", "admin:ignore")) || {}; } catch (e) { ign = {}; }
+    if (Array.isArray(ign)) {
+      const flat = ign; ign = {};
+      for (let i = 0; i < flat.length; i += 2) ign[flat[i]] = flat[i + 1];
+    }
+  }
+  const markIgnore = (kind, id, x) => {
+    const raw = ign[ignoreKey(kind, id)];
+    if (!raw) return;
+    let rec = null;
+    try { rec = JSON.parse(raw); } catch (e) { return; }
+    if (!rec) return;
+    const same = rec.sig === probSig(kind, x);
+    x.ign = { by: rec.by || "", at: rec.at || "", on: same, stale: !same };
+  };
+  women.forEach((w) => { if (w.dupRows > 1 || (w.dupPhone && w.dupPhone.length)) markIgnore("dup", w.email, w); });
+  noEmail.forEach((r) => markIgnore("mail", r.phone, r));
 
   return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women, notesTotal, notesOff, noEmail });
 }
