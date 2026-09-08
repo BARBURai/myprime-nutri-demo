@@ -190,15 +190,66 @@ console.log("\nמניצ'ט: כמה רשומות נושאות את הטלפון")
     String(r1.mc).indexOf("ok") === 0 && String(r2.mc).indexOf("ok") === 0, r1.mc + " / " + r2.mc);
 }
 
+console.log("\nהתעלמות, והחזרה שלה כשהמצב משתנה");
+{
+  const HDR2 = HDR;
+  CSV = [HDR2,
+    '972501111111,אורלי,לוי,dup@test.com,2026-06-14 0:00:00,TRUE,FALSE,ב,3,TRUE',
+    '972501111111,אורלי,לוי,dup@test.com,2026-09-13 0:00:00,TRUE,FALSE,ג,3,TRUE',
+    '972502222222,נילי,לביא,,2026-08-16 0:00:00,TRUE,FALSE,א,3,TRUE',
+  ].join("\n");
+  const list = async () => {
+    const res = mkRes();
+    await adminHandler({ query: { key: KEY }, method: "GET" }, res);
+    return res.body || {};
+  };
+  const post = async (body) => {
+    const res = mkRes();
+    await adminHandler({ query: { key: KEY }, method: "POST", body }, res);
+    return res.body || {};
+  };
+  const her = (d) => (d.women || []).find((w) => w.email === "dup@test.com");
+  const row = (d) => (d.noEmail || []).find((r) => r.phone === "972502222222");
+
+  let d = await list();
+  check("לפני ההתעלמות אין שום סימון", !her(d).ign && !row(d).ign);
+
+  const mcBefore = MC.calls;
+  const r1 = await post({ ignore: { kind: "dup", id: "dup@test.com" }, by: "טלי" });
+  const r2 = await post({ ignore: { kind: "mail", id: "972502222222" }, by: "טלי" });
+  check("שתי ההתעלמויות נשמרו", r1.ok === true && r2.ok === true, JSON.stringify([r1, r2]));
+  // ההתעלמות היא החלטה של המשרד על מה להציג לו, ולכן היא לעולם לא נוגעת
+  // במניצ'ט, בגיליון או באישה עצמה.
+  check("ושום דבר לא נכתב למניצ׳ט", MC.calls === mcBefore, String(MC.calls - mcBefore));
+
+  d = await list();
+  check("היא מסומנת כמוסתרת", her(d).ign?.on === true && her(d).ign?.stale === false);
+  check("ונרשם מי הסתיר ומתי", her(d).ign?.by === "טלי" && !!her(d).ign?.at);
+  check("וגם שורת חסר המייל", row(d).ign?.on === true);
+
+  // **החלטת רון, 5 בספטמבר 2026: "שתחזור."** ההתעלמות תקפה למצב שהיה כשלחצו
+  // עליה, ולכן שורה שלישית מחזירה אותה לרשימה מעצמה.
+  CSV = CSV + "\n" + '972501111111,אורלי,לוי,dup@test.com,2026-10-04 0:00:00,TRUE,FALSE,ג,3,TRUE';
+  d = await list();
+  check("שורה שלישית מחזירה אותה לרשימה", her(d).ign?.on === false && her(d).ign?.stale === true);
+  check("והרשומה נשארת כדי שאפשר יהיה לומר לה למה", her(d).ign?.by === "טלי");
+  check("ומי שלא השתנתה נשארת מוסתרת", row(d).ign?.on === true);
+
+  const r3 = await post({ ignore: { kind: "mail", id: "972502222222", on: false }, by: "טלי" });
+  d = await list();
+  check("ביטול ההתעלמות מוחק אותה", r3.ok === true && !row(d).ign);
+}
+
 console.log("\nמה שהמסך מציג");
 {
   const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
   // שני סוגי הבעיות בקובץ יושבים בכפתור אחד מ-v6.78, לפי בקשת רון.
   check('יש כפתור אחד, "בעיות בגיליון"', /data-v="probs"/.test(html) && html.indexOf("בעיות בגיליון (") !== -1);
-  check("והמספר שלו הוא סכום השניים", /\(noMail\.length\+dupList\.length\)\+'\)/.test(html));
+  check("והמספר שלו הוא סכום השניים", /probsN = noMailOn\.length \+ dupOn\.length/.test(html));
   check("ושני הכפתורים הישנים ירדו", !/data-v="nomail"/.test(html) && !/data-v="dup"/.test(html));
-  check("המסך מציג את שני החלקים", /probsScreen\(noMail, dupList\)/.test(html) &&
-    /return '<div class="psec">חסר מייל \('\+nm\.length\+'\)<\/div>'\+ nomailScreen\(nm\)\+/.test(html));
+  check("המסך מציג את שני החלקים", /probsScreen\(noMailOn, dupOn\)/.test(html) &&
+    /<div class="psec">חסר מייל \('\+nm\.length\+'\)<\/div>'\+\s*\n\s*nomailScreen\(/.test(html) &&
+    /<div class="psec">כפילות בגיליון \('\+dup\.length\+'\)<\/div>'\+\s*\n\s*dupSection\(/.test(html));
   check("הכפילות מסוננת לפי בורר האפליקציה בלבד",
     /dupAll = DATA\.women\.filter/.test(html) && /dupList = dupAll\.filter/.test(html));
   check("ויש שורת הסבר לתצוגה", /VIEW==="probs" \? '<div class="note">/.test(html));
@@ -223,6 +274,16 @@ console.log("\nמה שהמסך מציג");
   check("והיא אומרת שהכתיבה מגיעה לרשומה אחת", boxP.indexOf("לרשומה אחת בלבד") !== -1);
   check("ומי שאין לה כפילות לא מקבלת כלום",
     mk({ dupRows: 0, dupStarts: null, sheetStart: "x", cancelled: false, dupPhone: null }) === "");
+
+  check("יש כפתור התעלמות על שני החלקים",
+    /ignBtn\("dup", w\.email, w\)/.test(html) && /ignBtn\("mail", r\.phone, r\)/.test(html));
+  check("והכיתוב הוא התעלמות וביטול ההתעלמות",
+    html.indexOf('">התעלמות</button>') !== -1 && html.indexOf('">ביטול ההתעלמות</button>') !== -1);
+  // הסתרה שאינה נאמרת היא בדיוק הדרך לפספס בעיה אמיתית.
+  check("ושורת המוסתרות מוצגת תמיד", /function ignLine\(kind, n\)/.test(html) && html.indexOf("' מוסתרות</span>'") !== -1);
+  check("ומי שחזרה אומרת למה", html.indexOf("חזרה לרשימה: המצב שלה בגיליון השתנה מאז שהתעלמת ממנה.") !== -1);
+  check("והמספר על הכפתור סופר את המוצגות בלבד",
+    /probsN = noMailOn\.length \+ dupOn\.length/.test(html) && /probsScreen\(noMailOn, dupOn\)/.test(html));
 
   const wf = html.match(/function mcWarn\(r\)\{[\s\S]*?\n\}/);
   check("mcWarn מזהירה על כמה רשומות", !!wf && /r\.mcMulti > 1/.test(wf[0]));

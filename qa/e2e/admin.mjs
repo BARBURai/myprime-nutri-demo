@@ -99,7 +99,9 @@ const record = (device, name, ok, detail, skip) => {
   console.log(`${skip ? "מדולג" : ok ? "עובר " : "נכשל "} | ${device} | ${name}${detail ? `\n        ${detail}` : ""}`);
 };
 
-async function open(browser, device) {
+// `patch` נותן לתרחיש לשנות את הנתונים שהמסך מקבל, בלי לגעת בשאר התרחישים.
+async function open(browser, device, patch) {
+  const DATA0 = patch ? patch(JSON.parse(JSON.stringify(DATA))) : DATA;
   const ctx = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
   const posts = [];
   await ctx.route("**/api/**", (route) => {
@@ -113,7 +115,7 @@ async function open(browser, device) {
     if (url.includes("bank=1")) return json({ ok: true, bank: [] });
     if (url.includes("mc=")) return json({ ok: true, found: false });
     if (url.includes("codes=1")) return json({ ok: true, codes: [] });
-    return json(DATA);
+    return json(DATA0);
   });
   await ctx.addInitScript(() => {
     localStorage.setItem("mp_admin_key", "k");
@@ -360,6 +362,45 @@ CHECKS.push({
 });
 
 CHECKS.push({
+  // רון, 5 בספטמבר 2026: "אני רוצה כפתור התעלמות, יש שם מיילים לבדיקה אני לא
+  // צריך את זה." ההתעלמות תקפה למצב שהיה כשלחצו עליה, ולכן שינוי בשורות שלה
+  // מחזיר אותה לרשימה ואומר לה למה. "שתחזור."
+  name: "התעלמות מסתירה, אומרת כמה הוסתרו, ומחזירה את מי שהמצב שלה השתנה",
+  async run(browser, device) {
+    const { ctx, page, errors, posts } = await open(browser, device, (d) => {
+      const w = (em) => d.women.find((x) => x.email === em);
+      w("twin-a@test.com").ign = { by: "טלי", at: "2026-09-05T06:00:00.000Z", on: true, stale: false };
+      w("twin-b@test.com").ign = { by: "טלי", at: "2026-09-05T06:00:00.000Z", on: false, stale: true };
+      return d;
+    });
+    // המספר על הכפתור סופר את המוצגות בלבד: אחת מוסתרת, ולכן 3 במקום 4.
+    const label = (await page.locator('[data-v="probs"]').first().innerText()).trim();
+    await page.locator('[data-v="probs"]').first().click();
+    await page.waitForTimeout(400);
+    const shown = await page.locator(".qitem [data-open]").count();
+    const line = (await page.locator(".ignline").first().innerText()).replace(/\s+/g, " ");
+    // מי שחזרה מעצמה חייבת לומר למה, אחרת דברים חוזרים והמשרד לא יודע מדוע.
+    const back = await page.locator(".ignback").count();
+    // ההצגה מגלה את המוסתרת, ואצלה הכפתור הוא ביטול ולא התעלמות.
+    await page.locator("[data-ignopen]").first().click();
+    await page.waitForTimeout(400);
+    const afterOpen = await page.locator(".qitem [data-open]").count();
+    const off = await page.locator('[data-ignoff="dup:twin-a@test.com"]').count();
+    // ולחיצה על התעלמות שולחת בדיוק את מי שנלחצה.
+    await page.locator('[data-ignon="dup:dup@test.com"]').first().click();
+    await page.waitForTimeout(600);
+    await ctx.close();
+    const sent = posts.filter((p) => p.ignore)[0] || null;
+    return {
+      ok: /\(3\)/.test(label) && shown === 2 && /1 מוסתרות/.test(line) && back === 1 &&
+          afterOpen === 3 && off === 1 &&
+          !!sent && sent.ignore.kind === "dup" && sent.ignore.id === "dup@test.com" && sent.ignore.on === true &&
+          errors.length === 0,
+      detail: `האריח "${label}" · מוצגות ${shown} · "${line}" · חזרו ${back} · אחרי הצגה ${afterOpen} · ביטול ${off} · נשלח ${JSON.stringify(sent)} · שגיאות ${errors[0] || "אין"}`,
+    };
+  },
+}, {
+
   // הכל בתוך המסך ולא בכרטיס. רון, 4 בספטמבר 2026: "אי אפשר לצרף כבר את אלה
   // שחסרות מייל לאותו כפתור של כל הבעיות בקובץ?"
   name: "בעיות בגיליון: שני החלקים במסך אחד, וכל כפילות אומרת מה כפול",

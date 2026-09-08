@@ -222,7 +222,10 @@ console.log("\nוהיא מקבלת את חלון הגישה הרגיל");
 console.log("\nטיוטת התשובה");
 {
   check("היא נשענת על הבריף ב-api/_kb.js", ADMIN_JS.includes('from "./_kb.js"') && ADMIN_JS.includes("${KB}"));
-  const draft = ADMIN_JS.slice(ADMIN_JS.indexOf("body.draftFor"), ADMIN_JS.indexOf('if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("fixEmail")'));
+  // עד תחילת המסלול הבא ולא עד מסלול מסוים בשם, אחרת כל מסלול שיוכנס ביניהם
+  // ייכנס לחיתוך ויפיל את הבדיקה בלי שהטיוטה השתנתה. קרה ב-v6.80.
+  const dFrom = ADMIN_JS.indexOf("body.draftFor");
+  const draft = ADMIN_JS.slice(dFrom, ADMIN_JS.indexOf('\n  if (req.method === "POST"', dFrom + 200));
   // הדבר היחיד שמגיע למשתתפת הוא notes:replies, ואליו כותבים רק כשאדם לוחץ "שלחי לה".
   check("ושום דבר ממנה אינו נשלח למשתתפת", !draft.includes("notes:replies") && !draft.includes("HSET"));
   check("ואינה כותבת שום דבר לשום מקום", !draft.includes('"SET"') && !draft.includes("mcPush"));
