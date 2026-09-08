@@ -244,7 +244,14 @@ export default async function handler(req, res) {
     });
   } catch (e) { /* unreadable: send as usual rather than silence everyone */ }
 
-  let sent = 0, pruned = 0, failed = 0, quiet = 0;
+  // Two phases on purpose: decide who gets what, then send. Deciding is pure and instant.
+  // Sending is the slow part, and it used to happen one phone at a time inside this same loop:
+  // one network round trip, wait, next. At 26 registered devices that was fine. At 350 it took
+  // thirty seconds, which is exactly the timeout cron-job.org allows, and the morning job began
+  // failing. Left alone it would have been disabled for repeated failures and the reminders
+  // would have stopped without anyone noticing.
+  const outbox = [];
+  let quiet = 0;
   for (const [endpoint, val] of entries) {
     let rec;
     try { rec = JSON.parse(val); } catch (e) { continue; }
@@ -276,19 +283,37 @@ export default async function handler(req, res) {
         tag: "daily-content",
       });
     }
-
-    try {
-      await webpush.sendNotification(sub, payload);
-      sent++;
-    } catch (err) {
-      const code = err && err.statusCode;
-      if (code === 404 || code === 410) {
-        try { await redisCmd(RU, RT, ["HDEL", "push:subs", endpoint]); } catch (e) {}
-        pruned++;
-      } else {
-        failed++;
-      }
-    }
+    outbox.push({ endpoint, sub, payload });
   }
+
+  // Batches rather than all at once. A thousand simultaneous requests is its own way to fail,
+  // and twenty five at a time already turns half a minute into a couple of seconds while
+  // staying well inside what the push services expect.
+  const BATCH = 25;
+  let sent = 0, failed = 0;
+  const dead = [];
+  for (let i = 0; i < outbox.length; i += BATCH) {
+    const slice = outbox.slice(i, i + BATCH);
+    // allSettled, not all: one refused subscription must not abandon the other twenty four.
+    const results = await Promise.allSettled(slice.map((x) => webpush.sendNotification(x.sub, x.payload)));
+    results.forEach((r, j) => {
+      if (r.status === "fulfilled") { sent++; return; }
+      const code = r.reason && r.reason.statusCode;
+      // 404 and 410 mean the browser threw the subscription away: the app was uninstalled, or
+      // notifications were turned off. Anything else is this run's problem, not hers, so the
+      // subscription stays and is tried again tomorrow.
+      if (code === 404 || code === 410) dead.push(slice[j].endpoint);
+      else failed++;
+    });
+  }
+
+  // One Redis call per hundred dead subscriptions instead of one per phone. This used to sit
+  // inside the send loop, so a morning with many uninstalls paid for a round trip each time.
+  let pruned = 0;
+  for (let i = 0; i < dead.length; i += 100) {
+    const chunk = dead.slice(i, i + 100);
+    try { await redisCmd(RU, RT, ["HDEL", "push:subs", ...chunk]); pruned += chunk.length; } catch (e) {}
+  }
+
   return res.status(200).json({ ok: true, kind: morning ? "morning" : "evening", hours: morning ? null : serve, sent, pruned, failed, quiet, total: entries.length });
 }
