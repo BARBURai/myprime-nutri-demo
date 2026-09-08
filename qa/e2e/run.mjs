@@ -96,6 +96,18 @@ async function stubApi(context, { startDate, glow = false, replies = null }) {
   });
 }
 
+// מ-v6.89 כפתור ההוספה עוצר את מי שלא נגעה בכמות ושואל אותה עליה. תרחיש שכל
+// מה שהוא רוצה זה להוסיף פריט עובר דרך החלונית ומאשר את ברירת המחדל. החלונית
+// עצמה נבדקת בתרחיש ייעודי, ולכן כאן היא רק לא אמורה לחסום.
+async function addFromQty(page) {
+  await page.locator("text=/הוסיפי ל/").first().click();
+  await page.waitForTimeout(350);
+  if (await page.locator('[data-ask="qty"]').count()) {
+    await page.locator('[data-ask="qty"] >> text=/^אכלתי /').click();
+    await page.waitForTimeout(350);
+  }
+}
+
 async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null, replies = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
@@ -485,13 +497,16 @@ const CHECKS = [
       const onMethod = (await page.locator("text=חיפוש מזון").count()) > 0;
       await page.goBack();
       await page.waitForTimeout(500);
-      // לחיצה שלישית: החלון נסגר, ורק אז חוזרים ליומן.
+      // לחיצה שלישית: היא בחרה מזון ולא הוסיפה אותו, ולכן נשאלת לפני שהחלון
+      // נסגר. זו אותה חלונית שקופצת גם בהקשה מחוץ לחלון וגם ב-✕.
+      const asked = (await page.locator("text=את יוצאת בלי לשמור").count()) > 0;
+      if (asked) { await page.locator("text=יציאה בלי לשמור").first().click(); await page.waitForTimeout(500); }
       const closed = (await page.locator("text=חיפוש מזון").count()) === 0;
       const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
       await context.close();
       return {
-        ok: onList > 0 && inQty > 0 && backOnList && onMethod && closed && bad.length === 0,
-        detail: `ברשימה ${onList} · במסך הכמות ${inQty} · חזרה לרשימה ${backOnList} · לבחירת הדרך ${onMethod} · נסגר ${closed} · שגיאות ${bad[0] || "אין"}`,
+        ok: onList > 0 && inQty > 0 && backOnList && onMethod && asked && closed && bad.length === 0,
+        detail: `ברשימה ${onList} · במסך הכמות ${inQty} · חזרה לרשימה ${backOnList} · לבחירת הדרך ${onMethod} · נשאלה ${asked} · נסגר ${closed} · שגיאות ${bad[0] || "אין"}`,
       };
     },
   },
@@ -539,6 +554,97 @@ const CHECKS = [
     },
   },
   {
+    // רון, 8 בספטמבר 2026: "יש לא מעט נשים שמפספסות שני דברים, אחד את הקטע של
+    // כמה גרמים אכלו, ושתיים את הקטע של השמירה בסוף, כלומר הן יוצאות בלי לשמור".
+    //
+    // התרחיש בודק את שני הצדדים באותה הרצה, כי חלונית שקופצת תמיד נראית בדיוק
+    // כמו חלונית שלא קופצת אף פעם: בלי נגיעה בכמות היא קופצת, ואחרי נגיעה בפלוס
+    // היא לא, והפריט נכנס ליומן.
+    name: "חלוניות הכמות והיציאה, כל אחת שואלת פעם אחת",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device, { day: 15 });
+      const pick = async (q, label) => {
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator("text=חיפוש מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator('input[placeholder="חיפוש מזון…"]').fill(q);
+        await page.waitForTimeout(800);
+        await page.locator(`text=${label}`).first().click();
+        await page.waitForTimeout(400);
+      };
+      // אחרי הוספה של פריט חדש קופצת מעצמה השאלה "לשמור למועדפים?", והיא חוסמת
+      // את המסך עד שעונים עליה.
+      const dismissFav = async () => {
+        if (await page.locator("text=לשמור למועדפים?").count()) {
+          await page.locator("text=לא תודה").first().click();
+          await page.waitForTimeout(400);
+        }
+      };
+      const logLen = () => page.evaluate(() => (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []).length);
+      const add = () => page.locator("text=/הוסיפי ל/").first().click();
+
+      // א. בלי לגעת בכמות: הכפתור שואל במקום להוסיף.
+      await pick("בננה", "בננה בינונית");
+      await add();
+      await page.waitForTimeout(400);
+      const askedQty = await page.locator('[data-ask="qty"]').count();
+      await page.locator('[data-ask="qty"] >> text=אתקן את הכמות').click();
+      await page.waitForTimeout(300);
+      const stillQty = await page.locator("text=/הוסיפי ל/").count();
+      const notYet = await logLen();
+
+      // ב. והיא שואלת פעם אחת בלבד: אותה הקשה בדיוק, בלי לגעת, מוסיפה עכשיו.
+      await add();
+      await page.waitForTimeout(800);
+      const askedTwice = await page.locator('[data-ask="qty"]').count();
+      const afterA = await logLen();
+      await dismissFav();
+
+      // ג. אבל מזון אחר הוא שאלה אחרת, ושם היא כן נשאלת שוב.
+      await pick("תפוח עץ", "תפוח עץ");
+      await add();
+      await page.waitForTimeout(400);
+      const askedNewFood = await page.locator('[data-ask="qty"]').count();
+      await page.locator('[data-ask="qty"] >> text=/^אכלתי /').click();
+      await page.waitForTimeout(800);
+      const afterB = await logLen();
+      await dismissFav();
+
+      // ד. והיציאה: נשאלת פעם אחת, ובפעם השנייה פשוט יוצאת.
+      await pick("לחם", "לחם פרוס");
+      // ההקשה חייבת לנחות בתוך מסגרת האפליקציה ומעל החלון. במחשב המסגרת ממורכזת
+      // ואינה תופסת את כל החלון, ולכן אמצע המסך פשוט מפספס אותה.
+      const frame = async () => {
+        const f = await page.locator(".phone-frame").boundingBox();
+        await page.mouse.click(Math.round(f.x + f.width / 2), Math.round(f.y + 8));
+      };
+      await frame();
+      await page.waitForTimeout(400);
+      const askedExit = await page.locator('[data-ask="exit"]').count();
+      await page.locator('[data-ask="exit"] >> text=חזרה').click();
+      await page.waitForTimeout(300);
+      const stayed = await page.locator("text=/הוסיפי ל/").count();
+      await frame();
+      await page.waitForTimeout(600);
+      const askedExitTwice = await page.locator('[data-ask="exit"]').count();
+      const closed = (await page.locator("text=/הוסיפי ל/").count()) === 0;
+      const atEnd = await logLen();
+
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: askedQty === 1 && stillQty > 0 && notYet === 0 && askedTwice === 0 && afterA === 1
+          && askedNewFood === 1 && afterB === 2
+          && askedExit === 1 && stayed > 0 && askedExitTwice === 0 && closed && atEnd === 2
+          && bad.length === 0,
+        detail: `נשאלה ${askedQty} · נשארה ${stillQty} · לא נוסף ${notYet} · לא נשאלה שוב ${askedTwice} · ביומן ${afterA} · במזון אחר נשאלה ${askedNewFood} · ביומן ${afterB} · ביציאה נשאלה ${askedExit} · חזרה ${stayed} · ולא שוב ${askedExitTwice} · נסגר ${closed} · בסוף ${atEnd} · שגיאות ${bad[0] || "אין"}`,
+      };
+    },
+  },
+  {
     // אותה משתתפת: "כינוי לארוחה, כמו שיש אפשרות בכרטיסי אשראי לתת שם כינוי
     // לכרטיס." ורון: "לא מבין למה לא לרשום גם ביומן." לכן הכינוי נבדק כאן
     // דווקא ביומן, ולא רק במועדפים.
@@ -555,8 +661,8 @@ const CHECKS = [
       await page.waitForTimeout(700);
       await page.locator("text=בננה בינונית").first().click();
       await page.waitForTimeout(400);
-      await page.locator("text=/הוסיפי ל/").first().click();
-      await page.waitForTimeout(800);
+      await addFromQty(page);
+      await page.waitForTimeout(500);
       // החלונית קופצת מעצמה, והשדה מגיע מלא מראש בשם הקיים.
       const asked = await page.locator("text=לשמור למועדפים?").count();
       const box = page.locator('input[maxlength="60"]').first();
@@ -593,7 +699,7 @@ const CHECKS = [
         await page.waitForTimeout(700);
         await page.locator("text=" + pick).first().click();
         await page.waitForTimeout(400);
-        await page.locator("text=/הוסיפי ל/").first().click();
+        await addFromQty(page);
         await page.waitForTimeout(700);
         const fav = await page.locator("text=לא תודה").count();
         if (fav) { await page.locator("text=לא תודה").first().click(); await page.waitForTimeout(400); }
@@ -766,8 +872,8 @@ const CHECKS = [
       await page.waitForTimeout(400);
       const add = page.locator("text=/הוסיפי ל/").first();
       const had = await add.count();
-      if (had) await add.click();
-      await page.waitForTimeout(700);
+      if (had) await addFromQty(page);
+      await page.waitForTimeout(500);
       const inDiary = await page.locator("text=בננה בינונית").count();
       await context.close();
       return { ok: had > 0 && inDiary > 0, detail: `כפתור הוספה ${had}, מופיע ביומן ${inDiary}` };
@@ -1215,8 +1321,8 @@ const CHECKS = [
       await page.waitForTimeout(800);
       await page.locator("text=בננה בינונית").first().click();
       await page.waitForTimeout(500);
-      await page.locator("text=/הוסיפי ל/").first().click();
-      await page.waitForTimeout(900);
+      await addFromQty(page);
+      await page.waitForTimeout(600);
       // הפריט חייב לנחות בשישי, היום שממנו היא פתחה
       const dates = await page.evaluate(() => (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []).map((e) => e.date));
       if (!dates.includes("2026-08-28")) bad.push("הפריט לא נחת בשישי: " + JSON.stringify(dates));
@@ -1656,7 +1762,7 @@ for (const device of RUN_DEV) {
       const { ok, detail, skip } = await c.run(browser, device);
       record(device.name, c.name, ok, detail, skip);
     } catch (e) {
-      record(device.name, c.name, false, `שגיאה: ${String(e.message || e).split("\n")[0].slice(0, 120)}`);
+      record(device.name, c.name, false, `שגיאה: ${String(e.message || e).split("\n").slice(0, 3).join(" | ").slice(0, 300)}`);
       // E2E_SHOT=/path שומר צילום מסך של הכשל. בלי זה חוקרים לפי שם התרחיש,
       // וזה בדיוק מה שכבר שלח אותנו פעם למסקנה שגויה.
       if (process.env.E2E_SHOT && lastPage) { try { await lastPage.screenshot({ path: process.env.E2E_SHOT, fullPage: true }); } catch (e2) {} }

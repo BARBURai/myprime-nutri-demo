@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.88";
+const VERSION = "6.89";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3537,6 +3537,20 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [searching, setSearching] = useState(false);
   const [qUnit, setQUnit] = useState(null); // feature: quantity unit x count (null = base grams)
   const [addedKeys, setAddedKeys] = useState([]); // feature: multi-add from favorites
+  // שני דברים שנשים פספסו, ורון ראה את שניהם חוזרים: הכמות שנשארה על ברירת
+  // המחדל של המאגר, ויציאה מהחלון בלי שהמזון נוסף בכלל.
+  // qtyTouched: האם נגעה בכמות מאז שנכנסה למסך הזה, בכל דרך שהיא - צ׳יפ של מידה,
+  // פלוס, מינוס או הקלדה. דגל ולא השוואת מספרים, כי מי ששינתה ל-150 וחזרה ל-100
+  // כן בחרה את הכמות.
+  const [qtyTouched, setQtyTouched] = useState(false);
+  const [reachedQty, setReachedQty] = useState(false);
+  const [qtyWarn, setQtyWarn] = useState(false);
+  const [exitWarn, setExitWarn] = useState(false);
+  // כל חלונית שואלת פעם אחת בלבד. רון: "אם בלי לשנות שלא תקפוץ ההתראה כל הזמן,
+  // תכניס אותה ללופ ותעצבן אותה." תפקידן להסב את תשומת ליבה פעם אחת, לא לנדנד:
+  // מרגע שנשאלה, ההחלטה שלה. הראשון מתאפס בכל מזון חדש, כי זו שאלה אחרת.
+  const [qtyAsked, setQtyAsked] = useState(false);
+  const [exitAsked, setExitAsked] = useState(false);
   const [addedMap, setAddedMap] = useState({}); // favId -> created journal entry id (for undo)
   const [histTab, setHistTab] = useState("fav"); // "fav" | "recent" (favorites is the default)
   const [histQ, setHistQ] = useState(""); // חיפוש בתוך האחרונים והמועדפים, חוצה את שתי הלשוניות
@@ -3730,7 +3744,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
     try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
   };
   const [qtyOrigin, setQtyOrigin] = useState("list");
-  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit)) || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const pickFood = (f, g) => { setQtyTouched(false); setQtyAsked(false); setReachedQty(true); setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit)) || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
   const servingFields = (f, g) => {
     if (!f.combo) return {};
     const sm = f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit));
@@ -3842,6 +3856,20 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const filtered = query.trim().length >= 2 ? localPool.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
   const nut = food ? nutritionFor(food, grams) : null;
   const unitLabel = unitLabelFor(food?.unit);
+  // ההוספה עצמה, בפונקציה משלה, כדי שגם הכפתור וגם חלונית האזהרה יקראו לאותו
+  // קוד. שני מסלולים שעושים "כמעט אותו דבר" הם בדיוק איך שהם מתפצלים.
+  const doAdd = () => {
+    const fromHistory = qtyOrigin === "history" && !state.editEntry;
+    commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory);
+    if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); }
+  };
+  // היא בחרה מזון, הגיעה למסך הכמות, ולא הוסיפה כלום. הכלל הוא על סגירת החלון
+  // ולא על דרך יציאה מסוימת, ולכן הוא מכסה גם הקשה מחוץ לחלון, גם ✕, וגם את
+  // כפתור החזרה של הטלפון, בלי לרדוף אחרי כל אחד מהם בנפרד.
+  // בעריכת פריט קיים אין מה לאבד, ולכן שם לא שואלים.
+  const unsavedPick = () => reachedQty && !exitAsked && !state.editEntry && addedKeys.length === 0;
+  const guardedClose = () => { if (unsavedPick()) { setExitAsked(true); setExitWarn(true); return; } close(); };
+
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
   const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   // כפתור החזרה של הטלפון, שכבה אחת בכל לחיצה. בלי זה האפליקציה ידעה רק שחלון
@@ -3852,15 +3880,15 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   // להתפצל ממנה, וזה העיקרון שנקבע ב-v5.27.
   useEffect(() => {
     if (!backRef) return undefined;
-    backRef.current = back ? () => { back(); return true; } : null;
+    backRef.current = () => { if (back) { back(); return true; } if (unsavedPick()) { setExitAsked(true); setExitWarn(true); return true; } return false; };
     return () => { backRef.current = null; };
   });
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={guardedClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px))" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
-          <button onClick={step === "qty" && back ? back : close} aria-label={step === "qty" && back ? "חזרה" : "סגירה"} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+          <button onClick={step === "qty" && back ? back : guardedClose} aria-label={step === "qty" && back ? "חזרה" : "סגירה"} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
         </div>
         {step === "method" && (
           <>
@@ -4250,16 +4278,16 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               const count = isBase ? grams : Math.max(1, Math.round(grams / au.g));
               return (
                 <>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setQUnit(null); else { setQUnit(u); setGrams(u.g); } }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setQUnit(null); else { if (u.g !== grams) setQtyTouched(true); setQUnit(u); setGrams(u.g); } }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
-                    <button onClick={() => setGrams(Math.max(au.g, grams - au.g))} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
+                    <button onClick={() => { setQtyTouched(true); setGrams(Math.max(au.g, grams - au.g)); }} aria-label="הקטנת הכמות" style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                      <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                      <input value={count} onChange={(e) => { setQtyTouched(true); const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                       <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                     </div>
-                    <button onClick={() => setGrams(grams + au.g)} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
+                    <button onClick={() => { setQtyTouched(true); setGrams(grams + au.g); }} aria-label="הגדלת הכמות" style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
                   </div>
-                  <div style={{ textAlign: "center", fontSize: 14, color: C.faint, marginBottom: 14, minHeight: 18 }}>{!isBase ? `= ${grams} ${unitLabel}` : ""}</div>
+                  <div style={{ textAlign: "center", fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 14, minHeight: 23 }}>{!isBase ? `= ${grams} ${unitLabel}` : ""}</div>
                 </>
               );
             })()}
@@ -4284,10 +4312,48 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                 </div>
               )}
             </div>
-            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכני" : `הוסיפי ל${meal}`}</Btn>
+            <Btn onClick={() => { if (!state.editEntry && !qtyTouched && !qtyAsked) { setQtyAsked(true); setQtyWarn(true); return; } doAdd(); }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכני" : `הוסיפי ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
           </>
         )}
+      </div>
+      {qtyWarn && food && (
+        <AddAsk
+          id="qty"
+          title="חשוב למלא את המשקל של המזון שאכלת"
+          body={`לא שינית את הכמות, והיא עדיין ${grams} ${unitLabel}.`}
+          primary="אתקן את הכמות"
+          onPrimary={() => setQtyWarn(false)}
+          secondary={`אכלתי ${grams} ${unitLabel}`}
+          onSecondary={() => { setQtyWarn(false); doAdd(); }}
+        />
+      )}
+      {exitWarn && (
+        <AddAsk
+          id="exit"
+          title="את יוצאת בלי לשמור"
+          body={'המזון שבחרת עדיין לא נוסף ליומן. כדי לשמור אותו יש להקיש על כפתור ההוספה שבתחתית מסך הכמות.'}
+          primary="חזרה"
+          onPrimary={() => setExitWarn(false)}
+          secondary="יציאה בלי לשמור"
+          onSecondary={() => { setExitWarn(false); close(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// שתי החלוניות של חלון הוספת המזון. אותו רכיב לשתיהן, כי הן אותו דבר בדיוק:
+// שאלה קצרה, כפתור שמחזיר למסך, וכפתור שממשיך בכל זאת. הכפתור שמחזיר הוא
+// הראשי, כי בשני המקרים הוא זה שנכון כמעט תמיד.
+function AddAsk({ id, title, body, primary, onPrimary, secondary, onSecondary }) {
+  return (
+    <div data-ask={id} onClick={(e) => e.stopPropagation()} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", maxWidth: 340, width: "100%", fontFamily: fontStack, boxShadow: "0 10px 30px rgba(58,43,48,0.25)" }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 8, lineHeight: 1.35 }}>{title}</div>
+        <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginBottom: 16 }}>{body}</div>
+        <Btn onClick={onPrimary}>{primary}</Btn>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onSecondary} style={{ color: C.sub }}>{secondary}</Btn></div>
       </div>
     </div>
   );
