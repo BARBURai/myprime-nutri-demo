@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.84** · עודכן: 8 בספטמבר 2026
+**גרסה נוכחית: v6.85** · עודכן: 8 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,47 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v6.85** - **החגים שקטים, והתזכורת בערב שבת עוברת לשעתיים לפני הדלקת נרות.** בקשה של רון לקראת ראש השנה ויום כיפור.
+
+### שני דברים, והשני היה שבור כבר עכשיו
+**בקוד הייתה מוכרת יום שקט אחד בלבד, שבת.** כל חג יצא כיום רגיל: **התראת "תוכן יומי חדש" ב-07:00 בבוקר יום כיפור**, ותזכורת ערב שב-20.09.2026 הייתה נוחתת כמעט בדיוק עם כניסת הצום.
+
+**ותזכורת יום שישי ב-18:00 הייתה נכונה בקיץ בלבד.** היא נקבעה "כדי שתגיע לפני כניסת השבת", **ובדצמבר הנרות מודלקים בתל אביב סביב 16:10**, כלומר כל החורף היא הגיעה לכל אישה בתוך שבת. **זה לא דווח על ידי אף אחת והתגלה תוך כדי.**
+
+### הכללים
+| | |
+|---|---|
+| **ימים שקטים** | שבת, **וימי חג שאין בהם עבודה**: ראש השנה (יומיים), יום כיפור, סוכות, שמחת תורה, פסח א, שביעי של פסח, שבועות |
+| **חול המועד** | **לא שקט**, כי עובדים בו והאפליקציה בשימוש רגיל |
+| **מה משתיקים** | **את שתי ההתראות.** התוכן עצמו נפתח כרגיל ולא הולך לאיבוד כלום |
+| **ערב שבת וערב חג** | התזכורת יוצאת **שעתיים לפני הדלקת נרות**, מעוגל כלפי מטה לשעה עגולה. 17:00 בקיץ, 14:00 בחורף, **16:00 בערב יום כיפור** |
+| **השעה שהאישה בחרה** | **אינה חלה בערב**, כי היא נגזרת מהשבת ולא ממנה |
+
+### ואין טבלת תאריכים, בכוונה
+**`api/_hebcal.js` מחשב את החגים מהלוח העברי שכבר קיים בתוך Node.** אין ספרייה, אין קריאה לרשת, **ואין מה לעדכן בשנה הבאה.** טבלה הייתה עובדת עד השנה שבה מישהו שוכח להאריך אותה, וזו השנה שבה היא נשברת בשקט.
+
+**וגם השקיעה מחושבת ולא נלקחת מטבלה.** חשבון סטנדרטי, אומת מול זמנים מפורסמים בתל אביב: 19.06 יוצא 19:50 מול 19:49 אמיתי, 20.03 יוצא 17:53 מול 17:53, 18.12 יוצא 16:40 מול 16:44. **הפרש של דקות אינו יכול להשפיע על התראה שנשלחת שעתיים מראש.**
+
+### הקופי, שרון אישר
+**בערב חג בלבד**, מתחת לתזכורת הרגילה:
+> בימי החג לא נשלח תזכורות. האפליקציה פתוחה אם את מעוניינת להיכנס, ואפשר גם להשלים לאחור בסיום החג.
+
+**בבוקר שאחרי חג**, במקום שורת ההשלמה הרגילה **ולכל הנשים ולא רק למי שאנחנו יודעים שלא נכנסה**:
+> אם לא הספקת להיכנס בחג, ממליצה לך למצוא כמה דקות ולהשלים את התכנים של ימי החג 🙏
+
+**בלי ברכה בסוף, החלטת רון.** "חג שמח" אינו מתאים ליום כיפור, וזה נוסח קבוע אחד לכל החגים. **בדיקה נופלת אם מישהו יוסיף ברכה.**
+
+**ובשישי רגיל השורה על החג אינה מופיעה**, כי משפט שחוזר כל שבוע הופך לרעש והנשים כבר יודעות ששבת שקטה.
+
+### מה שרון צריך לעשות, ובלעדיו שום דבר לא ייצא בשעות החדשות
+**ב-cron-job.org, המשימה של הערב משתנה מ-`0 18-23 * * *` ל-`0 13-23 * * *`.** הרצות נוספות אינן מזיקות, כי הקוד מחליט למי לשלוח והסימון ב-Redis מונע כפילות.
+**ובוורסל, שהיא רשת הביטחון, נוספו שלוש הרצות מוקדמות** ב-12:00, 13:00 ו-14:00 UTC.
+
+### הבדיקות
+**`qa/holiday-check.mjs`, 66 בדיקות בלי רשת**, מריצה את הפונקציות האמיתיות: החגים בשלוש שנים שונות, חול המועד שאינו שקט, ערב חג וערב שבת, השקיעה מול זמנים אמיתיים, **וכל 52 ימי השישי של 2026 מול שעת הנרות שלהם**. **אומת שיש לה שיניים: על הקוד שבייצור היא מחזירה 54 מתוך 66**, ו-12 הנפילות הן בדיוק 12 הדברים שהשתנו.
+
+**ו-`qa/notify-window-check.mjs` עלתה מ-30 ל-42** ומכסה עכשיו גם את החגים ואת שעת הערב המחושבת.
 
 **v6.84** - מספור בלבד, אחרי ש-v6.83 עלתה לייצור. **המספר בייצור תמיד גבוה מכל מה שכבר עלה לשם, ולכן דב חייב להישאר מעליו.**
 
