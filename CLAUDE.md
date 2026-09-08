@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.85** · עודכן: 8 בספטמבר 2026
+**גרסה נוכחית: v6.87** · עודכן: 8 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,41 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v6.87** - **ההתראות נשלחות בקבוצות במקביל, אחרי שמשימת הבוקר התחילה להיכשל.** רון שלח צילום של ההיסטוריה ב-cron-job.org: אתמול הצליח ב-29.63 שניות, והיום נכשל בפסק זמן על 30.
+
+### הסיבה, והיא לא הייתה שרת איטי
+**ההתראות נשלחו אחת אחרי השנייה, בטור.** כל טלפון הוא פנייה נפרדת לשרת ההתראות, וכל אחת לוקחת בערך חמישית שנייה. **מאתיים טלפונים כפול זה הם בדיוק שלושים שניות, וזה בדיוק פסק הזמן ש-cron-job.org מרשה.**
+
+**זה עבד ב-26 מכשירים ונגמר לו הכביש ב-350.** זו משימה 12 ברשימה, "התראות בבאצ'ים מקבילים לפני סקייל ל-1,300", **והיא הגיעה מוקדם מהצפוי.**
+
+### ולמה זה היה מסוכן יותר משורה אדומה ביומן
+**ב-cron-job.org דלוק המתג "the cronjob will be disabled because of too many failures".** כלומר כישלונות חוזרים היו מכבים את המשימה, **וההתראות היו נפסקות בשקט בלי שאף אחד שם לב.**
+
+**ועוד סכנה: הסימון "נשלח היום" ב-Redis נתפס לפני השליחה**, ולכן ריצה שנקטעת באמצע הייתה משאירה חלק מהנשים בלי התראה **ובלי שום ניסיון שני.**
+
+### מה שנבנה
+| | |
+|---|---|
+| **ההחלטה והשליחה הופרדו** | קודם נקבע מי מקבלת ומה, וזה מיידי. אחר כך שולחים |
+| **קבוצות של 25 במקביל** | `Promise.allSettled` ולא `all`, **כדי שמנוי אחד שנדחה לא יזרוק את 24 האחרים** |
+| **הניקוי הפך לקריאה אחת** | מנויים שנעלמו נמחקים ב-`HDEL` אחד ולא באחד לכל טלפון |
+
+**נמדד בבדיקה: 200 מנויים עם השהיה של 20 מילישניות כל אחד. בטור זה 4,085 מילישניות, ובקבוצות זה 173.** פי עשרים ושלושה.
+
+### מה שנבחן ונדחה
+**לענות מיד ולשלוח ברקע.** זה נראה כמו הפתרון המתבקש **וזה בדיוק הבאג של v6.17:** בוורסל הפונקציה נסגרת ברגע שהתשובה יוצאת, ועבודה שנשארה ברקע פשוט לא קורית.
+
+**ולהאריך את פסק הזמן ב-cron-job.org אי אפשר**, 30 שניות הן המקסימום שם.
+
+### הבדיקות
+**`qa/push-batch-check.mjs`, 15 בדיקות בלי רשת**, מריצה את `api/notify.js` האמיתי מול Redis מדומה ושירות התראות מדומה **עם השהיה מכוונת, כך ששליחה בטור אינה יכולה לעבור על זמן בלבד.** היא סופרת גם **כמה שליחות רצות בו זמנית**, שזו הדרך היחידה להבחין בין מקבילי לבין טור שבמקרה היה מהיר.
+
+**אומת שיש לה שיניים: על הקוד שבייצור היא מחזירה 7 מתוך 15**, ובתוכן 4,085 מילישניות מול 173, שיא של שליחה אחת בו זמנית, ועשר קריאות מחיקה במקום אחת.
+
+**v6.86** - מספור בלבד, אחרי ש-v6.85 עלתה לייצור. **המספר בייצור תמיד גבוה מכל מה שכבר עלה לשם, ולכן דב חייב להישאר מעליו.**
+
+**ומה שעלה ב-v6.85 הוא שקט החגים ותזכורת הערב המוקדמת.** רון ביקש להעלות ישירות לייצור, **כי אין מה לבדוק בדב: ההתראות נשלחות מהייצור בלבד.** המועמד נבנה על גבי מיין ואומת כזהה בית-בית לדב, ואומת שהדיפלוי אכן עלה, כלומר **וורסל קיבלה את 13 משימות ה-cron** ולא פסלה את הקובץ כפי שקרה ב-v5.21.
 
 **v6.85** - **החגים שקטים, והתזכורת בערב שבת עוברת לשעתיים לפני הדלקת נרות.** בקשה של רון לקראת ראש השנה ויום כיפור.
 
