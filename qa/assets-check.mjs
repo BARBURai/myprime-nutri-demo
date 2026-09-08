@@ -50,13 +50,14 @@ for (const day of days) {
   walk(day.lessons, `שבוע ${day.week} יום ${day.day}`);
 }
 
-// One file is knowingly missing and is waiting on a decision from Ron, not on work.
-// W08D04-task.pdf was never in the repo at all: only an image of that page was ever uploaded.
-// Either Ron sends the PDF, or the "pdf" line comes out of data.js and the lesson keeps the
-// page image alone. Removing a download that a woman was promised is his call and not mine,
-// so it sits here in the open instead of being quietly deleted. The check still fails on
-// anything that is not on this list, which is the whole point of the list being this short.
-const KNOWN_MISSING = new Set(["W08D04-task.pdf"]);
+// Files that are knowingly missing and are waiting on a decision, not on work. Anything not
+// on this list fails the check, which is the whole point of keeping the list this short.
+//
+// It held W08D04-task.pdf for one version: that file was never in the repo at all, only an
+// image of the page was, so the lesson offered a download that returned an error. Ron sent
+// the PDF on 8 September and it now sits in public/pdf like every other one, so the list is
+// empty again. Put a name in here only with a comment saying whose decision it waits on.
+const KNOWN_MISSING = new Set([]);
 
 // The recipe and sweets cards carry their own images, and they name them as full paths
 // ("/recipes/12.jpg") rather than through PDF_BASE. Same class of bug, same blind spot, so
