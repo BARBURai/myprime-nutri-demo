@@ -1445,7 +1445,7 @@ export const CONTENT_DAYS = [
         "videoId": "e48273cb-79ad-4f55-b37f-5f23d8716aa9",
         "pdf": "W08D04-task.pdf",
         "pageImages": [
-          "W08D04-task-1.jpg"
+          "W08D04-task-1.png"
         ]
       }
     ]

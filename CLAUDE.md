@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v6.80** · עודכן: 5 בספטמבר 2026
+**גרסה נוכחית: v6.81** · עודכן: 8 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,31 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v6.81** - **שני שיעורים הציגו עמודים ריקים מאז יולי, והקבצים היו אצלנו כל הזמן בשם אחר.** נמצא במקרה, בזמן בדיקה אילו קבצים אפשר למחוק כדי להקטין את נפח ההעלאות.
+
+### מה היה שבור, וזה מה שהאישה ראתה
+| השיעור | מה היא ראתה |
+|---|---|
+| **שבוע 3 יום 5, "הפינה המתוקה של מיי פריים"** | **14 מלבנים ריקים** במקום עמודי חוברת המתוקים, מתחת לכיתוב "הקישי על הדף כדי להגדיל" |
+| **שבוע 8 יום 4, "משימת תזונה - צום לסירוגין"** | עמוד ריק, **וכפתור "הורדת הדף" שמחזיר שגיאה**, בזמן שהטקסט אומר "פירוט המשימה נמצא בדף מידע כאן למטה 👇" |
+
+**הסיבה: הקבצים הועלו ב-4 וב-5 ביולי בשם אחד, ו-`data.js` מבקש שם אחר.** ההפרש הוא מקף וספרה מובילה, `W03D05-sweets01.jpg` מול `W03D05-sweets-1.jpg`, ולכן הוא בלתי נראה בעין. **הקבצים בשם שהקוד מבקש מעולם לא היו בריפו**, כלומר זה לא נשבר אלא מעולם לא עבד.
+
+**אומת מול הייצור ולא נוחש:** השם שהקוד מבקש מחזיר 404, והשם שקיים בפועל מחזיר 200.
+
+### מה תוקן
+**15 קבצים שינו שם למה שהקוד מבקש, ו-`data.js` לא נגע** חוץ משורה אחת: **`W08D04-task-1` הוא PNG ולא JPEG**, ולכן הוא נושא עכשיו את הסיומת הנכונה. הדפדפן היה מציג אותו גם כך, ואין סיבה להמר על זה.
+
+**וסדר העמודים אומת:** בחוברת `W03D05-sweets.pdf` יש בדיוק 14 עמודים, כמספר התמונות, והמיפוי שומר על הסדר.
+
+### מה שנשאר פתוח, וזו החלטה של רון
+**`W08D04-task.pdf` אינו קיים ומעולם לא היה.** רק תמונה של אותו דף הועלתה אי פעם. **או שרון שולח את ה-PDF, או ששורת ההורדה יורדת מ-`data.js`** והשיעור נשאר עם התמונה לבדה, שעובדת עכשיו. **לא מחקתי אותה בעצמי, כי להוריד ממשתתפת הורדה שהובטחה לה היא החלטה שלו.** היא רשומה במפורש ב-`KNOWN_MISSING` בתוך הבדיקה, ולא נמחקה בשקט.
+
+### ולמה שום דבר לא תפס את זה במשך חודשיים
+**לא הייתה שום בדיקה שמוודאת שקובץ שהתוכן מבקש באמת קיים.** הקוד תקין, הבנייה עוברת, **ואף תרחיש בשכבה 3 אינו טוען עמוד של שיעור.** קובץ חסר הוא בלתי נראה לכל בדיקה אחרת, ונראה לגמרי לאישה.
+
+**`qa/assets-check.mjs`, בלי רשת**, עוברת על **118 שמות קבצים** ומוודאת שכל אחד מהם קיים תחת `public`: עץ התוכן של `data.js`, **וגם תמונות המתכונים והמתוקים** שנושאות נתיב מלא משלהן ולא עוברות דרך `PDF_BASE`. **המעבר גנרי בכוונה**, ולכן שדה חדש ב-`data.js` מכוסה בלי לגעת בבדיקה. **אומת שיש לה שיניים: על הקוד שבייצור היא מדווחת בדיוק על 15 הקבצים.**
 
 **v6.80** - **כפתור "התעלמות" על כל שורה במסך "בעיות בגיליון".** רון: "אני רוצה כפתור התעלמות, יש שם מיילים לבדיקה אני לא צריך את זה."
 
