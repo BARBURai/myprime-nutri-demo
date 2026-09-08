@@ -2,11 +2,12 @@
 //   Anyone who already finished today's tasks gets a congratulation instead of the reminder,
 //   at the same hour: api/usage.js sets trk:<day>:<email> the moment the day is marked
 //   complete, and that flag expires by itself the next day.
-//   evening (default) - 19:00 Asia/Jerusalem, "did you fill the diary today?", same text for
-//     everyone, on programme days 3 to 70. On FRIDAY it aims for 18:00 instead, so it lands
-//     before Shabbat comes in; vercel.json has a Friday-only 15:00 UTC cron for that, and the
-//     regular 16:00 UTC one covers the same hour in winter.
-// Neither one ever fires on a Saturday.
+//   evening (default) - the hour each woman chose, 19:00 to 22:00, "did you fill the diary
+//     today?", same text for everyone, on programme days 3 to 70. On the eve of Shabbat or of
+//     a festival it goes out two hours before candle lighting instead, the same hour for
+//     everyone, and on the eve of a festival it carries one extra line saying no reminders
+//     will come during the festival.
+// Neither one ever fires on a quiet day: Saturday, or a festival. See api/_hebcal.js.
 //   morning (?kind=morning) - 07:00 Asia/Jerusalem, "new content today", and for a woman who
 //     was not in the app yesterday one extra line inviting her to catch up.
 // Triggered by Vercel cron (sends Authorization: Bearer <CRON_SECRET>) OR an external cron (?secret=<NOTIFY_SECRET>).
@@ -19,6 +20,7 @@
 // every registered phone.
 //   Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT, CRON_SECRET, NOTIFY_SECRET
 import webpush from "web-push";
+import { isQuietDay, isErev, isErevYomTov, wasYomTov, erevHour } from "./_hebcal.js";
 
 async function redisCmd(base, token, cmd) {
   const r = await fetch(base, {
@@ -47,35 +49,37 @@ function israelDay(offsetDays) {
 const TRACKER_DAYS = { first: 3, last: 70 };
 const CONTENT_DAYS = { first: 1, last: 69 };
 
-// Saturday silences BOTH pushes for everyone, whatever day of the programme she is on.
-// This is checked before the start date is, so a registration with no start date is quiet
-// on Saturday too.
-function isSaturday(today) {
-  return new Date(today).getUTCDay() === 6;
-}
-function isFriday(today) {
-  return new Date(today).getUTCDay() === 5;
-}
+// A quiet day silences BOTH pushes for everyone, whatever day of the programme she is on:
+// Saturday, as it always was, and now the festivals too. This is checked before the start
+// date is, so a registration with no start date is quiet on those days as well. The rule
+// itself lives in api/_hebcal.js, which works the dates out from the Hebrew calendar rather
+// than from a list somebody has to remember to extend every year.
 
 // Each woman picks the hour her evening reminder lands, from a short fixed list, in
 // profile > העדפות אפליקציה. A subscription written before this existed carries no hour
-// and stays on 19:00, exactly as it was. FRIDAY overrides every choice: fixed at 18:00 for
-// everyone, so it lands well before Shabbat comes in instead of arriving as she sits down.
+// and stays on 19:00, exactly as it was.
+//
+// The eve of Shabbat or of a festival overrides every choice, and it is no longer the flat
+// 18:00 it used to be. That hour was chosen to land before Shabbat came in and only ever did
+// so in summer: in December candles are lit around 16:10 in Tel Aviv, so the 18:00 reminder
+// reached her well inside Shabbat, every week, for the whole winter. It is now two hours
+// before candle lighting, which is 17:00 in midsummer and 14:00 in midwinter.
 const REMINDER_HOURS = [19, 20, 21, 22];
-const FRIDAY_HOUR = 18;
 const DEFAULT_HOUR = 19;
 function reminderHourOf(rec, today) {
-  if (isFriday(today)) return FRIDAY_HOUR;
+  const e = erevHour(today);
+  if (e != null) return e;
   const h = Number(rec && rec.hour);
   return REMINDER_HOURS.includes(h) ? h : DEFAULT_HOUR;
 }
 // Which groups a run starting at Jerusalem hour h may serve: its own, plus the previous
-// hour's as a second chance. Vercel starts a scheduled job somewhere inside its hour, so a
-// run that slips past the hour would otherwise deliver nothing at all that day. This is the
-// same two-chance protection the single 19:00 reminder always had, now applied per group.
-function groupsForHour(h) {
-  const last = REMINDER_HOURS[REMINDER_HOURS.length - 1];
-  return [h, h - 1].filter((g) => g >= FRIDAY_HOUR && g <= last);
+// hour's as a second chance. A scheduled job starts somewhere inside its hour, so a run that
+// slips past the hour would otherwise deliver nothing at all that day. On the eve of Shabbat
+// or a festival there is only one group, the computed hour, shared by everyone.
+function groupsForHour(h, today) {
+  const e = erevHour(today);
+  if (e != null) return (h === e || h === e + 1) ? [e] : [];
+  return [h, h - 1].filter((g) => REMINDER_HOURS.includes(g));
 }
 
 // Day number within the program, day 1 being her start Sunday.
@@ -83,11 +87,11 @@ function programDayNumber(startDate, onDate) {
   return Math.floor((new Date(onDate) - new Date(startDate)) / 86400000) + 1;
 }
 
-// Does she have new content today? Nothing new opens on Saturday, and from day 70 on
+// Does she have new content today? Nothing new opens on a quiet day, and from day 70 on
 // everything already unlocked simply stays available. On those days the morning push says
 // nothing at all, because a headline promising new content would be false.
 function hasNewContent(startDate, today) {
-  if (isSaturday(today)) return false;
+  if (isQuietDay(today)) return false;
   if (!startDate) return true; // unknown start date: send rather than go silent
   const day = programDayNumber(startDate, today);
   return day >= CONTENT_DAYS.first && day <= CONTENT_DAYS.last;
@@ -97,7 +101,7 @@ function hasNewContent(startDate, today) {
 // the evening push asked whether she had filled in her daily report while the tracker had
 // not opened yet, so the question had no answer and no screen behind it.
 function hasTracker(startDate, today) {
-  if (isSaturday(today)) return false;
+  if (isQuietDay(today)) return false;
   if (!startDate) return true; // unknown start date: send rather than go silent
   const day = programDayNumber(startDate, today);
   return day >= TRACKER_DAYS.first && day <= TRACKER_DAYS.last;
@@ -119,13 +123,15 @@ export default async function handler(req, res) {
   // woman now, so instead of one window there are hour groups, and this run serves the
   // group due now plus the previous one. ?hour=22 forces a single group, for testing.
   const askedHour = Number((req.query && req.query.hour) || 0);
-  let groups = morning ? [] : (askedHour ? [askedHour] : groupsForHour(h));
+  const today = israelDay(0);
+  let groups = morning ? [] : (askedHour ? [askedHour] : groupsForHour(h, today));
   if (morning && !force && (h < 7 || h > 8)) {
     return res.status(200).json({ ok: true, skipped: "outside 7:00-8:59 Jerusalem" });
   }
   if (!morning && !groups.length) {
     if (!force) return res.status(200).json({ ok: true, skipped: `no reminder group at ${h}:00 Jerusalem` });
-    groups = [FRIDAY_HOUR, ...REMINDER_HOURS]; // a forced manual run reaches everyone
+    const e = erevHour(today);
+    groups = e != null ? [e] : [...REMINDER_HOURS]; // a forced manual run reaches everyone
   }
 
   const RU = process.env.UPSTASH_REDIS_REST_URL;
@@ -160,9 +166,14 @@ export default async function handler(req, res) {
 
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:hello@myprime.co.il", PUB, PRIV);
 
+  // On the eve of a festival the reminder says, once, that nothing will come during it. Only
+  // on the eve of a festival: saying it every Friday would make a useful sentence into weekly
+  // noise, and the women already know Saturday is quiet.
+  const EVENING_BODY = "תזכורת קטנה 💜 מילאת היום את דוח המעקב היומי שלך?";
+  const HOLIDAY_LINE = "בימי החג לא נשלח תזכורות. האפליקציה פתוחה אם את מעוניינת להיכנס, ואפשר גם להשלים לאחור בסיום החג.";
   const eveningPayload = JSON.stringify({
     title: "MyPrime מעקב",
-    body: "תזכורת קטנה 💜 מילאת היום את דוח המעקב היומי שלך?",
+    body: isErevYomTov(today) ? `${EVENING_BODY}\n\n${HOLIDAY_LINE}` : EVENING_BODY,
     url: "/",
     tag: "daily-diary",
   });
@@ -171,6 +182,11 @@ export default async function handler(req, res) {
   // Only ever an invitation. It never claims she did nothing, so it does no harm on the
   // day the flag is wrong for some other reason.
   const CATCHUP_LINE = "אם לא הספקת להיכנס אתמול לאפליקציה, ממליצה לך למצוא כמה דקות ולהשלים את הימים החסרים 🙏";
+  // The morning after a festival every woman gets the invitation, not only the ones we can
+  // prove were away. After a festival the assumption is safe, the wording is conditional so
+  // it never accuses, and it also covers the women whose activity flag we could not read.
+  const HOLIDAY_CATCHUP = "אם לא הספקת להיכנס בחג, ממליצה לך למצוא כמה דקות ולהשלים את התכנים של ימי החג 🙏";
+  const afterYomTov = wasYomTov(today);
 
   let raw;
   try {
@@ -183,8 +199,6 @@ export default async function handler(req, res) {
   if (Array.isArray(raw)) {
     for (let i = 0; i < raw.length; i += 2) entries.push([raw[i], raw[i + 1]]);
   }
-
-  const today = israelDay(0);
 
   // Who was NOT in the app yesterday. One MGET for everyone rather than a round trip per
   // woman, which at 1,300 subscriptions is the difference between one call and 1,300.
@@ -254,9 +268,10 @@ export default async function handler(req, res) {
       // Only add the catch-up line when we positively know she was away. An unknown email
       // or a failed lookup gets the plain message.
       const away = email && wasActive.has(email) && wasActive.get(email) === false;
+      const extra = afterYomTov ? HOLIDAY_CATCHUP : (away ? CATCHUP_LINE : "");
       payload = JSON.stringify({
         title: MORNING_TITLE,
-        body: away ? `${MORNING_BODY}\n\n${CATCHUP_LINE}` : MORNING_BODY,
+        body: extra ? `${MORNING_BODY}\n\n${extra}` : MORNING_BODY,
         url: "/",
         tag: "daily-content",
       });
