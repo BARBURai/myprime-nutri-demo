@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Play, Maximize2, VolumeX, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
-import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted, GLOW_FULL_DAY, GLOW_FULL_SECTIONS, GLOW_FULL_TITLE, GLOW_FULL_ROW, hasGlowFull } from "./glow";
+import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted, GLOW_FULL_DAY, GLOW_FULL_SECTIONS, GLOW_FULL_TITLE, GLOW_FULL_ROW, hasGlowFull, GLOW_LOGO, GLOW_C } from "./glow";
 export { contentForDay } from "./data";
 
 
@@ -316,29 +316,31 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   // סרגל, ומוצג רק למי שיש לה גישה.
   function Segmented() {
     const tabs = [["today", "היום"], ["all", "מיי פריים 360"]];
-    if (showGlow) tabs.push(["glow", `${GLOW_EMOJI} Glow`]);
+    if (showGlow) tabs.push(["glow", null]);   // null = הלוגו עצמו, ולא טקסט
     return (
       <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 12, padding: 4, marginBottom: 14 }}>
         {tabs.map(([id, lbl]) => (
-          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: id === "glow" ? 0.72 : 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 4px", fontFamily: font, fontSize: id === "glow" ? 15 : 16, fontWeight: 700, whiteSpace: "nowrap", background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl}</button>
+          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: id === "glow" ? 0.72 : 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 4px", fontFamily: font, fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center", background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl === null ? <img src={GLOW_LOGO} alt="Glow" style={{ height: 19, width: "auto", display: "block", opacity: view === id ? 1 : 0.62 }} /> : lbl}</button>
         ))}
       </div>
     );
   }
 
-  function LessonRow({ w, d, l, i, from }) {
+  // tint צובע את השורה בצבעי הקורס במקום בוורוד של מיי פריים. רון: "תגזור צבעים
+  // מהלוגו בכל הסעיף של Glow." מחוץ לסעיף הזה לא מועבר כלום ושום דבר לא משתנה.
+  function LessonRow({ w, d, l, i, from, tint }) {
     const tm = typeMeta(l.type);
     const meta = tm.label + (l.pdf || hasPages(l) ? " · כולל דף" : "");
     const trackD = tracksProgress(dayByWD(w, d));
     return (
-      <div onClick={() => goLesson(w, d, i, from)} role="button" style={rowStyle}>
-        <div style={iconWrap}><tm.Icon size={21} color={C.brand} /></div>
+      <div onClick={() => goLesson(w, d, i, from)} role="button" style={tint ? { ...rowStyle, border: `1px solid ${tint.line}` } : rowStyle}>
+        <div style={tint ? { ...iconWrap, background: tint.bg } : iconWrap}><tm.Icon size={21} color={tint ? tint.ink : C.brand} /></div>
         <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{l.title}</div>
           <div style={{ fontSize: 17, color: C.ink, marginTop: 4 }}>{meta}</div>
         </div>
         {trackD && isDone(w, d, i) && <Check size={20} color="#4E9E76" style={{ flexShrink: 0 }} />}
-        <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
+        <ChevronLeft size={18} color={tint ? tint.ink : C.faint} style={{ flexShrink: 0 }} />
       </div>
     );
   }
@@ -687,7 +689,16 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
         <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
         <div style={scroll}>
           <Segmented />
-          <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 14, lineHeight: 1.4 }}>{GLOW_EMOJI} {showFull ? GLOW_FULL_TITLE : GLOW_TITLE}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, flexWrap: "wrap" }}>
+            {/* הכותרת נשארת בדיוק כפי שאושרה, והלוגו יושב במקום המילה Glow שבתוכה
+                ולא לפניה. לכן היא מפוצלת סביב המילה ולא נכתבת מחדש. */}
+            {(showFull ? GLOW_FULL_TITLE : GLOW_TITLE).split("Glow").map((part, k) => (
+              <React.Fragment key={k}>
+                {k > 0 && <img src={GLOW_LOGO} alt="Glow" style={{ height: 34, width: "auto", display: "block" }} />}
+                {part.trim() && <span style={{ fontSize: 19, fontWeight: 700, color: GLOW_C.ink, lineHeight: 1.4 }}>{part.trim()}</span>}
+              </React.Fragment>
+            ))}
+          </div>
           {showFull
             ? GLOW_FULL_SECTIONS.map((sec) => {
                 const open = !!openSec[sec.title];
@@ -695,21 +706,23 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
                   // רון: "לא מספיק ברור שאלה ספריות שצריך ללחוץ והן נפתחות. אולי גם
                   // לשנות את הצבע ליותר בולט וחזק, ו**חץ למטה** גדול ועבה." ולכן הכותרת
                   // צבועה תמיד בצבע המותג, ולא רק כשהיא פתוחה, והחץ מסתובב בפתיחה.
-                  <div key={sec.title} style={{ border: `1.5px solid ${C.brand}`, borderRadius: 14, marginBottom: 12, overflow: "hidden", background: C.panel, boxShadow: "0 1px 4px rgba(58,43,48,0.08)" }}>
+                  <div key={sec.title} style={{ border: `2px solid ${GLOW_C.line}`, borderRadius: 14, marginBottom: 12, overflow: "hidden", background: C.panel, boxShadow: "0 1px 4px rgba(58,43,48,0.08)" }}>
                     <div role="button" onClick={() => setOpenSec((o) => ({ ...o, [sec.title]: !o[sec.title] }))}
-                      style={{ display: "flex", alignItems: "center", gap: 11, padding: "15px 14px", cursor: "pointer", background: C.brandBg }}>
+                      style={{ display: "flex", alignItems: "center", gap: 11, padding: "15px 14px", cursor: "pointer", background: GLOW_C.bg }}>
                       <span style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>{sec.icon}</span>
                       <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
-                        <div style={{ fontSize: 19, fontWeight: 800, color: C.brandD, lineHeight: 1.3 }}>{sec.title}</div>
+                        <div style={{ fontSize: 19, fontWeight: 800, color: GLOW_C.ink, lineHeight: 1.3 }}>{sec.title}</div>
                         {sec.sub && <div style={{ fontSize: 13.5, color: C.sub, marginTop: 3, lineHeight: 1.4 }}>{sec.sub}</div>}
                       </div>
-                      <ChevronDown size={28} strokeWidth={2.75} color={C.brandD} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
+                      <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: "50%", background: GLOW_C.accent, display: "flex", alignItems: "center", justifyContent: "center", transform: open ? "rotate(180deg)" : "none", transition: "transform .18s" }}>
+                        <ChevronDown size={24} strokeWidth={3} color="#fff" />
+                      </span>
                     </div>
-                    {open && <div style={{ padding: "4px 10px 6px", borderTop: `1.5px solid ${C.brand}` }}>{sec.idx.map((i) => <LessonRow key={"g" + i} w={0} d={0} l={GLOW_FULL_DAY.lessons[i]} i={i} from="glow" />)}</div>}
+                    {open && <div style={{ padding: "4px 10px 6px", borderTop: `1.5px solid ${GLOW_C.line}` }}>{sec.idx.map((i) => <LessonRow key={"g" + i} w={0} d={0} l={GLOW_FULL_DAY.lessons[i]} i={i} from="glow" tint={GLOW_C} />)}</div>}
                   </div>
                 );
               })
-            : GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="glow" />)}
+            : GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="glow" tint={GLOW_C} />)}
         </div>
       </div>
     );

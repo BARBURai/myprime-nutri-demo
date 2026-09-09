@@ -2201,7 +2201,7 @@ const CHECKS = [
         await page.waitForTimeout(600);
         const t = await page.evaluate(() => document.body.innerText);
         if (!t.includes("מיי פריים 360")) bad.push("הכפתור בסרגל אינו נקרא מיי פריים 360");
-        if (!t.includes("בונוס: שלושה שיעורי איפור")) bad.push("כותרת הבונוס חסרה");
+        if (!t.includes("בונוס: שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים")) bad.push("כותרת הבונוס חסרה");
         if (t.includes("הקורס המלא")) bad.push("הקורס המלא הוצג למי שיש לה רק בונוס");
         if (t.includes("שיעור 13 - סומק")) bad.push("שיעור מהקורס המלא הוצג למי שיש לה רק בונוס");
         if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
@@ -2219,7 +2219,7 @@ const CHECKS = [
         await row.first().click().catch(() => {});
         await page.waitForTimeout(700);
         const t = await page.evaluate(() => document.body.innerText);
-        if (!t.includes("מיי פריים Glow - הקורס המלא")) bad.push("כותרת הקורס המלא חסרה");
+        if (!t.includes("מיי פריים") || !t.includes("- הקורס המלא")) bad.push("כותרת הקורס המלא חסרה");
         for (const sec of ["להתחיל מהבסיס", "פנים", "עיניים", "לחיים", "שפתיים", "שיער", "מפתחות לאהבה עצמית"]) {
           if (!t.includes(sec)) bad.push("חסר הסעיף " + sec);
         }

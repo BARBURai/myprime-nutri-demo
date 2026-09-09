@@ -55,13 +55,26 @@ check("הכותרת בדיוק כפי שאושרה", glow.includes('export const
 check("שם הצ׳יפ בדיוק כפי שאושר", glow.includes('export const GLOW_CHIP = "מיי פריים Glow"'));
 check("השורה מופיעה בכרטיס של מסך היום", /glow && hasGlow\(\) && !glowStarted\(\) && <div/.test(mod));
 check("הכיתוב הקצר ביומן בדיוק כפי שאושר", glow.includes('export const GLOW_CARD_LINE = "בונוס: 3 שיעורי Glow 💄"'));
-check("סימן השפתון מופיע בארבעת המקומות", (mod.match(/GLOW_EMOJI/g) || []).length >= 4);
+check("סימן השפתון נשאר בשורה שביומן ובשורה שבמסך התוכן", (mod.match(/GLOW_EMOJI/g) || []).length >= 2);
+// רון: "אתה יכול את Glow להחליף בלוגו שצירפתי, גם בכותרת וגם בטאב, לא צריך את האמוג׳י."
+check("הלוגו מוצג בכפתור שבסרגל", /lbl === null \? <img src=\{GLOW_LOGO\}/.test(mod));
+check("ובכותרת של המסך", /<img src=\{GLOW_LOGO\} alt="Glow" style=\{\{ height: 34/.test(mod));
+// הכותרת עצמה לא נכתבה מחדש: היא מפוצלת סביב המילה Glow, והלוגו יושב במקומה.
+check("והכותרות שאושרו לא שוכתבו", /\(showFull \? GLOW_FULL_TITLE : GLOW_TITLE\)\.split\("Glow"\)/.test(mod));
+check("הקובץ עצמו קיים תחת public", (() => { try { return readFileSync(new URL("../public/glow-logo.png", import.meta.url)).length > 2000; } catch (e) { return false; } })());
+// והצבעים נגזרו מהלוגו עצמו, ולא נבחרו ביד.
+check("לסעיף יש פלטה משלו שנגזרה מהלוגו", /export const GLOW_C = \{/.test(glow) && /ink: "#A52AB6"/.test(glow));
+check("והיא זו שצובעת את הכותרות, החץ והמסגרות",
+  /color: GLOW_C\.ink/.test(mod) && /background: GLOW_C\.accent/.test(mod) && /solid \$\{GLOW_C\.line\}/.test(mod) && /background: GLOW_C\.bg/.test(mod));
+// רון: "תגזור צבעים מהלוגו בכל הסעיף של Glow", ולכן גם שורות השיעורים שבתוכו.
+check("וגם שורות השיעורים שבתוך הסעיף", /tint=\{GLOW_C\}/.test(mod) && /color=\{tint \? tint\.ink : C\.brand\}/.test(mod));
+check("ומחוץ לסעיף שום שורה לא נצבעת", (mod.match(/tint=\{GLOW_C\}/g) || []).length === 2);
 // The started flag is one way. Without a reset there is no way back to what a new woman sees.
 check("יש כפתור איפוס לסימון הצפייה בסרגל הבדיקות", /איפוס Glow/.test(app) && /removeItem\(GLOW_STARTED_KEY\)/.test(app));
 check("הכיתוב של השורה הקטנה בדיוק כפי שאושר", glow.includes('export const GLOW_ROW = "שיעורי הבונוס שלך במיי פריים Glow"'));
 check("שנייה אחת של צפייה מורידה את השורה מהיומן", /if \(!startedRef\.current && t > 0\)/.test(mod) && /onStart=\{openL\.week === 0 \?/.test(mod) && /markGlowStarted\(\)/.test(mod));
 check("ובמסך התוכן יש שורה אחת שמקפיצה לרשימה ולא הרשימה עצמה", /onClick=\{\(\) => setView\("glow"\)\}/.test(mod));
-check("הכפתור בסרגל העליון נוסף רק למי שמגיע לה", /if \(showGlow\) tabs\.push\(\[\"glow\", `\$\{GLOW_EMOJI\} Glow`\]\);/.test(mod));
+check("הכפתור בסרגל העליון נוסף רק למי שמגיע לה", /if \(showGlow\) tabs\.push\(\["glow", null\]\);/.test(mod));
 check("ואינו צ׳יפ סינון יותר", !/FILTER_CHIPS, \["glow"/.test(mod));
 check("ולמסך שלו אין שורת שבועות בכלל", /if \(view === "glow"\) \{/.test(mod) && !/isGlow/.test(mod));
 check("אין מקף ארוך בקופי", !/[–—]/.test(glow));
@@ -141,9 +154,9 @@ check("הסעיף נפתח בהקשה", /setOpenSec\(\(o\) => \(\{ \.\.\.o, \[se
 check("וסגור כברירת מחדל", /const \[openSec, setOpenSec\] = useState\(\{\}\);/.test(mod));
 check("השיעורים מרונדרים רק כשהסעיף פתוח", /\{open && <div style=\{\{ padding: "4px 10px 6px"[\s\S]{0,80}\{sec\.idx\.map/.test(mod));
 // רון: "חץ למטה וחץ גדול יותר ועבה", ו"הצבע יותר בולט וחזק".
-check("החץ הוא חץ למטה, גדול ועבה", /<ChevronDown size=\{28\} strokeWidth=\{2\.75\}/.test(mod));
+check("החץ הוא חץ למטה, גדול ועבה, בתוך עיגול מלא", /borderRadius: "50%", background: GLOW_C\.accent/.test(mod) && /<ChevronDown size=\{24\} strokeWidth=\{3\} color="#fff"/.test(mod));
 check("והוא מסתובב כשהסעיף נפתח", /transform: open \? "rotate\(180deg\)" : "none"/.test(mod));
-check("הכותרת צבועה תמיד ולא רק כשהיא פתוחה", /cursor: "pointer", background: C\.brandBg \}\}>/.test(mod));
+check("הכותרת צבועה תמיד ולא רק כשהיא פתוחה", /cursor: "pointer", background: GLOW_C\.bg \}\}>/.test(mod));
 // רון: "לא צריך לרשום מספר שיעורים."
 check("ואין מספר שיעורים בשום מקום", !/שיעורים`/.test(mod) && !/sec\.idx\.length/.test(mod));
 check("כפתור החזרה משיעור יודע לחזור לשם", /origin === "glow" \? "חזרה לשיעורי Glow"/.test(mod));

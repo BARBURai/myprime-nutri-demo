@@ -26,8 +26,21 @@ export const GLOW_CARD_LINE = "בונוס: 3 שיעורי Glow 💄";
 // One compact row inside "התוכן שלי היום", instead of listing the lessons under every day.
 export const GLOW_ROW = "שיעורי הבונוס שלך במיי פריים Glow";
 // lucide has no lipstick, and a paintbrush would read as art. The emoji says makeup at a
-// glance and needs no icon set.
+// glance and needs no icon set. **הוא נשאר בכרטיס היומן ובשורה שבמסך התוכן בלבד**:
+// בכותרת ובכפתור שבסרגל הוא הוחלף בלוגו עצמו, לפי רון.
 export const GLOW_EMOJI = "💄";
+
+// הלוגו של הקורס, חתוך מהקובץ שרון שלח ובגובה 120 פיקסלים עם רקע שקוף.
+export const GLOW_LOGO = "/glow-logo.png";
+// והצבעים נגזרו מהלוגו עצמו ולא נבחרו: אלה החציונים של שלושת שלישי הגרדיאנט
+// בקובץ. ככה כל הסעיף לובש את הצבעים של הקורס ולא את הוורוד של מיי פריים.
+export const GLOW_C = {
+  ink: "#A52AB6",     // הסגול שבתחילת הלוגו, לכותרות ולחצים
+  mid: "#D03CCD",
+  accent: "#EA47E3",  // המג׳נטה שבסופו
+  bg: "#FBF0FC",      // רקע רך שנגזר מאותו סגול
+  line: "#E8B9EE",
+};
 
 // She has played at least one bonus lesson. Only used to stop nagging her on the diary card:
 // the row inside the content screen stays, because it is her way back to them.
