@@ -74,44 +74,44 @@ export const GLOW_FULL_TITLE = "מיי פריים Glow - הקורס המלא";
 export const GLOW_FULL_ROW = "קורס האיפור המלא שלך במיי פריים Glow";
 
 const FULL_SECTIONS_RAW = [
-  { title: "להתחיל מהבסיס", lessons: [
+  { title: "להתחיל מהבסיס", icon: "✨", sub: "העור בגיל המעבר, גוואשה", lessons: [
     { title: "שיעור 1א׳ - מבוא קורס", videoId: "405fc049-0e7a-4447-9f1d-193845c0b4b9" },
     { title: "שיעור 1 ב׳ - מה קורה לעור שלנו בגיל המעבר?", videoId: "82f8a94b-12ce-4280-b98c-b5eb5cec6824" },
     { title: "שיעור 2 - עבודה עם גוואשה", videoId: "c72cbeaa-cf87-411e-a78c-a9d9c72f5f6a" },
   ] },
-  { title: "פנים", lessons: [
+  { title: "פנים", icon: "🧴", sub: "פריימר ובסיס, קונסילר, שיטת 4MUST", lessons: [
     { title: "שיעור 3 - הכנת העור פריימר ובסיס (המייקאפ)", videoId: "f7dc36be-25b6-45ef-bb9c-4315b94cddb4" },
     { title: "שיעור 4 - קונסילר וקורקטור", videoId: "6a7b153a-779a-4de9-8c74-8b23f1ff47cb" },
-    { title: "שיעור 5 - שיטת 4 MUST - חלק א׳", videoId: "95b14af8-3cdf-4e18-9a6a-d43d06054586" },
-    { title: "שיעור 5 - שיטת 4 MUST - חלק ב׳", videoId: "06281ff4-cdbe-4836-ae9a-962094c537de" },
-    { title: "שיעור 5 - שיטת 4 MUST - חלק ג׳", videoId: "1f276a60-68d5-4130-9870-4e320970dff2" },
+    { title: "שיעור 5 - שיטת 4MUST - חלק א׳", videoId: "95b14af8-3cdf-4e18-9a6a-d43d06054586" },
+    { title: "שיעור 5 - שיטת 4MUST - חלק ב׳", videoId: "06281ff4-cdbe-4836-ae9a-962094c537de" },
+    { title: "שיעור 5 - שיטת 4MUST - חלק ג׳", videoId: "1f276a60-68d5-4130-9870-4e320970dff2" },
   ] },
-  { title: "עיניים", lessons: [
+  { title: "עיניים", icon: "👁️", sub: "איפור בסיסי, אייליינר, צלליות, גבות", lessons: [
     { title: "שיעור 6 - איפור עיניים בסיסי", videoId: "81e96d03-c4a6-40e5-9442-432629fd8b33" },
     { title: "שיעור 7 - אייליינר מעושן", videoId: "6c87da14-7747-472e-a68a-c7fefb2e0969" },
     { title: "שיעור 8 - מראה עיניים מעושן", videoId: "333ac741-4dba-41d5-bdce-946503c74660" },
     { title: "שיעור 9 - איפור עיניים עם צלליות קרם", videoId: "50d5ec30-4741-4a86-bbd8-ee5c6237c33b" },
     { title: "שיעור 10 - גבות", videoId: "4ffcb4d6-7f4b-4e4a-9322-f1165ecfbbe3" },
   ] },
-  { title: "לחיים", lessons: [
+  { title: "לחיים", icon: "🌸", sub: "הצללות, הארות, סומק", lessons: [
     { title: "שיעור 11 - הצללות", videoId: "0bde2e6e-01ec-483d-bcbe-f8a700bdb0bf" },
-    { title: "שיעור 12 - האדרות", videoId: "3ca16fc0-d817-4985-a421-d0ee98f34d8a" },
+    { title: "שיעור 12 - הארות", videoId: "3ca16fc0-d817-4985-a421-d0ee98f34d8a" },
     { title: "שיעור 13 - סומק", videoId: "10ac207c-9b8f-4763-ab17-5f743beabb84" },
   ] },
-  { title: "שפתיים", lessons: [
+  { title: "שפתיים", icon: "💋", sub: "עיצוב והגדלה, שפתון", lessons: [
     { title: "שיעור 14 - עיצוב והגדלת שפתיים", videoId: "e70cd96a-829e-4c34-a0bb-5fe653337457" },
     { title: "שיעור 15 שפתון: איך לייצר וייב אחר?", videoId: "ab473fd9-60de-4421-b99a-ce43184b0e5e" },
   ] },
-  { title: "שיער", lessons: [
+  { title: "שיער", icon: "💇‍♀️", sub: "מתיחה, מקלון סלסול, נשירה", lessons: [
     { title: "שיעור 16 - מתיחה להרמת העיניים והמורל", videoId: "8a3e3173-0150-4d8e-8080-f31f1661b06d" },
     { title: "שיעור 17 - עיצוב השיער עם מקלון סלסול", videoId: "70db58d5-33cb-40a6-9c25-f5c373da0c44" },
     { title: "שיעור 18 - נשירת שיער", videoId: "f21a9dd6-fe84-4223-9cd4-e82e240813a1" },
   ] },
-  { title: "טאץ׳-אפ וסביבת האיפור", lessons: [
+  { title: "טאץ׳-אפ וסביבת האיפור", icon: "👝", sub: "טאצ׳ אפ, מה כדאי שיהיה לך", lessons: [
     { title: "שיעור 19 - טאצ׳ אפ", videoId: "3c9713fa-e937-4ddf-a97e-d365d81a7d72" },
     { title: "כל מה שאת צריכה בסביבת האיפור שלך", videoId: "3bb104f4-60e6-4dcd-b210-32eccff7620f" },
   ] },
-  { title: "מפתחות לאהבה עצמית", lessons: [
+  { title: "מפתחות לאהבה עצמית", icon: "💜", sub: "ארבעה מפתחות קצרים", lessons: [
     { title: "מבוא", videoId: "5ff04d74-935c-413f-a592-78fbae3c46d4" },
     { title: "מפתח 1 - דברי אליך יפה", videoId: "37122f6b-4b2c-46b0-9ca0-184e79fba464" },
     { title: "מפתח 2 - כוחה של נשימה", videoId: "c13d503f-ead8-452d-9c3b-8b6655f29111" },
@@ -131,7 +131,7 @@ export const GLOW_FULL_SECTIONS = FULL_SECTIONS_RAW.map((sec) => {
     idx.push(FULL_FLAT.length);
     FULL_FLAT.push({ title: l.title, type: "video", videoId: l.videoId });
   }
-  return { title: sec.title, idx };
+  return { title: sec.title, icon: sec.icon || "", sub: sec.sub || "", idx };
 }).filter((sec) => sec.idx.length > 0);
 
 export const GLOW_FULL_DAY = { week: 0, day: 0, theme: "מיי פריים Glow", lessons: FULL_FLAT };

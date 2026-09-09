@@ -2200,6 +2200,7 @@ const CHECKS = [
         await page.locator("text=שיעורי הבונוס שלך במיי פריים Glow").first().click().catch(() => {});
         await page.waitForTimeout(600);
         const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("מיי פריים 360")) bad.push("הכפתור בסרגל אינו נקרא מיי פריים 360");
         if (!t.includes("בונוס: שלושה שיעורי איפור")) bad.push("כותרת הבונוס חסרה");
         if (t.includes("הקורס המלא")) bad.push("הקורס המלא הוצג למי שיש לה רק בונוס");
         if (t.includes("שיעור 13 - סומק")) bad.push("שיעור מהקורס המלא הוצג למי שיש לה רק בונוס");
@@ -2222,9 +2223,14 @@ const CHECKS = [
         for (const sec of ["להתחיל מהבסיס", "פנים", "עיניים", "לחיים", "שפתיים", "שיער", "מפתחות לאהבה עצמית"]) {
           if (!t.includes(sec)) bad.push("חסר הסעיף " + sec);
         }
-        for (const les of ["שיעור 2 - עבודה עם גוואשה", "שיעור 13 - סומק", "מפתח 4 - תבחרי בך"]) {
-          if (!t.includes(les)) bad.push("חסר השיעור " + les);
-        }
+        if (!t.includes("הצללות, הארות, סומק")) bad.push("התיאור הקצר של הסעיף חסר");
+        // סגורים כברירת מחדל: הסעיפים על המסך והשיעורים לא.
+        if (t.includes("שיעור 13 - סומק")) bad.push("הסעיפים אינם סגורים כברירת מחדל");
+        await page.locator("text=לחיים").first().click().catch(() => {});
+        await page.waitForTimeout(400);
+        const t2 = await page.evaluate(() => document.body.innerText);
+        if (!t2.includes("שיעור 13 - סומק")) bad.push("הסעיף לא נפתח בהקשה");
+        if (t2.includes("שיעור 2 - עבודה עם גוואשה")) bad.push("סעיף אחר נפתח יחד איתו");
         if (t.includes("בונוס: שלושה שיעורי איפור")) bad.push("כותרת הבונוס הוצגה למי שיש לה את המלא");
         if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
         await context.close();

@@ -60,9 +60,10 @@ check("סימן השפתון מופיע בארבעת המקומות", (mod.match
 check("יש כפתור איפוס לסימון הצפייה בסרגל הבדיקות", /איפוס Glow/.test(app) && /removeItem\(GLOW_STARTED_KEY\)/.test(app));
 check("הכיתוב של השורה הקטנה בדיוק כפי שאושר", glow.includes('export const GLOW_ROW = "שיעורי הבונוס שלך במיי פריים Glow"'));
 check("שנייה אחת של צפייה מורידה את השורה מהיומן", /if \(!startedRef\.current && t > 0\)/.test(mod) && /onStart=\{openL\.week === 0 \?/.test(mod) && /markGlowStarted\(\)/.test(mod));
-check("ובמסך התוכן יש שורה אחת שמקפיצה לרשימה ולא הרשימה עצמה", /setTypeF\("glow"\); setView\("all"\)/.test(mod));
-check("הצ׳יפ נוסף רק למי שמגיע לה", /showGlow \? \[\.\.\.FILTER_CHIPS, \["glow", .*GLOW_CHIP.*\]\] : FILTER_CHIPS/.test(mod));
-check("ובצ׳יפ הזה שורת השבועות נעלמת", /!isPdf && !isGlow &&/.test(mod));
+check("ובמסך התוכן יש שורה אחת שמקפיצה לרשימה ולא הרשימה עצמה", /onClick=\{\(\) => setView\("glow"\)\}/.test(mod));
+check("הכפתור בסרגל העליון נוסף רק למי שמגיע לה", /if \(showGlow\) tabs\.push\(\[\"glow\", `\$\{GLOW_EMOJI\} Glow`\]\);/.test(mod));
+check("ואינו צ׳יפ סינון יותר", !/FILTER_CHIPS, \["glow"/.test(mod));
+check("ולמסך שלו אין שורת שבועות בכלל", /if \(view === "glow"\) \{/.test(mod) && !/isGlow/.test(mod));
 check("אין מקף ארוך בקופי", !/[–—]/.test(glow));
 
 console.log("\nארבעת הסרטונים\n");
@@ -130,6 +131,25 @@ check("הכיתוב הוא זה שרון אישר",
   && glow.includes('export const GLOW_FULL_ROW = "קורס האיפור המלא שלך במיי פריים Glow"'));
 check("ואין לו שורה בכרטיס היומן בכלל", !/GLOW_FULL_CARD/.test(glow));
 
+console.log("\nהפריסה של הקורס המלא\n");
+// רון בדק בטלפון: "הכותרות קטנות מאוד, צריכות להיות מודגשות ויפות ואולי עם אייקון...
+// והם צריכים להיות בדרופדאון... ומתחת לנושא בסוגריים באותיות קטנות את השיעורים העיקריים."
+check("לכל סעיף אייקון ותיאור קצר", /icon: "[^"]+", sub: "[^"]+"/.test(glow));
+check("ושמונת הסעיפים נושאים אותם", (glow.match(/icon: "/g) || []).length === 8);
+check("והם עוברים לרכיב ולא נשארים בקובץ", /title: sec\.title, icon: sec\.icon \|\| "", sub: sec\.sub \|\| ""/.test(glow));
+check("הסעיף נפתח בהקשה", /setOpenSec\(\(o\) => \(\{ \.\.\.o, \[sec\.title\]: !o\[sec\.title\] \}\)\)/.test(mod));
+check("וסגור כברירת מחדל", /const \[openSec, setOpenSec\] = useState\(\{\}\);/.test(mod));
+check("השיעורים מרונדרים רק כשהסעיף פתוח", /\{open && <div style=\{\{ padding: "0 10px 6px" \}\}>\{sec\.idx\.map/.test(mod));
+// רון: "לא צריך לרשום מספר שיעורים."
+check("ואין מספר שיעורים בשום מקום", !/שיעורים`/.test(mod) && !/sec\.idx\.length/.test(mod));
+check("כפתור החזרה משיעור יודע לחזור לשם", /origin === "glow" \? "חזרה לשיעורי Glow"/.test(mod));
+// רון: "במקום כל התוכנית הייתי רושם מיי פריים 360", בכפתור שבסרגל בלבד.
+check("הכפתור בסרגל נקרא מיי פריים 360", /\["all", "מיי פריים 360"\]/.test(mod));
+check("וכפתורי החזרה לא נגעו", mod.includes("חזרה לכל התוכנית"));
+// שני תיקוני קופי מהבדיקה שלו.
+check("שיעור 12 הוא הארות ולא האדרות", glow.includes("שיעור 12 - הארות") && !/האדרות/.test(glow));
+check("ו-4MUST צמוד, כדי שהספרה לא תתהפך", (glow.match(/שיטת 4MUST/g) || []).length === 4 && !/4 MUST/.test(glow));
+
 console.log("\nמסך ההמתנה, לפני שהתוכנית מתחילה\n");
 check("מסך ההמתנה מקבל את הסימון", /function PreStartScreen\(\{ name, startDate, glow = false, onOpenGlow \}\)/.test(app));
 check("והכרטיס מוצג רק למי שמגיע לה", /\{glow && hasGlow\(\) && \(/.test(app));
@@ -141,7 +161,7 @@ check("הכפתור פותח ישירות את רשימת הבונוס", /setGlo
 // Before her start date NOTHING of the programme is unlocked, so the ordinary content view
 // would be an empty screen. Landing her on the bonus list is what makes the button safe as
 // well as useful: there is no day there to press.
-check("ומסך התוכן נפתח על הבונוס ולא על היום", /useState\(startGlow \? "all" : "today"\)/.test(mod) && /useState\(startGlow \? "glow" : "all"\)/.test(mod));
+check("ומסך התוכן נפתח על הבונוס ולא על היום", /useState\(startGlow \? "glow" : "today"\)/.test(mod));
 check("והדגל מתאפס בסגירה, כדי שפתיחה רגילה לא תיפתח על הבונוס",
   /setSheet\(null\); setGlowDirect\(false\)/.test(app));
 check("מסך הניהול מציג את הבונוס גם למי שהמחזור שלה טרם התחיל",

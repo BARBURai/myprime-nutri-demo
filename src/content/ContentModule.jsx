@@ -231,13 +231,15 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   // Opened straight onto the bonus list. A woman who has not started yet has nothing at all
   // unlocked, so the ordinary "today" view would be an empty screen and read as broken. The
   // bonus chip hides the week row anyway, because the bonus belongs to no week.
-  const [view, setView] = useState(startGlow ? "all" : "today");
+  const [view, setView] = useState(startGlow ? "glow" : "today");
   const [openL, setOpenL] = useState(null); // {week, day, i, pagesOnly}
   const [origin, setOrigin] = useState("today");
   const [selWeek, setSelWeek] = useState(null);
   const [dayOpen, setDayOpen] = useState({});
   const [query, setQuery] = useState("");
-  const [typeF, setTypeF] = useState(startGlow ? "glow" : "all");
+  const [typeF, setTypeF] = useState("all");
+  // איזה סעיף פתוח במסך של Glow. סגורים כברירת מחדל, כדי שכל הקורס ייראה במבט אחד.
+  const [openSec, setOpenSec] = useState({});
 
   // The phone's back button, handed up to the app. Each level does exactly what its own
   // on-screen back arrow does, and the return value says whether the press was used up.
@@ -309,11 +311,16 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   const rowStyle = { display: "flex", alignItems: "center", gap: 10, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13, marginBottom: 10, cursor: "pointer", background: C.panel };
   const iconWrap = { width: 44, height: 44, borderRadius: 12, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
 
+  // רון, 9 בספטמבר 2026: "שמת את גלו בתור איזשהו סעיף סינון, זה לא טוב. זה צריך
+  // להיות למעלה בסרגל העליון... בלי להוסיף עוד שורה." ולכן כפתור שלישי בתוך אותו
+  // סרגל, ומוצג רק למי שיש לה גישה.
   function Segmented() {
+    const tabs = [["today", "היום"], ["all", "מיי פריים 360"]];
+    if (showGlow) tabs.push(["glow", `${GLOW_EMOJI} Glow`]);
     return (
       <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 12, padding: 4, marginBottom: 14 }}>
-        {[["today", "היום"], ["all", "כל התוכנית"]].map(([id, lbl]) => (
-          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 6px", fontFamily: font, fontSize: 16, fontWeight: 700, background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl}</button>
+        {tabs.map(([id, lbl]) => (
+          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: id === "glow" ? 0.72 : 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 4px", fontFamily: font, fontSize: id === "glow" ? 15 : 16, fontWeight: 700, whiteSpace: "nowrap", background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl}</button>
         ))}
       </div>
     );
@@ -548,7 +555,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
       const nuLesson = nu ? dayByWD(nu.week, nu.day).lessons[nu.i] : null;
       const dOn = isDone(openL.week, openL.day, openL.i);
       const fOn = isFav(openL.week, openL.day, openL.i);
-      const backLabel = openL.pagesOnly ? "חזרה לדפים" : origin === "today" ? "חזרה לסרטונים שלך היום" : origin === "all" ? "חזרה לכל התוכנית" : origin === "fav" ? "חזרה למועדפים" : "חזרה לחיפוש";
+      const backLabel = openL.pagesOnly ? "חזרה לדפים" : origin === "today" ? "חזרה לסרטונים שלך היום" : origin === "all" ? "חזרה לכל התוכנית" : origin === "glow" ? "חזרה לשיעורי Glow" : origin === "fav" ? "חזרה למועדפים" : "חזרה לחיפוש";
 
       if (openL.pagesOnly) {
         // Minimal page view: only the page images + download. No video, no rest.
@@ -674,15 +681,45 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   }
 
   // ---------- ALL PROGRAM ----------
+  if (view === "glow") {
+    return (
+      <div style={overlay}>
+        <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
+        <div style={scroll}>
+          <Segmented />
+          <div style={{ fontSize: 19, fontWeight: 700, color: C.ink, marginBottom: 14, lineHeight: 1.4 }}>{GLOW_EMOJI} {showFull ? GLOW_FULL_TITLE : GLOW_TITLE}</div>
+          {showFull
+            ? GLOW_FULL_SECTIONS.map((sec) => {
+                const open = !!openSec[sec.title];
+                return (
+                  <div key={sec.title} style={{ border: `1px solid ${C.line}`, borderRadius: 14, marginBottom: 10, overflow: "hidden", background: C.panel }}>
+                    <div role="button" onClick={() => setOpenSec((o) => ({ ...o, [sec.title]: !o[sec.title] }))}
+                      style={{ display: "flex", alignItems: "center", gap: 11, padding: "13px 13px", cursor: "pointer", background: open ? C.brandBg : C.panel }}>
+                      <span style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{sec.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.3 }}>{sec.title}</div>
+                        {sec.sub && <div style={{ fontSize: 13, color: C.sub, marginTop: 2, lineHeight: 1.4 }}>{sec.sub}</div>}
+                      </div>
+                      <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0, transform: open ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />
+                    </div>
+                    {open && <div style={{ padding: "0 10px 6px" }}>{sec.idx.map((i) => <LessonRow key={"g" + i} w={0} d={0} l={GLOW_FULL_DAY.lessons[i]} i={i} from="glow" />)}</div>}
+                  </div>
+                );
+              })
+            : GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="glow" />)}
+        </div>
+      </div>
+    );
+  }
+
   if (view === "all") {
     const wk = selWeek == null ? (openWeeks[openWeeks.length - 1] || 1) : selWeek;
     const weekDays = openDaysList.filter((dd) => dd.week === wk);
     const isPdf = typeF === "pdf";
     // The bonus belongs to no week, so its chip hides the week row. Otherwise the same three
     // lessons would appear under every week and read as a bug.
-    const isGlow = typeF === "glow";
-    const visibleDays = isPdf || isGlow ? [] : weekDays.filter((dd) => dd.lessons.some((l) => matchesChip(l, typeF)));
-    const chips = showGlow ? [...FILTER_CHIPS, ["glow", `${GLOW_EMOJI} ${GLOW_CHIP}`]] : FILTER_CHIPS;
+    const visibleDays = isPdf ? [] : weekDays.filter((dd) => dd.lessons.some((l) => matchesChip(l, typeF)));
+    const chips = FILTER_CHIPS;
     return (
       <div style={overlay}>
         <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
@@ -693,7 +730,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
             <button onClick={() => setView("fav")} style={{ flex: 1, border: `1.5px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 12, padding: "11px 8px", fontFamily: font, fontSize: 16, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Heart size={18} /> המועדפים שלי</button>
           </div>
 
-          {!isPdf && !isGlow && (
+          {!isPdf && (
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 14 }}>
               {openWeeks.map((w) => (<button key={w} onClick={() => setSelWeek(w)} style={{ flexShrink: 0, border: "none", cursor: "pointer", borderRadius: 999, padding: "8px 16px", fontFamily: font, fontSize: 16, fontWeight: 700, background: w === wk ? C.brand : C.bg, color: w === wk ? "#fff" : C.ink }}>שבוע {w}</button>))}
             </div>
@@ -703,19 +740,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
             {chips.map(([id, lbl]) => (<button key={id} onClick={() => setTypeF(id)} style={{ border: `1.5px solid ${typeF === id ? C.brand : C.line}`, cursor: "pointer", borderRadius: 999, padding: "6px 13px", fontFamily: font, fontSize: 15, fontWeight: 600, background: typeF === id ? C.brandBg : C.panel, color: typeF === id ? C.brandD : C.ink }}>{lbl}</button>))}
           </div>
 
-          {isGlow ? (
-            <>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, marginBottom: 10, lineHeight: 1.4 }}>{GLOW_EMOJI} {showFull ? GLOW_FULL_TITLE : GLOW_TITLE}</div>
-              {showFull
-                ? GLOW_FULL_SECTIONS.map((sec) => (
-                    <div key={sec.title} style={{ marginBottom: 6 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: C.sub, margin: "14px 0 6px" }}>{sec.title}</div>
-                      {sec.idx.map((i) => <LessonRow key={"g" + i} w={0} d={0} l={GLOW_FULL_DAY.lessons[i]} i={i} from="all" />)}
-                    </div>
-                  ))
-                : GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="all" />)}
-            </>
-          ) : isPdf ? (
+          {isPdf ? (
             pageEntries.length === 0
               ? <div style={{ fontSize: 16, color: C.sub, textAlign: "center", padding: "22px 14px" }}>אין דפים זמינים עדיין.</div>
               : pageEntries.map((x) => <ResultRow key={lessonKey(x.week, x.day, x.i)} w={x.week} d={x.day} l={x.l} i={x.i} from="all" pagesOnly subtitle={`שבוע ${x.week} יום ${x.day} · ${x.l.pageImages.length} עמודים`} />)
@@ -778,7 +803,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
         {showGlow && (
           <>
             <div style={{ borderTop: `1px solid ${C.line}`, margin: "20px 0 14px" }} />
-            <div onClick={() => { setTypeF("glow"); setView("all"); }} role="button" style={rowStyle}>
+            <div onClick={() => setView("glow")} role="button" style={rowStyle}>
               <div style={{ ...iconWrap, fontSize: 22 }}>{GLOW_EMOJI}</div>
               <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
                 <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{showFull ? GLOW_FULL_ROW : GLOW_ROW}</div>
