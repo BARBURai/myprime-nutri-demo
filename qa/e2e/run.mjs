@@ -52,7 +52,11 @@ const BASE = `http://127.0.0.1:${server.address().port}`;
 // two are different days, and a harness that works in UTC then puts her on the wrong
 // programme day and reports a bug that does not exist. This was found the hard way.
 const israelToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-const TODAY = israelToday();
+// **נמדד מחדש לפני כל תרחיש, ולא פעם אחת בטעינה.** ב-10 בספטמבר 2026 חבילה
+// שהתחילה ב-23:5x נכשלה בשלושת המכשירים על תרחיש היומן: הזרע נכתב עם התאריך של
+// אתמול, והדפדפן כבר נטען אחרי חצות וראה את היום החדש. **האפליקציה הייתה תקינה
+// לגמרי.** זו המלכודת הראשונה מסעיף 20, בפעם הרביעית.
+let TODAY = israelToday();
 // To put her on day N we walk back N-1 days from today, which is what the app does with
 // the date that comes from the registration sheet.
 let lastPage = null;
@@ -2253,6 +2257,7 @@ console.log(`\n  MyPrime QA שכבה 3 - ${RUN_CHK.length} בדיקות × ${RUN
 for (const device of RUN_DEV) {
   for (const c of RUN_CHK) {
     try {
+      TODAY = israelToday();   // כדי שהזרע והדפדפן יסכימו גם כשהחבילה חוצה חצות
       const { ok, detail, skip } = await c.run(browser, device);
       record(device.name, c.name, ok, detail, skip);
     } catch (e) {
