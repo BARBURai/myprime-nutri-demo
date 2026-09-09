@@ -78,10 +78,12 @@ console.log("\nשדה כמות שמגיע עם ערך בפנים");
 // שמגיע גם הוא עם ערך בפנים.
 const sel = (src.match(/onFocus=\{\(e\) => e\.target\.select\(\)\}/g) || []).length;
 check("שמונה שדות מסמנים את תוכנם בכניסה", sel === 8, "נמצאו " + sel);
+// מ-v6.90 המונים כבר לא כותבים 1 במקום מספר שנמחק, ולכן הביטוי השתנה. הסימון
+// בכניסה נשאר, וזה מה שנבדק כאן, יחד עם ההחזרה של המספר ביציאה מהשדה.
 check("המונה של הוספת מזון בהם",
-  /setGrams\(Math\.max\(1, c\) \* au\.g\); \}\} onFocus=\{\(e\) => e\.target\.select\(\)\}/.test(src));
+  /if \(c >= 1\) \{ setQtyTouched\(true\); setGrams\(c \* au\.g\); \}[\s\S]{0,80}onFocus=\{\(e\) => e\.target\.select\(\)\} onBlur=\{\(\) => setQtyText\(null\)\}/.test(src));
 check("והמונה של אישור האופציה",
-  /setChosen\(\{ \.\.\.chosen, grams: Math\.max\(1, c\) \* au\.g \}\); \}\} onFocus=\{\(e\) => e\.target\.select\(\)\}/.test(src));
+  /setChosen\(\{ \.\.\.chosen, txt: v, \.\.\.\(c >= 1 \? \{ grams: c \* au\.g \} : \{\}\) \}\);[\s\S]{0,80}onFocus=\{\(e\) => e\.target\.select\(\)\} onBlur=\{\(\) => setChosen\(\{ \.\.\.chosen, txt: null \}\)\}/.test(src));
 for (const [label, setter] of [["כמות", "setMAmount"], ["קלוריות", "setMKcal"], ["חלבון", "setMProt"], ["שומן", "setMFat"], ["פחמימות", "setMCarb"]]) {
   check("שדה " + label + " בהזנה הידנית",
     new RegExp(setter + '\\(e\\.target\\.value\\.replace\\(/\\[\\^0-9\\.\\]/g, ""\\)\\)\\} onFocus=\\{\\(e\\) => e\\.target\\.select\\(\\)\\}').test(src));

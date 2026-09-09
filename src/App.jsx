@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.87";
+const VERSION = "6.93";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -979,6 +979,7 @@ function Btn({ children, onClick, variant = "solid", disabled, style = {} }) {
 function SrcBadge({ source }) {
   if (source === "estimated") return <span style={{ fontSize: 13, background: C.amberBg, color: C.amber, padding: "2px 7px", borderRadius: 5 }}>מוערך</span>;
   if (source === "db") return <span style={{ fontSize: 13, background: "#E7F4EC", color: "#1E8449", padding: "2px 7px", borderRadius: 5 }}>מהמאגר</span>;
+  if (source === "stated") return <span style={{ fontSize: 13, background: C.brandBg, color: C.brandD, padding: "2px 7px", borderRadius: 5 }}>לפי מה שהזנת</span>;
   if (source === "usda") return <span style={{ fontSize: 13, background: "#EEF4FB", color: "#2D6CB5", padding: "2px 7px", borderRadius: 5 }}>USDA</span>;
   return null;
 }
@@ -2874,7 +2875,7 @@ function photoHeadsup35Seen() { try { return localStorage.getItem("myprime_photo
 function markPhotoHeadsup35() { try { localStorage.setItem("myprime_photo_hs35", "1"); } catch (e) {} }
 
 async function aiNutritionChat(messages) {
-  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. דברי תמיד בלשון נקבה, גם אלייך וגם על עצמך: \"שמחה לעזור\", \"רשמתי לך\", ולא בלשון זכר.אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) אם חסר מידע על כמה דברים - שאלי על כולם בהודעה אחת (אפשר כרשימה קצרה), לא שאלה אחרי שאלה. שאלי רק על מה שבאמת חסר וחשוב, אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות מיותרות. חשוב מאוד - קראי את כל ההודעה של המשתמשת עד הסוף לפני שאת שואלת שאלה כלשהי, וכבדי כל פרט שכבר נמסר: אם המשתמשת כבר ציינה כמות או מידה (גרם, כוס, כף, כפית, פרוסה) - אל תשאלי עליה שוב לעולם, קחי אותה כפי שהיא. אם כתבה '2 כפות אורז' - יש לך כבר את הכמות, אל תשאלי כמה גרם. אם כבר ציינה אופן הכנה (מבושל, מטוגן, אפוי, על הגריל, חי) - אל תשאלי עליו שוב; 'אורז מבושל' פירושו שכבר יש לך את אופן ההכנה. אם המשתמשת כתבה יחידת מידה מפורשת (כפות / כפיות) - אל תשאלי 'כפות או כפיות', קחי מה שכתבה. הכלל על כמות הוא דקדוקי ולא לפי רשימת מאכלים: שם מאכל שנכתב בלשון יחיד ובלי מספר פירושו אחד, תמיד, גם אם לא שמעת על המאכל הזה מעולם. אל תשאלי 'כמה'. זה נכון גם כשנוספו למאכל מילים נוספות - 'תפוח ירוק', 'מלפפון קטן', 'פריכית אורז', 'פרגית על הגריל', 'פרוסת לחם מלא' - הלשון עדיין יחיד וזה עדיין אחד. מותר לשאול על כמות בשני מקרים בלבד: (1) המאכל נכתב בלשון רבים בלי מספר, למשל 'שקדים', 'עגבניות', 'תותים'; (2) מאכל בתפזורת שאין לו יחידה טבעית, למשל אורז, פסטה, קוסקוס, גבינה לבנה, סלט או גרנולה, שנכתב בלי שום מידה. בכל מקרה אחר הניחי אחד והמשיכי. הכלל הזה חל על כל פריט בנפרד גם כשמנויים כמה מאכלים באותו משפט, עם פסיקים או בלי: 'פריכית עגבנייה ומלפפון' הם שלושה פריטים, אחד מכל אחד, ואין לשאול 'כמה' על אף אחד מהם. ואל תבקשי אישור על ההנחה הזאת: לא 'ביצה אחת, נכון?' ולא 'עגבנייה אחת?' - פשוט קחי אחת והמשיכי. אם צוין מספר מפורש (למשל '3 ביצים') השתמשי בו. 'ביצה קשה' פירושו ביצה אחת, ואופן ההכנה שלה כבר נמסר - אל תשאלי אם היא קשה, עין או מקושקשת. אם המשתמשת הכינה מאכל שמתחלק ליחידות (פשטידה, תבנית עוגה, סיר תבשיל, מגש וכו') - זהי זאת, והתייחסי אליו כמוצר אחד שמתחלק לחתיכות (אל תפרקי אותו לרכיבים). אם היא לא ציינה כמה חתיכות/מנות יצאו מכל המאכל וכמה חתיכות היא אכלה - שאלי את שתי השאלות בהודעה אחת. בפריט כזה החזירי את הערכים של המאכל ה**שלם** (grams ו-kcal והמאקרו של כל התבנית), והוסיפי שני שדות: pieces (מספר החתיכות הכולל) ו-ate (כמה חתיכות היא אכלה). בפריט רגיל שאינו מתחלק לחתיכות - אל תוסיפי את השדות pieces ו-ate. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. עבור מאכל שמתחלק לחתיכות הוסיפי לפריט גם \"pieces\":מספר_חתיכות_כולל ו-\"ate\":כמה_אכלה (עם ערכי המאכל השלם). הערכות סבירות בלבד.";
+  const system = "את עוזרת תזונה ידידותית של MyPrime, מדברת עברית, ותפקידך אך ורק לעזור לתעד אוכל ולהעריך ערכים תזונתיים באפליקציה. דברי תמיד בלשון נקבה, גם אלייך וגם על עצמך: \"שמחה לעזור\", \"רשמתי לך\", ולא בלשון זכר.אם המשתמשת כותבת משהו שאינו קשור לאוכל, ארוחות או תזונה (למשל שאלות כלליות, מזג אוויר, חדשות, מתמטיקה, קוד וכו') - אל תעני לגופו של עניין, והחזירי reply בנוסח: \"אני מצטערת, אני יכולה לעזור רק בדברים שקשורים לתיעוד האוכל והתזונה באפליקציה הזו 🙂\", עם done=false ו-items ריק. כשהמשתמשת מספרת מה אכלה או מצרפת תמונה - אם יש תמונה זהי את הפריטים שבה. המטרה: הערכה קלורית מדויקת ככל האפשר. לכן לפני סיכום בררי את מה שמשפיע על הקלוריות: אופן ההכנה (מטוגן / אפוי / מבושל / על הגריל / חי), תוספות שמן או חמאה או רוטב, וגודל מנה או כמות. אם המשתמשת ציינה כמות מפורשת (למשל \"200 גרם\" או \"כוס\") - קחי אותה בדיוק כפי שנמסרה, אל תשני אותה ואל תחליפי אותה בגודל מנה אופייני. במשקאות ממותקים (קולה, מיץ, משקה קל וכו') שאלי תמיד אם זה רגיל או דיאט/זירו, כי ההבדל בקלוריות עצום. אם המאכל נאכל בדרך כלל יחד עם מאכל נוסף (למשל דייסת שיבולת שועל / גרנולה / קורנפלקס עם חלב או יוגורט; קפה עם חלב או סוכר) - שאלי אם הוסיפה משהו ועם מה, ואם רלוונטי גם איזה סוג (למשל איזה יוגורט). אם כן, הוסיפי כל רכיב כפריט נפרד ב-items כדי שהכול יתועד יחד בבת אחת. (מים אינם משנים קלוריות, אז אין צורך לשאול עליהם.) אם חסר מידע על כמה דברים - שאלי על כולם בהודעה אחת (אפשר כרשימה קצרה), לא שאלה אחרי שאלה. שאלי רק על מה שבאמת חסר וחשוב, אל תשאלי על מה שכבר נאמר ואל תציפי בשאלות מיותרות. חשוב מאוד - קראי את כל ההודעה של המשתמשת עד הסוף לפני שאת שואלת שאלה כלשהי, וכבדי כל פרט שכבר נמסר: אם המשתמשת כבר ציינה כמות או מידה (גרם, כוס, כף, כפית, פרוסה) - אל תשאלי עליה שוב לעולם, קחי אותה כפי שהיא. אם כתבה '2 כפות אורז' - יש לך כבר את הכמות, אל תשאלי כמה גרם. אם כבר ציינה אופן הכנה (מבושל, מטוגן, אפוי, על הגריל, חי) - אל תשאלי עליו שוב; 'אורז מבושל' פירושו שכבר יש לך את אופן ההכנה. אם המשתמשת כתבה יחידת מידה מפורשת (כפות / כפיות) - אל תשאלי 'כפות או כפיות', קחי מה שכתבה. הכלל על כמות הוא דקדוקי ולא לפי רשימת מאכלים: שם מאכל שנכתב בלשון יחיד ובלי מספר פירושו אחד, תמיד, גם אם לא שמעת על המאכל הזה מעולם. אל תשאלי 'כמה'. זה נכון גם כשנוספו למאכל מילים נוספות - 'תפוח ירוק', 'מלפפון קטן', 'פריכית אורז', 'פרגית על הגריל', 'פרוסת לחם מלא' - הלשון עדיין יחיד וזה עדיין אחד. מותר לשאול על כמות בשני מקרים בלבד: (1) המאכל נכתב בלשון רבים בלי מספר, למשל 'שקדים', 'עגבניות', 'תותים'; (2) מאכל בתפזורת שאין לו יחידה טבעית, למשל אורז, פסטה, קוסקוס, גבינה לבנה, סלט או גרנולה, שנכתב בלי שום מידה. בכל מקרה אחר הניחי אחד והמשיכי. הכלל הזה חל על כל פריט בנפרד גם כשמנויים כמה מאכלים באותו משפט, עם פסיקים או בלי: 'פריכית עגבנייה ומלפפון' הם שלושה פריטים, אחד מכל אחד, ואין לשאול 'כמה' על אף אחד מהם. ואל תבקשי אישור על ההנחה הזאת: לא 'ביצה אחת, נכון?' ולא 'עגבנייה אחת?' - פשוט קחי אחת והמשיכי. אם צוין מספר מפורש (למשל '3 ביצים') השתמשי בו. 'ביצה קשה' פירושו ביצה אחת, ואופן ההכנה שלה כבר נמסר - אל תשאלי אם היא קשה, עין או מקושקשת. אם המשתמשת הכינה מאכל שמתחלק ליחידות (פשטידה, תבנית עוגה, סיר תבשיל, מגש וכו') - זהי זאת, והתייחסי אליו כמוצר אחד שמתחלק לחתיכות (אל תפרקי אותו לרכיבים). אם היא לא ציינה כמה חתיכות/מנות יצאו מכל המאכל וכמה חתיכות היא אכלה - שאלי את שתי השאלות בהודעה אחת. בפריט כזה החזירי את הערכים של המאכל ה**שלם** (grams ו-kcal והמאקרו של כל התבנית), והוסיפי שני שדות: pieces (מספר החתיכות הכולל) ו-ate (כמה חתיכות היא אכלה). בפריט רגיל שאינו מתחלק לחתיכות - אל תוסיפי את השדות pieces ו-ate. אם המשתמשת מסרה בעצמה ערכים תזונתיים של מאכל, למשל מהתווית שעל האריזה, קחי אותם בדיוק כפי שנמסרו, אל תשני אותם ואל תחליפי אותם בהערכה שלך. אם חסר לך אחד מהם, שאלי אותה עליו לפני הסיכום, וכל מה שחסר בהודעה אחת ולא אחד אחרי השני, למשל: כמה שומן ופחמימות רשום על האריזה. אם היא אומרת שאינה יודעת או שאין לה את הנתון, השלימי אותו בהערכה סבירה והמשיכי. כשיש מספיק מידע סכמי את הפריטים, החזירי done=true עם items, ובשדה reply הציגי סיכום קצר. אם מבקשים שינוי או תוספת - החזירי שוב done=true עם items מעודכן. חשוב מאוד: החזירי בכל תור JSON תקין בלבד, בלי שום טקסט מחוץ ל-JSON ובלי סימוני קוד, במבנה: {\"reply\":\"טקסט קצר למשתמשת\",\"done\":false,\"items\":[]} . כל פריט במבנה {\"name\":\"שם בעברית\",\"en\":\"short english name for nutrition-DB lookup\",\"unit\":\"g\",\"grams\":מספר,\"kcal\":מספר,\"protein\":מספר,\"fat\":מספר,\"carbs\":מספר} . שדה en הוא שם קצר באנגלית של המאכל לחיפוש במאגר תזונה (כולל אופן הכנה אם רלוונטי, למשל \"grilled ribeye steak\", \"white rice cooked\", \"hummus\"). עבור מוצקים unit=\"g\" ו-grams בגרמים; עבור נוזלים ומשקאות unit=\"ml\" ו-grams הוא הכמות במ\"ל. עבור מאכל שמתחלק לחתיכות הוסיפי לפריט גם \"pieces\":מספר_חתיכות_כולל ו-\"ate\":כמה_אכלה (עם ערכי המאכל השלם). ובפריט שהקלוריות שלו נמסרו על ידה הוסיפי גם \"stated\":true, ובכל פריט אחר אל תוסיפי את השדה הזה כלל. הערכות סבירות בלבד.";
   const res = await fetch(AI_ENDPOINT, {
     method: "POST", headers: aiHeaders(),
     body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2200, system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }], messages }),
@@ -2905,7 +2906,8 @@ async function aiNutritionChat(messages) {
     reply: (parsed.reply || "") + (softLimit ? "\n\nזו הייתה המנה האחרונה במכסת ה-AI להיום 💜 מכאן אפשר להמשיך לתעד דרך חיפוש או ברקוד, ומחר המכסה מתאפסת." : ""),
     done: !!parsed.done,
     items: (parsed.items || []).map((it) => {
-      const base = { name: it.name, en: it.en || "", grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0) };
+      // stated=true פירושו שהיא עצמה מסרה את הערכים, ומשם והלאה שום מאגר לא נוגע בהם.
+      const base = { name: it.name, en: it.en || "", grams: Math.round(it.grams || 0), unit: it.unit === "ml" ? "ml" : "g", kcal: Math.round(it.kcal || 0), p: Math.round(it.protein || 0), f: Math.round(it.fat || 0), c: Math.round(it.carbs || 0), ...(it.stated === true ? { stated: true } : {}) };
       const pieces = Math.round(Number(it.pieces) || 0);
       const ate = Number(it.ate) || 0;
       // Divided homemade dish (e.g. a quiche cut into 8): the AI returns whole-dish
@@ -3225,6 +3227,11 @@ async function reconcileWithDb(items) {
   return Promise.all((items || []).map(async (it) => {
     try {
       if (it._pieces) return { ...it, source: "estimated" }; // homemade divided dish: keep AI estimate
+      // **ערכים שהיא עצמה מסרה מהתווית גוברים על כל מאגר.** רון בדק ב-9 בספטמבר
+      // 2026: היא כתבה "יוגורט 0 אחוז שומן, 200 גרם, 112 קלוריות, חלבון 20", הבינה
+      // רשמה בדיוק את זה, **והשורה הזאת החליפה אותה ב-76 קק״ל מהמאגר.** השומר
+      // למטה לא תפס, כי 76 מול 112 הוא 32 אחוז ולא 40.
+      if (it.stated) return { ...it, source: "stated" };
       const m = await lookupProduct(it.name, it.en);
       if (m) {
         const scale = (it.grams || 100) / 100;
@@ -3537,6 +3544,30 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [searching, setSearching] = useState(false);
   const [qUnit, setQUnit] = useState(null); // feature: quantity unit x count (null = base grams)
   const [addedKeys, setAddedKeys] = useState([]); // feature: multi-add from favorites
+  // שני דברים שנשים פספסו, ורון ראה את שניהם חוזרים: הכמות שנשארה על ברירת
+  // המחדל של המאגר, ויציאה מהחלון בלי שהמזון נוסף בכלל.
+  // qtyTouched: האם נגעה בכמות מאז שנכנסה למסך הזה, בכל דרך שהיא - צ׳יפ של מידה,
+  // פלוס, מינוס או הקלדה. דגל ולא השוואת מספרים, כי מי ששינתה ל-150 וחזרה ל-100
+  // כן בחרה את הכמות.
+  const [qtyTouched, setQtyTouched] = useState(false);
+  // מה שהיא הקלידה בשדה, כמחרוזת, כדי שהשדה יוכל להיות ריק. בלי זה כל תו שנמחק
+  // נכתב מיד בחזרה כ-1: ההקשה על המספר מסמנת את כל הספרות, מקש מחיקה אחד מוחק
+  // את כולן, והרצפה של 1 הפכה 118 ג׳ ל-1 ג׳ באותה שנייה - **ועוד סימנה שהיא
+  // "נגעה בכמות", ולכן החלונית שתקה בדיוק ברגע שהמספר הכי שגוי.** רון תפס את זה
+  // בבננה. null פירושו להציג את המספר האמיתי.
+  const [qtyText, setQtyText] = useState(null);
+  const [reachedQty, setReachedQty] = useState(false);
+  const [qtyWarn, setQtyWarn] = useState(false);
+  const [exitWarn, setExitWarn] = useState(false);
+  // האם אישור היציאה ימשיך את החזרה שנקטעה (שכבה אחת אחורה) או יסגור את החלון.
+  const [exitGoBack, setExitGoBack] = useState(false);
+  // איזו משתי ההודעות מוצגת: זו של מזון שנבחר, או זו של שיחת ה-AI.
+  const [exitAi, setExitAi] = useState(false);
+  // כל חלונית שואלת פעם אחת בלבד. רון: "אם בלי לשנות שלא תקפוץ ההתראה כל הזמן,
+  // תכניס אותה ללופ ותעצבן אותה." תפקידן להסב את תשומת ליבה פעם אחת, לא לנדנד:
+  // מרגע שנשאלה, ההחלטה שלה. הראשון מתאפס בכל מזון חדש, כי זו שאלה אחרת.
+  const [qtyAsked, setQtyAsked] = useState(false);
+  const [exitAsked, setExitAsked] = useState(false);
   const [addedMap, setAddedMap] = useState({}); // favId -> created journal entry id (for undo)
   const [histTab, setHistTab] = useState("fav"); // "fav" | "recent" (favorites is the default)
   const [histQ, setHistQ] = useState(""); // חיפוש בתוך האחרונים והמועדפים, חוצה את שתי הלשוניות
@@ -3730,7 +3761,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
     try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
   };
   const [qtyOrigin, setQtyOrigin] = useState("list");
-  const pickFood = (f, g) => { setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit)) || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const pickFood = (f, g) => { setQtyTouched(false); setQtyText(null); setQtyAsked(false); setReachedQty(true); setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit)) || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
   const servingFields = (f, g) => {
     if (!f.combo) return {};
     const sm = f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit));
@@ -3842,6 +3873,27 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const filtered = query.trim().length >= 2 ? localPool.filter((f) => (f.name + " " + (f.search || "")).includes(query.trim())) : [];
   const nut = food ? nutritionFor(food, grams) : null;
   const unitLabel = unitLabelFor(food?.unit);
+  // ההוספה עצמה, בפונקציה משלה, כדי שגם הכפתור וגם חלונית האזהרה יקראו לאותו
+  // קוד. שני מסלולים שעושים "כמעט אותו דבר" הם בדיוק איך שהם מתפצלים.
+  const doAdd = () => {
+    const fromHistory = qtyOrigin === "history" && !state.editEntry;
+    commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory);
+    if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); }
+  };
+  // היא בחרה מזון, הגיעה למסך הכמות, ולא הוסיפה כלום. הכלל הוא על סגירת החלון
+  // ולא על דרך יציאה מסוימת, ולכן הוא מכסה גם הקשה מחוץ לחלון, גם ✕, וגם את
+  // כפתור החזרה של הטלפון, בלי לרדוף אחרי כל אחד מהם בנפרד.
+  // בעריכת פריט קיים אין מה לאבד, ולכן שם לא שואלים.
+  const unsavedPick = () => reachedQty && !exitAsked && !state.editEntry && addedKeys.length === 0;
+  // ומה שהיא סיימה לספר ל-AI ועדיין לא הוסיפה. **הרשימה על המסך נראית שמורה ואינה:**
+  // היא מסיימת שיחה שלמה, רואה את הפריטים עם הקלוריות, ומה שמכניס אותם ליומן הוא
+  // כפתור אחד שמתחתיהם. השיחה עצמה אינה הולכת לאיבוד כל עוד האפליקציה פתוחה
+  // (v4.81), אבל היא אינה ביומן, וסגירה של האפליקציה כן מוחקת אותה.
+  const unsavedAi = () => !!(aiDoneItems && aiDoneItems.length) && !exitAsked && !state.editEntry;
+  const unsavedAny = () => unsavedPick() || unsavedAi();
+  const askExit = (goBack) => { setExitAsked(true); setExitAi(unsavedAi()); setExitGoBack(goBack); setExitWarn(true); };
+  const guardedClose = () => { if (unsavedAny()) { askExit(false); return; } close(); };
+
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
   const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   // כפתור החזרה של הטלפון, שכבה אחת בכל לחיצה. בלי זה האפליקציה ידעה רק שחלון
@@ -3850,17 +3902,31 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   //
   // **זו בדיוק אותה פונקציה שחץ החזרה שעל המסך קורא לה**, ולא חישוב שני שיכול
   // להתפצל ממנה, וזה העיקרון שנקבע ב-v5.27.
+  //
+  // ומ-v6.90 האזהרה קודמת לחזרה עצמה. רון בדק בסמסונג ולא ראה אותה, כי ממסך
+  // הכמות היא הייתה דורשת שלוש לחיצות: לרשימה, לבחירת הדרך, ורק אז החוצה.
+  // עכשיו הלחיצה הראשונה אחרי שהגיעה למסך הכמות בלי להוסיף כלום שואלת אותה,
+  // **ופעם אחת בלבד לכל פתיחה של החלון** (החלטת רון, אפשרות ג): מי שבחרה
+  // "חזרה" והמשיכה לעבוד לא תישאל שוב באותו ביקור. "יציאה בלי לשמור" ממשיכה
+  // בדיוק את החזרה שנקטעה, ולכן שכבה אחת בכל לחיצה נשמרת כפי שהיא.
   useEffect(() => {
     if (!backRef) return undefined;
-    backRef.current = back ? () => { back(); return true; } : null;
+    backRef.current = () => {
+      // חלונית פתוחה נסגרת קודם. בלי זה החזרה הייתה מזיזה את המסך מתחתיה.
+      if (qtyWarn) { setQtyWarn(false); return true; }
+      if (exitWarn) { setExitWarn(false); return true; }
+      if (unsavedAny()) { askExit(!!back); return true; }
+      if (back) { back(); return true; }
+      return false;
+    };
     return () => { backRef.current = null; };
   });
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={close}>
+    <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.4)", display: "flex", alignItems: "flex-end", zIndex: 20 }} onClick={guardedClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, width: "100%", height: step === "ai" ? "100%" : undefined, maxHeight: step === "ai" ? "100%" : "92%", borderRadius: step === "ai" ? 0 : "20px 20px 0 0", padding: step === "ai" ? "max(14px, env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px))" : "14px 16px calc(80px + env(safe-area-inset-bottom, 0px))", fontFamily: fontStack, overscrollBehavior: "contain", ...(step === "list" || step === "ai" ? { display: "flex", flexDirection: "column", overflowY: "hidden" } : { overflowY: "auto" }) }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, fontWeight: 600, color: C.ink }}>{back && <button onClick={back} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.sub, padding: 0 }}><ChevronRight size={20} /></button>}{title}</span>
-          <button onClick={step === "qty" && back ? back : close} aria-label={step === "qty" && back ? "חזרה" : "סגירה"} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
+          <button onClick={step === "qty" && back ? back : guardedClose} aria-label={step === "qty" && back ? "חזרה" : "סגירה"} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
         </div>
         {step === "method" && (
           <>
@@ -4174,7 +4240,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                       <span style={{ fontSize: 15, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
                     </div>
                   ))}
-                  <div style={{ fontSize: 12, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז - סריקת ברקוד היא המדויקת ביותר.</div>
+                  <div style={{ fontSize: 12, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"לפי מה שהזנת" = המספרים שמסרת מהאריזה · "מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז - סריקת ברקוד היא המדויקת ביותר.</div>
                   <div style={{ fontSize: 13, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
                   {(() => {
@@ -4250,16 +4316,23 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               const count = isBase ? grams : Math.max(1, Math.round(grams / au.g));
               return (
                 <>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setQUnit(null); else { setQUnit(u); setGrams(u.g); } }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { setQtyText(null); if (u.g <= 1) setQUnit(null); else { if (u.g !== grams) setQtyTouched(true); setQUnit(u); setGrams(u.g); } }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
-                    <button onClick={() => setGrams(Math.max(au.g, grams - au.g))} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
+                    <button onClick={() => { setQtyText(null); setQtyTouched(true); setGrams(Math.max(au.g, grams - au.g)); }} aria-label="הקטנת הכמות" style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                      <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                      <input value={qtyText === null ? count : qtyText} onChange={(e) => {
+                        // שדה ריק נשאר ריק, והכמות לא זזה. רק מספר אמיתי מזיז אותה
+                        // ונחשב בחירה שלה, ולכן מחיקה לבדה אינה משתיקה את החלונית.
+                        const v = e.target.value.replace(/[^0-9]/g, "");
+                        setQtyText(v);
+                        const c = parseInt(v || "0", 10);
+                        if (c >= 1) { setQtyTouched(true); setGrams(c * au.g); }
+                      }} onFocus={(e) => e.target.select()} onBlur={() => setQtyText(null)} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                       <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                     </div>
-                    <button onClick={() => setGrams(grams + au.g)} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
+                    <button onClick={() => { setQtyText(null); setQtyTouched(true); setGrams(grams + au.g); }} aria-label="הגדלת הכמות" style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
                   </div>
-                  <div style={{ textAlign: "center", fontSize: 14, color: C.faint, marginBottom: 14, minHeight: 18 }}>{!isBase ? `= ${grams} ${unitLabel}` : ""}</div>
+                  <div style={{ textAlign: "center", fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 14, minHeight: 23 }}>{!isBase ? `= ${grams} ${unitLabel}` : ""}</div>
                 </>
               );
             })()}
@@ -4284,10 +4357,50 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                 </div>
               )}
             </div>
-            <Btn onClick={() => { const fromHistory = qtyOrigin === "history" && !state.editEntry; commit({ meal, name: food.name, g: grams, unit: food.unit || "g", source: state.editEntry?.source || "verified", ...(String(food.id || "").startsWith("bc_") ? { catSource: "estimated" } : {}), ...servingFields(food, grams), ...nut }, fromHistory); if (fromHistory) { setAddedKeys((k) => [...k, food.id]); setStep("history"); } }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכני" : `הוסיפי ל${meal}`}</Btn>
+            <Btn onClick={() => { setQtyText(null); if (!state.editEntry && !qtyTouched && !qtyAsked) { setQtyAsked(true); setQtyWarn(true); return; } doAdd(); }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכני" : `הוסיפי ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
           </>
         )}
+      </div>
+      {qtyWarn && food && (
+        <AddAsk
+          id="qty"
+          title="חשוב למלא את המשקל של המזון שאכלת"
+          body={`לא שינית את הכמות, והיא עדיין ${grams} ${unitLabel}.`}
+          primary="אתקן את הכמות"
+          onPrimary={() => setQtyWarn(false)}
+          secondary={`אכלתי ${grams} ${unitLabel}`}
+          onSecondary={() => { setQtyWarn(false); doAdd(); }}
+        />
+      )}
+      {exitWarn && (
+        <AddAsk
+          id="exit"
+          title="את יוצאת בלי לשמור"
+          body={exitAi
+            ? 'מה שרשמת בשיחה עדיין לא נוסף ליומן. כדי לשמור אותו יש להקיש על "הוסיפי ליומן" שבתחתית הרשימה.'
+            : "המזון שבחרת עדיין לא נוסף ליומן. כדי לשמור אותו יש להקיש על כפתור ההוספה שבתחתית מסך הכמות."}
+          primary="חזרה"
+          onPrimary={() => setExitWarn(false)}
+          secondary="יציאה בלי לשמור"
+          onSecondary={() => { setExitWarn(false); if (exitGoBack) { setExitGoBack(false); back && back(); } else close(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// שתי החלוניות של חלון הוספת המזון. אותו רכיב לשתיהן, כי הן אותו דבר בדיוק:
+// שאלה קצרה, כפתור שמחזיר למסך, וכפתור שממשיך בכל זאת. הכפתור שמחזיר הוא
+// הראשי, כי בשני המקרים הוא זה שנכון כמעט תמיד.
+function AddAsk({ id, title, body, primary, onPrimary, secondary, onSecondary, z }) {
+  return (
+    <div data-ask={id} onClick={(e) => e.stopPropagation()} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: z || 30, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", maxWidth: 340, width: "100%", fontFamily: fontStack, boxShadow: "0 10px 30px rgba(58,43,48,0.25)" }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 8, lineHeight: 1.35 }}>{title}</div>
+        <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginBottom: 16 }}>{body}</div>
+        <Btn onClick={onPrimary}>{primary}</Btn>
+        <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={onSecondary} style={{ color: C.sub }}>{secondary}</Btn></div>
       </div>
     </div>
   );
@@ -4632,7 +4745,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
 // every single question was the complaint.
 let recIntroSeen = false;
 
-function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose, onGoProfile }) {
+function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose, onGoProfile, backRef }) {
   const [stage, setStage] = useState(recIntroSeen ? "confirm" : "intro");
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
@@ -4688,6 +4801,14 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   // with a choose button. replies holds every parsed answer; chosen holds the one she picked,
   // with an editable weight, before it goes to the diary.
   const [chosen, setChosen] = useState(null);
+  // אותם שני שומרים של מסך הכמות בהוספת מזון (v6.89 ו-v6.90), כאן על האופציה
+  // שהיא בחרה. **ההבדל היחיד הוא מאיפה הגיע המספר:** בחיפוש הוא של המאגר, וכאן
+  // הוא ההערכה של הבינה למנה שהיא עצמה הציעה. בשני המקרים הוא לא נבחר על ידה.
+  const [chosenTouched, setChosenTouched] = useState(false);
+  const [chosenAsked, setChosenAsked] = useState(false);
+  const [exitAsked, setExitAsked] = useState(false);
+  const [qtyWarn, setQtyWarn] = useState(false);
+  const [exitWarn, setExitWarn] = useState(false);
   const [prefsHint, setPrefsHint] = useState(false); // popup pointing her at the profile
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   const avoidAll = [...allergies, ...customSens].filter(Boolean);
@@ -4788,6 +4909,8 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     for (const m of [{ label: "מנה", g: serv }, ...measuresForUnit(unit)]) {
       if (m.g > 1 && !seen[m.label]) { seen[m.label] = 1; units.push(m); }
     }
+    // אופציה חדשה היא שאלה חדשה, בדיוק כמו מזון חדש בהוספת מזון.
+    setChosenTouched(false); setChosenAsked(false); setExitAsked(false);
     setChosen({ ...o, unit, baseGrams: serv, grams: serv, units, qUnit: units[0], meal: defaultMeal() });
   };
   // The AI's numbers are for the weight it suggested, so rescale when she changes it.
@@ -4797,6 +4920,25 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     const r = (v) => Math.round((v || 0) * f);
     return { kcal: r(o.kcal), p: r(o.p), f: r(o.f), c: r(o.c) };
   };
+  // **"ביטול" הוא בחירה מפורשת ולכן אינו שואל.** מה שכן שואל הוא הקשה מחוץ
+  // לחלונית וכפתור החזרה של הטלפון, ששם היא לא אמרה שהיא מוותרת. פעם אחת לכל
+  // אופציה, כמו בהוספת מזון.
+  const unsavedChosen = () => !!chosen && !exitAsked;
+  const askExitChosen = () => { setExitAsked(true); setExitWarn(true); };
+  const closeChosen = () => { if (unsavedChosen()) { askExitChosen(); return; } setChosen(null); };
+  // כפתור החזרה של הטלפון, שכבה אחת בכל לחיצה. בלי זה לחיצה אחת מתוך חלונית
+  // הכמות סגרה את כל המסך ומחקה איתו את השיחה שבה היא קיבלה את הרעיונות. זה
+  // בדיוק הדפוס של v5.27 ושל v6.72, ואותה פונקציה שהחלונית עצמה קוראת לה.
+  useEffect(() => {
+    if (!backRef) return undefined;
+    backRef.current = () => {
+      if (qtyWarn) { setQtyWarn(false); return true; }
+      if (exitWarn) { setExitWarn(false); return true; }
+      if (chosen) { closeChosen(); return true; }
+      return false;
+    };
+    return () => { backRef.current = null; };
+  });
   const logChosen = () => {
     if (!chosen) return;
     const v = scaled(chosen);
@@ -4952,7 +5094,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
         )}
 
         {chosen && (
-          <div onClick={() => setChosen(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}>
+          <div onClick={closeChosen} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 16px", width: "100%", maxWidth: 340, fontFamily: fontStack }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 2 }}>{chosen.name}</div>
               <div style={{ fontSize: 14, color: C.sub, marginBottom: 12 }}>אפשר לתקן את הכמות לפני שנרשום</div>
@@ -4966,14 +5108,20 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
                 const count = isBase ? chosen.grams : Math.max(1, Math.round(chosen.grams / au.g));
                 return (
                   <>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setChosen({ ...chosen, qUnit: null }); else setChosen({ ...chosen, qUnit: u, grams: u.g }); }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setChosen({ ...chosen, qUnit: null, txt: null }); else { if (u.g !== chosen.grams) setChosenTouched(true); setChosen({ ...chosen, qUnit: u, grams: u.g, txt: null }); } }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
-                      <button onClick={() => setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g) })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
+                      <button onClick={() => { setChosenTouched(true); setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g), txt: null }); }} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                        <input value={chosen.txt == null ? count : chosen.txt} onChange={(e) => {
+                          // אותה מלכודת של מסך הכמות: מחיקת המספר הייתה קופצת ל-1.
+                          const v = e.target.value.replace(/[^0-9]/g, "");
+                          const c = parseInt(v || "0", 10);
+                          if (c >= 1) setChosenTouched(true);
+                          setChosen({ ...chosen, txt: v, ...(c >= 1 ? { grams: c * au.g } : {}) });
+                        }} onFocus={(e) => e.target.select()} onBlur={() => setChosen({ ...chosen, txt: null })} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                         <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                       </div>
-                      <button onClick={() => setChosen({ ...chosen, grams: chosen.grams + au.g })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
+                      <button onClick={() => { setChosenTouched(true); setChosen({ ...chosen, grams: chosen.grams + au.g, txt: null }); }} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
                     </div>
                     <div style={{ textAlign: "center", fontSize: 14, color: C.faint, marginBottom: 12, minHeight: 18 }}>{!isBase ? `= ${chosen.grams} ${unitLabel}` : ""}</div>
                   </>
@@ -4984,10 +5132,34 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
                 {MEALS.map((m) => (<span key={m} onClick={() => setChosen({ ...chosen, meal: m })} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: chosen.meal === m ? C.brand : "transparent", color: chosen.meal === m ? "#fff" : C.sub, boxShadow: chosen.meal === m ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
               </div>
               <div style={{ fontSize: 13.5, color: C.faint, marginBottom: 14 }}>{scaled(chosen).kcal} קק״ל{proteinFocus ? ` · ${scaled(chosen).p} גרם חלבון` : ""}</div>
-              <Btn onClick={logChosen}>הוסיפי ליומן</Btn>
+              <Btn onClick={() => { if (!chosenTouched && !chosenAsked) { setChosenAsked(true); setQtyWarn(true); return; } logChosen(); }}>הוסיפי ליומן</Btn>
               <Btn variant="ghost" onClick={() => setChosen(null)} style={{ marginTop: 8 }}>ביטול</Btn>
             </div>
           </div>
+        )}
+        {qtyWarn && chosen && (
+          <AddAsk
+            id="recqty"
+            z={70}
+            title="חשוב למלא את המשקל של המזון שאכלת"
+            body={`לא שינית את הכמות, והיא עדיין ${chosen.grams} ${unitLabelFor(chosen.unit)}. זו הערכה של המנה שהוצעה, ולא בהכרח מה שאכלת.`}
+            primary="אתקן את הכמות"
+            onPrimary={() => setQtyWarn(false)}
+            secondary={`אכלתי ${chosen.grams} ${unitLabelFor(chosen.unit)}`}
+            onSecondary={() => { setQtyWarn(false); logChosen(); }}
+          />
+        )}
+        {exitWarn && (
+          <AddAsk
+            id="recexit"
+            z={70}
+            title="את יוצאת בלי לשמור"
+            body={'המנה שבחרת עדיין לא נוספה ליומן. כדי לשמור אותה יש להקיש על "הוסיפי ליומן".'}
+            primary="חזרה"
+            onPrimary={() => setExitWarn(false)}
+            secondary="יציאה בלי לשמור"
+            onSecondary={() => { setExitWarn(false); setChosen(null); }}
+          />
         )}
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
           <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(input); } }} disabled={loading} rows={1} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
@@ -6790,6 +6962,7 @@ export default function App() {
   // favourites views). Rather than lift all of them, it hands us a closer that shuts one
   // level and says whether it took the press.
   const contentBackRef = useRef(null);
+  const recBackRef = useRef(null);
   // אותו דבר בתוך חלון הוספת המזון: חיפוש, האחרונים והמועדפים, ומסך הכמות הם
   // שכבות, ולחיצה על חזור סוגרת אחת מהן ולא את החלון כולו.
   const addBackRef = useRef(null);
@@ -6804,40 +6977,6 @@ export default function App() {
   // or a tab other than the diary. Back then closes that, one layer at a time. On the diary
   // with nothing open there is no entry left, the press reaches Android, and it closes the
   // app exactly as it does in every other app. No dialog, and nothing that pretends to work.
-  const sentinelRef = useRef(false);
-  useEffect(() => {
-    const layered = !!(modal || sheet || recipeSel || tab !== "day");
-    if (layered && !sentinelRef.current) {
-      try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
-    }
-  }, [modal, sheet, recipeSel, tab]);
-  useEffect(() => {
-    const onPop = () => {
-      sentinelRef.current = false; // the browser just consumed it
-      // Innermost first, one level per press, and each level does exactly what its own
-      // on-screen back arrow does. Anything else and the press skips past a screen she is
-      // still looking at.
-      if (modalRef.current && addBackRef.current && addBackRef.current()) {
-        // שכבה בתוך החלון נסגרה והחלון עצמו נשאר פתוח, כלומר שום מצב שלנו לא
-        // השתנה והאפקט שלמעלה לא ירוץ. דוחפים כאן את הרשומה הבאה, אחרת הלחיצה
-        // הבאה הייתה יוצאת מהאפליקציה.
-        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
-      }
-      else if (modalRef.current) setModal(null);
-      else if (sheetRef.current === "content" && contentBackRef.current && contentBackRef.current()) {
-        // A level inside the content module closed and the sheet itself is still open, so
-        // no state of ours changed and the effect above will not run. Push the next entry
-        // here, otherwise the following press would leave the app.
-        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
-      }
-      else if (sheetRef.current) { setSheet(null); setGlowDirect(false); }
-      else if (recipeSelRef.current) setRecipeSel(null);
-      else if (tabRef.current !== "day") setTab("day");
-      // Nothing of ours left: no new entry is pushed, so the next press exits the app.
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
 
   const checkAccess = async (em, nm, isLogin) => {
     setGate("checking"); setGateMsg("");
@@ -7016,6 +7155,78 @@ export default function App() {
   const markNotifyAsked = () => setProfile((p) => (p.tipsSeen || []).includes("notifyAsked") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "notifyAsked"] });
   const acceptNotify = async () => { setNotifyPrompt(false); markNotifyAsked(); await enableDailyReminder(gateEmail); };
   const dismissNotify = () => { setNotifyPrompt(false); markNotifyAsked(); };
+  // המצב של החלוניות נקרא דרך ref, כי המאזין נרשם פעם אחת ואינו רואה ערכים
+  // חדשים. אותו דפוס בדיוק של modalRef ו-tabRef שמעליו.
+  const popupRef = useRef({});
+  popupRef.current = { lockMsg, futureConfirm, futureData, favPrompt, notifyPrompt, replyPop, tour };
+  const dismissNotifyRef = useRef(null); dismissNotifyRef.current = dismissNotify;
+  const tourBackRef = useRef(null); tourBackRef.current = tourBack;
+  const tourEndRef = useRef(null); tourEndRef.current = tourEnd;
+  const pushSentinel = () => { try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {} };
+  const sentinelRef = useRef(false);
+  // **כל חלונית שחוסמת את המסך היא שכבה, ולא רק חלון ההוספה.** משתתפת דיווחה
+  // ב-9 בספטמבר 2026 ש"כפתור back מעיף מהאפליקציה", ונמדד בדיוק: היא מוסיפה
+  // מזון, קופצת השאלה "לשמור למועדפים?", **ולחיצה אחת על חזרה לא עושה כלום
+  // והשנייה סוגרת את האפליקציה, כשהחלונית עדיין על המסך.** הסיבה: החלוניות
+  // האלה חיות ברמת האפליקציה ולא היו ברשימה כאן, ולכן לא היה מה לסגור.
+  const popupOpen = !!(lockMsg || futureConfirm || futureData || favPrompt || notifyPrompt || replyPop || tour);
+  useEffect(() => {
+    const layered = popupOpen || !!(modal || sheet || recipeSel || tab !== "day");
+    if (layered && !sentinelRef.current) {
+      try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+    }
+  }, [popupOpen, modal, sheet, recipeSel, tab]);
+  useEffect(() => {
+    const onPop = () => {
+      const wasOurs = sentinelRef.current;
+      sentinelRef.current = false; // the browser just consumed it
+      // Innermost first, one level per press, and each level does exactly what its own
+      // on-screen back arrow does. Anything else and the press skips past a screen she is
+      // still looking at.
+      //
+      // **החלוניות קודמות לכל השאר, כי הן מצוירות מעל הכל.** כל אחת עושה בדיוק
+      // מה שכפתור הביטול שלה עושה, ולעולם לא את כפתור האישור: חזרה אינה
+      // "תודה, הבנתי" ואינה "כן, שמרי".
+      const P = popupRef.current;
+      if (P.lockMsg) { setLockMsg(null); pushSentinel(); return; }
+      if (P.futureConfirm) { setFutureConfirm(false); pushSentinel(); return; }
+      if (P.futureData) { setFutureData(false); pushSentinel(); return; }
+      if (P.favPrompt) { setFavPrompt(null); setFavName(""); pushSentinel(); return; }
+      if (P.notifyPrompt) { dismissNotifyRef.current(); pushSentinel(); return; }
+      if (P.replyPop) { setReplyLater((arr) => (arr.includes(P.replyPop.id) ? arr : [...arr, P.replyPop.id])); pushSentinel(); return; }
+      // בסיור, חזרה חוזרת שלב אחד אחורה. החלטת רון. בשלב הראשון אין לאן, ולכן
+      // היא עושה בדיוק מה שכפתור הסיום שבמסך עושה, ולא נשארת לחיצה מתה.
+      if (P.tour) { if (P.tour.i > 0) tourBackRef.current(); else tourEndRef.current(); pushSentinel(); return; }
+      if (modalRef.current && addBackRef.current && addBackRef.current()) {
+        // שכבה בתוך החלון נסגרה והחלון עצמו נשאר פתוח, כלומר שום מצב שלנו לא
+        // השתנה והאפקט שלמעלה לא ירוץ. דוחפים כאן את הרשומה הבאה, אחרת הלחיצה
+        // הבאה הייתה יוצאת מהאפליקציה.
+        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+      }
+      else if (modalRef.current) setModal(null);
+      else if (sheetRef.current === "recommend" && recBackRef.current && recBackRef.current()) {
+        // שכבה בתוך "מה כדאי לאכול" נסגרה והמסך עצמו נשאר פתוח, ולכן דוחפים כאן
+        // את הרשומה הבאה, בדיוק כמו בחלון ההוספה ובמודול התוכן.
+        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+      }
+      else if (sheetRef.current === "content" && contentBackRef.current && contentBackRef.current()) {
+        // A level inside the content module closed and the sheet itself is still open, so
+        // no state of ours changed and the effect above will not run. Push the next entry
+        // here, otherwise the following press would leave the app.
+        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+      }
+      else if (sheetRef.current) { setSheet(null); setGlowDirect(false); }
+      else if (recipeSelRef.current) setRecipeSel(null);
+      else if (tabRef.current !== "day") setTab("day");
+      // **לחיצה שאין לה מה לסגור אינה נבלעת בשקט.** רשומה שנשארה בהיסטוריה אחרי
+      // שחלון נסגר ב-✕ או מפני שהמזון נוסף הפכה את הלחיצה הראשונה ללחיצה מתה,
+      // והשנייה סגרה את האפליקציה. עכשיו היא מועברת הלאה מיד, ולכן חזרה ביומן
+      // סוגרת את האפליקציה בלחיצה אחת, כמו בכל אפליקציה אחרת.
+      else if (wasOurs) { try { window.history.back(); } catch (e) {} }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
   const stepsOpenToday = unlockedOn(profile.startDate, selectedDate, STEPS_UNLOCK);
   // Step goal: she sets the baseline once, then accepts increases via a prominent banner (never silent).
@@ -7613,7 +7824,7 @@ export default function App() {
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
-            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} backRef={recBackRef} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "lossStop" && <LossStopSheet onAck={ackLossStop} />}
