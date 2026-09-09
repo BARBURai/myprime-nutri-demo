@@ -486,27 +486,30 @@ const CHECKS = [
       await page.waitForTimeout(400);
       // מסך הכמות: כפתור ההוספה ליומן קיים רק שם.
       const inQty = await page.locator("text=/הוסיפי ל/").count();
+      // מ-v6.90 הלחיצה הראשונה שואלת קודם, כי רון לא ראה את החלונית בסמסונג:
+      // ממסך הכמות היא דרשה שלוש לחיצות. **"יציאה בלי לשמור" ממשיכה בדיוק את
+      // החזרה שנקטעה**, ולכן שכבה אחת בכל לחיצה נשמרה, וזה מה שנבדק כאן.
       await page.goBack();
-      await page.waitForTimeout(500);
-      // אחרי לחיצה אחת: חזרה לרשימת האחרונים, והחלון עדיין פתוח.
+      await page.waitForTimeout(600);
+      const asked = (await page.locator('[data-ask="exit"]').count()) > 0;
+      if (asked) { await page.locator('[data-ask="exit"] >> text=יציאה בלי לשמור').click(); await page.waitForTimeout(500); }
+      // ואחריה: רשימת האחרונים, והחלון עדיין פתוח. זה הבאג שמשתתפת דיווחה
+      // עליו, וגם עכשיו הלחיצה הזאת אינה מחזירה אותה ליומן.
       const backOnList = (await page.locator("text=יוגורט").count()) > 0
         && (await page.locator("text=/הוסיפי ל/").count()) === 0;
       await page.goBack();
       await page.waitForTimeout(500);
-      // לחיצה שנייה: חזרה לבחירת הדרך, בתוך אותו חלון.
+      // לחיצה שנייה: חזרה לבחירת הדרך, בתוך אותו חלון, ובלי לשאול שוב.
+      const askedTwice = (await page.locator('[data-ask="exit"]').count()) > 0;
       const onMethod = (await page.locator("text=חיפוש מזון").count()) > 0;
       await page.goBack();
-      await page.waitForTimeout(500);
-      // לחיצה שלישית: היא בחרה מזון ולא הוסיפה אותו, ולכן נשאלת לפני שהחלון
-      // נסגר. זו אותה חלונית שקופצת גם בהקשה מחוץ לחלון וגם ב-✕.
-      const asked = (await page.locator("text=את יוצאת בלי לשמור").count()) > 0;
-      if (asked) { await page.locator("text=יציאה בלי לשמור").first().click(); await page.waitForTimeout(500); }
+      await page.waitForTimeout(600);
       const closed = (await page.locator("text=חיפוש מזון").count()) === 0;
       const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
       await context.close();
       return {
-        ok: onList > 0 && inQty > 0 && backOnList && onMethod && asked && closed && bad.length === 0,
-        detail: `ברשימה ${onList} · במסך הכמות ${inQty} · חזרה לרשימה ${backOnList} · לבחירת הדרך ${onMethod} · נשאלה ${asked} · נסגר ${closed} · שגיאות ${bad[0] || "אין"}`,
+        ok: onList > 0 && inQty > 0 && asked && !askedTwice && backOnList && onMethod && closed && bad.length === 0,
+        detail: `ברשימה ${onList} · במסך הכמות ${inQty} · נשאלה ${asked} · ולא שוב ${!askedTwice} · חזרה לרשימה ${backOnList} · לבחירת הדרך ${onMethod} · נסגר ${closed} · שגיאות ${bad[0] || "אין"}`,
       };
     },
   },
@@ -641,6 +644,111 @@ const CHECKS = [
           && askedExit === 1 && stayed > 0 && askedExitTwice === 0 && closed && atEnd === 2
           && bad.length === 0,
         detail: `נשאלה ${askedQty} · נשארה ${stillQty} · לא נוסף ${notYet} · לא נשאלה שוב ${askedTwice} · ביומן ${afterA} · במזון אחר נשאלה ${askedNewFood} · ביומן ${afterB} · ביציאה נשאלה ${askedExit} · חזרה ${stayed} · ולא שוב ${askedExitTwice} · נסגר ${closed} · בסוף ${atEnd} · שגיאות ${bad[0] || "אין"}`,
+      };
+    },
+  },
+  {
+    // רון, 9 בספטמבר 2026, אחרי בדיקה בסמסונג: "נכנסתי שוב, לחצתי על גרם, זה
+    // הפך ל-1 גרם ושמר ללא חלונית", ו"כשאני עושה אחורנית בסמסונג אני לא רואה
+    // שקופצת לי החלונית כי לא שמרתי".
+    //
+    // שניהם היו אמיתיים. הקשה על המספר מסמנת את כל הספרות, ומקש מחיקה אחד מוחק
+    // את כולן: הרצפה של 1 כתבה 1 במקומן, **וזה נספר כ"נגעה בכמות"**, ולכן
+    // החלונית שתקה בדיוק ברגע שהמספר הכי שגוי. וכפתור החזרה דרש שלוש לחיצות
+    // עד לחלונית, כי הוא יורד שכבה אחת בכל פעם.
+    //
+    // שני הצדדים באותה הרצה בכוונה: מספר שנמחק ומספר שהוקלד, וחזרה ששואלת
+    // ואז חזרה שלא, כי כלל שיורה תמיד נראה בדיוק כמו כלל שלא יורה אף פעם.
+    name: "מחיקת הכמות אינה קופצת לגרם אחד, וחזרה שואלת בלחיצה הראשונה",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device, { day: 15 });
+      const pick = async (q, label) => {
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator("text=חיפוש מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator('input[placeholder="חיפוש מזון…"]').fill(q);
+        await page.waitForTimeout(800);
+        await page.locator(`text=${label}`).first().click();
+        await page.waitForTimeout(400);
+      };
+      // הקלוריות של מסך הכמות עצמו, ולא הראשון שנמצא במסך: ביומן שמאחור יש
+      // שורות עם אותה מילה בדיוק.
+      const kcalOnScreen = () => page.evaluate(() => {
+        const lbl = [...document.querySelectorAll("span")].find((x) => x.textContent.trim() === "קלוריות");
+        return lbl ? lbl.parentElement.lastElementChild.textContent.trim() : "?";
+      });
+      const inp = page.locator('input[inputmode="numeric"]').first();
+      const bad = [];
+
+      // א. מחיקת המספר. השדה נשאר ריק, והכמות לא זזה.
+      await pick("בננה", "בננה בינונית");
+      const start = await inp.inputValue();
+      const kcalStart = await kcalOnScreen();
+      await inp.click();
+      await page.waitForTimeout(250);
+      await page.keyboard.press("Backspace");
+      await page.waitForTimeout(400);
+      const emptied = await inp.inputValue();
+      const kcalEmpty = await kcalOnScreen();
+      if (start !== "118") bad.push(`נכנסה עם ${start} ולא 118`);
+      if (emptied !== "") bad.push(`אחרי מחיקה השדה מכיל "${emptied}"`);
+      if (kcalEmpty !== kcalStart) bad.push(`הקלוריות זזו: ${kcalStart} ← ${kcalEmpty}`);
+
+      // ומכיוון שמחיקה אינה בחירה, החלונית עדיין קופצת, ועם המספר המקורי.
+      await page.locator("text=/הוסיפי ל/").first().click();
+      await page.waitForTimeout(500);
+      const askText = (await page.locator('[data-ask="qty"]').innerText().catch(() => "")).replace(/\n/g, " ");
+      if (!askText.includes("118")) bad.push(`החלונית לא נוקבת ב-118: "${askText.slice(0, 60)}"`);
+      await page.locator('[data-ask="qty"] >> text=/^אכלתי /').click();
+      await page.waitForTimeout(900);
+      const savedG = await page.evaluate(() => { const l = (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []); return l.length ? l[l.length - 1].g : null; });
+      if (savedG !== 118) bad.push(`נשמרו ${savedG} ג׳ במקום 118`);
+      if (await page.locator("text=לשמור למועדפים?").count()) {
+        await page.locator("text=לא תודה").first().click();
+        await page.waitForTimeout(400);
+      }
+
+      // ב. ומספר שהוקלד באמת כן נחשב בחירה, ואינו נעצר.
+      await pick("תפוח עץ", "תפוח עץ");
+      await inp.click();
+      await page.waitForTimeout(200);
+      await inp.fill("70");
+      await page.waitForTimeout(400);
+      await page.locator("text=/הוסיפי ל/").first().click();
+      await page.waitForTimeout(900);
+      if (await page.locator('[data-ask="qty"]').count()) bad.push("נשאלה אף שהקלידה כמות");
+      const typedG = await page.evaluate(() => { const l = (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []); return l.length ? l[l.length - 1].g : null; });
+      if (typedG !== 70) bad.push(`נשמרו ${typedG} ג׳ במקום 70`);
+      if (await page.locator("text=לשמור למועדפים?").count()) {
+        await page.locator("text=לא תודה").first().click();
+        await page.waitForTimeout(400);
+      }
+
+      // ג. כפתור החזרה: שואל בלחיצה הראשונה, ולא שוב באותו ביקור.
+      await pick("לחם", "לחם פרוס");
+      await page.goBack().catch(() => {});
+      await page.waitForTimeout(700);
+      const askedOnFirstBack = await page.locator('[data-ask="exit"]').count();
+      if (askedOnFirstBack !== 1) bad.push("החזרה הראשונה לא שאלה");
+      await page.locator('[data-ask="exit"] >> text=חזרה').click();
+      await page.waitForTimeout(400);
+      if (!(await page.locator("text=/הוסיפי ל/").count())) bad.push('"חזרה" לא השאירה אותה במסך הכמות');
+      await page.goBack().catch(() => {});
+      await page.waitForTimeout(700);
+      if (await page.locator('[data-ask="exit"]').count()) bad.push("נשאלה פעמיים באותו ביקור");
+      const backToList = await page.locator('input[placeholder="חיפוש מזון…"]').count();
+      if (!backToList) bad.push("החזרה השנייה לא הביאה אותה לרשימה");
+      const finalLen = await page.evaluate(() => (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []).length);
+      if (finalLen !== 2) bad.push(`ביומן ${finalLen} פריטים במקום 2`);
+
+      const errs = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: bad.length === 0 && errs.length === 0,
+        detail: bad.length ? bad.join(" · ") : `118 ← ריק ← 118 · הוקלד 70 · חזרה שאלה פעם אחת · שגיאות ${errs[0] || "אין"}`,
       };
     },
   },

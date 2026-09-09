@@ -56,7 +56,7 @@ console.log("\nהכמות שנשארה על ברירת המחדל");
 // רון: "יש לא מעט נשים שמפספסות את הקטע של כמה גרמים אכלו". ברירת המחדל בחיפוש
 // היא של המאגר ולא שלה, ולכן מי שלא נגעה בה רושמת ליומן מספר שמישהו אחר בחר.
 check("יש דגל שאומר אם נגעה בכמות", /const \[qtyTouched, setQtyTouched\] = useState\(false\);/.test(src));
-check("והוא מתאפס בכל כניסה למסך הכמות", /const pickFood = \(f, g\) => \{ setQtyTouched\(false\); setQtyAsked\(false\); setReachedQty\(true\);/.test(src));
+check("והוא מתאפס בכל כניסה למסך הכמות", /const pickFood = \(f, g\) => \{ setQtyTouched\(false\); setQtyText\(null\); setQtyAsked\(false\); setReachedQty\(true\);/.test(src));
 // דגל ולא השוואת מספרים: מי ששינתה ל-150 וחזרה ל-100 כן בחרה את הכמות.
 check("כל ארבע דרכי השינוי מסמנות נגיעה", (src.match(/setQtyTouched\(true\)/g) || []).length === 4);
 // צ׳יפ של מידה אמיתית קובע כמות, ולכן הוא נגיעה. הצ׳יפ הראשון, של היחידה
@@ -66,10 +66,10 @@ check("כל ארבע דרכי השינוי מסמנות נגיעה", (src.match(
 // גרם? אני מבין כף או כפית." צ׳יפ נחשב בחירה רק אם הוא באמת הזיז את המספר,
 // ולכן "100 ג׳" כשהמספר כבר 100 אינו בחירה, ו"כף · 15 ג׳" כן.
 check("צ׳יפ נחשב בחירה רק אם הזיז את המספר", /if \(u\.g !== grams\) setQtyTouched\(true\); setQUnit\(u\); setGrams\(u\.g\);/.test(src));
-check("והצ׳יפ של היחידה הבסיסית אינו", /onClick=\{\(\) => \{ if \(u\.g <= 1\) setQUnit\(null\);/.test(src));
+check("והצ׳יפ של היחידה הבסיסית אינו", /onClick=\{\(\) => \{ setQtyText\(null\); if \(u\.g <= 1\) setQUnit\(null\);/.test(src));
 check("המינוס", /setQtyTouched\(true\); setGrams\(Math\.max\(au\.g, grams - au\.g\)\)/.test(src));
 check("הפלוס", /setQtyTouched\(true\); setGrams\(grams \+ au\.g\)/.test(src));
-check("וההקלדה", /setQtyTouched\(true\); const c = parseInt/.test(src));
+check("וההקלדה של מספר אמיתי", /if \(c >= 1\) \{ setQtyTouched\(true\); setGrams\(c \* au\.g\); \}/.test(src));
 check("כפתור ההוספה עוצר כשלא נגעה", /if \(!state\.editEntry && !qtyTouched && !qtyAsked\) \{ setQtyAsked\(true\); setQtyWarn\(true\); return; \} doAdd\(\);/.test(src));
 // בעריכת פריט קיים הכמות כבר שלה, ואין על מה לשאול.
 check("ובעריכת פריט קיים אינו עוצר", /!state\.editEntry && !qtyTouched/.test(src));
@@ -82,8 +82,8 @@ console.log("\nיציאה בלי לשמור");
 // הקשה מחוץ לחלון, גם ✕, וגם את כפתור החזרה של הטלפון.
 check("הכלל: הגיעה למסך הכמות ולא הוסיפה כלום", /const unsavedPick = \(\) => reachedQty && !exitAsked && !state\.editEntry && addedKeys\.length === 0;/.test(src));
 check("הקשה מחוץ לחלון עוברת דרך השומר", /zIndex: 20 \}\} onClick=\{guardedClose\}/.test(src));
-check("וכפתור החזרה של הטלפון גם הוא", /if \(unsavedPick\(\)\) \{ setExitAsked\(true\); setExitWarn\(true\); return true; \}/.test(src));
-check("וכשאין מה לאבד הוא מדווח שלא בלע את הלחיצה", /return true; \}\n?\s*return false; \};/.test(src) || /return true; \} return false; \};/.test(src));
+check("וכפתור החזרה של הטלפון גם הוא", /if \(unsavedPick\(\)\) \{ setExitAsked\(true\); setExitGoBack\(!!back\); setExitWarn\(true\); return true; \}/.test(src));
+check("וכשאין מה לאבד הוא מדווח שלא בלע את הלחיצה", /if \(back\) \{ back\(\); return true; \}\s*\n\s*return false;/.test(src));
 check("בעריכת פריט קיים לא שואלים", /reachedQty && !exitAsked && !state\.editEntry/.test(src));
 
 // כשהיא עובדת בכפות, המספר בגרמים הוא מה שבאמת נכנס ליומן, ולכן הוא לא הערת
@@ -97,9 +97,38 @@ check("יש דגל לכל אחת מהן", /const \[qtyAsked, setQtyAsked\] = use
 check("חלונית הכמות אינה חוזרת על אותו מזון", /!state\.editEntry && !qtyTouched && !qtyAsked/.test(src));
 check("והדגל נדלק ברגע שנשאלה", /setQtyAsked\(true\); setQtyWarn\(true\); return;/.test(src));
 // מזון חדש הוא שאלה חדשה, ולכן שם היא כן נשאלת שוב.
-check("אבל כן חוזרת על מזון אחר", /setQtyTouched\(false\); setQtyAsked\(false\); setReachedQty\(true\)/.test(src));
+check("אבל כן חוזרת על מזון אחר", /setQtyTouched\(false\); setQtyText\(null\); setQtyAsked\(false\); setReachedQty\(true\)/.test(src));
 check("חלונית היציאה אינה חוזרת", /reachedQty && !exitAsked && !state\.editEntry/.test(src));
-check("והדגל שלה נדלק בשתי דרכי היציאה", (src.match(/setExitAsked\(true\); setExitWarn\(true\)/g) || []).length === 2);
+check("והדגל שלה נדלק בשתי דרכי היציאה", (src.match(/setExitAsked\(true\); setExitGoBack\((?:false|!!back)\); setExitWarn\(true\)/g) || []).length === 2);
+
+console.log("\nשדה ריק אינו בחירה, ואינו קופץ לגרם אחד");
+// רון תפס את זה בבננה: 118 ג׳, הקשה על המספר מסמנת את כל שלוש הספרות, ומקש
+// מחיקה אחד מוחק את כולן. הרצפה של 1 כתבה מיד 1 במקומן, **וההקלדה סימנה
+// שהיא נגעה בכמות**, ולכן החלונית שתקה בדיוק כשהמספר הכי שגוי: 1 ג׳, קלוריה.
+check("מה שהוקלד נשמר בנפרד, כדי שהשדה יוכל להיות ריק", /const \[qtyText, setQtyText\] = useState\(null\);/.test(src));
+check("והשדה מציג אותו", /value=\{qtyText === null \? count : qtyText\}/.test(src));
+check("שדה ריק אינו מזיז את הכמות", /const c = parseInt\(v \|\| "0", 10\);\s*\n\s*if \(c >= 1\) \{ setQtyTouched\(true\)/.test(src));
+check("ואינו נחשב שינוי, ולכן החלונית עדיין קופצת", !/setQtyText\(v\);\s*\n\s*setQtyTouched\(true\)/.test(src));
+check("אין יותר רצפה שכותבת 1 במקום מה שנמחק", !/setGrams\(Math\.max\(1, c\) \* au\.g\)/.test(src));
+// יציאה מהשדה מחזירה את המספר האמיתי, אחרת היא רואה שדה ריק וכמות אחרת נשמרת.
+check("יציאה מהשדה מחזירה את המספר", /onBlur=\{\(\) => setQtyText\(null\)\}/.test(src));
+check("וכפתור ההוספה מחזיר אותו לפני שהוא מחליט", /<Btn onClick=\{\(\) => \{ setQtyText\(null\); if \(!state\.editEntry/.test(src));
+check("וכל דרך אחרת לשנות כמות מנקה אותו", (src.match(/setQtyText\(null\)/g) || []).length >= 6);
+// אותה מלכודת בדיוק יושבת במונה של "מה כדאי לאכול", ושם אין אפילו חלונית.
+check("ואותו תיקון במונה של מסך ההמלצות", /value=\{chosen\.txt == null \? count : chosen\.txt\}/.test(src) && !/setChosen\(\{ \.\.\.chosen, grams: Math\.max\(1, c\) \* au\.g \}\)/.test(src));
+check("והוא מתנקה שם בצ׳יפים ובפלוס מינוס", (src.match(/txt: null/g) || []).length >= 4);
+
+console.log("\nכפתור החזרה שואל בלחיצה הראשונה, ופעם אחת בלבד");
+// רון בדק בסמסונג ולא ראה את החלונית, כי ממסך הכמות היא דרשה שלוש לחיצות:
+// לרשימה, לבחירת הדרך, ורק אז החוצה. אפשרות ג שהוא בחר: שואלים בראשונה,
+// ופעם אחת לכל פתיחה של החלון.
+check("האזהרה קודמת לחזרה עצמה", src.indexOf("if (unsavedPick()) { setExitAsked(true); setExitGoBack(!!back); setExitWarn(true); return true; }") < src.indexOf("if (back) { back(); return true; }\n      return false;"));
+check("ואישור היציאה ממשיך את החזרה שנקטעה", /if \(exitGoBack\) \{ setExitGoBack\(false\); back && back\(\); \} else close\(\);/.test(src));
+check("ולכן שכבה אחת בכל לחיצה נשמרת", /const back = step === "qty" && !state\.editEntry \? \(\) => setStep\(qtyOrigin\)/.test(src));
+// חלונית פתוחה נסגרת קודם, אחרת החזרה מזיזה את המסך מתחתיה.
+check("חזרה סוגרת קודם חלונית פתוחה", /if \(qtyWarn\) \{ setQtyWarn\(false\); return true; \}/.test(src) && /if \(exitWarn\) \{ setExitWarn\(false\); return true; \}/.test(src));
+// הקשה מחוץ לחלון היא יציאה אמיתית, ולכן שם האישור סוגר ולא חוזר שכבה.
+check("הקשה מחוץ לחלון עדיין סוגרת", /const guardedClose = \(\) => \{ if \(unsavedPick\(\)\) \{ setExitAsked\(true\); setExitGoBack\(false\); setExitWarn\(true\); return; \} close\(\); \};/.test(src));
 
 console.log("\nהקופי, כפי שרון אישר");
 check("חשוב למלא את המשקל", src.includes('title="חשוב למלא את המשקל של המזון שאכלת"'));

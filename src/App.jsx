@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.89";
+const VERSION = "6.90";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3543,9 +3543,17 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   // פלוס, מינוס או הקלדה. דגל ולא השוואת מספרים, כי מי ששינתה ל-150 וחזרה ל-100
   // כן בחרה את הכמות.
   const [qtyTouched, setQtyTouched] = useState(false);
+  // מה שהיא הקלידה בשדה, כמחרוזת, כדי שהשדה יוכל להיות ריק. בלי זה כל תו שנמחק
+  // נכתב מיד בחזרה כ-1: ההקשה על המספר מסמנת את כל הספרות, מקש מחיקה אחד מוחק
+  // את כולן, והרצפה של 1 הפכה 118 ג׳ ל-1 ג׳ באותה שנייה - **ועוד סימנה שהיא
+  // "נגעה בכמות", ולכן החלונית שתקה בדיוק ברגע שהמספר הכי שגוי.** רון תפס את זה
+  // בבננה. null פירושו להציג את המספר האמיתי.
+  const [qtyText, setQtyText] = useState(null);
   const [reachedQty, setReachedQty] = useState(false);
   const [qtyWarn, setQtyWarn] = useState(false);
   const [exitWarn, setExitWarn] = useState(false);
+  // האם אישור היציאה ימשיך את החזרה שנקטעה (שכבה אחת אחורה) או יסגור את החלון.
+  const [exitGoBack, setExitGoBack] = useState(false);
   // כל חלונית שואלת פעם אחת בלבד. רון: "אם בלי לשנות שלא תקפוץ ההתראה כל הזמן,
   // תכניס אותה ללופ ותעצבן אותה." תפקידן להסב את תשומת ליבה פעם אחת, לא לנדנד:
   // מרגע שנשאלה, ההחלטה שלה. הראשון מתאפס בכל מזון חדש, כי זו שאלה אחרת.
@@ -3744,7 +3752,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
     try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
   };
   const [qtyOrigin, setQtyOrigin] = useState("list");
-  const pickFood = (f, g) => { setQtyTouched(false); setQtyAsked(false); setReachedQty(true); setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit)) || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
+  const pickFood = (f, g) => { setQtyTouched(false); setQtyText(null); setQtyAsked(false); setReachedQty(true); setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit)) || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
   const servingFields = (f, g) => {
     if (!f.combo) return {};
     const sm = f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit));
@@ -3868,7 +3876,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   // כפתור החזרה של הטלפון, בלי לרדוף אחרי כל אחד מהם בנפרד.
   // בעריכת פריט קיים אין מה לאבד, ולכן שם לא שואלים.
   const unsavedPick = () => reachedQty && !exitAsked && !state.editEntry && addedKeys.length === 0;
-  const guardedClose = () => { if (unsavedPick()) { setExitAsked(true); setExitWarn(true); return; } close(); };
+  const guardedClose = () => { if (unsavedPick()) { setExitAsked(true); setExitGoBack(false); setExitWarn(true); return; } close(); };
 
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
   const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
@@ -3878,9 +3886,23 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   //
   // **זו בדיוק אותה פונקציה שחץ החזרה שעל המסך קורא לה**, ולא חישוב שני שיכול
   // להתפצל ממנה, וזה העיקרון שנקבע ב-v5.27.
+  //
+  // ומ-v6.90 האזהרה קודמת לחזרה עצמה. רון בדק בסמסונג ולא ראה אותה, כי ממסך
+  // הכמות היא הייתה דורשת שלוש לחיצות: לרשימה, לבחירת הדרך, ורק אז החוצה.
+  // עכשיו הלחיצה הראשונה אחרי שהגיעה למסך הכמות בלי להוסיף כלום שואלת אותה,
+  // **ופעם אחת בלבד לכל פתיחה של החלון** (החלטת רון, אפשרות ג): מי שבחרה
+  // "חזרה" והמשיכה לעבוד לא תישאל שוב באותו ביקור. "יציאה בלי לשמור" ממשיכה
+  // בדיוק את החזרה שנקטעה, ולכן שכבה אחת בכל לחיצה נשמרת כפי שהיא.
   useEffect(() => {
     if (!backRef) return undefined;
-    backRef.current = () => { if (back) { back(); return true; } if (unsavedPick()) { setExitAsked(true); setExitWarn(true); return true; } return false; };
+    backRef.current = () => {
+      // חלונית פתוחה נסגרת קודם. בלי זה החזרה הייתה מזיזה את המסך מתחתיה.
+      if (qtyWarn) { setQtyWarn(false); return true; }
+      if (exitWarn) { setExitWarn(false); return true; }
+      if (unsavedPick()) { setExitAsked(true); setExitGoBack(!!back); setExitWarn(true); return true; }
+      if (back) { back(); return true; }
+      return false;
+    };
     return () => { backRef.current = null; };
   });
   return (
@@ -4278,14 +4300,21 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               const count = isBase ? grams : Math.max(1, Math.round(grams / au.g));
               return (
                 <>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setQUnit(null); else { if (u.g !== grams) setQtyTouched(true); setQUnit(u); setGrams(u.g); } }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { setQtyText(null); if (u.g <= 1) setQUnit(null); else { if (u.g !== grams) setQtyTouched(true); setQUnit(u); setGrams(u.g); } }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
-                    <button onClick={() => { setQtyTouched(true); setGrams(Math.max(au.g, grams - au.g)); }} aria-label="הקטנת הכמות" style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
+                    <button onClick={() => { setQtyText(null); setQtyTouched(true); setGrams(Math.max(au.g, grams - au.g)); }} aria-label="הקטנת הכמות" style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                      <input value={count} onChange={(e) => { setQtyTouched(true); const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setGrams(Math.max(1, c) * au.g); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                      <input value={qtyText === null ? count : qtyText} onChange={(e) => {
+                        // שדה ריק נשאר ריק, והכמות לא זזה. רק מספר אמיתי מזיז אותה
+                        // ונחשב בחירה שלה, ולכן מחיקה לבדה אינה משתיקה את החלונית.
+                        const v = e.target.value.replace(/[^0-9]/g, "");
+                        setQtyText(v);
+                        const c = parseInt(v || "0", 10);
+                        if (c >= 1) { setQtyTouched(true); setGrams(c * au.g); }
+                      }} onFocus={(e) => e.target.select()} onBlur={() => setQtyText(null)} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                       <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                     </div>
-                    <button onClick={() => { setQtyTouched(true); setGrams(grams + au.g); }} aria-label="הגדלת הכמות" style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
+                    <button onClick={() => { setQtyText(null); setQtyTouched(true); setGrams(grams + au.g); }} aria-label="הגדלת הכמות" style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
                   </div>
                   <div style={{ textAlign: "center", fontSize: 18, fontWeight: 500, color: C.ink, marginBottom: 14, minHeight: 23 }}>{!isBase ? `= ${grams} ${unitLabel}` : ""}</div>
                 </>
@@ -4312,7 +4341,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                 </div>
               )}
             </div>
-            <Btn onClick={() => { if (!state.editEntry && !qtyTouched && !qtyAsked) { setQtyAsked(true); setQtyWarn(true); return; } doAdd(); }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכני" : `הוסיפי ל${meal}`}</Btn>
+            <Btn onClick={() => { setQtyText(null); if (!state.editEntry && !qtyTouched && !qtyAsked) { setQtyAsked(true); setQtyWarn(true); return; } doAdd(); }}><Check size={15} style={{ verticalAlign: -2, marginLeft: 4 }} /> {state.editEntry ? "עדכני" : `הוסיפי ל${meal}`}</Btn>
             {state.editEntry && <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={removeAndClose} style={{ color: C.amber }}>מחק פריט</Btn></div>}
           </>
         )}
@@ -4336,7 +4365,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
           primary="חזרה"
           onPrimary={() => setExitWarn(false)}
           secondary="יציאה בלי לשמור"
-          onSecondary={() => { setExitWarn(false); close(); }}
+          onSecondary={() => { setExitWarn(false); if (exitGoBack) { setExitGoBack(false); back && back(); } else close(); }}
         />
       )}
     </div>
@@ -5032,14 +5061,19 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
                 const count = isBase ? chosen.grams : Math.max(1, Math.round(chosen.grams / au.g));
                 return (
                   <>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setChosen({ ...chosen, qUnit: null }); else setChosen({ ...chosen, qUnit: u, grams: u.g }); }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setChosen({ ...chosen, qUnit: null, txt: null }); else setChosen({ ...chosen, qUnit: u, grams: u.g, txt: null }); }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
-                      <button onClick={() => setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g) })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
+                      <button onClick={() => setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g), txt: null })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
-                        <input value={count} onChange={(e) => { const c = parseInt(e.target.value.replace(/[^0-9]/g, "") || "0", 10); setChosen({ ...chosen, grams: Math.max(1, c) * au.g }); }} onFocus={(e) => e.target.select()} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
+                        <input value={chosen.txt == null ? count : chosen.txt} onChange={(e) => {
+                          // אותה מלכודת של מסך הכמות: מחיקת המספר הייתה קופצת ל-1.
+                          const v = e.target.value.replace(/[^0-9]/g, "");
+                          const c = parseInt(v || "0", 10);
+                          setChosen({ ...chosen, txt: v, ...(c >= 1 ? { grams: c * au.g } : {}) });
+                        }} onFocus={(e) => e.target.select()} onBlur={() => setChosen({ ...chosen, txt: null })} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                         <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                       </div>
-                      <button onClick={() => setChosen({ ...chosen, grams: chosen.grams + au.g })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
+                      <button onClick={() => setChosen({ ...chosen, grams: chosen.grams + au.g, txt: null })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
                     </div>
                     <div style={{ textAlign: "center", fontSize: 14, color: C.faint, marginBottom: 12, minHeight: 18 }}>{!isBase ? `= ${chosen.grams} ${unitLabel}` : ""}</div>
                   </>
