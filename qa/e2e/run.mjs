@@ -85,7 +85,7 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false, replies = null, aiAnswer = null }) {
+async function stubApi(context, { startDate, glow = false, replies = null, aiAnswer = null, catalog = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
@@ -93,7 +93,11 @@ async function stubApi(context, { startDate, glow = false, replies = null, aiAns
     // ברירת המחדל היא תשובה שלא סיימה, כדי ששום תרחיש אחר לא יקבל בטעות כרטיס
     // תוצאות. תרחיש שצריך שיחה גמורה מוסר aiAnswer משלו.
     if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify(aiAnswer || { reply: "רשמתי לך", done: false, items: [] }) }] });
-    if (url.includes("/api/catalog") || url.includes("/api/il-food")) return json({ items: [] });
+    // catalog מאפשר לתרחיש להעמיד מוצר במאגר, וזה מה שנותן ל-reconcileWithDb מה
+    // לדרוס. בלי זה אף מסלול השוואה אינו רץ בכלל, ובדיקה על "המאגר לא דרס" הייתה
+    // עוברת גם על הקוד השבור.
+    if (url.includes("/api/catalog")) return json({ items: catalog || [] });
+    if (url.includes("/api/il-food")) return json({ items: [] });
     return json({ ok: true });
   });
 }
@@ -110,12 +114,12 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null, replies = null, aiAnswer = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null, replies = null, aiAnswer = null, catalog = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow, replies, aiAnswer });
+  await stubApi(context, { startDate, glow, replies, aiAnswer, catalog });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
@@ -2068,6 +2072,61 @@ const CHECKS = [
       if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
       await context.close();
       return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "שאלה, לא שאלה על ביטול, ונסגרה שכבה אחת" };
+    },
+  },
+  {
+    // רון בדק ב-9 בספטמבר 2026 את מה שמשתתפת דיווחה: היא מסרה את המספרים מהאריזה,
+    // הבינה רשמה בדיוק אותם, **והמאגר שלנו דרס אותם והציג "מהמאגר"**. שני הצדדים
+    // באותה הרצה, כי מאגר שלא דורס אף פעם נראה בדיוק כמו מאגר שלא נמצא לו מוצר:
+    // פריט שהיא מסרה את ערכיו נשאר שלה, ופריט שלא נמסר כן מתעדכן מהמאגר.
+    name: "ערכים שהיא מסרה מהאריזה שורדים את המאגר, ומה שלא נמסר מתעדכן",
+    async run(browser, device) {
+      const answer = {
+        reply: "רשמתי לך", done: true,
+        items: [
+          { name: "יוגורט בדיקה", en: "yogurt", unit: "g", grams: 200, kcal: 112, protein: 20, fat: 0, carbs: 8, stated: true },
+          { name: "לחם בדיקה", en: "bread", unit: "g", grams: 100, kcal: 300, protein: 9, fat: 3, carbs: 50 },
+        ],
+      };
+      // אותם שני שמות במאגר, עם ערכים אחרים לגמרי. בלי התיקון שניהם נדרסים.
+      const catalog = [
+        { name: "יוגורט בדיקה", per100: { kcal: 38, p: 8, f: 3, c: 4 }, source: "verified" },
+        { name: "לחם בדיקה", per100: { kcal: 250, p: 8, f: 3, c: 45 }, source: "verified" },
+      ];
+      const { context, page, errors } = await openApp(browser, device, { day: 15, aiAnswer: answer, catalog });
+      const bad = [];
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=ספרי לי מה אכלת").first().click();
+      await page.waitForTimeout(600);
+      await page.locator("textarea").first().fill("יוגורט 200 גרם 112 קלוריות חלבון 20 שומן 0, ולחם 100 גרם");
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(3500);
+
+      const card = await page.evaluate(() => document.body.innerText);
+      if (!card.includes("יוגורט בדיקה")) bad.push("כרטיס התוצאות לא הוצג");
+      if (!card.includes("112")) bad.push("הקלוריות שהיא מסרה נדרסו על ידי המאגר");
+      if (!card.includes("לפי מה שהזנת")) bad.push('התג "לפי מה שהזנת" אינו מוצג');
+      if (!card.includes("250")) bad.push("הפריט שלא נמסרו ערכיו לא התעדכן מהמאגר");
+      if (!/מהמאגר/.test(card)) bad.push('הפריט שהתעדכן אינו מסומן "מהמאגר"');
+      if (/עדכנתי את הקלוריות לפי המאגר: סה״כ 288/.test(card)) bad.push("ההודעה על עדכון סוכמת גם את מה שלא נגע");
+
+      // ומשם ליומן, כדי שהתג והמספר יישרדו גם את השמירה. שומרים לפי הרכיבים,
+      // כי "כמוצר אחד" מאחד שני פריטים לשורה אחת ואז המקור שלה הוא תערובת.
+      const byParts = page.locator("text=לפי הרכיבים");
+      if (await byParts.count()) { await byParts.first().click(); await page.waitForTimeout(300); }
+      const add = page.getByRole("button", { name: /הוסיפי ליומן/ });
+      if (await add.count()) { await add.first().click(); await page.waitForTimeout(900); }
+      const closeBtn = page.getByRole("button", { name: /סיום/ });
+      if (await closeBtn.count()) { await closeBtn.first().click(); await page.waitForTimeout(700); }
+      const diary = await page.evaluate(() => document.body.innerText);
+      if (!diary.includes("לפי מה שהזנת")) bad.push("התג אינו נשמר ביומן");
+
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "שלה נשאר 112, ומה שלא נמסר עודכן ל-250" };
     },
   },
 ];
