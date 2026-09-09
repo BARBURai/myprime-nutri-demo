@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.91";
+const VERSION = "6.92";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4386,9 +4386,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
 // שתי החלוניות של חלון הוספת המזון. אותו רכיב לשתיהן, כי הן אותו דבר בדיוק:
 // שאלה קצרה, כפתור שמחזיר למסך, וכפתור שממשיך בכל זאת. הכפתור שמחזיר הוא
 // הראשי, כי בשני המקרים הוא זה שנכון כמעט תמיד.
-function AddAsk({ id, title, body, primary, onPrimary, secondary, onSecondary }) {
+function AddAsk({ id, title, body, primary, onPrimary, secondary, onSecondary, z }) {
   return (
-    <div data-ask={id} onClick={(e) => e.stopPropagation()} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div data-ask={id} onClick={(e) => e.stopPropagation()} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: z || 30, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", maxWidth: 340, width: "100%", fontFamily: fontStack, boxShadow: "0 10px 30px rgba(58,43,48,0.25)" }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 8, lineHeight: 1.35 }}>{title}</div>
         <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.55, marginBottom: 16 }}>{body}</div>
@@ -4738,7 +4738,7 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
 // every single question was the complaint.
 let recIntroSeen = false;
 
-function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose, onGoProfile }) {
+function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose, onGoProfile, backRef }) {
   const [stage, setStage] = useState(recIntroSeen ? "confirm" : "intro");
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
@@ -4794,6 +4794,14 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   // with a choose button. replies holds every parsed answer; chosen holds the one she picked,
   // with an editable weight, before it goes to the diary.
   const [chosen, setChosen] = useState(null);
+  // אותם שני שומרים של מסך הכמות בהוספת מזון (v6.89 ו-v6.90), כאן על האופציה
+  // שהיא בחרה. **ההבדל היחיד הוא מאיפה הגיע המספר:** בחיפוש הוא של המאגר, וכאן
+  // הוא ההערכה של הבינה למנה שהיא עצמה הציעה. בשני המקרים הוא לא נבחר על ידה.
+  const [chosenTouched, setChosenTouched] = useState(false);
+  const [chosenAsked, setChosenAsked] = useState(false);
+  const [exitAsked, setExitAsked] = useState(false);
+  const [qtyWarn, setQtyWarn] = useState(false);
+  const [exitWarn, setExitWarn] = useState(false);
   const [prefsHint, setPrefsHint] = useState(false); // popup pointing her at the profile
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   const avoidAll = [...allergies, ...customSens].filter(Boolean);
@@ -4894,6 +4902,8 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     for (const m of [{ label: "מנה", g: serv }, ...measuresForUnit(unit)]) {
       if (m.g > 1 && !seen[m.label]) { seen[m.label] = 1; units.push(m); }
     }
+    // אופציה חדשה היא שאלה חדשה, בדיוק כמו מזון חדש בהוספת מזון.
+    setChosenTouched(false); setChosenAsked(false); setExitAsked(false);
     setChosen({ ...o, unit, baseGrams: serv, grams: serv, units, qUnit: units[0], meal: defaultMeal() });
   };
   // The AI's numbers are for the weight it suggested, so rescale when she changes it.
@@ -4903,6 +4913,25 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
     const r = (v) => Math.round((v || 0) * f);
     return { kcal: r(o.kcal), p: r(o.p), f: r(o.f), c: r(o.c) };
   };
+  // **"ביטול" הוא בחירה מפורשת ולכן אינו שואל.** מה שכן שואל הוא הקשה מחוץ
+  // לחלונית וכפתור החזרה של הטלפון, ששם היא לא אמרה שהיא מוותרת. פעם אחת לכל
+  // אופציה, כמו בהוספת מזון.
+  const unsavedChosen = () => !!chosen && !exitAsked;
+  const askExitChosen = () => { setExitAsked(true); setExitWarn(true); };
+  const closeChosen = () => { if (unsavedChosen()) { askExitChosen(); return; } setChosen(null); };
+  // כפתור החזרה של הטלפון, שכבה אחת בכל לחיצה. בלי זה לחיצה אחת מתוך חלונית
+  // הכמות סגרה את כל המסך ומחקה איתו את השיחה שבה היא קיבלה את הרעיונות. זה
+  // בדיוק הדפוס של v5.27 ושל v6.72, ואותה פונקציה שהחלונית עצמה קוראת לה.
+  useEffect(() => {
+    if (!backRef) return undefined;
+    backRef.current = () => {
+      if (qtyWarn) { setQtyWarn(false); return true; }
+      if (exitWarn) { setExitWarn(false); return true; }
+      if (chosen) { closeChosen(); return true; }
+      return false;
+    };
+    return () => { backRef.current = null; };
+  });
   const logChosen = () => {
     if (!chosen) return;
     const v = scaled(chosen);
@@ -5058,7 +5087,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
         )}
 
         {chosen && (
-          <div onClick={() => setChosen(null)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}>
+          <div onClick={closeChosen} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 16px", width: "100%", maxWidth: 340, fontFamily: fontStack }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 2 }}>{chosen.name}</div>
               <div style={{ fontSize: 14, color: C.sub, marginBottom: 12 }}>אפשר לתקן את הכמות לפני שנרשום</div>
@@ -5072,19 +5101,20 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
                 const count = isBase ? chosen.grams : Math.max(1, Math.round(chosen.grams / au.g));
                 return (
                   <>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setChosen({ ...chosen, qUnit: null, txt: null }); else setChosen({ ...chosen, qUnit: u, grams: u.g, txt: null }); }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>{units.map((u) => { const active = (u.g <= 1 && isBase) || u.label === au.label; return (<span key={u.label} onClick={() => { if (u.g <= 1) setChosen({ ...chosen, qUnit: null, txt: null }); else { if (u.g !== chosen.grams) setChosenTouched(true); setChosen({ ...chosen, qUnit: u, grams: u.g, txt: null }); } }} style={{ fontSize: 15, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandD : C.sub, boxShadow: active ? `inset 0 0 0 1px ${C.brand}` : `inset 0 0 0 1px ${C.line}` }}>{u.label}{u.g > 1 ? ` · ${u.g} ${unitLabel}` : ""}</span>); })}</div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 6 }}>
-                      <button onClick={() => setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g), txt: null })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
+                      <button onClick={() => { setChosenTouched(true); setChosen({ ...chosen, grams: Math.max(au.g, chosen.grams - au.g), txt: null }); }} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>−</button>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 96, justifyContent: "center" }}>
                         <input value={chosen.txt == null ? count : chosen.txt} onChange={(e) => {
                           // אותה מלכודת של מסך הכמות: מחיקת המספר הייתה קופצת ל-1.
                           const v = e.target.value.replace(/[^0-9]/g, "");
                           const c = parseInt(v || "0", 10);
+                          if (c >= 1) setChosenTouched(true);
                           setChosen({ ...chosen, txt: v, ...(c >= 1 ? { grams: c * au.g } : {}) });
                         }} onFocus={(e) => e.target.select()} onBlur={() => setChosen({ ...chosen, txt: null })} inputMode="numeric" style={{ width: 58, textAlign: "center", fontSize: 27, fontWeight: 600, color: C.ink, border: "none", borderBottom: `2px solid ${C.line}`, outline: "none", fontFamily: fontStack, background: "transparent", padding: "0 2px" }} />
                         <span style={{ fontSize: 15, color: C.sub }}>{isBase ? unitLabel : au.label}</span>
                       </div>
-                      <button onClick={() => setChosen({ ...chosen, grams: chosen.grams + au.g, txt: null })} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
+                      <button onClick={() => { setChosenTouched(true); setChosen({ ...chosen, grams: chosen.grams + au.g, txt: null }); }} style={{ width: 40, height: 40, border: `1px solid ${C.line}`, borderRadius: 10, background: C.panel, cursor: "pointer", fontSize: 24, color: C.ink }}>+</button>
                     </div>
                     <div style={{ textAlign: "center", fontSize: 14, color: C.faint, marginBottom: 12, minHeight: 18 }}>{!isBase ? `= ${chosen.grams} ${unitLabel}` : ""}</div>
                   </>
@@ -5095,10 +5125,34 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
                 {MEALS.map((m) => (<span key={m} onClick={() => setChosen({ ...chosen, meal: m })} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: chosen.meal === m ? C.brand : "transparent", color: chosen.meal === m ? "#fff" : C.sub, boxShadow: chosen.meal === m ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}
               </div>
               <div style={{ fontSize: 13.5, color: C.faint, marginBottom: 14 }}>{scaled(chosen).kcal} קק״ל{proteinFocus ? ` · ${scaled(chosen).p} גרם חלבון` : ""}</div>
-              <Btn onClick={logChosen}>הוסיפי ליומן</Btn>
+              <Btn onClick={() => { if (!chosenTouched && !chosenAsked) { setChosenAsked(true); setQtyWarn(true); return; } logChosen(); }}>הוסיפי ליומן</Btn>
               <Btn variant="ghost" onClick={() => setChosen(null)} style={{ marginTop: 8 }}>ביטול</Btn>
             </div>
           </div>
+        )}
+        {qtyWarn && chosen && (
+          <AddAsk
+            id="recqty"
+            z={70}
+            title="חשוב למלא את המשקל של המזון שאכלת"
+            body={`לא שינית את הכמות, והיא עדיין ${chosen.grams} ${unitLabelFor(chosen.unit)}. זו הערכה של המנה שהוצעה, ולא בהכרח מה שאכלת.`}
+            primary="אתקן את הכמות"
+            onPrimary={() => setQtyWarn(false)}
+            secondary={`אכלתי ${chosen.grams} ${unitLabelFor(chosen.unit)}`}
+            onSecondary={() => { setQtyWarn(false); logChosen(); }}
+          />
+        )}
+        {exitWarn && (
+          <AddAsk
+            id="recexit"
+            z={70}
+            title="את יוצאת בלי לשמור"
+            body={'המנה שבחרת עדיין לא נוספה ליומן. כדי לשמור אותה יש להקיש על "הוסיפי ליומן".'}
+            primary="חזרה"
+            onPrimary={() => setExitWarn(false)}
+            secondary="יציאה בלי לשמור"
+            onSecondary={() => { setExitWarn(false); setChosen(null); }}
+          />
         )}
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
           <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(input); } }} disabled={loading} rows={1} placeholder={loading ? "רגע, חושבת…" : "כתבי מה בא לך…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: loading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
@@ -6901,6 +6955,7 @@ export default function App() {
   // favourites views). Rather than lift all of them, it hands us a closer that shuts one
   // level and says whether it took the press.
   const contentBackRef = useRef(null);
+  const recBackRef = useRef(null);
   // אותו דבר בתוך חלון הוספת המזון: חיפוש, האחרונים והמועדפים, ומסך הכמות הם
   // שכבות, ולחיצה על חזור סוגרת אחת מהן ולא את החלון כולו.
   const addBackRef = useRef(null);
@@ -7142,6 +7197,11 @@ export default function App() {
         try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
       }
       else if (modalRef.current) setModal(null);
+      else if (sheetRef.current === "recommend" && recBackRef.current && recBackRef.current()) {
+        // שכבה בתוך "מה כדאי לאכול" נסגרה והמסך עצמו נשאר פתוח, ולכן דוחפים כאן
+        // את הרשומה הבאה, בדיוק כמו בחלון ההוספה ובמודול התוכן.
+        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+      }
       else if (sheetRef.current === "content" && contentBackRef.current && contentBackRef.current()) {
         // A level inside the content module closed and the sheet itself is still open, so
         // no state of ours changed and the effect above will not run. Push the next entry
@@ -7757,7 +7817,7 @@ export default function App() {
             {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
             {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
-            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} />}
+            {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} backRef={recBackRef} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
             {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
             {sheet === "lossStop" && <LossStopSheet onAck={ackLossStop} />}

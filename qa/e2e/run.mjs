@@ -1993,6 +1993,83 @@ const CHECKS = [
       return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : `הכפתור ב-${r.btnBottom} מתוך ${r.frameH}, ונסגר בהקשה` };
     },
   },
+  {
+    // רון, 9 בספטמבר 2026: "כששמתי במה כדאי לאכול בחרתי באפשרות לא קיבלתי שום דבר
+    // שקופץ למרות שלא שיניתי את הכמות." שני הצדדים באותו תרחיש בכוונה, כי חלונית
+    // שקופצת תמיד נראית בדיוק כמו חלונית שאינה קופצת אף פעם. ובאותה הרצה גם
+    // כפתור החזרה, שסגר עד עכשיו את כל המסך ומחק איתו את השיחה.
+    name: "מה כדאי לאכול: הכמות שלא נגעו בה, היציאה, וחזרה שסוגרת שכבה אחת",
+    async run(browser, device) {
+      const answer = { intro: "הנה רעיון", options: [{ name: "חביתה עם ירקות בדיקה", desc: "מהיר וקל", unit: "g", grams: 150, kcal: 300, p: 20, f: 18, c: 8 }], note: "" };
+      const { context, page, errors } = await openApp(browser, device, { day: 15, aiAnswer: answer });
+      const bad = [];
+      const txt = () => page.evaluate(() => document.body.innerText);
+      const ask = (id) => page.locator(`[data-ask="${id}"]`);
+
+      const toOptions = async () => {
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=מה כדאי לאכול").first().click();
+        await page.waitForTimeout(700);
+        const go = page.getByRole("button", { name: "הבנתי, בואי נתחיל" });
+        if (await go.count()) { await go.first().click(); await page.waitForTimeout(400); }
+        await page.locator("textarea").first().fill("משהו קל");
+        await page.getByRole("button", { name: /קבלי המלצות/ }).first().click();
+        await page.waitForTimeout(900);
+      };
+      const pick = async () => { await page.locator("text=בחרי את זו").first().click(); await page.waitForTimeout(500); };
+      const inBox = async () => (await txt()).includes("אפשר לתקן את הכמות לפני שנרשום");
+      const inSheet = async () => (await txt()).includes("חביתה עם ירקות בדיקה");
+
+      await toOptions();
+      if (!(await page.locator("text=בחרי את זו").count())) bad.push("האופציה לא הוצגה");
+
+      // א. כפתור החזרה: שואל, ואינו סוגר את המסך עם השיחה שבתוכו.
+      await pick();
+      await page.goBack();
+      await page.waitForTimeout(600);
+      if (!(await ask("recexit").count())) bad.push("חזרה מתוך חלונית הכמות לא שאלה כלום");
+      await ask("recexit").getByRole("button", { name: "חזרה" }).click().catch(() => {});
+      await page.waitForTimeout(400);
+      if (!(await inBox())) bad.push('"חזרה" לא השאירה אותה בחלונית הכמות');
+      await page.goBack();
+      await page.waitForTimeout(600);
+      if (await inBox()) bad.push("הלחיצה השנייה לא סגרה את חלונית הכמות");
+      if (!(await inSheet())) bad.push("הלחיצה סגרה את כל המסך והשיחה נעלמה");
+
+      // ב. "ביטול" הוא בחירה מפורשת ואינו שואל.
+      await pick();
+      await page.getByRole("button", { name: "ביטול" }).first().click();
+      await page.waitForTimeout(400);
+      if (await ask("recexit").count()) bad.push('"ביטול" שאל אף שהוא בחירה מפורשת');
+      if (await inBox()) bad.push('"ביטול" לא סגר את חלונית הכמות');
+
+      // ג. הכמות שלא נגעו בה.
+      await pick();
+      await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+      await page.waitForTimeout(500);
+      if (!(await ask("recqty").count())) bad.push("החלונית לא קפצה אף שלא נגעה בכמות");
+      else if (!(await ask("recqty").innerText()).includes("150")) bad.push("החלונית אינה נוקבת בכמות שהוצעה");
+      await ask("recqty").getByRole("button", { name: "אתקן את הכמות" }).click().catch(() => {});
+      await page.waitForTimeout(400);
+      if (!(await inBox())) bad.push('"אתקן את הכמות" לא החזיר אותה למסך');
+
+      // ד. ואחרי שנגעה, אין חלונית, והמנה נכנסת ליומן.
+      await page.locator("text=אפשר לתקן את הכמות לפני שנרשום").locator("xpath=../..").getByText("+", { exact: true }).click().catch(async () => {
+        await page.getByRole("button", { name: "+", exact: true }).last().click();
+      });
+      await page.waitForTimeout(400);
+      await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+      await page.waitForTimeout(800);
+      if (await ask("recqty").count()) bad.push("החלונית קפצה אף שהיא כן שינתה את הכמות");
+      const diary = await txt();
+      if (!diary.includes("חביתה עם ירקות בדיקה")) bad.push("המנה לא נוספה ליומן");
+
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "שאלה, לא שאלה על ביטול, ונסגרה שכבה אחת" };
+    },
+  },
 ];
 
 /* ---------- run ---------- */

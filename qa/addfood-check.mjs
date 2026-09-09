@@ -151,7 +151,10 @@ check("מה שרשמת בשיחה עדיין לא נוסף ליומן", src.incl
 check("ומפנה לכפתור בשמו האמיתי", src.includes('להקיש על "הוסיפי ליומן" שבתחתית הרשימה'));
 check("ואינו מפנה לכפתור שמירה שאינו קיים", !/כפתור השמירה/.test(src));
 check("והכפתור עצמו עדיין נקרא כך", /<Btn onClick=\{doCommit\}>[\s\S]{0,120}הוסיפי ליומן<\/Btn>/.test(src));
-check("אותה כותרת לשתי ההודעות", (src.match(/title="את יוצאת בלי לשמור"/g) || []).length === 1);
+// מ-v6.92 אותה כותרת קיימת גם ב"מה כדאי לאכול", ולכן הספירה כאן היא בתוך חלון
+// ההוספה בלבד: הודעה אחת לשני הגופים, זה שנבחר מזון וזה של שיחת ה-AI.
+const addBody = src.slice(src.indexOf("function AddModal("), src.indexOf("\nfunction ", src.indexOf("function AddModal(") + 10));
+check("אותה כותרת לשתי ההודעות", (addBody.match(/title="את יוצאת בלי לשמור"/g) || []).length === 1);
 check("ואין מקף ארוך בהודעה החדשה", !/[\u2013\u2014]/.test("מה שרשמת בשיחה עדיין לא נוסף ליומן."));
 
 console.log("\nהקופי, כפי שרון אישר");
@@ -163,7 +166,8 @@ check("את יוצאת בלי לשמור", src.includes('title="את יוצאת 
 check("ואינו מפנה ל\"סיום\" כאילו הוא שומר", !/כדי לשמור אותו[^"]*סיום/.test(src));
 check("אלא לכפתור ההוספה", src.includes("כדי לשמור אותו יש להקיש על כפתור ההוספה שבתחתית מסך הכמות."));
 check("אין מקף ארוך בשתי החלוניות", !/[\u2013\u2014]/.test((src.match(/function AddAsk[\s\S]{0,1200}/) || [""])[0]));
-check("ושתיהן עוברות דרך רכיב אחד", (src.match(/<AddAsk/g) || []).length === 2 && /function AddAsk\(/.test(src));
+// שתיים כאן, ושתיים ב"מה כדאי לאכול" מ-v6.92, וכולן דרך אותו רכיב.
+check("ושתיהן עוברות דרך רכיב אחד", (addBody.match(/<AddAsk/g) || []).length === 2 && (src.match(/<AddAsk/g) || []).length === 4 && /function AddAsk\(/.test(src));
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
