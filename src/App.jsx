@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.94";
+const VERSION = "6.95";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4744,10 +4744,15 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
 // scope means it comes back when the app is reloaded. Asking her the same thing before
 // every single question was the complaint.
 let recIntroSeen = false;
+// **השיחה נזכרת כל עוד האפליקציה פתוחה.** רון, 9 בספטמבר 2026: "מקבל המלצה, לא
+// לוחץ על שום המלצה, יוצא החוצה והשיחה נמחקה." המסך השני, "ספרי לי מה אכלת",
+// כבר עושה בדיוק את זה מ-v4.81 דרך aiSession, וכאן זה מעולם לא הוכנס.
+// נמחק ברגע שהיא באמת רשמה מנה ליומן, כי אז השיחה הסתיימה.
+let recSession = null;
 
 function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose, onGoProfile, backRef }) {
-  const [stage, setStage] = useState(recIntroSeen ? "confirm" : "intro");
-  const [msgs, setMsgs] = useState([]);
+  const [stage, setStage] = useState(recSession ? recSession.stage : (recIntroSeen ? "confirm" : "intro"));
+  const [msgs, setMsgs] = useState(() => (recSession && recSession.msgs) || []);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
@@ -4767,7 +4772,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
   // Every answer is kept, not just the latest: she may scroll back and take an idea from
   // an earlier round after seeing the newer ones.
-  const [replies, setReplies] = useState([]);
+  const [replies, setReplies] = useState(() => (recSession && recSession.replies) || []);
   const lastAnswerRef = useRef(null);
   const listRef = useRef(null);
   const roundsRef = useRef(0);
@@ -4813,6 +4818,9 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   const avoidAll = [...allergies, ...customSens].filter(Boolean);
 
+  // נזכר כל עוד האפליקציה פתוחה, בדיוק כמו aiSession במסך השני. יציאה בטעות
+  // אינה מוחקת את הרעיונות, והם חוזרים בפתיחה הבאה.
+  useEffect(() => { if (stage === "chat") recSession = { stage, msgs, replies }; }, [stage, msgs, replies]);
   const run = async (history, isRetry) => {
     setLoading(true); setErr(false); setBadAnswer(false);
     const r = await aiMealChat(history, ctx);
@@ -4941,6 +4949,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   });
   const logChosen = () => {
     if (!chosen) return;
+    recSession = null; // נרשמה מנה ליומן, ולכן השיחה הסתיימה והבאה מתחילה נקייה
     const v = scaled(chosen);
     onLog([{ meal: chosen.meal, name: chosen.name, g: chosen.grams, unit: chosen.unit || "g", source: "estimated", kcal: v.kcal, p: v.p, f: v.f, c: v.c, servingG: chosen.grams || 1 }]);
     setChosen(null);

@@ -2129,6 +2129,59 @@ const CHECKS = [
       return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "שלה נשאר 112, ומה שלא נמסר עודכן ל-250" };
     },
   },
+  {
+    // רון, 9 בספטמבר 2026: "מקבל המלצה, לא לוחץ על שום המלצה, יוצא החוצה והשיחה
+    // נמחקה." שני הצדדים באותה הרצה, כי זיכרון שאינו נמחק לעולם נראה בדיוק כמו
+    // זיכרון שעובד: השיחה חוזרת אחרי יציאה, ומתאפסת אחרי שנרשמה מנה ליומן.
+    name: "השיחה במה כדאי לאכול חוזרת אחרי יציאה, ומתאפסת אחרי שנרשמה מנה",
+    async run(browser, device) {
+      const answer = { intro: "הנה רעיון", options: [{ name: "חביתה זכורה בדיקה", desc: "מהיר וקל", unit: "g", grams: 150, kcal: 300, p: 20, f: 18, c: 8 }], note: "" };
+      const { context, page, errors } = await openApp(browser, device, { day: 15, aiAnswer: answer });
+      const bad = [];
+      const txt = () => page.evaluate(() => document.body.innerText);
+      const openSheet = async () => {
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=מה כדאי לאכול").first().click();
+        await page.waitForTimeout(700);
+      };
+      await openSheet();
+      const go = page.getByRole("button", { name: "הבנתי, בואי נתחיל" });
+      if (await go.count()) { await go.first().click(); await page.waitForTimeout(400); }
+      await page.locator("textarea").first().fill("משהו קל");
+      await page.getByRole("button", { name: /קבלי המלצות/ }).first().click();
+      await page.waitForTimeout(900);
+      if (!(await txt()).includes("חביתה זכורה בדיקה")) bad.push("הרעיון לא הוצג");
+
+      // א. יוצאים בלי לגעת בשום רעיון, וחוזרים. היציאה היא הקשה על האזור הכהה
+      // שמעל המסך, כי לכפתור ה-✕ של המסכים הנשלפים אין תווית שאפשר לתפוס בה.
+      await page.mouse.click(Math.round(device.viewport.width / 2), 40);
+      await page.waitForTimeout(600);
+      if ((await txt()).includes("חביתה זכורה בדיקה")) bad.push("המסך לא נסגר");
+      await openSheet();
+      if (!(await txt()).includes("חביתה זכורה בדיקה")) bad.push("השיחה נמחקה ביציאה");
+
+      // ב. רושמים מנה ליומן, ואז השיחה הבאה מתחילה נקייה.
+      await page.locator("text=בחרי את זו").first().click();
+      await page.waitForTimeout(500);
+      await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+      await page.waitForTimeout(500);
+      const ask = page.locator('[data-ask="recqty"]');
+      if (await ask.count()) { await ask.getByRole("button", { name: /^אכלתי / }).click(); await page.waitForTimeout(900); }
+      // ההוספה ליומן מקפיצה את "לשמור למועדפים?", והיא חוסמת את המסך עד שעונים לה.
+      const no = page.getByRole("button", { name: /לא תודה/ });
+      if (await no.count()) { await no.first().click(); await page.waitForTimeout(500); }
+      const diary = await txt();
+      if (!diary.includes("חביתה זכורה בדיקה")) bad.push("המנה לא נוספה ליומן");
+      await openSheet();
+      const after = await txt();
+      if (after.includes("הנה רעיון")) bad.push("השיחה הישנה חזרה אחרי שנרשמה מנה");
+
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "חזרה אחרי יציאה, והתאפסה אחרי הרישום" };
+    },
+  },
 ];
 
 /* ---------- run ---------- */

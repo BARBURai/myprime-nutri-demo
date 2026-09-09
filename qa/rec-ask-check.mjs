@@ -77,6 +77,19 @@ check("ומנגנון החזרה בודק אותו לפני שהוא סוגר א
 const order = src.indexOf('sheetRef.current === "recommend"') < src.indexOf('else if (sheetRef.current) { setSheet(null)');
 check("והבדיקה הזאת קודמת לסגירת המסך", order);
 
+console.log("\nהשיחה נזכרת כל עוד האפליקציה פתוחה");
+// רון, 9 בספטמבר 2026: "מקבל המלצה, לא לוחץ על שום המלצה, יוצא החוצה והשיחה נמחקה."
+// המסך השני עושה בדיוק את זה מ-v4.81, וכאן זה מעולם לא הוכנס.
+check("יש זיכרון ברמת המודול, ולא בתוך הרכיב", /^let recSession = null;$/m.test(src));
+check("השלב נטען ממנו", /useState\(recSession \? recSession\.stage : \(recIntroSeen \? "confirm" : "intro"\)\)/.test(rec));
+check("וגם השיחה עצמה", /useState\(\(\) => \(recSession && recSession\.msgs\) \|\| \[\]\)/.test(rec));
+check("וגם כרטיסי הרעיונות שעל המסך", /useState\(\(\) => \(recSession && recSession\.replies\) \|\| \[\]\)/.test(rec));
+check("והוא נשמר בכל שינוי", /if \(stage === "chat"\) recSession = \{ stage, msgs, replies \};/.test(rec));
+// אחרי שהמנה נרשמה ליומן השיחה הסתיימה, ואחרת הרעיונות הישנים היו חוזרים מחר.
+check("ונמחק ברגע שנרשמה מנה ליומן", /recSession = null;[\s\S]{0,80}const v = scaled\(chosen\);/.test(rec));
+check("ואינו נוגע ב-replies של האפליקציה עצמה",
+  (src.match(/const \[replies, setReplies\] = useState\(\[\]\);/g) || []).length === 1);
+
 console.log("\nמה שלא זז");
 check("חלונית הכמות של הוספת המזון עדיין קיימת", /id="qty"/.test(src));
 check("וחלונית היציאה שלה", /id="exit"/.test(src));
