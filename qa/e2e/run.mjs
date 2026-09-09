@@ -85,11 +85,11 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false, replies = null, aiAnswer = null, catalog = null }) {
+async function stubApi(context, { startDate, glow = false, glowFull = false, replies = null, aiAnswer = null, catalog = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, ...(replies ? { replies } : {}) });
+    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, glowFull, ...(replies ? { replies } : {}) });
     // ברירת המחדל היא תשובה שלא סיימה, כדי ששום תרחיש אחר לא יקבל בטעות כרטיס
     // תוצאות. תרחיש שצריך שיחה גמורה מוסר aiAnswer משלו.
     if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify(aiAnswer || { reply: "רשמתי לך", done: false, items: [] }) }] });
@@ -114,12 +114,12 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null, replies = null, aiAnswer = null, catalog = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, clock = null, replies = null, aiAnswer = null, catalog = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow, replies, aiAnswer, catalog });
+  await stubApi(context, { startDate, glow, glowFull, replies, aiAnswer, catalog });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
@@ -2180,6 +2180,56 @@ const CHECKS = [
       if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
       await context.close();
       return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "חזרה אחרי יציאה, והתאפסה אחרי הרישום" };
+    },
+  },
+  {
+    // קורס האיפור המלא, למי שמסומנת בעמודה GLOW-FULL. שני הצדדים באותה הרצה,
+    // כי מסך שמראה תמיד את הקורס נראה בדיוק כמו מסך שמסנן נכון: מי שיש לה רק
+    // את הבונוס ממשיכה לראות ארבעה שיעורים ואת השורה בכרטיס היומן, ומי שיש לה
+    // את המלא רואה את הסעיפים, את כל השיעורים, ובלי שורה ביומן.
+    name: "קורס Glow המלא מוצג בסעיפים, ולמי שיש רק בונוס שום דבר לא משתנה",
+    async run(browser, device) {
+      const bad = [];
+      // א. רק הבונוס.
+      {
+        const { context, page, errors } = await openApp(browser, device, { glow: true });
+        const card = await page.evaluate(() => document.body.innerText);
+        if (!card.includes("בונוס: 3 שיעורי Glow")) bad.push("שורת הבונוס חסרה בכרטיס היומן");
+        await page.getByText("הסרטונים שלך היום").first().click().catch(() => {});
+        await page.waitForTimeout(700);
+        await page.locator("text=שיעורי הבונוס שלך במיי פריים Glow").first().click().catch(() => {});
+        await page.waitForTimeout(600);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("בונוס: שלושה שיעורי איפור")) bad.push("כותרת הבונוס חסרה");
+        if (t.includes("הקורס המלא")) bad.push("הקורס המלא הוצג למי שיש לה רק בונוס");
+        if (t.includes("שיעור 13 - סומק")) bad.push("שיעור מהקורס המלא הוצג למי שיש לה רק בונוס");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+      // ב. הקורס המלא.
+      {
+        const { context, page, errors } = await openApp(browser, device, { glow: true, glowFull: true });
+        const card = await page.evaluate(() => document.body.innerText);
+        if (card.includes("בונוס: 3 שיעורי Glow")) bad.push("שורת הבונוס נשארה ביומן למי שיש לה את המלא");
+        await page.getByText("הסרטונים שלך היום").first().click().catch(() => {});
+        await page.waitForTimeout(700);
+        const row = page.locator("text=קורס האיפור המלא שלך במיי פריים Glow");
+        if (!(await row.count())) bad.push("השורה של הקורס המלא אינה מוצגת");
+        await row.first().click().catch(() => {});
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("מיי פריים Glow - הקורס המלא")) bad.push("כותרת הקורס המלא חסרה");
+        for (const sec of ["להתחיל מהבסיס", "פנים", "עיניים", "לחיים", "שפתיים", "שיער", "מפתחות לאהבה עצמית"]) {
+          if (!t.includes(sec)) bad.push("חסר הסעיף " + sec);
+        }
+        for (const les of ["שיעור 2 - עבודה עם גוואשה", "שיעור 13 - סומק", "מפתח 4 - תבחרי בך"]) {
+          if (!t.includes(les)) bad.push("חסר השיעור " + les);
+        }
+        if (t.includes("בונוס: שלושה שיעורי איפור")) bad.push("כותרת הבונוס הוצגה למי שיש לה את המלא");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "בונוס בלבד ללא שינוי, והמלא בשמונה סעיפים" };
     },
   },
 ];
