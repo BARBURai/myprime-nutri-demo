@@ -139,7 +139,11 @@ check("ושמונת הסעיפים נושאים אותם", (glow.match(/icon: "/
 check("והם עוברים לרכיב ולא נשארים בקובץ", /title: sec\.title, icon: sec\.icon \|\| "", sub: sec\.sub \|\| ""/.test(glow));
 check("הסעיף נפתח בהקשה", /setOpenSec\(\(o\) => \(\{ \.\.\.o, \[sec\.title\]: !o\[sec\.title\] \}\)\)/.test(mod));
 check("וסגור כברירת מחדל", /const \[openSec, setOpenSec\] = useState\(\{\}\);/.test(mod));
-check("השיעורים מרונדרים רק כשהסעיף פתוח", /\{open && <div style=\{\{ padding: "0 10px 6px" \}\}>\{sec\.idx\.map/.test(mod));
+check("השיעורים מרונדרים רק כשהסעיף פתוח", /\{open && <div style=\{\{ padding: "4px 10px 6px"[\s\S]{0,80}\{sec\.idx\.map/.test(mod));
+// רון: "חץ למטה וחץ גדול יותר ועבה", ו"הצבע יותר בולט וחזק".
+check("החץ הוא חץ למטה, גדול ועבה", /<ChevronDown size=\{28\} strokeWidth=\{2\.75\}/.test(mod));
+check("והוא מסתובב כשהסעיף נפתח", /transform: open \? "rotate\(180deg\)" : "none"/.test(mod));
+check("הכותרת צבועה תמיד ולא רק כשהיא פתוחה", /cursor: "pointer", background: C\.brandBg \}\}>/.test(mod));
 // רון: "לא צריך לרשום מספר שיעורים."
 check("ואין מספר שיעורים בשום מקום", !/שיעורים`/.test(mod) && !/sec\.idx\.length/.test(mod));
 check("כפתור החזרה משיעור יודע לחזור לשם", /origin === "glow" \? "חזרה לשיעורי Glow"/.test(mod));

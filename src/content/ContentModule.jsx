@@ -692,17 +692,20 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
             ? GLOW_FULL_SECTIONS.map((sec) => {
                 const open = !!openSec[sec.title];
                 return (
-                  <div key={sec.title} style={{ border: `1px solid ${C.line}`, borderRadius: 14, marginBottom: 10, overflow: "hidden", background: C.panel }}>
+                  // רון: "לא מספיק ברור שאלה ספריות שצריך ללחוץ והן נפתחות. אולי גם
+                  // לשנות את הצבע ליותר בולט וחזק, ו**חץ למטה** גדול ועבה." ולכן הכותרת
+                  // צבועה תמיד בצבע המותג, ולא רק כשהיא פתוחה, והחץ מסתובב בפתיחה.
+                  <div key={sec.title} style={{ border: `1.5px solid ${C.brand}`, borderRadius: 14, marginBottom: 12, overflow: "hidden", background: C.panel, boxShadow: "0 1px 4px rgba(58,43,48,0.08)" }}>
                     <div role="button" onClick={() => setOpenSec((o) => ({ ...o, [sec.title]: !o[sec.title] }))}
-                      style={{ display: "flex", alignItems: "center", gap: 11, padding: "13px 13px", cursor: "pointer", background: open ? C.brandBg : C.panel }}>
-                      <span style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{sec.icon}</span>
+                      style={{ display: "flex", alignItems: "center", gap: 11, padding: "15px 14px", cursor: "pointer", background: C.brandBg }}>
+                      <span style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>{sec.icon}</span>
                       <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.3 }}>{sec.title}</div>
-                        {sec.sub && <div style={{ fontSize: 13, color: C.sub, marginTop: 2, lineHeight: 1.4 }}>{sec.sub}</div>}
+                        <div style={{ fontSize: 19, fontWeight: 800, color: C.brandD, lineHeight: 1.3 }}>{sec.title}</div>
+                        {sec.sub && <div style={{ fontSize: 13.5, color: C.sub, marginTop: 3, lineHeight: 1.4 }}>{sec.sub}</div>}
                       </div>
-                      <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0, transform: open ? "rotate(-90deg)" : "none", transition: "transform .15s" }} />
+                      <ChevronDown size={28} strokeWidth={2.75} color={C.brandD} style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform .18s" }} />
                     </div>
-                    {open && <div style={{ padding: "0 10px 6px" }}>{sec.idx.map((i) => <LessonRow key={"g" + i} w={0} d={0} l={GLOW_FULL_DAY.lessons[i]} i={i} from="glow" />)}</div>}
+                    {open && <div style={{ padding: "4px 10px 6px", borderTop: `1.5px solid ${C.brand}` }}>{sec.idx.map((i) => <LessonRow key={"g" + i} w={0} d={0} l={GLOW_FULL_DAY.lessons[i]} i={i} from="glow" />)}</div>}
                   </div>
                 );
               })
