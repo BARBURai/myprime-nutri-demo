@@ -82,7 +82,7 @@ console.log("\nיציאה בלי לשמור");
 // הקשה מחוץ לחלון, גם ✕, וגם את כפתור החזרה של הטלפון.
 check("הכלל: הגיעה למסך הכמות ולא הוסיפה כלום", /const unsavedPick = \(\) => reachedQty && !exitAsked && !state\.editEntry && addedKeys\.length === 0;/.test(src));
 check("הקשה מחוץ לחלון עוברת דרך השומר", /zIndex: 20 \}\} onClick=\{guardedClose\}/.test(src));
-check("וכפתור החזרה של הטלפון גם הוא", /if \(unsavedPick\(\)\) \{ setExitAsked\(true\); setExitGoBack\(!!back\); setExitWarn\(true\); return true; \}/.test(src));
+check("וכפתור החזרה של הטלפון גם הוא", /if \(unsavedAny\(\)\) \{ askExit\(!!back\); return true; \}/.test(src));
 check("וכשאין מה לאבד הוא מדווח שלא בלע את הלחיצה", /if \(back\) \{ back\(\); return true; \}\s*\n\s*return false;/.test(src));
 check("בעריכת פריט קיים לא שואלים", /reachedQty && !exitAsked && !state\.editEntry/.test(src));
 
@@ -99,7 +99,8 @@ check("והדגל נדלק ברגע שנשאלה", /setQtyAsked\(true\); setQtyW
 // מזון חדש הוא שאלה חדשה, ולכן שם היא כן נשאלת שוב.
 check("אבל כן חוזרת על מזון אחר", /setQtyTouched\(false\); setQtyText\(null\); setQtyAsked\(false\); setReachedQty\(true\)/.test(src));
 check("חלונית היציאה אינה חוזרת", /reachedQty && !exitAsked && !state\.editEntry/.test(src));
-check("והדגל שלה נדלק בשתי דרכי היציאה", (src.match(/setExitAsked\(true\); setExitGoBack\((?:false|!!back)\); setExitWarn\(true\)/g) || []).length === 2);
+// שתי דרכי היציאה עוברות דרך פונקציה אחת, ולכן אין שני מסלולים שיכולים להתפצל.
+check("והדגל שלה נדלק בשתי דרכי היציאה", /const askExit = \(goBack\) => \{ setExitAsked\(true\); setExitAi\(unsavedAi\(\)\); setExitGoBack\(goBack\); setExitWarn\(true\); \};/.test(src) && (src.match(/askExit\((?:false|!!back)\)/g) || []).length === 2);
 
 console.log("\nשדה ריק אינו בחירה, ואינו קופץ לגרם אחד");
 // רון תפס את זה בבננה: 118 ג׳, הקשה על המספר מסמנת את כל שלוש הספרות, ומקש
@@ -122,13 +123,36 @@ console.log("\nכפתור החזרה שואל בלחיצה הראשונה, ופ�
 // רון בדק בסמסונג ולא ראה את החלונית, כי ממסך הכמות היא דרשה שלוש לחיצות:
 // לרשימה, לבחירת הדרך, ורק אז החוצה. אפשרות ג שהוא בחר: שואלים בראשונה,
 // ופעם אחת לכל פתיחה של החלון.
-check("האזהרה קודמת לחזרה עצמה", src.indexOf("if (unsavedPick()) { setExitAsked(true); setExitGoBack(!!back); setExitWarn(true); return true; }") < src.indexOf("if (back) { back(); return true; }\n      return false;"));
+check("האזהרה קודמת לחזרה עצמה", src.indexOf("if (unsavedAny()) { askExit(!!back); return true; }") < src.indexOf("if (back) { back(); return true; }\n      return false;"));
 check("ואישור היציאה ממשיך את החזרה שנקטעה", /if \(exitGoBack\) \{ setExitGoBack\(false\); back && back\(\); \} else close\(\);/.test(src));
 check("ולכן שכבה אחת בכל לחיצה נשמרת", /const back = step === "qty" && !state\.editEntry \? \(\) => setStep\(qtyOrigin\)/.test(src));
 // חלונית פתוחה נסגרת קודם, אחרת החזרה מזיזה את המסך מתחתיה.
 check("חזרה סוגרת קודם חלונית פתוחה", /if \(qtyWarn\) \{ setQtyWarn\(false\); return true; \}/.test(src) && /if \(exitWarn\) \{ setExitWarn\(false\); return true; \}/.test(src));
 // הקשה מחוץ לחלון היא יציאה אמיתית, ולכן שם האישור סוגר ולא חוזר שכבה.
-check("הקשה מחוץ לחלון עדיין סוגרת", /const guardedClose = \(\) => \{ if \(unsavedPick\(\)\) \{ setExitAsked\(true\); setExitGoBack\(false\); setExitWarn\(true\); return; \} close\(\); \};/.test(src));
+check("הקשה מחוץ לחלון עדיין סוגרת", /const guardedClose = \(\) => \{ if \(unsavedAny\(\)\) \{ askExit\(false\); return; \} close\(\); \};/.test(src));
+
+console.log("\nושיחת ה-AI, שנראית שמורה ואינה");
+// רון: "קדימה". היא מסיימת שיחה שלמה, רואה את הפריטים עם הקלוריות, ומה שמכניס
+// אותם ליומן הוא כפתור אחד שמתחתיהם. **השיחה עצמה אינה הולכת לאיבוד כל עוד
+// האפליקציה פתוחה (v4.81), אבל היא אינה ביומן**, וסגירה של האפליקציה מוחקת אותה.
+check("יש כלל נפרד לשיחה שלא נשמרה", /const unsavedAi = \(\) => !!\(aiDoneItems && aiDoneItems\.length\) && !exitAsked && !state\.editEntry;/.test(src));
+check("ושתי דרכי היציאה בודקות את שניהם", /const unsavedAny = \(\) => unsavedPick\(\) \|\| unsavedAi\(\);/.test(src));
+// שיחה שעדיין באמצע אינה נעצרת: אין מה לשמור ממנה, והיא ממילא נזכרת.
+check("שיחה בלי רשימת פריטים אינה עוצרת אותה", /aiDoneItems && aiDoneItems\.length/.test(src));
+check("ובעריכת פריט קיים לא שואלים גם כאן", /unsavedAi = \(\)[^\n]*!state\.editEntry/.test(src));
+// שתי הודעות, ולכן חייב להיות משהו שבוחר ביניהן.
+check("ההודעה נבחרת לפי מה שלא נשמר", /const \[exitAi, setExitAi\] = useState\(false\);/.test(src) && /body=\{exitAi\n?\s*\?/.test(src));
+check("ונקבעת ברגע השאלה ולא אחר כך", /setExitAi\(unsavedAi\(\)\)/.test(src));
+
+console.log("\nהקופי של שיחת ה-AI");
+check("מה שרשמת בשיחה עדיין לא נוסף ליומן", src.includes("מה שרשמת בשיחה עדיין לא נוסף ליומן."));
+// **הכפתור באמת נקרא "הוסיפי ליומן" ולא "שמירה".** הנוסח שהוצע דיבר על כפתור
+// שמירה, וזה היה שולח נשים לחפש משהו שלא קיים - בדיוק הטעות שתוקנה ב-v6.89.
+check("ומפנה לכפתור בשמו האמיתי", src.includes('להקיש על "הוסיפי ליומן" שבתחתית הרשימה'));
+check("ואינו מפנה לכפתור שמירה שאינו קיים", !/כפתור השמירה/.test(src));
+check("והכפתור עצמו עדיין נקרא כך", /<Btn onClick=\{doCommit\}>[\s\S]{0,120}הוסיפי ליומן<\/Btn>/.test(src));
+check("אותה כותרת לשתי ההודעות", (src.match(/title="את יוצאת בלי לשמור"/g) || []).length === 1);
+check("ואין מקף ארוך בהודעה החדשה", !/[\u2013\u2014]/.test("מה שרשמת בשיחה עדיין לא נוסף ליומן."));
 
 console.log("\nהקופי, כפי שרון אישר");
 check("חשוב למלא את המשקל", src.includes('title="חשוב למלא את המשקל של המזון שאכלת"'));

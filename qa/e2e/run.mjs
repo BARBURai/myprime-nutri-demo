@@ -85,12 +85,14 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false, replies = null }) {
+async function stubApi(context, { startDate, glow = false, replies = null, aiAnswer = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, ...(replies ? { replies } : {}) });
-    if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify({ reply: "רשמתי לך", done: false, items: [] }) }] });
+    // ברירת המחדל היא תשובה שלא סיימה, כדי ששום תרחיש אחר לא יקבל בטעות כרטיס
+    // תוצאות. תרחיש שצריך שיחה גמורה מוסר aiAnswer משלו.
+    if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify(aiAnswer || { reply: "רשמתי לך", done: false, items: [] }) }] });
     if (url.includes("/api/catalog") || url.includes("/api/il-food")) return json({ items: [] });
     return json({ ok: true });
   });
@@ -108,12 +110,12 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null, replies = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null, replies = null, aiAnswer = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow, replies });
+  await stubApi(context, { startDate, glow, replies, aiAnswer });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
@@ -749,6 +751,76 @@ const CHECKS = [
       return {
         ok: bad.length === 0 && errs.length === 0,
         detail: bad.length ? bad.join(" · ") : `118 ← ריק ← 118 · הוקלד 70 · חזרה שאלה פעם אחת · שגיאות ${errs[0] || "אין"}`,
+      };
+    },
+  },
+  {
+    // רון, 9 בספטמבר 2026: "קדימה". היא מסיימת שיחה שלמה עם ה-AI, רואה על המסך
+    // את הפריטים עם הקלוריות, **וזה נראה כאילו זה כבר נשמר.** מה שמכניס אותם
+    // ליומן הוא כפתור אחד שמתחתיהם.
+    //
+    // ומה שנמדד לפני הבנייה, כי זה משנה את גודל הנזק: **השיחה עצמה אינה הולכת
+    // לאיבוד** כל עוד האפליקציה פתוחה, לפי v4.81, והכרטיס חוזר בפתיחה הבאה של
+    // החלון. מה שכן: הפריטים אינם ביומן, והיא אינה יודעת את זה.
+    //
+    // ובמסך ה-AI אין בכלל הקשה מחוץ לחלון, כי הוא במסך מלא. שתי דרכי היציאה
+    // היחידות שם הן ה-✕ וכפתור החזרה של הטלפון, ושתיהן נבדקות כאן.
+    name: "שיחת AI שלא נשמרה שואלת לפני היציאה, ולא נמחקת",
+    async run(browser, device) {
+      const answer = { reply: "רשמתי לך תפוח אחד", done: true, items: [{ name: "תפוח", grams: 180, kcal: 94, p: 0, f: 0, c: 25 }] };
+      const { context, page, errors } = await openApp(browser, device, { day: 15, aiAnswer: answer });
+      const openAi = async () => {
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator("text=ספרי לי מה אכלת").first().click();
+        await page.waitForTimeout(600);
+      };
+      const logLen = () => page.evaluate(() => (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []).length);
+      const bad = [];
+
+      await openAi();
+      await page.locator("textarea").fill("אכלתי תפוח");
+      await page.locator("textarea").press("Enter");
+      // ההשוואה מול מאגרי המזון מקבלת עד שבע שניות לפני שהיא נופלת חזרה להערכה.
+      await page.waitForTimeout(9000);
+      if (!(await page.locator("text=הוסיפי ליומן").count())) bad.push("כרטיס התוצאות לא הופיע");
+
+      // א. ה-✕. במסך ה-AI זו דרך היציאה הגלויה היחידה.
+      await page.locator('[aria-label="סגירה"]').first().click();
+      await page.waitForTimeout(600);
+      const askedOnClose = await page.locator('[data-ask="exit"]').count();
+      if (askedOnClose !== 1) bad.push("ה-✕ לא שאל");
+      const askText = (await page.locator('[data-ask="exit"]').innerText().catch(() => "")).replace(/\n/g, " ");
+      if (!askText.includes("בשיחה")) bad.push(`הוצגה ההודעה של מסך הכמות: "${askText.slice(0, 70)}"`);
+      if (!askText.includes("הוסיפי ליומן")) bad.push("ההודעה אינה מפנה לכפתור בשמו");
+
+      // "חזרה" משאירה אותה בשיחה, עם הכרטיס.
+      await page.locator('[data-ask="exit"] >> text=חזרה').click();
+      await page.waitForTimeout(400);
+      if (!(await page.locator("text=הוסיפי ליומן").count())) bad.push('"חזרה" הוציאה אותה מהשיחה');
+
+      // ב. ופעם אחת בלבד לכל פתיחה של החלון, כמו בצד השני.
+      await page.locator('[aria-label="סגירה"]').first().click();
+      await page.waitForTimeout(700);
+      if (await page.locator('[data-ask="exit"]').count()) bad.push("נשאלה פעמיים באותו ביקור");
+      if (await page.locator("textarea").count()) bad.push("החלון לא נסגר");
+      if ((await logLen()) !== 0) bad.push("נשמר ליומן בלי שהיא הקישה על ההוספה");
+
+      // ג. ומה שנמדד לפני הבנייה: השיחה חוזרת, ואפשר לשמור ממנה.
+      await openAi();
+      if (!(await page.locator("text=רשמתי לך תפוח אחד").count())) bad.push("השיחה לא חזרה");
+      if (!(await page.locator("text=הוסיפי ליומן").count())) bad.push("כרטיס התוצאות לא חזר");
+      await page.locator("text=הוסיפי ליומן").first().click();
+      await page.waitForTimeout(900);
+      if ((await logLen()) !== 1) bad.push("ההוספה מהכרטיס שחזר לא עבדה");
+
+      const errs = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: bad.length === 0 && errs.length === 0,
+        detail: bad.length ? bad.join(" · ") : `✕ שאל · הודעת השיחה · חזרה נשארה · לא נשאלה שוב · השיחה חזרה ונשמרה · שגיאות ${errs[0] || "אין"}`,
       };
     },
   },

@@ -3554,6 +3554,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [exitWarn, setExitWarn] = useState(false);
   // האם אישור היציאה ימשיך את החזרה שנקטעה (שכבה אחת אחורה) או יסגור את החלון.
   const [exitGoBack, setExitGoBack] = useState(false);
+  // איזו משתי ההודעות מוצגת: זו של מזון שנבחר, או זו של שיחת ה-AI.
+  const [exitAi, setExitAi] = useState(false);
   // כל חלונית שואלת פעם אחת בלבד. רון: "אם בלי לשנות שלא תקפוץ ההתראה כל הזמן,
   // תכניס אותה ללופ ותעצבן אותה." תפקידן להסב את תשומת ליבה פעם אחת, לא לנדנד:
   // מרגע שנשאלה, ההחלטה שלה. הראשון מתאפס בכל מזון חדש, כי זו שאלה אחרת.
@@ -3876,7 +3878,14 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   // כפתור החזרה של הטלפון, בלי לרדוף אחרי כל אחד מהם בנפרד.
   // בעריכת פריט קיים אין מה לאבד, ולכן שם לא שואלים.
   const unsavedPick = () => reachedQty && !exitAsked && !state.editEntry && addedKeys.length === 0;
-  const guardedClose = () => { if (unsavedPick()) { setExitAsked(true); setExitGoBack(false); setExitWarn(true); return; } close(); };
+  // ומה שהיא סיימה לספר ל-AI ועדיין לא הוסיפה. **הרשימה על המסך נראית שמורה ואינה:**
+  // היא מסיימת שיחה שלמה, רואה את הפריטים עם הקלוריות, ומה שמכניס אותם ליומן הוא
+  // כפתור אחד שמתחתיהם. השיחה עצמה אינה הולכת לאיבוד כל עוד האפליקציה פתוחה
+  // (v4.81), אבל היא אינה ביומן, וסגירה של האפליקציה כן מוחקת אותה.
+  const unsavedAi = () => !!(aiDoneItems && aiDoneItems.length) && !exitAsked && !state.editEntry;
+  const unsavedAny = () => unsavedPick() || unsavedAi();
+  const askExit = (goBack) => { setExitAsked(true); setExitAi(unsavedAi()); setExitGoBack(goBack); setExitWarn(true); };
+  const guardedClose = () => { if (unsavedAny()) { askExit(false); return; } close(); };
 
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
   const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
@@ -3899,7 +3908,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       // חלונית פתוחה נסגרת קודם. בלי זה החזרה הייתה מזיזה את המסך מתחתיה.
       if (qtyWarn) { setQtyWarn(false); return true; }
       if (exitWarn) { setExitWarn(false); return true; }
-      if (unsavedPick()) { setExitAsked(true); setExitGoBack(!!back); setExitWarn(true); return true; }
+      if (unsavedAny()) { askExit(!!back); return true; }
       if (back) { back(); return true; }
       return false;
     };
@@ -4361,7 +4370,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         <AddAsk
           id="exit"
           title="את יוצאת בלי לשמור"
-          body={'המזון שבחרת עדיין לא נוסף ליומן. כדי לשמור אותו יש להקיש על כפתור ההוספה שבתחתית מסך הכמות.'}
+          body={exitAi
+            ? 'מה שרשמת בשיחה עדיין לא נוסף ליומן. כדי לשמור אותו יש להקיש על "הוסיפי ליומן" שבתחתית הרשימה.'
+            : "המזון שבחרת עדיין לא נוסף ליומן. כדי לשמור אותו יש להקיש על כפתור ההוספה שבתחתית מסך הכמות."}
           primary="חזרה"
           onPrimary={() => setExitWarn(false)}
           secondary="יציאה בלי לשמור"
