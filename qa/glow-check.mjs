@@ -58,7 +58,9 @@ check("הכיתוב הקצר ביומן בדיוק כפי שאושר", glow.incl
 check("סימן השפתון נשאר בשורה שביומן ובשורה שבמסך התוכן", (mod.match(/GLOW_EMOJI/g) || []).length >= 2);
 // רון: "אתה יכול את Glow להחליף בלוגו שצירפתי, גם בכותרת וגם בטאב, לא צריך את האמוג׳י."
 check("הלוגו מוצג בכפתור שבסרגל", /lbl === null \? <img src=\{GLOW_LOGO\}/.test(mod));
-check("ובכותרת של המסך", /<img src=\{GLOW_LOGO\} alt="Glow" style=\{\{ height: 34/.test(mod));
+check("ובכותרת של המסך", /<img src=\{GLOW_LOGO\} alt="Glow" style=\{\{ height: 26/.test(mod));
+// רון: "בכפתור כשהוא לא דלוק קשה לראות אותו." אין עמעום, והבחירה מסומנת ברקע.
+check("והלוגו שבכפתור אינו מעומעם", !/opacity: view === id/.test(mod));
 // הכותרת עצמה לא נכתבה מחדש: היא מפוצלת סביב המילה Glow, והלוגו יושב במקומה.
 check("והכותרות שאושרו לא שוכתבו", /\(showFull \? GLOW_FULL_TITLE : GLOW_TITLE\)\.split\("Glow"\)/.test(mod));
 check("הקובץ עצמו קיים תחת public", (() => { try { return readFileSync(new URL("../public/glow-logo.png", import.meta.url)).length > 2000; } catch (e) { return false; } })());

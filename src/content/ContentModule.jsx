@@ -320,7 +320,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     return (
       <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 12, padding: 4, marginBottom: 14 }}>
         {tabs.map(([id, lbl]) => (
-          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: id === "glow" ? 0.72 : 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 4px", fontFamily: font, fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center", background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl === null ? <img src={GLOW_LOGO} alt="Glow" style={{ height: 19, width: "auto", display: "block", opacity: view === id ? 1 : 0.62 }} /> : lbl}</button>
+          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: id === "glow" ? 0.72 : 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 4px", fontFamily: font, fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center", background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl === null ? <img src={GLOW_LOGO} alt="Glow" style={{ height: 20, width: "auto", display: "block" }} /> : lbl}</button>
         ))}
       </div>
     );
@@ -694,7 +694,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
                 ולא לפניה. לכן היא מפוצלת סביב המילה ולא נכתבת מחדש. */}
             {(showFull ? GLOW_FULL_TITLE : GLOW_TITLE).split("Glow").map((part, k) => (
               <React.Fragment key={k}>
-                {k > 0 && <img src={GLOW_LOGO} alt="Glow" style={{ height: 34, width: "auto", display: "block" }} />}
+                {k > 0 && <img src={GLOW_LOGO} alt="Glow" style={{ height: 26, width: "auto", display: "block" }} />}
                 {part.trim() && <span style={{ fontSize: 19, fontWeight: 700, color: GLOW_C.ink, lineHeight: 1.4 }}>{part.trim()}</span>}
               </React.Fragment>
             ))}
