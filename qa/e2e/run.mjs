@@ -825,6 +825,75 @@ const CHECKS = [
     },
   },
   {
+    // משתתפת, 9 בספטמבר 2026: "כשמוסיפים ארוחה מהאחרונים והמועדפים שלי, כפתור
+    // back מעיף מהאפליקציה."
+    //
+    // שוחזר בדפדפן על הקוד שבייצור: היא מוסיפה מזון, קופצת השאלה "לשמור
+    // למועדפים?", **הלחיצה הראשונה על חזרה לא עושה כלום, והשנייה סוגרת את
+    // האפליקציה כשהחלונית עדיין על המסך.** החלוניות שחיות ברמת האפליקציה לא
+    // נחשבו שכבה, ורשומה מתה בהיסטוריה בלעה את הלחיצה הראשונה.
+    //
+    // שני הצדדים באותה הרצה: החלונית נסגרת בלחיצה, **ולפני כן החלון עצמו עדיין
+    // יורד שכבה בכל לחיצה** כפי שנקבע ב-v6.72, כדי שהתיקון לא ידרוס אותו.
+    name: "חזרה סוגרת את חלונית המועדפים, ואינה בולעת לחיצות",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device, { day: 15 });
+      const bad = [];
+      const has = (t) => page.locator(`text=${t}`).count();
+
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=חיפוש מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator('input[placeholder="חיפוש מזון…"]').fill("בננה");
+      await page.waitForTimeout(900);
+      await page.locator("text=בננה בינונית").first().click();
+      await page.waitForTimeout(500);
+
+      // א. מתוך מסך הכמות, החלון עדיין יורד שכבה בכל לחיצה (v6.72 ו-v6.90).
+      await page.goBack().catch(() => {});
+      await page.waitForTimeout(600);
+      if (!(await page.locator('[data-ask="exit"]').count())) bad.push("החזרה ממסך הכמות לא שאלה");
+      await page.locator('[data-ask="exit"] >> text=יציאה בלי לשמור').click();
+      await page.waitForTimeout(500);
+      if (!(await page.locator('input[placeholder="חיפוש מזון…"]').count())) bad.push("לא חזרה לרשימת החיפוש");
+
+      // ב. ועכשיו מוסיפים באמת, כדי שתקפוץ השאלה על המועדפים.
+      await page.locator("text=בננה בינונית").first().click();
+      await page.waitForTimeout(500);
+      await addFromQty(page);
+      await page.waitForTimeout(900);
+      if (!(await has("לשמור למועדפים?"))) bad.push("חלונית המועדפים לא קפצה");
+
+      // הלחיצה הראשונה סוגרת אותה. על הקוד שבייצור היא לא עושה כלום.
+      await page.goBack().catch(() => {});
+      await page.waitForTimeout(700);
+      const stillPrompt = await has("לשמור למועדפים?");
+      const outside = page.url().includes("/start");
+      if (stillPrompt) bad.push("החלונית נשארה על המסך אחרי לחיצת חזרה");
+      if (outside) bad.push("*** יצאה מהאפליקציה ***");
+      // ולא נשמרה בטעות: חזרה היא "לא תודה", לא "כן, שמרי".
+      const favs = await page.evaluate(() => (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").favorites || []).length);
+      if (favs !== 0) bad.push(`נשמרו ${favs} מועדפים אף שלא אישרה`);
+      // והמזון עצמו כן נשמר ליומן, כי ההוספה כבר קרתה לפני החלונית.
+      const logged = await page.evaluate(() => (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []).length);
+      if (logged !== 1) bad.push(`ביומן ${logged} פריטים במקום 1`);
+
+      // ג. ואחרי שהכל סגור, אין לחיצה מתה: היומן אינו בולע לחיצה בשקט.
+      const stillApp = await page.locator('[aria-label="הוספה"]').count();
+      if (!stillApp) bad.push("מסך היומן לא מוצג בסוף");
+
+      const errs = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: bad.length === 0 && errs.length === 0,
+        detail: bad.length ? bad.join(" · ") : `שכבות נשמרו · החלונית נסגרה בלחיצה · לא נשמרה · ביומן 1 · שגיאות ${errs[0] || "אין"}`,
+      };
+    },
+  },
+  {
     // אותה משתתפת: "כינוי לארוחה, כמו שיש אפשרות בכרטיסי אשראי לתת שם כינוי
     // לכרטיס." ורון: "לא מבין למה לא לרשום גם ביומן." לכן הכינוי נבדק כאן
     // דווקא ביומן, ולא רק במועדפים.

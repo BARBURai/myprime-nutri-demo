@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.90";
+const VERSION = "6.91";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -6915,40 +6915,6 @@ export default function App() {
   // or a tab other than the diary. Back then closes that, one layer at a time. On the diary
   // with nothing open there is no entry left, the press reaches Android, and it closes the
   // app exactly as it does in every other app. No dialog, and nothing that pretends to work.
-  const sentinelRef = useRef(false);
-  useEffect(() => {
-    const layered = !!(modal || sheet || recipeSel || tab !== "day");
-    if (layered && !sentinelRef.current) {
-      try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
-    }
-  }, [modal, sheet, recipeSel, tab]);
-  useEffect(() => {
-    const onPop = () => {
-      sentinelRef.current = false; // the browser just consumed it
-      // Innermost first, one level per press, and each level does exactly what its own
-      // on-screen back arrow does. Anything else and the press skips past a screen she is
-      // still looking at.
-      if (modalRef.current && addBackRef.current && addBackRef.current()) {
-        // שכבה בתוך החלון נסגרה והחלון עצמו נשאר פתוח, כלומר שום מצב שלנו לא
-        // השתנה והאפקט שלמעלה לא ירוץ. דוחפים כאן את הרשומה הבאה, אחרת הלחיצה
-        // הבאה הייתה יוצאת מהאפליקציה.
-        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
-      }
-      else if (modalRef.current) setModal(null);
-      else if (sheetRef.current === "content" && contentBackRef.current && contentBackRef.current()) {
-        // A level inside the content module closed and the sheet itself is still open, so
-        // no state of ours changed and the effect above will not run. Push the next entry
-        // here, otherwise the following press would leave the app.
-        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
-      }
-      else if (sheetRef.current) { setSheet(null); setGlowDirect(false); }
-      else if (recipeSelRef.current) setRecipeSel(null);
-      else if (tabRef.current !== "day") setTab("day");
-      // Nothing of ours left: no new entry is pushed, so the next press exits the app.
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
 
   const checkAccess = async (em, nm, isLogin) => {
     setGate("checking"); setGateMsg("");
@@ -7127,6 +7093,73 @@ export default function App() {
   const markNotifyAsked = () => setProfile((p) => (p.tipsSeen || []).includes("notifyAsked") ? p : { ...p, tipsSeen: [...(p.tipsSeen || []), "notifyAsked"] });
   const acceptNotify = async () => { setNotifyPrompt(false); markNotifyAsked(); await enableDailyReminder(gateEmail); };
   const dismissNotify = () => { setNotifyPrompt(false); markNotifyAsked(); };
+  // המצב של החלוניות נקרא דרך ref, כי המאזין נרשם פעם אחת ואינו רואה ערכים
+  // חדשים. אותו דפוס בדיוק של modalRef ו-tabRef שמעליו.
+  const popupRef = useRef({});
+  popupRef.current = { lockMsg, futureConfirm, futureData, favPrompt, notifyPrompt, replyPop, tour };
+  const dismissNotifyRef = useRef(null); dismissNotifyRef.current = dismissNotify;
+  const tourBackRef = useRef(null); tourBackRef.current = tourBack;
+  const tourEndRef = useRef(null); tourEndRef.current = tourEnd;
+  const pushSentinel = () => { try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {} };
+  const sentinelRef = useRef(false);
+  // **כל חלונית שחוסמת את המסך היא שכבה, ולא רק חלון ההוספה.** משתתפת דיווחה
+  // ב-9 בספטמבר 2026 ש"כפתור back מעיף מהאפליקציה", ונמדד בדיוק: היא מוסיפה
+  // מזון, קופצת השאלה "לשמור למועדפים?", **ולחיצה אחת על חזרה לא עושה כלום
+  // והשנייה סוגרת את האפליקציה, כשהחלונית עדיין על המסך.** הסיבה: החלוניות
+  // האלה חיות ברמת האפליקציה ולא היו ברשימה כאן, ולכן לא היה מה לסגור.
+  const popupOpen = !!(lockMsg || futureConfirm || futureData || favPrompt || notifyPrompt || replyPop || tour);
+  useEffect(() => {
+    const layered = popupOpen || !!(modal || sheet || recipeSel || tab !== "day");
+    if (layered && !sentinelRef.current) {
+      try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+    }
+  }, [popupOpen, modal, sheet, recipeSel, tab]);
+  useEffect(() => {
+    const onPop = () => {
+      const wasOurs = sentinelRef.current;
+      sentinelRef.current = false; // the browser just consumed it
+      // Innermost first, one level per press, and each level does exactly what its own
+      // on-screen back arrow does. Anything else and the press skips past a screen she is
+      // still looking at.
+      //
+      // **החלוניות קודמות לכל השאר, כי הן מצוירות מעל הכל.** כל אחת עושה בדיוק
+      // מה שכפתור הביטול שלה עושה, ולעולם לא את כפתור האישור: חזרה אינה
+      // "תודה, הבנתי" ואינה "כן, שמרי".
+      const P = popupRef.current;
+      if (P.lockMsg) { setLockMsg(null); pushSentinel(); return; }
+      if (P.futureConfirm) { setFutureConfirm(false); pushSentinel(); return; }
+      if (P.futureData) { setFutureData(false); pushSentinel(); return; }
+      if (P.favPrompt) { setFavPrompt(null); setFavName(""); pushSentinel(); return; }
+      if (P.notifyPrompt) { dismissNotifyRef.current(); pushSentinel(); return; }
+      if (P.replyPop) { setReplyLater((arr) => (arr.includes(P.replyPop.id) ? arr : [...arr, P.replyPop.id])); pushSentinel(); return; }
+      // בסיור, חזרה חוזרת שלב אחד אחורה. החלטת רון. בשלב הראשון אין לאן, ולכן
+      // היא עושה בדיוק מה שכפתור הסיום שבמסך עושה, ולא נשארת לחיצה מתה.
+      if (P.tour) { if (P.tour.i > 0) tourBackRef.current(); else tourEndRef.current(); pushSentinel(); return; }
+      if (modalRef.current && addBackRef.current && addBackRef.current()) {
+        // שכבה בתוך החלון נסגרה והחלון עצמו נשאר פתוח, כלומר שום מצב שלנו לא
+        // השתנה והאפקט שלמעלה לא ירוץ. דוחפים כאן את הרשומה הבאה, אחרת הלחיצה
+        // הבאה הייתה יוצאת מהאפליקציה.
+        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+      }
+      else if (modalRef.current) setModal(null);
+      else if (sheetRef.current === "content" && contentBackRef.current && contentBackRef.current()) {
+        // A level inside the content module closed and the sheet itself is still open, so
+        // no state of ours changed and the effect above will not run. Push the next entry
+        // here, otherwise the following press would leave the app.
+        try { window.history.pushState({ mp: 1 }, ""); sentinelRef.current = true; } catch (e) {}
+      }
+      else if (sheetRef.current) { setSheet(null); setGlowDirect(false); }
+      else if (recipeSelRef.current) setRecipeSel(null);
+      else if (tabRef.current !== "day") setTab("day");
+      // **לחיצה שאין לה מה לסגור אינה נבלעת בשקט.** רשומה שנשארה בהיסטוריה אחרי
+      // שחלון נסגר ב-✕ או מפני שהמזון נוסף הפכה את הלחיצה הראשונה ללחיצה מתה,
+      // והשנייה סגרה את האפליקציה. עכשיו היא מועברת הלאה מיד, ולכן חזרה ביומן
+      // סוגרת את האפליקציה בלחיצה אחת, כמו בכל אפליקציה אחרת.
+      else if (wasOurs) { try { window.history.back(); } catch (e) {} }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const waterOpenToday = unlockedOn(profile.startDate, selectedDate, WATER_UNLOCK);
   const stepsOpenToday = unlockedOn(profile.startDate, selectedDate, STEPS_UNLOCK);
   // Step goal: she sets the baseline once, then accepts increases via a prominent banner (never silent).
