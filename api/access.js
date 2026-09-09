@@ -142,7 +142,7 @@ export default async function handler(req, res) {
     }
   } catch (e) { /* the map is a bridge, never a gate: a Redis hiccup falls back to the file */ }
 
-  let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false;
+  let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false, glowFull = false;
   let solo = 0;
   try {
     // Cache-busting: Google's published CSV can serve a stale copy for a few minutes.
@@ -155,7 +155,7 @@ export default async function handler(req, res) {
     // Locate the "ביטלה" (cancellation) and start-date columns by header name.
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
-    let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, emailCol = -1, headerFound = false;
+    let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, glowFullCol = -1, emailCol = -1, headerFound = false;
     let solo6Col = -1, solo12Col = -1;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
@@ -168,6 +168,9 @@ export default async function handler(req, res) {
       monthsCol = findCol(header, ["חודשי גישה נוספים"]);
       // Optional. Marks the women who also received the מיי פריים Glow bonus lessons.
       glowCol = findCol(header, ["בונוס איפור"]);
+      // קורס האיפור המלא, שניתן במתנה בוובינר. עמודה אופציונלית: כל עוד היא
+      // אינה קיימת בגיליון, שום דבר לא משתנה לאף אישה.
+      glowFullCol = findCol(header, ["glow-full"]);
       // שתי עמודות אופציונליות של תוכנית סולו, נקראות כאן בדיוק כמו במסך הניהול
       // כדי ששניהם לא יוכלו לחלוק על אורך החלון שלה.
       solo6Col = findCol(header, ["SOLO6"]);
@@ -201,9 +204,10 @@ export default async function handler(req, res) {
       const cells = parseCsvLine(line);
       const isYes = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
 
-      const hit = { phone: "", glow: false, solo: 0, months: null, cancelled: false, start: null };
+      const hit = { phone: "", glow: false, glowFull: false, solo: 0, months: null, cancelled: false, start: null };
       if (phoneCol !== -1 && cells[phoneCol]) hit.phone = String(cells[phoneCol]).replace(/[^\d]/g, "");
       if (glowCol !== -1) hit.glow = isYes(cells[glowCol]);
+      if (glowFullCol !== -1) hit.glowFull = isYes(cells[glowFullCol]);
       if (solo12Col !== -1 && isYes(cells[solo12Col])) hit.solo = 12;
       else if (solo6Col !== -1 && isYes(cells[solo6Col])) hit.solo = 6;
 
@@ -248,6 +252,7 @@ export default async function handler(req, res) {
       startStr = win.start;
       phone = win.phone;
       glow = win.glow;
+      glowFull = win.glowFull;
       solo = win.solo;
       extraMonths = win.months;
     }
@@ -269,6 +274,7 @@ export default async function handler(req, res) {
           startStr = m.start;
           phone = String(m.phone || "").replace(/[^\d]/g, "");
           glow = !!m.glow;
+          glowFull = !!m.glowFull;
           solo = (m.solo === 6 || m.solo === 12) ? m.solo : 0;
           const mm = parseInt(m.months, 10);
           if (Number.isFinite(mm) && mm > 0) extraMonths = mm;
@@ -312,6 +318,8 @@ export default async function handler(req, res) {
       // path: the sheet reaches us through Google's cache and lags by minutes.
       if (ovr.glow === "1") glow = true;
       else if (ovr.glow === "0") glow = false;
+      if (ovr.glowFull === "1") glowFull = true;
+      else if (ovr.glowFull === "0") glowFull = false;
     }
   } catch (e) { /* fall through to the sheet */ }
   // Same answer as the sheet's own cancellation, so she sees the one screen that already
@@ -384,6 +392,10 @@ export default async function handler(req, res) {
     try {
       if (glow) await redis(RU, RT, "SET", `glow:${email}`, "1", "EX", 2592000);
       else await redis(RU, RT, "DEL", `glow:${email}`);
+      // אותו דפוס בדיוק לקורס המלא: נכתב בכל כניסה ונמחק ברגע שהסימון יורד
+      // מהגיליון, ולכן הסרה נכנסת לתוקף בטעינה הבאה שלה ולא מתישהו.
+      if (glowFull) await redis(RU, RT, "SET", `glowfull:${email}`, "1", "EX", 2592000);
+      else await redis(RU, RT, "DEL", `glowfull:${email}`);
     } catch (e) { /* the bonus is never worth failing a login over */ }
   }
 
@@ -403,5 +415,5 @@ export default async function handler(req, res) {
 
   // `freeze` travels on so the diary can leave the frozen days out of her day strip and
   // label the days before them for what they are. Nothing of hers is deleted.
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull, replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
 }

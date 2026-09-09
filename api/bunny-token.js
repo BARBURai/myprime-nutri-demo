@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { isGlowVideo } from "./_glow-ids.js";
+import { isGlowVideo, isGlowFullVideo } from "./_glow-ids.js";
 
 // Bunny Stream library that holds the MyPrime course videos.
 // The library ID and CDN hostname are NOT secret (they appear in every play URL),
@@ -30,16 +30,25 @@ export default async function handler(req, res) {
   // Deliberately fail CLOSED: no email, no flag, or Redis unreachable all mean no. The
   // programme's own 88 videos are untouched by this and keep working in every case, so a
   // Redis hiccup can never lock a woman out of the course she paid for.
-  if (isGlowVideo(videoId)) {
+  //
+  // ושתי רמות ולא אחת: שלושת השיעורים החינמיים נפתחים למי שיש לה את הבונוס **או**
+  // את הקורס המלא, ושאר שיעורי הקורס נפתחים למי שיש לה את המלא בלבד. בלי ההפרדה
+  // הזאת, קורס בתשלום היה חסום במסך ופתוח בשרת: כל מזהי הסרטונים נשלחים ממילא
+  // לדפדפן של כל אישה בתוך קוד האפליקציה.
+  if (isGlowVideo(videoId) || isGlowFullVideo(videoId)) {
     const email = String((req.query && req.query.email) || "").trim().toLowerCase();
     const RU = process.env.UPSTASH_REDIS_REST_URL;
     const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
+    const flag = async (k) => {
+      try {
+        const r = await fetch(`${RU}/GET/${encodeURIComponent(k + ":" + email)}`, { headers: { Authorization: `Bearer ${RT}` } });
+        return r.ok ? (await r.json()).result === "1" : false;
+      } catch (e) { return false; }
+    };
     let ok = false;
     if (email && email.includes("@") && RU && RT) {
-      try {
-        const r = await fetch(`${RU}/GET/${encodeURIComponent("glow:" + email)}`, { headers: { Authorization: `Bearer ${RT}` } });
-        if (r.ok) ok = (await r.json()).result === "1";
-      } catch (e) { ok = false; }
+      ok = await flag("glowfull");
+      if (!ok && isGlowVideo(videoId)) ok = await flag("glow");
     }
     if (!ok) {
       res.status(403).json({ error: "not_entitled" });

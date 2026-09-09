@@ -52,3 +52,89 @@ export const GLOW_DAY = {
 };
 
 export const hasGlow = () => GLOW_DAY.lessons.length > 0;
+
+/* ============================================================
+   הקורס המלא
+   ============================================================
+   רון, 9 בספטמבר 2026: וובינר שבו נשים מקבלות את קורס האיפור המלא במתנה. הן
+   מסומנות בעמודה `GLOW-FULL` בגיליון, ורואות את כל הקורס באותו מסך שבו שלושת
+   השיעורים החינמיים מוצגים היום.
+
+   שלושה דברים שחשוב לשמור:
+
+   1. **שלושת החינמיים הם חלק מהקורס ולא בלוק נפרד.** החלטת רון. מי שקיבלה את
+      המלא רואה רשימה אחת, ולא את אותם שיעורים בשני מקומות.
+   2. **מוצג בשמונה הסעיפים של הקורס** ולא ברשימה שטוחה של 28 שורות.
+   3. **לא מופיע בכרטיס היומן.** החלטת רון: "לא הייתי שם את זה ביומן". הדרך
+      אליו היא השורה במסך התוכן והצ'יפ ב"כל התוכנית".
+
+   שיעור בלי מזהה אינו מרונדר בכלל, ולכן אפשר להוסיף אותם אחד אחד.
+   וכמו הבונוס, גם זה יושב מחוץ לכל ספירה של התוכנית. */
+export const GLOW_FULL_TITLE = "מיי פריים Glow - הקורס המלא";
+export const GLOW_FULL_ROW = "קורס האיפור המלא שלך במיי פריים Glow";
+
+const FULL_SECTIONS_RAW = [
+  { title: "להתחיל מהבסיס", lessons: [
+    { title: "שיעור 1א׳ - מבוא קורס", videoId: "405fc049-0e7a-4447-9f1d-193845c0b4b9" },
+    { title: "שיעור 1ב׳ - מה קורה לעור שלנו בגיל המעבר?", videoId: "" },
+    { title: "שיעור 2 - עבודה עם גוואשה", videoId: "" },
+  ] },
+  { title: "פנים", lessons: [
+    { title: "שיעור 3 - הכנת העור, פריימר ובסיס", videoId: "f7dc36be-25b6-45ef-bb9c-4315b94cddb4" },
+    { title: "שיעור 4 - קונסילר וקורקטור", videoId: "" },
+    { title: "שיעור 5 - שיטת 4 MUST, חלק א׳", videoId: "" },
+    { title: "שיעור 5 - שיטת 4 MUST, חלק ב׳", videoId: "" },
+    { title: "שיעור 5 - שיטת 4 MUST, חלק ג׳", videoId: "" },
+  ] },
+  { title: "עיניים", lessons: [
+    { title: "שיעור 6 - איפור עיניים בסיסי", videoId: "81e96d03-c4a6-40e5-9442-432629fd8b33" },
+    { title: "שיעור 7 - אייליינר מעושן", videoId: "" },
+    { title: "שיעור 8 - מראה עיניים מעושן", videoId: "333ac741-4dba-41d5-bdce-946503c74660" },
+    { title: "שיעור 9 - איפור עיניים עם צלליות קרם", videoId: "" },
+    { title: "שיעור 10 - גבות", videoId: "" },
+  ] },
+  { title: "לחיים", lessons: [
+    { title: "שיעור 11 - הצללות", videoId: "" },
+    { title: "שיעור 12 - האדרות", videoId: "" },
+    { title: "שיעור 13 - סומק", videoId: "" },
+  ] },
+  { title: "שפתיים", lessons: [
+    { title: "שיעור 14 - עיצוב והגדלת שפתיים", videoId: "" },
+    { title: "שיעור 15 - שפתון: איך לייצר וייב אחר?", videoId: "" },
+  ] },
+  { title: "שיער", lessons: [
+    { title: "שיעור 16 - מתיחה להרמת העיניים והמורל", videoId: "" },
+    { title: "שיעור 17 - עיצוב השיער עם מקלון סלסול", videoId: "" },
+    { title: "שיעור 18 - נשירת שיער", videoId: "" },
+  ] },
+  { title: "טאץ׳-אפ וסביבת האיפור", lessons: [
+    { title: "שיעור 19 - טאצ׳ אפ", videoId: "" },
+    { title: "כל מה שאת צריכה בסביבת האיפור שלך", videoId: "" },
+  ] },
+  { title: "מפתחות לאהבה עצמית", lessons: [
+    { title: "מבוא", videoId: "" },
+    { title: "מפתח 1 - דברי אליך יפה", videoId: "" },
+    { title: "מפתח 2 - כוחה של נשימה", videoId: "" },
+    { title: "מפתח 3 - לנעוץ ביומן", videoId: "" },
+    { title: "מפתח 4 - תבחרי בך", videoId: "" },
+  ] },
+];
+
+// רשימה שטוחה אחת של השיעורים שכבר יש להם סרטון, ולצידה הסעיפים שמצביעים
+// עליה במספרים. **המספר הוא מה שמסמן "הושלם" ומה שנשמר במועדפים**, ולכן הוא
+// נגזר מהרשימה השטוחה ולעולם לא מהמיקום בתוך הסעיף.
+const FULL_FLAT = [];
+export const GLOW_FULL_SECTIONS = FULL_SECTIONS_RAW.map((sec) => {
+  const idx = [];
+  for (const l of sec.lessons) {
+    if (!l.videoId) continue;
+    idx.push(FULL_FLAT.length);
+    FULL_FLAT.push({ title: l.title, type: "video", videoId: l.videoId });
+  }
+  return { title: sec.title, idx };
+}).filter((sec) => sec.idx.length > 0);
+
+export const GLOW_FULL_DAY = { week: 0, day: 0, theme: "מיי פריים Glow", lessons: FULL_FLAT };
+export const hasGlowFull = () => GLOW_FULL_DAY.lessons.length > 0;
+// כמה שיעורים בקורס בסך הכל, כולל אלה שעוד לא הועלו. משמש את הכיתוב בלבד.
+export const GLOW_FULL_PLANNED = FULL_SECTIONS_RAW.reduce((n, s) => n + s.lessons.length, 0);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Play, Maximize2, VolumeX, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
-import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted } from "./glow";
+import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted, GLOW_FULL_DAY, GLOW_FULL_SECTIONS, GLOW_FULL_TITLE, GLOW_FULL_ROW, hasGlowFull } from "./glow";
 export { contentForDay } from "./data";
 
 
@@ -205,9 +205,13 @@ export function ContentDayCard({ week, dow, C, font, onOpen, glow }) {
   );
 }
 
-export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, backRef, startGlow = false , onGlowStart }) {
+export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, glowFull = false, backRef, startGlow = false , onGlowStart }) {
   const allDays = CONTENT_DAYS;
-  const showGlow = !!glow && hasGlow();
+  // מי שקיבלה את הקורס המלא רואה אותו במקום שלושת החינמיים, ולא לצידם: שלושתם
+  // חלק ממנו. החלטת רון, 9 בספטמבר 2026.
+  const showFull = !!glowFull && hasGlowFull();
+  const showGlow = showFull || (!!glow && hasGlow());
+  const glowDay = showFull ? GLOW_FULL_DAY : GLOW_DAY;
   // Saturday carries day-of-week 0, and "everything up to today" then matches nothing, so the
   // whole current week vanished from "כל התוכנית" - on the Saturday of week 1 the screen was
   // empty. Shabbat reads as Friday here, the same way the tracker already treats it.
@@ -262,7 +266,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
 
   // Week 0 is the bonus. Guarded by showGlow as well, so that even a stale open-lesson state
   // cannot render a bonus lesson for a woman who is not marked for it.
-  const dayByWD = (w, d) => (w === 0 ? (showGlow ? GLOW_DAY : null) : allDays.find((dd) => dd.week === w && dd.day === d));
+  const dayByWD = (w, d) => (w === 0 ? (showGlow ? glowDay : null) : allDays.find((dd) => dd.week === w && dd.day === d));
   const isDone = (w, d, i) => !!done[lessonKey(w, d, i)];
   const isFav = (w, d, i) => !!fav[lessonKey(w, d, i)];
   const toggleDone = (w, d, i) => setDone((s) => { const n = { ...s }; const k = lessonKey(w, d, i); if (n[k]) delete n[k]; else n[k] = 1; saveStore(DONE_KEY, n); return n; });
@@ -701,8 +705,15 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
 
           {isGlow ? (
             <>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, marginBottom: 10, lineHeight: 1.4 }}>{GLOW_EMOJI} {GLOW_TITLE}</div>
-              {GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="all" />)}
+              <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, marginBottom: 10, lineHeight: 1.4 }}>{GLOW_EMOJI} {showFull ? GLOW_FULL_TITLE : GLOW_TITLE}</div>
+              {showFull
+                ? GLOW_FULL_SECTIONS.map((sec) => (
+                    <div key={sec.title} style={{ marginBottom: 6 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: C.sub, margin: "14px 0 6px" }}>{sec.title}</div>
+                      {sec.idx.map((i) => <LessonRow key={"g" + i} w={0} d={0} l={GLOW_FULL_DAY.lessons[i]} i={i} from="all" />)}
+                    </div>
+                  ))
+                : GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="all" />)}
             </>
           ) : isPdf ? (
             pageEntries.length === 0
@@ -770,7 +781,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
             <div onClick={() => { setTypeF("glow"); setView("all"); }} role="button" style={rowStyle}>
               <div style={{ ...iconWrap, fontSize: 22 }}>{GLOW_EMOJI}</div>
               <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{GLOW_ROW}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{showFull ? GLOW_FULL_ROW : GLOW_ROW}</div>
               </div>
               <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
             </div>
@@ -807,13 +818,13 @@ export function usageSummary() {
   // watching the bonus is a different question, asked so the full Glow course can be
   // offered to exactly those women.
   let gDone = 0, gViews = 0;
-  GLOW_DAY.lessons.forEach((l, i) => {
+  (hasGlowFull() ? GLOW_FULL_DAY : GLOW_DAY).lessons.forEach((l, i) => {
     const k = lessonKey(0, 0, i);
     if (done[k]) gDone++;
     gViews += views[k] || 0;
   });
   return {
     days, videosDone: vDone, videosTotal: vTotal, views: vViews,
-    glowDone: gDone, glowTotal: GLOW_DAY.lessons.length, glowViews: gViews, glowStarted: glowStarted(),
+    glowDone: gDone, glowTotal: (hasGlowFull() ? GLOW_FULL_DAY : GLOW_DAY).lessons.length, glowViews: gViews, glowStarted: glowStarted(),
   };
 }
