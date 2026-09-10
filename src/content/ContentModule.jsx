@@ -320,7 +320,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     return (
       <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 12, padding: 4, marginBottom: 14 }}>
         {tabs.map(([id, lbl]) => (
-          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: id === "glow" ? 0.72 : 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 4px", fontFamily: font, fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center", background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl === null ? <img src={GLOW_LOGO} alt="Glow" style={{ height: 20, width: "auto", display: "block" }} /> : lbl}</button>
+          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: id === "glow" ? 0.72 : 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 4px", fontFamily: font, fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center", background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl === null ? <img src={GLOW_LOGO} alt="Glow" style={{ height: 16, width: "auto", display: "block" }} /> : lbl}</button>
         ))}
       </div>
     );
@@ -694,7 +694,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
                 ולא לפניה. לכן היא מפוצלת סביב המילה ולא נכתבת מחדש. */}
             {(showFull ? GLOW_FULL_TITLE : GLOW_TITLE).split("Glow").map((part, k) => (
               <React.Fragment key={k}>
-                {k > 0 && <img src={GLOW_LOGO} alt="Glow" style={{ height: 26, width: "auto", display: "block" }} />}
+                {k > 0 && <img src={GLOW_LOGO} alt="Glow" style={{ height: 12, width: "auto", display: "block" }} />}
                 {part.trim() && <span style={{ fontSize: 19, fontWeight: 700, color: GLOW_C.ink, lineHeight: 1.4 }}>{part.trim()}</span>}
               </React.Fragment>
             ))}
@@ -706,7 +706,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
                   // רון: "לא מספיק ברור שאלה ספריות שצריך ללחוץ והן נפתחות. אולי גם
                   // לשנות את הצבע ליותר בולט וחזק, ו**חץ למטה** גדול ועבה." ולכן הכותרת
                   // צבועה תמיד בצבע המותג, ולא רק כשהיא פתוחה, והחץ מסתובב בפתיחה.
-                  <div key={sec.title} style={{ border: `2px solid ${GLOW_C.line}`, borderRadius: 14, marginBottom: 12, overflow: "hidden", background: C.panel, boxShadow: "0 1px 4px rgba(58,43,48,0.08)" }}>
+                  <div key={sec.title} style={{ border: `1.5px solid ${GLOW_C.line}`, borderRadius: 14, marginBottom: 12, overflow: "hidden", background: C.panel, boxShadow: "0 1px 3px rgba(58,43,48,0.07)" }}>
                     <div role="button" onClick={() => setOpenSec((o) => ({ ...o, [sec.title]: !o[sec.title] }))}
                       style={{ display: "flex", alignItems: "center", gap: 11, padding: "15px 14px", cursor: "pointer", background: GLOW_C.bg }}>
                       <span style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>{sec.icon}</span>

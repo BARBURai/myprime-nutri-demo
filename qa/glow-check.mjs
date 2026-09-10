@@ -58,14 +58,18 @@ check("הכיתוב הקצר ביומן בדיוק כפי שאושר", glow.incl
 check("סימן השפתון נשאר בשורה שביומן ובשורה שבמסך התוכן", (mod.match(/GLOW_EMOJI/g) || []).length >= 2);
 // רון: "אתה יכול את Glow להחליף בלוגו שצירפתי, גם בכותרת וגם בטאב, לא צריך את האמוג׳י."
 check("הלוגו מוצג בכפתור שבסרגל", /lbl === null \? <img src=\{GLOW_LOGO\}/.test(mod));
-check("ובכותרת של המסך", /<img src=\{GLOW_LOGO\} alt="Glow" style=\{\{ height: 26/.test(mod));
+// רון, 10 בספטמבר 2026: "הגלו לא בגודל של האותיות בשורה, הוא ענק." הכותרת היא
+// 19 פיקסלים, וגובה אות עברית בה נמדד ב-11 עד 12, ולכן זה הגובה של הלוגו.
+check("ובכותרת של המסך, בגובה האותיות שלצידו", /<img src=\{GLOW_LOGO\} alt="Glow" style=\{\{ height: 12/.test(mod));
 // רון: "בכפתור כשהוא לא דלוק קשה לראות אותו." אין עמעום, והבחירה מסומנת ברקע.
 check("והלוגו שבכפתור אינו מעומעם", !/opacity: view === id/.test(mod));
 // הכותרת עצמה לא נכתבה מחדש: היא מפוצלת סביב המילה Glow, והלוגו יושב במקומה.
 check("והכותרות שאושרו לא שוכתבו", /\(showFull \? GLOW_FULL_TITLE : GLOW_TITLE\)\.split\("Glow"\)/.test(mod));
 check("הקובץ עצמו קיים תחת public", (() => { try { return readFileSync(new URL("../public/glow-logo.png", import.meta.url)).length > 2000; } catch (e) { return false; } })());
-// והצבעים נגזרו מהלוגו עצמו, ולא נבחרו ביד.
-check("לסעיף יש פלטה משלו שנגזרה מהלוגו", /export const GLOW_C = \{/.test(glow) && /ink: "#A52AB6"/.test(glow));
+// רון פסל את הפלטה שנגזרה מהגרדיאנט: "ורדרדים מידי ילדותי מידי וזול". המג׳נטה
+// נשארת בלוגו בלבד, וסביבו חצילית עמוקה ואפור רך.
+check("לסעיף יש פלטה משלו", /export const GLOW_C = \{/.test(glow) && /ink: "#3E2148"/.test(glow));
+check("ואין בה ורוד או מג׳נטה", !/#A52AB6|#D03CCD|#EA47E3|#FBF0FC|#E8B9EE/.test(glow));
 check("והיא זו שצובעת את הכותרות, החץ והמסגרות",
   /color: GLOW_C\.ink/.test(mod) && /background: GLOW_C\.accent/.test(mod) && /solid \$\{GLOW_C\.line\}/.test(mod) && /background: GLOW_C\.bg/.test(mod));
 // רון: "תגזור צבעים מהלוגו בכל הסעיף של Glow", ולכן גם שורות השיעורים שבתוכו.
@@ -142,8 +146,10 @@ check("שיעור בלי מזהה אינו מרונדר", /if \(!l\.videoId\) co
 check("הקורס המלא אינו מופיע בכרטיס היומן", /glow=\{glow && !glowFull\}/.test(app));
 check("ומסך ההמתנה כן פותח אותו", /glow=\{glow \|\| glowFull\}/.test(app));
 check("הכיתוב הוא זה שרון אישר",
-  glow.includes('export const GLOW_FULL_TITLE = "מיי פריים Glow - הקורס המלא"')
+  glow.includes('export const GLOW_FULL_TITLE = "מיי פריים Glow"')
   && glow.includes('export const GLOW_FULL_ROW = "קורס האיפור המלא שלך במיי פריים Glow"'));
+// רון: "תוריד את המילים הקורס המלא." הן נשארות בשורה שבמסך התוכן בלבד.
+check("והמילים הקורס המלא ירדו מהכותרת", !/GLOW_FULL_TITLE = "[^"]*הקורס המלא/.test(glow));
 check("ואין לו שורה בכרטיס היומן בכלל", !/GLOW_FULL_CARD/.test(glow));
 
 console.log("\nהפריסה של הקורס המלא\n");
