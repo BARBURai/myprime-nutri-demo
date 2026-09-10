@@ -97,6 +97,19 @@ function isExpired(startSunday, extraMonths, solo) {
   return today.getTime() > exp.getTime();
 }
 
+// מוצר גלו העצמאי: החלון נמדד מהיום הראשון שהיא נכנסה ולא מתאריך התחלה של מחזור,
+// כי אין לה מחזור כלל. ברירת המחדל היא 12 חודשים, ו-GLOW-FULL-M גובר עליה.
+function glowExpired(startYmd, months) {
+  const m = (Number.isFinite(months) && months > 0) ? Math.floor(months) : 12;
+  const p = String(startYmd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!p) return false;
+  const exp = new Date(Date.UTC(+p[1], +p[2] - 1, +p[3]));
+  exp.setUTCMonth(exp.getUTCMonth() + m);
+  const t = israelDay(0).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const today = new Date(Date.UTC(+t[1], +t[2] - 1, +t[3]));
+  return today.getTime() > exp.getTime();
+}
+
 // Max concurrent devices per email: a phone and a computer. 0 (or less) = no limit.
 // The cap EVICTS rather than blocks - see the device section below for why.
 const MAX_DEVICES = 2;
@@ -143,7 +156,7 @@ export default async function handler(req, res) {
   } catch (e) { /* the map is a bridge, never a gate: a Redis hiccup falls back to the file */ }
 
   let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false, glowFull = false;
-  let solo = 0;
+  let solo = 0, glowMonths = null;
   try {
     // Cache-busting: Google's published CSV can serve a stale copy for a few minutes.
     // Appending a timestamp helps fetch a fresher version, and we ask fetch not to cache.
@@ -156,7 +169,7 @@ export default async function handler(req, res) {
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
     let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, glowFullCol = -1, emailCol = -1, headerFound = false;
-    let solo6Col = -1, solo12Col = -1;
+    let solo6Col = -1, solo12Col = -1, glowFullMCol = -1;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
       cancelCol = findCol(header, ["ביטלה"]);
@@ -171,6 +184,9 @@ export default async function handler(req, res) {
       // קורס האיפור המלא, שניתן במתנה בוובינר. עמודה אופציונלית: כל עוד היא
       // אינה קיימת בגיליון, שום דבר לא משתנה לאף אישה.
       glowFullCol = findCol(header, ["glow-full"]);
+      // מספר חודשי הגישה לקורס. עמודה אופציונלית, וריק פירושו ברירת המחדל.
+      // ההתאמה היא על שם העמודה המלא, ולכן GLOW-FULL ו-GLOW-FULL-M לעולם לא יתבלבלו.
+      glowFullMCol = findCol(header, ["GLOW-FULL-M"]);
       // שתי עמודות אופציונליות של תוכנית סולו, נקראות כאן בדיוק כמו במסך הניהול
       // כדי ששניהם לא יוכלו לחלוק על אורך החלון שלה.
       solo6Col = findCol(header, ["SOLO6"]);
@@ -204,10 +220,14 @@ export default async function handler(req, res) {
       const cells = parseCsvLine(line);
       const isYes = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
 
-      const hit = { phone: "", glow: false, glowFull: false, solo: 0, months: null, cancelled: false, start: null };
+      const hit = { phone: "", glow: false, glowFull: false, solo: 0, months: null, glowM: null, cancelled: false, start: null };
       if (phoneCol !== -1 && cells[phoneCol]) hit.phone = String(cells[phoneCol]).replace(/[^\d]/g, "");
       if (glowCol !== -1) hit.glow = isYes(cells[glowCol]);
       if (glowFullCol !== -1) hit.glowFull = isYes(cells[glowFullCol]);
+      if (glowFullMCol !== -1) {
+        const gm = parseInt(String(cells[glowFullMCol] || "").replace(/[^\d]/g, ""), 10);
+        if (Number.isFinite(gm) && gm > 0) hit.glowM = gm;
+      }
       if (solo12Col !== -1 && isYes(cells[solo12Col])) hit.solo = 12;
       else if (solo6Col !== -1 && isYes(cells[solo6Col])) hit.solo = 6;
 
@@ -255,6 +275,7 @@ export default async function handler(req, res) {
       glowFull = win.glowFull;
       solo = win.solo;
       extraMonths = win.months;
+      glowMonths = win.glowM;
     }
   } catch (e) {
     return res.status(200).json({ allowed: false, reason: "fetch_failed", configured: true });
@@ -278,6 +299,8 @@ export default async function handler(req, res) {
           solo = (m.solo === 6 || m.solo === 12) ? m.solo : 0;
           const mm = parseInt(m.months, 10);
           if (Number.isFinite(mm) && mm > 0) extraMonths = mm;
+          const gm = parseInt(m.glowM, 10);
+          if (Number.isFinite(gm) && gm > 0) glowMonths = gm;
         }
       }
     } catch (e) { /* the file stays in charge */ }
@@ -320,6 +343,8 @@ export default async function handler(req, res) {
       else if (ovr.glow === "0") glow = false;
       if (ovr.glowFull === "1") glowFull = true;
       else if (ovr.glowFull === "0") glowFull = false;
+      const gmo = parseInt(ovr.glowM, 10);
+      if (Number.isFinite(gmo) && gmo > 0) glowMonths = gmo;
     }
   } catch (e) { /* fall through to the sheet */ }
   // Same answer as the sheet's own cancellation, so she sees the one screen that already
@@ -332,9 +357,28 @@ export default async function handler(req, res) {
   }
   const startSunday = parseDateToSunday(clerkStart || startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
+  // מוצר גלו העצמאי, שנמכר בלי 360. הסימן שמבדיל אותו ממתנת הוובינר הוא תאריך
+  // ההתחלה עצמו: למי שקיבלה את הקורס במתנה תמיד יש מחזור של 360, ולמי שקנתה את
+  // הקורס לבדו אין. לכן אין צורך בשום עמודה נוספת מעבר ל-GLOW-FULL-M.
+  const glowOnly = !!glowFull && !startSunday;
+  let glowStart = "";
+  if (glowOnly) {
+    const RU0 = process.env.UPSTASH_REDIS_REST_URL, RT0 = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (RU0 && RT0) {
+      try {
+        const t0 = israelDay(0);
+        // HSETNX תופס את היום הראשון פעם אחת ולעולם אינו דורס אותו, ולכן השעון שלה
+        // לא מתאפס בכל כניסה ואין מה למלא במשרד.
+        await redis(RU0, RT0, "HSETNX", "glow:start", email, t0);
+        glowStart = String((await redis(RU0, RT0, "HGET", "glow:start", email)) || t0);
+      } catch (e) { glowStart = ""; /* תקלה אצלנו לעולם אינה נועלת אישה משלמת */ }
+    }
+  }
   const pastWindow = clerkUntil
     ? israelDay(0) > clerkUntil
-    : (startSunday && isExpired(startSunday, extraMonths, solo));
+    : glowOnly
+      ? (!!glowStart && glowExpired(glowStart, glowMonths))
+      : (startSunday && isExpired(startSunday, extraMonths, solo));
   if (pastWindow) {
     return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate });
   }
@@ -415,5 +459,5 @@ export default async function handler(req, res) {
 
   // `freeze` travels on so the diary can leave the frozen days out of her day strip and
   // label the days before them for what they are. Nothing of hers is deleted.
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull, replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull, product: glowOnly ? "glow" : "360", replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
 }

@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v7.02** · עודכן: 10 בספטמבר 2026
+**גרסה נוכחית: v7.03** · עודכן: 10 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,31 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v7.03** - **שער הגישה מבדיל בין מתנת הוובינר לבין מוצר גלו שנמכר לבדו.** שינוי בשרת בלבד, ובאפליקציה עצמה השתנה מספר הגרסה בלבד.
+
+### הסימן שמבדיל, ולמה לא נדרשת שום עמודה נוספת
+**רון: "מי שתקבל את זה במסגרת הניסיון יהיה לה גם תאריך ל-360 וגם את התיוג של glow full."** כלומר **תאריך ההתחלה עצמו הוא הסימן**: למי שקיבלה את הקורס במתנה תמיד יש מחזור, ולמי שתקנה את הקורס לבדו אין.
+
+| מה יש לה | מה היא מקבלת |
+|---|---|
+| **360 וגם `GLOW-FULL`** | התוכנית ובתוכה הקורס המלא, **כל עוד חלון 360 פתוח.** לא נגע |
+| **`GLOW-FULL` בלי תאריך התחלה** | הקורס בלבד, **12 חודשים** |
+| **`GLOW-FULL-M` מלאה** | המספר שבה גובר, **אצל מוצר גלו בלבד** |
+
+**והחלטה אחת שנגזרה מדבריו ולא נשאלה בנפרד: `GLOW-FULL-M` אינה נוגעת במי שיש לה 360.** הוא אמר "זה יהיה פתוח לה כל זמן ש-360 פתוח", ולכן מספר בעמודה אצל מי שקיבלה במתנה אינו מקצר ואינו מאריך לה דבר. **בדיקה נועלת את זה.**
+
+### השעון של מוצר גלו נספר מהיום הראשון שהיא נכנסה
+**אין לה מחזור, ולכן אין ממה לספור.** היום הראשון נתפס אצלנו ב-`HSETNX`, כלומר **פעם אחת ולעולם אינו נדרס**, ואין מה למלא במשרד.
+
+**ונכשל לצד הפתוח: אם Redis נופל, אישה משלמת אינה נעולה.** זה בדיוק אותו כלל שכבר קיים בכל השער.
+
+### מלכודת שנבדקה לפני שנגעתי
+**`GLOW-FULL` ו-`GLOW-FULL-M` הן שתי עמודות ששמן דומה**, וההתאמה בקוד היא על השם המלא ולא על תחילתו, ולכן הן אינן יכולות להתבלבל. **אומת בהרצה, ובדיקה נועלת גם את זה:** מספר בעמודה בלי סימון ב-`GLOW-FULL` אינו נותן את הקורס לאף אחת.
+
+**`qa/glow-only-check.mjs`, 22 בדיקות בלי רשת**, מריצה את `api/access.js` האמיתי מול גיליון מדומה ומול Redis מדומה, **כולל המקרה שבו Redis נופל.** **אומת שיש לה שיניים: על v7.02 היא מחזירה 12 מתוך 22.**
+
+**ומה שעדיין לא נבנה: המסך של מוצר גלו העצמאי**, כלומר האפליקציה בלי היומן ובלי ההרשמה. **הקופי שלו ממתין לאישור של רון.** עד אז אישה בלי תאריך התחלה תיכנס ותקבל את מסכי 360 הרגילים, **וזה מצב שאינו קיים בשטח** כי המוצר עדיין לא נמכר.
 
 **v7.02** - **הלוגו בכותרת ירד לגובה האותיות שלצידו, המילים "הקורס המלא" ירדו, והפלטה של הסעיף הוחלפה.** רון: "הגלו לא בגודל של האותיות בשורה הוא ענק ותוריד את המילים הקורס המלא. והצבעים נהיו ורדרדים מידי ילדותי מידי וזול. לא נראה טוב בכלל הצבע של הספריות החיצים וכו."
 
