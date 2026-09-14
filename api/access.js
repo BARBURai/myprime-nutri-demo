@@ -440,6 +440,12 @@ export default async function handler(req, res) {
       // מהגיליון, ולכן הסרה נכנסת לתוקף בטעינה הבאה שלה ולא מתישהו.
       if (glowFull) await redis(RU, RT, "SET", `glowfull:${email}`, "1", "EX", 2592000);
       else await redis(RU, RT, "DEL", `glowfull:${email}`);
+      // ומי שקנתה את הקורס לבדו מסומנת ככזאת, כדי ש-api/bunny-token.js יסרב לחתום
+      // לה על 88 סרטוני התוכנית. רון: "ברור שצריך שמי שקנתה קורס איפור לא תוכל
+      // להגיע בשום צורה בדרך ל-360." הסימון נכתב בכל כניסה ונמחק ברגע שנפתח לה
+      // מחזור 360, ולכן מתנת הוובינר אינה מושפעת ממנו לרגע.
+      if (glowOnly) await redis(RU, RT, "SET", `glowonly:${email}`, "1", "EX", 2592000);
+      else await redis(RU, RT, "DEL", `glowonly:${email}`);
     } catch (e) { /* the bonus is never worth failing a login over */ }
   }
 

@@ -108,6 +108,10 @@ console.log("\nמוצר גלו העצמאי: הקורס בלי 360");
   const first = seen();
   await gate("solo@test.com");
   check("והוא אינו נדרס בכניסה הבאה", !!first && seen() === first, String(first));
+  // רון: "ברור שצריך שמי שקנתה קורס איפור לא תוכל להגיע בשום צורה בדרך ל-360."
+  // זה הסימון ש-api/bunny-token.js קורא כדי לסרב לחתום לה על 88 סרטוני התוכנית.
+  check("והיא מסומנת ככזאת, כדי שסרטוני 360 לא ייחתמו לה", store.kv["glowonly:solo@test.com"] === "1");
+  check("ובמקביל הקורס שלה עצמה כן פתוח לה", store.kv["glowfull:solo@test.com"] === "1");
 }
 {
   reset();
@@ -171,6 +175,16 @@ console.log("\nמה שאסור שיקרה");
   const g = await gate("plain@test.com");
   check("מי שאין לה קורס אינה מושפעת בכלל", g.allowed === true && g.product === "360" && g.glowFull === false);
   check("ולא נכתב לה שום שעון של גלו", !store.hash["glow:start"]);
+  check("ואינה מסומנת כקונת הקורס לבדו", store.kv["glowonly:plain@test.com"] === undefined);
+}
+{
+  // מתנת הוובינר: יש לה גם 360 וגם הקורס המלא, ולכן היא לעולם אינה מסומנת
+  // כקונת הקורס לבדו. בלי הבדיקה הזאת סימון שגוי היה חוסם לה את כל התוכנית.
+  reset();
+  CSV = [HDR, `972501111111,מיכל,לוי,gift@test.com,${sundayMonthsAgo(1)} 0:00:00,FALSE,א,3,FALSE,TRUE,12`].join("\n");
+  const g = await gate("gift@test.com");
+  check("מתנת הוובינר אינה מסומנת כקונת הקורס לבדו", g.product === "360" && store.kv["glowonly:gift@test.com"] === undefined);
+  check("והקורס המלא כן פתוח לה", store.kv["glowfull:gift@test.com"] === "1");
 }
 
 console.log(`\n${pass} מתוך ${pass + fail} עברו.\n`);

@@ -10,12 +10,16 @@ process.env.UPSTASH_REDIS_REST_TOKEN = "t";
 const GLOW = "405fc049-0e7a-4447-9f1d-193845c0b4b9"; // מבוא
 const COURSE = "18b03d75-b3ff-4d85-b021-aedfe40d156e"; // שיעור רגיל מהתוכנית
 
-// Only this address carries the flag.
+// המפתחות שקיימים ב-Redis המדומה. כל מה שאינו ברשימה מחזיר null.
+// `glowonly:solo@test.com` הוא מי שקנתה את קורס האיפור לבדו, בלי 360.
+// לקונת הקורס לבדו יש **שני** סימונים: `glowfull` שפותח לה את הקורס, ו-`glowonly`
+// שסוגר לה את התוכנית. כך זה גם ב-api/access.js, ששניהם נכתבים לה באותה כניסה.
+const KEYS = ["glow:yes@test.com", "glowfull:full@test.com", "glowfull:solo@test.com", "glowonly:solo@test.com"];
 let redisDown = false;
 globalThis.fetch = async (url) => {
   if (redisDown) throw new Error("redis down");
   const u = decodeURIComponent(String(url));
-  const ok = u.includes("GET/glow:yes@test.com");
+  const ok = KEYS.some((k) => u.includes("GET/" + k));
   return { ok: true, json: async () => ({ result: ok ? "1" : null }) };
 };
 
@@ -53,6 +57,17 @@ check("שיעור רגיל ממשיך לעבוד. תקלה אצלנו לא נו�
 r = await call(GLOW, "yes@test.com");
 check("והבונוס נחסם, כלומר נכשל לצד הבטוח", r.code === 403);
 redisDown = false;
+
+console.log("\nמי שקנתה את הקורס לבדו לא מגיעה ל-360\n");
+// רון: "ברור שצריך שמי שקנתה קורס איפור לא תוכל להגיע בשום צורה בדרך ל-360."
+r = await call(COURSE, "solo@test.com");
+check("שיעור מהתוכנית נחסם לקונת הקורס לבדו", r.code === 403 && r.body.error === "not_entitled", r.code + " " + JSON.stringify(r.body));
+r = await call(GLOW, "solo@test.com");
+check("ושיעורי הקורס שלה עצמה ממשיכים להיחתם", r.code === 200 && !!(r.body && r.body.url), r.code + "");
+r = await call(COURSE, "full@test.com");
+check("ומי שיש לה גם 360 וגם הקורס המלא אינה נחסמת, כי אין לה סימון", r.code === 200, r.code + "");
+r = await call(COURSE, "yes@test.com");
+check("וגם מי שיש לה רק את הדמו ממשיכה בתוכנית כרגיל", r.code === 200, r.code + "");
 
 console.log("\nקלט לא תקין\n");
 r = await call("../../etc/passwd", "yes@test.com");

@@ -27,30 +27,47 @@ export default async function handler(req, res) {
   // The flag is written by api/access.js on every entry, so removing the TRUE in the sheet
   // takes her access away on her next load rather than at some later refresh.
   //
-  // Deliberately fail CLOSED: no email, no flag, or Redis unreachable all mean no. The
-  // programme's own 88 videos are untouched by this and keep working in every case, so a
-  // Redis hiccup can never lock a woman out of the course she paid for.
+  // Deliberately fail CLOSED on the Glow videos: no email, no flag, or Redis unreachable
+  // all mean no. The programme's own 88 videos fail OPEN in the same situation, so a Redis
+  // hiccup can never lock a woman out of the course she paid for.
   //
   // ושתי רמות ולא אחת: שלושת השיעורים החינמיים נפתחים למי שיש לה את הבונוס **או**
   // את הקורס המלא, ושאר שיעורי הקורס נפתחים למי שיש לה את המלא בלבד. בלי ההפרדה
   // הזאת, קורס בתשלום היה חסום במסך ופתוח בשרת: כל מזהי הסרטונים נשלחים ממילא
   // לדפדפן של כל אישה בתוך קוד האפליקציה.
-  if (isGlowVideo(videoId) || isGlowFullVideo(videoId)) {
-    const email = String((req.query && req.query.email) || "").trim().toLowerCase();
-    const RU = process.env.UPSTASH_REDIS_REST_URL;
-    const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
-    const flag = async (k) => {
-      try {
-        const r = await fetch(`${RU}/GET/${encodeURIComponent(k + ":" + email)}`, { headers: { Authorization: `Bearer ${RT}` } });
-        return r.ok ? (await r.json()).result === "1" : false;
-      } catch (e) { return false; }
-    };
+  const email = String((req.query && req.query.email) || "").trim().toLowerCase();
+  const RU = process.env.UPSTASH_REDIS_REST_URL;
+  const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const hasEmail = !!(email && email.includes("@") && RU && RT);
+  const flag = async (k) => {
+    try {
+      const r = await fetch(`${RU}/GET/${encodeURIComponent(k + ":" + email)}`, { headers: { Authorization: `Bearer ${RT}` } });
+      return r.ok ? (await r.json()).result === "1" : false;
+    } catch (e) { return false; }
+  };
+
+  const isGlow = isGlowVideo(videoId) || isGlowFullVideo(videoId);
+
+  if (isGlow) {
     let ok = false;
-    if (email && email.includes("@") && RU && RT) {
+    if (hasEmail) {
       ok = await flag("glowfull");
       if (!ok && isGlowVideo(videoId)) ok = await flag("glow");
     }
     if (!ok) {
+      res.status(403).json({ error: "not_entitled" });
+      return;
+    }
+  } else {
+    // 88 סרטוני התוכנית. רון: "ברור שצריך שמי שקנתה קורס איפור לא תוכל להגיע
+    // בשום צורה בדרך ל-360." הסימון `glowonly` נכתב ב-api/access.js למי שיש לה
+    // GLOW-FULL בלי תאריך התחלה, כלומר למי שקנתה את הקורס לבדו.
+    //
+    // והכיוון כאן הפוך מזה שלמעלה, במכוון: כאן נכשלים לצד הפתוח, כי אישה שאין לה
+    // סימון היא אישה עם 360, **ותקלה אצלנו לעולם לא תנעל אישה מהתוכנית ששילמה
+    // עליה.** המחיר: בדקות שבהן Redis אינו עונה, קונת הקורס לבדו יכולה להגיע
+    // לסרטוני התוכנית אם היא מחזיקה מזהה, ובאותן דקות היא ממילא חסומה מהקורס שלה.
+    if (hasEmail && await flag("glowonly")) {
       res.status(403).json({ error: "not_entitled" });
       return;
     }
