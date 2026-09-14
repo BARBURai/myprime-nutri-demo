@@ -694,7 +694,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
                 ולא לפניה. לכן היא מפוצלת סביב המילה ולא נכתבת מחדש. */}
             {(showFull ? GLOW_FULL_TITLE : GLOW_TITLE).split("Glow").map((part, k) => (
               <React.Fragment key={k}>
-                {k > 0 && <img src={GLOW_LOGO} alt="Glow" style={{ height: 12, width: "auto", display: "block" }} />}
+                {k > 0 && <img src={GLOW_LOGO} alt="Glow" style={{ height: 14, width: "auto", display: "block" }} />}
                 {part.trim() && <span style={{ fontSize: 19, fontWeight: 700, color: GLOW_C.ink, lineHeight: 1.4 }}>{part.trim()}</span>}
               </React.Fragment>
             ))}
