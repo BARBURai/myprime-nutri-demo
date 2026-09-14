@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Play, Maximize2, VolumeX, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
-import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted, GLOW_FULL_DAY, GLOW_FULL_SECTIONS, GLOW_FULL_TITLE, GLOW_FULL_ROW, hasGlowFull, GLOW_LOGO, GLOW_C } from "./glow";
+import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted, GLOW_FULL_DAY, GLOW_FULL_SECTIONS, GLOW_FULL_TITLE, GLOW_FULL_ROW, hasGlowFull, GLOW_LOGO, GLOW_C, glowVideoAt, glowListFor } from "./glow";
 export { contentForDay } from "./data";
 
 
@@ -25,7 +25,51 @@ const FAV_KEY = "mp_content_fav_v1";
 const VIEWS_KEY = "mp_content_views_v1";
 function loadStore(key) { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) { return {}; } }
 function saveStore(key, obj) { try { localStorage.setItem(key, JSON.stringify(obj)); } catch (e) {} }
-function lessonKey(week, day, i) { return `W${week}D${day}-${i}`; }
+// שיעורי גלו נושאים שבוע 0 ויום 0, והם היחידים שהרשימה שלהם מתחלפת: ארבעת
+// שיעורי הדמו מול 28 שיעורי הקורס המלא. לכן שם המפתח נגזר ממזהה הסרטון ולא
+// מהמקום ברשימה. בכל שאר התוכנית המקום נשאר, כי יש שם שיעורים בלי סרטון בכלל
+// והרשימה של כל יום קבועה. ראה את ההסבר המלא ב-src/content/glow.js.
+function lessonKey(week, day, i) {
+  if (week === 0 && day === 0) {
+    const v = glowVideoAt(i);
+    if (v) return `GV-${v}`;
+  }
+  return `W${week}D${day}-${i}`;
+}
+
+// המרה חד פעמית של מה שכבר שמור על המכשיר. בלעדיה כל אישה שראתה שיעור גלו
+// הייתה מאבדת את הווי שלה ברגע שהגרסה הזאת עולה.
+//
+// **איזו רשימה שימשה כשהמפתח הישן נכתב:** מפתח עם מספר 4 ומעלה יכול היה
+// להיכתב רק מול הקורס המלא, כי בדמו יש ארבעה שיעורים בלבד. מי שיש לה מפתח
+// כזה הייתה על הקורס, וכל המפתחות שלה מומרים מולו. לכל השאר ההמרה היא מול
+// הדמו, וזה נכון לכל אישה בייצור, שם הקורס המלא מעולם לא היה קיים.
+const GLOW_MIGRATED_KEY = "mp_glow_key_v2";
+function migrateGlowKeys() {
+  try {
+    if (localStorage.getItem(GLOW_MIGRATED_KEY) === "1") return;
+    const old = /^W0D0-(\d+)$/;
+    const stores = [DONE_KEY, FAV_KEY, VIEWS_KEY].map((k) => [k, loadStore(k)]);
+    const idxOf = (o) => Object.keys(o).map((k) => (old.exec(k) || [])[1]).filter((x) => x !== undefined).map(Number);
+    const wasFull = stores.some(([, o]) => idxOf(o).some((i) => i >= 4));
+    const list = wasFull ? GLOW_FULL_DAY : GLOW_DAY;
+    stores.forEach(([key, obj]) => {
+      let touched = false;
+      Object.keys(obj).forEach((k) => {
+        const m = old.exec(k);
+        if (!m) return;
+        const v = glowVideoAt(Number(m[1]), list);
+        const val = obj[k];
+        delete obj[k];
+        touched = true;
+        if (v) obj[`GV-${v}`] = key === VIEWS_KEY ? (obj[`GV-${v}`] || 0) + val : val;
+      });
+      if (touched) saveStore(key, obj);
+    });
+    localStorage.setItem(GLOW_MIGRATED_KEY, "1");
+  } catch (e) {}
+}
+migrateGlowKeys();
 function tracksProgress(day) { return !!day; }
 // iPhone/iPad: Safari ignores the download attribute, so a plain link NAVIGATES to the PDF.
 // Inside an installed PWA there is no toolbar and no back button, so the woman gets stuck on the
@@ -858,14 +902,18 @@ export function usageSummary() {
   // who received the bonus would read as behind the rest in the office screen. Who is
   // watching the bonus is a different question, asked so the full Glow course can be
   // offered to exactly those women.
+  // **הרשימה שלה ולא הרשימה שקיימת בקוד.** `hasGlowFull()` אומר רק שהקורס
+  // אינו ריק, ולכן הוא נכון לכל אישה, וכך מי שיש לה את ארבעת שיעורי הדמו
+  // דווחה מ-v6.96 כ"2 מתוך 28" במסך הניהול.
   let gDone = 0, gViews = 0;
-  (hasGlowFull() ? GLOW_FULL_DAY : GLOW_DAY).lessons.forEach((l, i) => {
+  const gList = glowListFor();
+  gList.lessons.forEach((l, i) => {
     const k = lessonKey(0, 0, i);
     if (done[k]) gDone++;
     gViews += views[k] || 0;
   });
   return {
     days, videosDone: vDone, videosTotal: vTotal, views: vViews,
-    glowDone: gDone, glowTotal: (hasGlowFull() ? GLOW_FULL_DAY : GLOW_DAY).lessons.length, glowViews: gViews, glowStarted: glowStarted(),
+    glowDone: gDone, glowTotal: gList.lessons.length, glowViews: gViews, glowStarted: glowStarted(),
   };
 }
