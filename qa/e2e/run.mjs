@@ -89,11 +89,11 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false, glowFull = false, replies = null, aiAnswer = null, catalog = null }) {
+async function stubApi(context, { startDate, glow = false, glowFull = false, product = "360", replies = null, aiAnswer = null, catalog = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, glowFull, ...(replies ? { replies } : {}) });
+    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, glowFull, product, ...(replies ? { replies } : {}) });
     // ברירת המחדל היא תשובה שלא סיימה, כדי ששום תרחיש אחר לא יקבל בטעות כרטיס
     // תוצאות. תרחיש שצריך שיחה גמורה מוסר aiAnswer משלו.
     if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify(aiAnswer || { reply: "רשמתי לך", done: false, items: [] }) }] });
@@ -118,12 +118,12 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, clock = null, replies = null, aiAnswer = null, catalog = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow, glowFull, replies, aiAnswer, catalog });
+  await stubApi(context, { startDate, glow, glowFull, product, replies, aiAnswer, catalog });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
@@ -2184,6 +2184,52 @@ const CHECKS = [
       if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
       await context.close();
       return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "חזרה אחרי יציאה, והתאפסה אחרי הרישום" };
+    },
+  },
+  {
+    // מסך הקורס העצמאי, לקונת קורס האיפור לבדו. שני הצדדים באותה הרצה, כי מסך
+    // שנעול תמיד נראה בדיוק כמו מסך שאינו נעול אף פעם: אישה של 360 שיש לה גם
+    // את הקורס חייבת להמשיך לקבל את התוכנית המלאה עם כל הלשוניות.
+    name: "קונת הקורס לבדו מקבלת מסך אחד, ואישה של 360 ממשיכה לקבל את התוכנית",
+    async run(browser, device) {
+      const bad = [];
+      // א. קנתה את הקורס לבדו.
+      {
+        const { context, page, errors } = await openApp(browser, device, { glow: true, glowFull: true, product: "glow" });
+        await page.waitForTimeout(900);
+        const t = await page.evaluate(() => document.body.innerText);
+        for (const sec of ["להתחיל מהבסיס", "פנים", "עיניים", "מפתחות לאהבה עצמית"]) {
+          if (!t.includes(sec)) bad.push("חסר הסעיף " + sec);
+        }
+        // מה שאסור שיהיה שם: יומן, מדדים, משימות ומסכי הרשמה.
+        for (const x of ["יומן המעקב שלי", "מה שהוזן היום", "הסרטונים שלך היום", "מיי פריים 360", "נתוני בסיס"]) {
+          if (t.includes(x)) bad.push("מסך 360 דלף לקורס העצמאי: " + x);
+        }
+        if (t.includes("0 מתוך 28")) bad.push("שורת ההתקדמות הוצגה כשהיא על אפס");
+        const hero = await page.locator('img[src*="glow-hero"]').count();
+        if (!hero) bad.push("תמונת הפתיחה אינה מוצגת");
+        // ההגדרות: המייל שלה, בלי תאריך גישה ובלי שדה שהיא לא מילאה.
+        await page.locator('[aria-label="הגדרות"]').first().click().catch(() => {});
+        await page.waitForTimeout(500);
+        const st = await page.evaluate(() => document.body.innerText);
+        if (!st.includes("הגדרות")) bad.push("ההגדרות לא נפתחו");
+        if (!st.includes("התנתקות מהמכשיר")) bad.push("אין התנתקות בהגדרות");
+        if (st.includes("גישה עד")) bad.push("תאריך הגישה הוצג בהגדרות");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      // ב. אישה של 360 שיש לה גם את הקורס. שום דבר לא נעול אצלה.
+      {
+        const { context, page, errors } = await openApp(browser, device, { glow: true, glowFull: true });
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("יומן המעקב שלי")) bad.push("היומן נעלם לאישה של 360");
+        const hero = await page.locator('img[src*="glow-hero"]').count();
+        if (hero) bad.push("תמונת המסך העצמאי הוצגה בתוך 360");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "הקורס העצמאי נעול, ו-360 לא נגע" };
     },
   },
   {

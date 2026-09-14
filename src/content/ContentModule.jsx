@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Play, Maximize2, VolumeX, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
+import { Play, Maximize2, VolumeX, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search, Settings } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
-import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted, GLOW_FULL_DAY, GLOW_FULL_SECTIONS, GLOW_FULL_TITLE, GLOW_FULL_ROW, hasGlowFull, GLOW_LOGO, GLOW_C, glowVideoAt, glowListFor } from "./glow";
+import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted, GLOW_FULL_DAY, GLOW_FULL_SECTIONS, GLOW_FULL_TITLE, GLOW_FULL_ROW, hasGlowFull, GLOW_LOGO, GLOW_HERO, GLOW_C, glowVideoAt, glowListFor } from "./glow";
 export { contentForDay } from "./data";
 
 
@@ -249,7 +249,7 @@ export function ContentDayCard({ week, dow, C, font, onOpen, glow }) {
   );
 }
 
-export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, glowFull = false, backRef, startGlow = false , onGlowStart }) {
+export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, glowFull = false, backRef, startGlow = false , onGlowStart, solo = false, onSettings }) {
   const allDays = CONTENT_DAYS;
   // מי שקיבלה את הקורס המלא רואה אותו במקום שלושת החינמיים, ולא לצידם: שלושתם
   // חלק ממנו. החלטת רון, 9 בספטמבר 2026.
@@ -275,7 +275,11 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   // Opened straight onto the bonus list. A woman who has not started yet has nothing at all
   // unlocked, so the ordinary "today" view would be an empty screen and read as broken. The
   // bonus chip hides the week row anyway, because the bonus belongs to no week.
-  const [view, setView] = useState(startGlow ? "glow" : "today");
+  // solo = קונת קורס האיפור לבדו, בלי 360. אין לה ימים, אין תוכנית ואין לשוניות,
+  // ולכן המסך נפתח על הקורס ונשאר עליו. `setView` נחסם במקום לסנן כל מסלול בנפרד,
+  // כדי שגם חזרה משיעור וגם מצב ישן שנשמר לא יוכלו להוציא אותה משם.
+  const [view, setViewRaw] = useState(solo || startGlow ? "glow" : "today");
+  const setView = (v) => setViewRaw(solo ? "glow" : v);
   const [openL, setOpenL] = useState(null); // {week, day, i, pagesOnly}
   const [origin, setOrigin] = useState("today");
   const [selWeek, setSelWeek] = useState(null);
@@ -726,14 +730,43 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     );
   }
 
+  // ראש המסך של קונת הקורס לבדו. אין לה סרגל תחתון וגם לא לשוניות, כי יש לה
+  // מסך אחד, וסרגל היה מציע לה לבחור בין המסך שהיא כבר נמצאת בו לבין כלום.
+  // ההגדרות יושבות בגלגל שבפינת התמונה.
+  function SoloHead() {
+    const list = showFull ? GLOW_FULL_DAY : GLOW_DAY;
+    const watched = list.lessons.reduce((n, _l, i) => n + (isDone(0, 0, i) ? 1 : 0), 0);
+    return (
+      <div>
+        <div style={{ position: "relative" }}>
+          <img src={GLOW_HERO} alt={GLOW_FULL_TITLE} style={{ display: "block", width: "100%", height: "auto" }} />
+          {onSettings && (
+            <button onClick={onSettings} aria-label="הגדרות" style={{ position: "absolute", top: "max(12px, env(safe-area-inset-top, 0px))", left: 12, width: 38, height: 38, borderRadius: 999, border: "none", cursor: "pointer", background: "rgba(255,255,255,0.92)", color: GLOW_C.ink, boxShadow: "0 2px 8px rgba(44,27,52,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Settings size={20} />
+            </button>
+          )}
+        </div>
+        {/* אין לה יומן, אין ימים ואין לוח, ולכן המספר הוא ההתמצאות היחידה שלה
+            בקורס, ושמונת הסעיפים סגורים בפתיחה. **אינו מוצג כל עוד היא על אפס**,
+            כי ביום הראשון "0 מתוך 28" הוא הדבר היחיד שהיא רואה. */}
+        {watched > 0 && (
+          <div style={{ fontSize: 16, fontWeight: 700, color: GLOW_C.ink, padding: "14px 16px 12px", lineHeight: 1.5 }}>
+            צפית ב-{watched} מתוך {list.lessons.length} שיעורים
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ---------- ALL PROGRAM ----------
   if (view === "glow") {
     return (
       <div style={overlay}>
-        <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
-        <div style={scroll}>
-          <Segmented />
-          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, flexWrap: "wrap" }}>
+        {!solo && <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>}
+        <div style={solo ? { ...scroll, padding: "0 0 calc(28px + env(safe-area-inset-bottom, 0px))" } : scroll}>
+          {solo ? <SoloHead /> : <Segmented />}
+          <div style={solo ? { padding: "0 16px" } : null}>
+          <div hidden={solo} style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, flexWrap: "wrap" }}>
             {/* הכותרת נשארת בדיוק כפי שאושרה, והלוגו יושב במקום המילה Glow שבתוכה
                 ולא לפניה. לכן היא מפוצלת סביב המילה ולא נכתבת מחדש. */}
             {(showFull ? GLOW_FULL_TITLE : GLOW_TITLE).split("Glow").map((part, k) => (
@@ -767,6 +800,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
                 );
               })
             : GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="glow" tint={GLOW_C} />)}
+          </div>
         </div>
       </div>
     );

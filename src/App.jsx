@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.06";
+const VERSION = "7.07";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4455,6 +4455,34 @@ function SheetShell({ title, onClose, children, className = "" }) {
   );
 }
 
+// ההגדרות של קונת קורס האיפור לבדה. היא לא מילאה שום פרט, ולכן אין לה פרופיל:
+// לא משקל, לא גובה, לא מטרה ולא מחזור. זו רשימה קצרה ולא מסך, וזו הסיבה שהיא
+// יושבת בגלגל שבפינת התמונה ולא בסרגל תחתון. רון: "מה בעצם צריך להיות בפרופיל
+// אם היא לא מילאה שום דבר."
+function GlowSoloSettings({ name, email, onInstall, onLogout, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(email); } catch (e) {
+      try { const t = document.createElement("textarea"); t.value = email; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); } catch (e2) { return; }
+    }
+    setCopied(true); setTimeout(() => setCopied(false), 1400);
+  };
+  const row = { width: "100%", boxSizing: "border-box", textAlign: "right", border: `1px solid ${C.line}`, background: C.panel, borderRadius: 14, padding: "14px 15px", fontFamily: fontStack, fontSize: 16.5, color: C.ink, cursor: "pointer", marginBottom: 10 };
+  return (
+    <SheetShell title="הגדרות" onClose={onClose}>
+      <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "14px 15px", marginBottom: 14 }}>
+        {name && <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, marginBottom: 6 }}>{name}</div>}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 15.5, color: C.sub, direction: "ltr", wordBreak: "break-all" }}>{email}</span>
+          {email && <button onClick={copy} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 999, padding: "4px 12px", fontSize: 13.5, fontFamily: fontStack, color: C.ink, cursor: "pointer", flexShrink: 0 }}>{copied ? "הועתק ✓" : "העתקה"}</button>}
+        </div>
+      </div>
+      {onInstall && <button style={row} onClick={onInstall}>התקנת האפליקציה על הטלפון</button>}
+      <button style={{ ...row, color: C.brandD }} onClick={onLogout}>התנתקות מהמכשיר</button>
+    </SheetShell>
+  );
+}
+
 function ActivityModal({ onClose, onAdd, weightKg }) {
   const acts = [
     { name: "ריצה", met: 9.8 },
@@ -6841,6 +6869,8 @@ export default function App() {
   // מי שקיבלה את קורס האיפור המלא, לפי עמודת GLOW-FULL בגיליון. נשמר כאן כדי
   // שהמסך ייבנה נכון עוד לפני שהשער עונה, בדיוק כמו הבונוס שמעליו.
   const [glowFull, setGlowFull] = useState(() => { try { return localStorage.getItem("myprime_glow_full") === "1"; } catch (e) { return false; } });
+  // "glow" = קנתה את קורס האיפור לבדה. ראה את ההערה בתשובת השער למטה.
+  const [product, setProduct] = useState(() => { try { return localStorage.getItem("myprime_product") === "glow" ? "glow" : "360"; } catch (e) { return "360"; } });
   // "התחילה לצפות בבונוס". נשמר על המכשיר שלה, ומוחזק כאן גם כמצב כדי שהשליחה
   // של נתוני השימוש תצא שוב באותו ביקור. בלי זה התג במניצ'ט יצא רק בכניסה הבאה
   // שלה, כלומר לרוב רק למחרת, ומי שנרשמה וצפתה באותו ערב לא הייתה מתויגת כלל.
@@ -7009,6 +7039,13 @@ export default function App() {
         setGlowFull(!!d.glowFull);
         try { localStorage.setItem("myprime_glow_full", d.glowFull ? "1" : "0"); } catch (e) {}
         setGlow(!!d.glow);
+        // איזה מוצר היא קנתה. "glow" הוא קורס האיפור שנמכר לבדו, בלי 360, והשער
+        // מזהה אותו בכך שיש לה GLOW-FULL ואין לה תאריך התחלה. נכתב מחדש בכל
+        // כניסה, ולכן קונת גלו שנרשמת ל-360 עוברת לתוכנית המלאה מעצמה, ואישה
+        // של 360 שמסומן לה GLOW-FULL מקבלת את הקורס בתוך התוכנית. שני הכיוונים
+        // בלי שום צעד ידני.
+        setProduct(d.product === "glow" ? "glow" : "360");
+        try { localStorage.setItem("myprime_product", d.product === "glow" ? "glow" : "360"); } catch (e) {}
         // Answers the office wrote to notes she left, that she has not read yet. They light
         // the dot on the notes bubble and sit at the top of it until she taps "תודה, הבנתי".
         setReplies(Array.isArray(d.replies) ? d.replies : []);
@@ -7774,6 +7811,20 @@ export default function App() {
           <InstallGate onSkip={skipInstall} />
         ) : gate !== "ok" ? (
           <AccessGate status={gate} backDate={gateBack} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} notice={gateNotice} attempts={gateAttempts} agree={gateAgree} setAgree={setGateAgree} />
+        ) : product === "glow" ? (
+          /* קונת קורס האיפור לבדה, בלי 360. מסך אחד, בלי יומן, בלי מדדים, בלי
+             משימות, בלי התראות ובלי מסכי הרשמה, כי אין לה מה למלא. הסרגל התחתון
+             ירד: יש לה מסך אחד, וסרגל היה מציע לה לבחור בין המסך שהיא כבר נמצאת
+             בו לבין כלום. ההגדרות בגלגל שבפינת התמונה.
+             וברגע שייפתח לה מחזור 360, השער מפסיק להחזיר "glow" והיא מקבלת את
+             התוכנית המלאה בכניסה הבאה, בלי שום צעד ידני. */
+          <>
+            <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+              <ContentModule solo glow glowFull week={0} dow={0} todayWeek={0} todayDow={0} C={C} font={fontStack} backRef={contentBackRef} onSettings={() => setSheet("glowSettings")} onClose={() => {}} />
+            </div>
+            {sheet === "glowSettings" && <GlowSoloSettings name={gateName} email={gateEmail} onInstall={appIsPhone && !appStandalone ? () => setSheet("install") : null} onLogout={logoutDevice} onClose={() => setSheet(null)} />}
+            {sheet === "install" && <InstallGuideModal onClose={() => setSheet("glowSettings")} />}
+          </>
         ) : !onboarded ? (
           bkRestore === "offer" ? (
             <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={() => setBkRestore("none")} />
