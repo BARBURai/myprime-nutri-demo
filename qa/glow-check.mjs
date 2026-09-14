@@ -187,7 +187,7 @@ check("הכפתור פותח ישירות את רשימת הבונוס", /setGlo
 // Before her start date NOTHING of the programme is unlocked, so the ordinary content view
 // would be an empty screen. Landing her on the bonus list is what makes the button safe as
 // well as useful: there is no day there to press.
-check("ומסך התוכן נפתח על הבונוס ולא על היום", /useState\(startGlow \? "glow" : "today"\)/.test(mod));
+check("ומסך התוכן נפתח על הבונוס ולא על היום", /useState\((?:solo \|\| )?startGlow \? "glow" : "today"\)/.test(mod));
 check("והדגל מתאפס בסגירה, כדי שפתיחה רגילה לא תיפתח על הבונוס",
   /setSheet\(null\); setGlowDirect\(false\)/.test(app));
 check("מסך הניהול מציג את הבונוס גם למי שהמחזור שלה טרם התחיל",
