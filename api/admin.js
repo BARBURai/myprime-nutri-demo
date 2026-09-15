@@ -36,7 +36,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.13";
+const ADMIN_VERSION = "7.14";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -133,7 +133,7 @@ async function mcFind(phone) {
 // Push the same change into ManyChat. Runs after the local write and never blocks it: if
 // ManyChat is unreachable the clerk's change still takes effect in the app, which is the
 // thing she is looking at. The screen reports which of the two actually happened.
-async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on, freezeTag, hasName, first, last, out }) {
+async function mcPush({ phone, hasGroup, group, start, newEmail, glow, glowFull, tag, on, freezeTag, hasName, first, last, out }) {
   let sub;
   try { sub = await mcFind(phone); } catch (e) { return "failed"; }
   if (!sub) return "not_found";
@@ -209,6 +209,13 @@ async function mcPush({ phone, hasGroup, group, start, newEmail, glow, tag, on, 
     if (glow === "1" || glow === "0") {
       await mc(glow === "1" ? "/fb/subscriber/addTagByName" : "/fb/subscriber/removeTagByName", {
         subscriber_id: sub.id, tag_name: MC_TAGS.demo,
+      });
+    }
+    // אותו דבר בדיוק לקורס המלא. **"חזרה לגיליון" אינו נוגע בתגית**, כי משמעותו
+    // "מה שמניצ'ט כבר אומר", ואין מה לכתוב.
+    if (glowFull === "1" || glowFull === "0") {
+      await mc(glowFull === "1" ? "/fb/subscriber/addTagByName" : "/fb/subscriber/removeTagByName", {
+        subscriber_id: sub.id, tag_name: MC_TAGS.full,
       });
     }
     if (tag) {
@@ -812,6 +819,10 @@ JSON בלבד, בלי שום טקסט אחר:
     // the published CSV from a cache and takes minutes; this takes effect on her next load.
     const hasGlow = body && Object.prototype.hasOwnProperty.call(body, "glow");
     const glow = String((body && body.glow) || "").trim();
+    // קורס האיפור המלא. **המסלול זהה לחלוטין לזה של הבונוס**: נשמר אצלנו וחל
+    // בכניסה הבאה שלה, ובמקביל נכתב למניצ'ט. `api/access.js` כבר קורא את הסימון.
+    const hasGlowFull = body && Object.prototype.hasOwnProperty.call(body, "glowFull");
+    const glowFull = String((body && body.glowFull) || "").trim();
     const until = String((body && body.until) || "").trim();
     const group = String((body && body.group) || "").trim();
     // The two Glow-course and new-app tags have no column of their own in the sheet, so
@@ -826,7 +837,7 @@ JSON בלבד, בלי שום טקסט אחר:
     // את הפרמטר לכתובת ומסך הניהול מוגן במפתח. **הוא אינו מסיר שום תג במניצ'ט.**
     const glowTagReset = !!(body && body.glowtag);
     if (!email) return res.status(400).json({ ok: false, error: "missing_email" });
-    if (!hasUntil && !hasGroup && !hasGlow && !hasStart && !hasFreeze && !tag && !glowTagReset && !hasName) return res.status(400).json({ ok: false, error: "nothing_to_do" });
+    if (!hasUntil && !hasGroup && !hasGlow && !hasGlowFull && !hasStart && !hasFreeze && !tag && !glowTagReset && !hasName) return res.status(400).json({ ok: false, error: "nothing_to_do" });
     if (glowTagReset) {
       if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
       try { await redis(RU, RT, "DEL", `glowtag:${email}`); }
@@ -835,6 +846,7 @@ JSON בלבד, בלי שום טקסט אחר:
     }
     if (tag && tag !== "full" && tag !== "app" && tag !== "cancelproc") return res.status(400).json({ ok: false, error: "bad_tag" });
     if (hasGlow && glow && glow !== "1" && glow !== "0") return res.status(400).json({ ok: false, error: "bad_glow" });
+    if (hasGlowFull && glowFull && glowFull !== "1" && glowFull !== "0") return res.status(400).json({ ok: false, error: "bad_glowfull" });
     // שם ריק לגמרי היה מוחק לה את השם במניצ'ט, שהוא המקור. אין מסלול כזה.
     if (hasName && !first && !last) return res.status(400).json({ ok: false, error: "bad_name" });
     if (hasUntil && until && !DATE_RE.test(until)) return res.status(400).json({ ok: false, error: "bad_date" });
@@ -869,7 +881,7 @@ JSON בלבד, בלי שום טקסט אחר:
       // What the value was before this edit. With no override in force that is the sheet's
       // own value, so read it rather than logging a blank.
       let sheetRow = null;
-      if ((hasUntil && !cur.until) || (hasGroup && !cur.group) || (hasGlow && !cur.glow) || (hasStart && !cur.start) || (hasFreeze && !cur.start) || (hasName && !cur.first && !cur.last)) {
+      if ((hasUntil && !cur.until) || (hasGroup && !cur.group) || (hasGlow && !cur.glow) || (hasGlowFull && !cur.glowFull) || (hasStart && !cur.start) || (hasFreeze && !cur.start) || (hasName && !cur.first && !cur.last)) {
         try {
           const sheet = await loadSheet(process.env.ACCESS_SHEET_CSV_URL);
           sheetRow = sheet.women.find((w) => w.email === email) || null;
@@ -925,6 +937,10 @@ JSON בלבד, בלי שום טקסט אחר:
         const was = cur.glow || (sheetRow ? (sheetRow.glow ? "1" : "0") : "");
         log.unshift({ at, by, field: "glow", from: was, to: glow });
       }
+      if (hasGlowFull) {
+        const was = cur.glowFull || (sheetRow ? (sheetRow.glowFull ? "1" : "0") : "");
+        log.unshift({ at, by, field: "glowfull", from: was, to: glowFull });
+      }
       // A tag has no stored value of its own here, only a line in the record, so that the
       // office can still see who turned it on and when.
       if (tag) {
@@ -942,6 +958,7 @@ JSON בלבד, בלי שום טקסט אחר:
         first: hasName ? first : (cur.first || ""),
         last: hasName ? last : (cur.last || ""),
         glow: hasGlow ? glow : (cur.glow || ""),
+        glowFull: hasGlowFull ? glowFull : (cur.glowFull || ""),
         by, at, log: log.slice(0, 20),
       });
       await redis(RU, RT, "HSET", "admin:overrides", email, rec);
@@ -954,8 +971,8 @@ JSON בלבד, בלי שום טקסט אחר:
       // automations there hang off her start date and not off the day she comes back.
       const mcStart = hasStart ? start : freezeStart;
       const freezeTag = hasFreeze ? (freeze ? "on" : "off") : "";
-      if (process.env.MANYCHAT_TOKEN && (hasGroup || mcStart || glow === "1" || glow === "0" || tag || freezeTag || hasName)) {
-        mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", tag, on, freezeTag, hasName, first, last, out: mcOut });
+      if (process.env.MANYCHAT_TOKEN && (hasGroup || mcStart || glow === "1" || glow === "0" || glowFull === "1" || glowFull === "0" || tag || freezeTag || hasName)) {
+        mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", glowFull: hasGlowFull ? glowFull : "", tag, on, freezeTag, hasName, first, last, out: mcOut });
       }
       return res.status(200).json({ ok: true, mc: mcState, mcMulti: mcOut.multi || 0 });
     } catch (e) {
@@ -1169,6 +1186,9 @@ JSON בלבד, בלי שום טקסט אחר:
       // clerk must never have to guess which of the two she is looking at.
       glow: (ovr && ovr.glow) ? ovr.glow === "1" : !!w.glow,
       sheetGlow: !!w.glow,
+      // שני הערכים נוסעים, כאן כמו בכל המסך: מה שבתוקף ומה שהגיליון אומר.
+      sheetGlowFull: !!w.glowFull,
+      glowFullOverride: (ovr && ovr.glowFull) ? { glowFull: ovr.glowFull, by: ovr.by || "" } : null,
       // קורס האיפור המלא, ומאיפה הוא הגיע אליה. `glowSource` הוא "paid", "gift",
       // "solo" או ריק, וזה מה שקובע מה יקרה לה כשחלון 360 ייגמר.
       glowFull: glowFullNow,

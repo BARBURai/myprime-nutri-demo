@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v7.13** · עודכן: 15 בספטמבר 2026
+**גרסה נוכחית: v7.14** · עודכן: 15 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,33 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v7.14** - **מתג לקורס האיפור המלא בלשונית ההרשאות, שעובד מיד.** רון: "למה אני רואה בהרשאות רק את שיעורי הבונוס, למה אני לא יכול לשנות לה גם את כל השיעורים של גלו."
+
+### מה שהיה, ולמה הוא לא הספיק
+**מתג לקורס המלא כן היה, אבל הוא ישב בתוך הבלוק של מניצ'ט**, ולכן הוא **נעלם לגמרי** כשמניצ'ט לא מצא אותה לפי הטלפון. זה מה שרון ראה: "מניצ'ט: לא נמצאה רשומה לפי הטלפון הזה."
+
+**וגם כשהוא כן הופיע הוא היה איטי:** הוא שינה את התגית במניצ'ט, **ומשם היא הגיעה לאפליקציה רק אחרי שמניצ'ט ייצא לגיליון.** דקות עד שעות.
+
+| | הבונוס | הקורס המלא, קודם |
+|---|---|---|
+| נשמר אצלנו וחל **בכניסה הבאה** | ✓ | **✗** |
+| נכתב לתגית במניצ'ט | ✓ | ✓ |
+| מוצג גם כשמניצ'ט לא עונה | ✓ | **✗** |
+
+### מה שנבנה
+**שורה שנייה בהרשאות, מתחת לבונוס, באותו דפוס בדיוק:** "יש גישה" · "אין גישה" · "חזרה לגיליון", עם ✎ כשיש שינוי ידני **ועם מה שהגיליון אומר לצידו**, כי הפקידה לעולם לא אמורה לנחש במה היא מסתכלת.
+
+**והשער כבר ידע לקרוא את זה.** השורה שקוראת את הסימון קיימת ב-`api/access.js` והייתה רדומה, ולכן זו תוספת של מסך ולא שינוי בשער.
+
+**"חזרה לגיליון" אינו נוגע בתגית שבמניצ'ט**, כי משמעותו "מה שמניצ'ט כבר אומר", ואין מה לכתוב. בדיקה נועלת את זה.
+
+### ומתג אחד ולא שניים
+**המתג הישן ירד מבלוק מניצ'ט.** שני מתגים לאותו דבר יכולים להראות תשובות שונות, **והחדש עובד גם כשמניצ'ט לא עונה.** מתג "אפליקציה חדשה" נשאר שם.
+
+**`qa/glowfull-toggle-check.mjs`, 25 בדיקות בלי רשת**, מריצה את `api/admin.js` ואת `api/access.js` האמיתיים מול מניצ'ט מדומה שאפשר להגיד לו לא למצוא אותה. **אומת שיש לה שיניים: על v7.13 היא מחזירה 5 מתוך 25.**
+
+**ומלכודת שנתפסה בבנייתה:** הבדיקה הראשונה לא שלחה טלפון בגוף הבקשה, **והמסך האמיתי כן שולח**, כי זה מה שמניצ'ט מזהה לפיו. שלוש בדיקות התגית נפלו, וזו הייתה הבדיקה ולא הקוד.
 
 **v7.13** - מספור בלבד, אחרי ש-v7.12 עלתה לייצור. **המספר בייצור תמיד גבוה מכל מה שכבר עלה לשם, ולכן דב חייב להישאר מעליו.**
 
