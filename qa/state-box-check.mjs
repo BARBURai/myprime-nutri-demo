@@ -215,6 +215,19 @@ console.log("\nההיסטוריה, ובדרופדאון");
   check("למי שאין קורס אין שורות של קורס", !h.includes("נכנסה לקורס לראשונה"), h);
 }
 
+console.log("\nשורת ההמתנה במסך, ובקופי שרון אישר");
+{
+  const APP = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  check("הקופי של רון נמצא באפליקציה מילה במילה",
+    APP.includes("💄 קורס הביוטי Glow המלא במתנה יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים של תוכנית הליווי."));
+  // **בלי כפתור, כי אין עדיין לאן ללחוץ.** הקורס נעול עד יום 1.
+  const at = APP.indexOf("קורס הביוטי Glow המלא במתנה");
+  check("ואין בה כפתור לצפייה", !APP.slice(at, at + 400).includes("<Btn"), "");
+  // מסך ההמתנה מקבל את הבונוס ואת ההמתנה כשני שדות נפרדים, ולא `glow || glowFull`
+  // כפי שהיה, אחרת הקורס היה נפתח שוב בתקופת ההמתנה.
+  check("מסך ההמתנה אינו פותח יותר את הקורס המלא", !APP.includes("glow={glow || glowFull}"));
+}
+
 console.log("\nמסך הפתיחה תקף גם לקונת הקורס");
 {
   const APP = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");

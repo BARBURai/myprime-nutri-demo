@@ -94,8 +94,15 @@ export function decideAccess(f) {
   //
   // **שלושת שיעורי המתנה אינם מושפעים** וממשיכים להיפתח בתקופת ההמתנה, כי זו כל
   // מטרתם. ולקונת הקורס לבדו אין תוכנית ואין המתנה, ולכן זה אינו נוגע בה כלל.
+  //
+  // **וההמתנה חלה על המתנה בלבד ולא על קורס שנקנה בכסף.** אישה שקנתה את הקורס
+  // לבדה כבר צופה בו, וברגע שנפתח לה מחזור של 360 היא הייתה מאבדת אותו עד יום 1.
+  // זה אותו כלל בדיוק של v7.09: **מצב של 360 לעולם אינו לוקח קורס בתשלום.**
   const preStart = has360 && today < ymdOf(startSunday);
-  const glowFullOpen = glowOpen && !preStart;
+  const glowFullOpen = glowOpen && (!preStart || !!f.glowPaid);
+  // יש לה קורס, והוא ייפתח ביום 1. **זה מה שמצדיק שורה במסך ההמתנה**, ובלעדיו
+  // היא עוברת שבועיים בלי לדעת שהוא קיים.
+  const glowSoon = !!f.glowFull && preStart && !glowFullOpen;
 
   // אישה רשומה שעדיין לא שובצה למחזור: אין לה 360 ואין לה מה לפוג, והיא נכנסת
   // כמו תמיד ומקבלת את מסכי ההרשמה וההמתנה. **זה המצב היחיד שבו אין מוצר פתוח
@@ -113,7 +120,7 @@ export function decideAccess(f) {
   return {
     has360, open360, stopped360, frozenNow, expired360, waiting360,
     glowOwned, glowStopped, glowStandalone, glowPast, glowOnly, glowOpen,
-    preStart, glowFullOpen,
+    preStart, glowFullOpen, glowSoon,
     // מתנה מול קנייה, כפי שהמשרד צריך לראות את זה.
     glowSource: !f.glowFull ? "" : (!has360 ? "solo" : (f.glowPaid ? "paid" : "gift")),
     end360: ymdOf(end360At),

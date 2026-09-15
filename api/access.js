@@ -467,5 +467,5 @@ export default async function handler(req, res) {
 
   // `freeze` travels on so the diary can leave the frozen days out of her day strip and
   // label the days before them for what they are. Nothing of hers is deleted.
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull: glowFullNow, product: glowOnly ? "glow" : "360", replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull: glowFullNow, glowSoon: decision.glowSoon, product: glowOnly ? "glow" : "360", replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
 }

@@ -145,7 +145,11 @@ check("המספר שמסמן הושלם נגזר מהרשימה השטוחה", /
 check("שיעור בלי מזהה אינו מרונדר", /if \(!l\.videoId\) continue;/.test(glow));
 // החלטת רון: "לא הייתי שם את זה ביומן".
 check("הקורס המלא אינו מופיע בכרטיס היומן", /glow=\{glow && !glowFull\}/.test(app));
-check("ומסך ההמתנה כן פותח אותו", /glow=\{glow \|\| glowFull\}/.test(app));
+// **הכלל התהפך ב-v7.11, לפי החלטת רון.** מסך ההמתנה פתח את הקורס המלא לפי
+// ההחלטה של v6.96, שהתקבלה כשהוא היה מתנה מהוובינר ולא מוצר שנמכר. מעכשיו הוא
+// נפתח לה ביום 1, ובמסך ההמתנה יש שורה שאומרת לה את זה.
+check("ומסך ההמתנה אינו פותח יותר את הקורס המלא", !/glow=\{glow \|\| glowFull\}/.test(app));
+check("ובמקומו יש שורה שאומרת לה שהוא ייפתח ביום 1", app.includes("יפתח באפליקציה ביום הראשון של התוכנית"));
 check("הכיתוב הוא זה שרון אישר",
   glow.includes('export const GLOW_FULL_TITLE = "מיי פריים Glow"')
   && glow.includes('export const GLOW_FULL_ROW = "קורס האיפור המלא שלך במיי פריים Glow"'));
@@ -177,7 +181,7 @@ check("שיעור 12 הוא הארות ולא האדרות", glow.includes("שי
 check("ו-4MUST צמוד, כדי שהספרה לא תתהפך", (glow.match(/שיטת 4MUST/g) || []).length === 4 && !/4 MUST/.test(glow));
 
 console.log("\nמסך ההמתנה, לפני שהתוכנית מתחילה\n");
-check("מסך ההמתנה מקבל את הסימון", /function PreStartScreen\(\{ name, startDate, glow = false, onOpenGlow \}\)/.test(app));
+check("מסך ההמתנה מקבל את הסימון", /function PreStartScreen\(\{ name, startDate, glow = false, glowSoon = false, onOpenGlow \}\)/.test(app));
 check("והכרטיס מוצג רק למי שמגיע לה", /\{glow && hasGlow\(\) && \(/.test(app));
 check("הקופי של הכרטיס בדיוק כפי שאושר",
   app.includes("💄 בונוס שמחכה לך כבר עכשיו") &&

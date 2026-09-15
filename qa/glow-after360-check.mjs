@@ -328,5 +328,37 @@ console.log("\nלפני יום 1: הקורס המלא נעול, והמתנה ל�
   check("קונת הקורס לבדו אינה מושפעת מההמתנה", g.allowed === true && g.product === "glow" && g.glowFull === true, g.reason);
 }
 
+console.log("\nוההמתנה חלה על המתנה בלבד");
+{
+  reset();
+  // קנתה את הקורס, ואז נרשמה ל-360 שמתחיל בעוד שבועיים. **היא כבר צפתה בו,
+  // ואסור שייסגר לה.**
+  CSV = [HDR, row({ email: "prepaid@t.com", start: daysFromNow(14), full: "TRUE", paid: "TRUE" })].join("\n");
+  const g = await gate("prepaid@t.com");
+  check("קורס שנקנה בכסף אינו נסגר בתקופת ההמתנה", g.glowFull === true, String(g.glowFull));
+  check("ולכן גם אין לה שורת המתנה במסך", g.glowSoon === false, String(g.glowSoon));
+  check("והסרטונים שלו נחתמים לה", store.kv["glowfull:prepaid@t.com"] === "1");
+}
+{
+  reset();
+  CSV = [HDR, row({ email: "pregift@t.com", start: daysFromNow(14), full: "TRUE" })].join("\n");
+  const g = await gate("pregift@t.com");
+  check("ומתנה כן ממתינה ליום 1", g.glowFull === false, String(g.glowFull));
+  check("ונאמר לה שהיא מחכה", g.glowSoon === true, String(g.glowSoon));
+}
+{
+  reset();
+  CSV = [HDR, row({ email: "plainpre@t.com", start: daysFromNow(14) })].join("\n");
+  const g = await gate("plainpre@t.com");
+  check("ומי שאין לה קורס אינה מקבלת שום שורה", g.glowSoon === false, String(g.glowSoon));
+}
+{
+  reset();
+  const d = new Date(); d.setDate(d.getDate() - d.getDay());
+  CSV = [HDR, row({ email: "started@t.com", start: d.toISOString().slice(0, 10), full: "TRUE" })].join("\n");
+  const g = await gate("started@t.com");
+  check("ומרגע שהתוכנית התחילה השורה יורדת", g.glowSoon === false && g.glowFull === true, String(g.glowSoon));
+}
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.\n`);
 process.exit(fail ? 1 : 0);
