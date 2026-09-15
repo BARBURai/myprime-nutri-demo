@@ -156,7 +156,7 @@ export default async function handler(req, res) {
   } catch (e) { /* the map is a bridge, never a gate: a Redis hiccup falls back to the file */ }
 
   let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false, glowFull = false;
-  let solo = 0, glowMonths = null;
+  let solo = 0, glowMonths = null, glowPaid = false;
   try {
     // Cache-busting: Google's published CSV can serve a stale copy for a few minutes.
     // Appending a timestamp helps fetch a fresher version, and we ask fetch not to cache.
@@ -169,7 +169,7 @@ export default async function handler(req, res) {
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
     let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, glowFullCol = -1, emailCol = -1, headerFound = false;
-    let solo6Col = -1, solo12Col = -1, glowFullMCol = -1;
+    let solo6Col = -1, solo12Col = -1, glowFullMCol = -1, glowPaidCol = -1;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
       cancelCol = findCol(header, ["ביטלה"]);
@@ -187,6 +187,11 @@ export default async function handler(req, res) {
       // מספר חודשי הגישה לקורס. עמודה אופציונלית, וריק פירושו ברירת המחדל.
       // ההתאמה היא על שם העמודה המלא, ולכן GLOW-FULL ו-GLOW-FULL-M לעולם לא יתבלבלו.
       glowFullMCol = findCol(header, ["GLOW-FULL-M"]);
+      // הסימן שמבדיל בין קורס שנקנה בכסף לבין הקורס שניתן במתנה בוובינר, ובלעדיו
+      // שתי הנשים נראות זהות לגמרי. **קנייה שורדת את סיום 360 והמתנה נגמרת איתו.**
+      // עמודה אופציונלית: כל עוד היא אינה קיימת, שום דבר לא משתנה לאף אישה.
+      // ההתאמה היא על השם המלא, ולכן היא אינה יכולה להתבלבל עם GLOW-FULL.
+      glowPaidCol = findCol(header, ["GLOW-PAID"]);
       // שתי עמודות אופציונליות של תוכנית סולו, נקראות כאן בדיוק כמו במסך הניהול
       // כדי ששניהם לא יוכלו לחלוק על אורך החלון שלה.
       solo6Col = findCol(header, ["SOLO6"]);
@@ -220,10 +225,11 @@ export default async function handler(req, res) {
       const cells = parseCsvLine(line);
       const isYes = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
 
-      const hit = { phone: "", glow: false, glowFull: false, solo: 0, months: null, glowM: null, cancelled: false, start: null };
+      const hit = { phone: "", glow: false, glowFull: false, glowPaid: false, solo: 0, months: null, glowM: null, cancelled: false, start: null };
       if (phoneCol !== -1 && cells[phoneCol]) hit.phone = String(cells[phoneCol]).replace(/[^\d]/g, "");
       if (glowCol !== -1) hit.glow = isYes(cells[glowCol]);
       if (glowFullCol !== -1) hit.glowFull = isYes(cells[glowFullCol]);
+      if (glowPaidCol !== -1) hit.glowPaid = isYes(cells[glowPaidCol]);
       if (glowFullMCol !== -1) {
         const gm = parseInt(String(cells[glowFullMCol] || "").replace(/[^\d]/g, ""), 10);
         if (Number.isFinite(gm) && gm > 0) hit.glowM = gm;
@@ -263,6 +269,10 @@ export default async function handler(req, res) {
       // "אם מישהי ביטלה ויש לה שתי שורות אז היא ביטלה, ולא צריך להיות לה שום
       // גישה, וזה לא משנה אם יש שתי שורות או שמונה מאות."
       cancelled = hits.some((h) => h.cancelled);
+      // **הקנייה נספרת מכל השורות, בדיוק כמו הביטול**, כי היא עובדה על האישה
+      // ולא על המחזור. אישה שקנתה את הקורס לא תאבד אותו מפני שהשורה המנצחת
+      // היא דווקא זו שאין בה את הסימון.
+      glowPaid = hits.some((h) => h.glowPaid);
       let win = hits[0];
       for (let k = 1; k < hits.length; k++) {
         const h = hits[k];
@@ -296,6 +306,7 @@ export default async function handler(req, res) {
           phone = String(m.phone || "").replace(/[^\d]/g, "");
           glow = !!m.glow;
           glowFull = !!m.glowFull;
+          glowPaid = !!m.glowPaid;
           solo = (m.solo === 6 || m.solo === 12) ? m.solo : 0;
           const mm = parseInt(m.months, 10);
           if (Number.isFinite(mm) && mm > 0) extraMonths = mm;
@@ -306,7 +317,9 @@ export default async function handler(req, res) {
     } catch (e) { /* the file stays in charge */ }
   }
   if (!found) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
-  if (cancelled) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
+  // **הביטול, ההקפאה והחלון שנגמר אינם יוצאים מכאן יותר, והם עדיין חוסמים.**
+  // כולם נאספים כעובדות ונאכפים יחד בבלוק ההכרעה שלמטה, כי מרגע שיש שני מוצרים
+  // נפרדים אסור שסגירה של 360 תיקח ממנה קורס איפור ששילמה עליו בנפרד.
 
   // 2) usage window (only when a parseable start date exists for this participant)
   // A clerk can extend or end a woman's access from the admin screen. That decision is
@@ -343,26 +356,52 @@ export default async function handler(req, res) {
       else if (ovr.glow === "0") glow = false;
       if (ovr.glowFull === "1") glowFull = true;
       else if (ovr.glowFull === "0") glowFull = false;
+      if (ovr.glowPaid === "1") glowPaid = true;
+      else if (ovr.glowPaid === "0") glowPaid = false;
       const gmo = parseInt(ovr.glowM, 10);
       if (Number.isFinite(gmo) && gmo > 0) glowMonths = gmo;
     }
   } catch (e) { /* fall through to the sheet */ }
-  // Same answer as the sheet's own cancellation, so she sees the one screen that already
-  // exists and points her at support, rather than a second wording for the same thing.
-  if (clerkBlocked) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
-  // Missing either half means the freeze cannot resolve, and she waits rather than being let
-  // in with a week nobody chose for her.
-  if (freeze && (!freeze.back || !freeze.week || israelDay(0) < freeze.back)) {
-    return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: freeze.back || "" });
-  }
   const startSunday = parseDateToSunday(clerkStart || startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
-  // מוצר גלו העצמאי, שנמכר בלי 360. הסימן שמבדיל אותו ממתנת הוובינר הוא תאריך
-  // ההתחלה עצמו: למי שקיבלה את הקורס במתנה תמיד יש מחזור של 360, ולמי שקנתה את
-  // הקורס לבדו אין. לכן אין צורך בשום עמודה נוספת מעבר ל-GLOW-FULL-M.
-  const glowOnly = !!glowFull && !startSunday;
+
+  // ============================================================================
+  // שני מוצרים, שני חישובים נפרדים.
+  //
+  // עד 15 בספטמבר 2026 השער שאל שאלה אחת, "יש לה תאריך התחלה?", והסיק ממנה איזה
+  // מוצר יש לה. **זה היה נכון רק כל עוד אף אחת עוד לא סיימה 360**, כי תאריך
+  // ההתחלה נשאר בגיליון לנצח. ברגע שאישה סיימה וקנתה את קורס האיפור היא נשארה
+  // מסומנת כ-360 שהחלון שלו נגמר, כלומר **נחסמה מקורס ששילמה עליו.** אותו דבר
+  // קרה למי שביטלה את 360 ולמי שנמצאת בהקפאה.
+  //
+  // מכאן נשאלות שתי שאלות נפרדות, והמסך נגזר מהן: 360 פתוח לה? הקורס פתוח לה?
+  // ============================================================================
+  const has360 = !!startSunday;
+  // ההקפאה שלא ניתנת לפתרון, בלי תאריך חזרה או בלי שבוע, ממשיכה להחזיק אותה
+  // בחוץ ולא מכניסה אותה לשבוע שאף אחד לא בחר לה.
+  const frozenNow = !!(freeze && (!freeze.back || !freeze.week || israelDay(0) < freeze.back));
+  // ביטול בגיליון וביטול בתהליך מהמשרד מסיימים את 360 באותה צורה בדיוק.
+  const stopped360 = !!cancelled || !!clerkBlocked;
+  const expired360 = clerkUntil
+    ? israelDay(0) > clerkUntil
+    : !!(startSunday && isExpired(startSunday, extraMonths, solo));
+  const open360 = has360 && !stopped360 && !frozenNow && !expired360;
+
+  // **הקורס שנקנה בכסף שורד את סיום 360; הקורס שניתן במתנה בוובינר נגמר איתו.**
+  // זו ההחלטה של רון מ-v7.03, שנשמרת כאן במלואה: אישה בלי `GLOW-PAID` שיש לה
+  // מחזור מקבלת את הקורס כל עוד 360 פתוח, ולא רגע אחד אחריו. ומי שמעולם לא
+  // הייתה ב-360 היא קונה מעצם העובדה שאין לה מחזור, בדיוק כמו ב-v7.03.
+  //
+  // **וכדי לשלול קורס בתשלום, מורידים את `GLOW-FULL`.** ביטול של 360 אינו הלֶוֶר
+  // לזה, כי הוא מדבר על מוצר אחר.
+  const glowOwned = !!glowFull && (!has360 || !!glowPaid);
+  // **ביטול אצל מי שמעולם לא הייתה ב-360 יכול לדבר רק על הקורס עצמו**, כי אין לה
+  // שום מוצר אחר לבטל, ולכן שם הוא סוגר גם אותו. אצל מי שיש לה מחזור הביטול הוא
+  // של 360 בלבד ואינו נוגע בקורס ששילמה עליו בנפרד.
+  const glowStopped = !has360 && stopped360;
+  const glowStandalone = glowOwned && !glowStopped && !open360;
   let glowStart = "";
-  if (glowOnly) {
+  if (glowStandalone) {
     const RU0 = process.env.UPSTASH_REDIS_REST_URL, RT0 = process.env.UPSTASH_REDIS_REST_TOKEN;
     if (RU0 && RT0) {
       try {
@@ -374,12 +413,28 @@ export default async function handler(req, res) {
       } catch (e) { glowStart = ""; /* תקלה אצלנו לעולם אינה נועלת אישה משלמת */ }
     }
   }
-  const pastWindow = clerkUntil
+  // החלון של הקורס. הארכה ידנית מהמשרד גוברת עליו **רק אצל מי שאין לה 360 בכלל**,
+  // כי שם היא ברורה על הקורס; אצל מי שסיימה 360 ההארכה מדברת על התוכנית ואסור לה
+  // לקחת קורס בתשלום. ותקלה אצלנו לעולם אינה סוגרת חלון: בלי `glowStart` הוא פתוח.
+  const glowPast = (!has360 && clerkUntil)
     ? israelDay(0) > clerkUntil
-    : glowOnly
-      ? (!!glowStart && glowExpired(glowStart, glowMonths))
-      : (startSunday && isExpired(startSunday, extraMonths, solo));
-  if (pastWindow) {
+    : !!(glowStart && glowExpired(glowStart, glowMonths));
+  const glowOnly = glowStandalone && !glowPast;
+
+  // אישה רשומה שעדיין לא שובצה למחזור: אין לה 360 ואין לה מה לפוג, והיא נכנסת
+  // כמו תמיד ומקבלת את מסכי ההרשמה וההמתנה. **זה המצב היחיד שבו אין מוצר פתוח
+  // ובכל זאת אין מה לחסום.**
+  // `expired360` נכלל כאן כי הוא נושא גם הארכה ידנית שנגמרה, וזו כן סוגרת גם את מי
+  // שאין לה מחזור. בלעדיו היא הייתה נכנסת בחזרה אחרי שהמשרד סגר לה את הגישה.
+  // ו-`glowOwned` נכלל כי מי שיש לה קורס אינה "ממתינה למחזור" אלא קונה שהחלון שלה
+  // נגמר, ובלי זה היא הייתה נכנסת בחזרה כ-360 אחרי שהקורס שלה פג.
+  const waiting360 = !has360 && !stopped360 && !frozenNow && !expired360 && !glowOwned;
+
+  // בלוק ההכרעה. **חוסמים רק כששני המוצרים סגורים**, וההודעה היא של הסיבה שסגרה
+  // את 360, כדי שהיא תראה את אותם מסכים שכבר קיימים ולא נוסח שני לאותו דבר.
+  if (!open360 && !glowOnly && !waiting360) {
+    if (stopped360) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
+    if (frozenNow) return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: (freeze && freeze.back) || "" });
     return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate });
   }
 

@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v7.08** · עודכן: 14 בספטמבר 2026
+**גרסה נוכחית: v7.09** · עודכן: 15 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,55 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v7.09** - **אישה שסיימה 360 וקנתה את קורס האיפור נחסמה מקורס ששילמה עליו.** רון: "יכול להיות מישהי שהיה לה קודם את 360 ועדיין יש לה 360 עם שיעורי המתנה ופתאום החליטה לקנות גלו, יכול להיות שהיא סיימה את 360 ורצתה לקנות גלו, יכול להיות כל מיני מצבים. תחשוב על כל המצבים, לכל אחד מהם צריך שהמערכת תבין את הסיטואציה ותיתן לה את המסך הנכון."
+
+### מה שהיה שבור, ולמה לא ראיתי את זה כשבניתי
+**השער שאל שאלה אחת: "יש לה תאריך התחלה?"** ומהתשובה הסיק איזה מוצר יש לה. **זה היה נכון בדיוק כל עוד אף אחת עוד לא סיימה 360**, וזו הנחה שלא נרשמה בשום מקום.
+
+**תאריך ההתחלה נשאר בגיליון לנצח.** לכן אישה שסיימה 360 וקנתה את הקורס נשארה מסומנת כ-360 שהחלון שלו נגמר, **כלומר נחסמה לגמרי.** אותו דבר בדיוק קרה למי שביטלה את 360 ולמי שנמצאת בהקפאה.
+
+**וזה המסלול הכי סביר למכור בו את הקורס**, כלומר כמעט כל קונה הייתה נופלת שם.
+
+### הכלל החדש: שני מוצרים, שתי שאלות
+| 360 | הקורס | המסך |
+|---|---|---|
+| פתוח | פתוח | התוכנית, והקורס בתוכה |
+| פתוח | סגור | התוכנית |
+| סגור | פתוח | **מסך הקורס בלבד** |
+| סגור | סגור | חסומה |
+
+**כל המצבים יוצאים מהטבלה הזאת לבד**, כולל מצבים שלא חשבנו עליהם. **חוסמים רק כששני המוצרים סגורים**, וההודעה היא של הסיבה שסגרה את 360, כדי שהיא תראה את המסכים שכבר קיימים.
+
+### והסימן שהיה חסר: עמודה `GLOW-PAID`
+**אישה שקיבלה את הקורס במתנה בוובינר ואישה שקנתה אותו נראו זהות לגמרי**, לשתיהן `GLOW-FULL` ותו לא. **ובלי להבדיל ביניהן אי אפשר לתקן:** תיקון עיוור היה נותן את הקורס ל-12 חודשים בחינם לכל מי שהייתה בוובינר.
+
+**עמודה אופציונלית חדשה, שהאוטומציה של המכירה במניצ'ט מדליקה.** כל עוד היא אינה קיימת **שום דבר לא משתנה לאף אישה**, ובדיקה נועלת בדיוק את זה.
+
+| מה יש לה | מה קורה כש-360 נגמר |
+|---|---|
+| `GLOW-FULL` בלבד, עם מחזור | **המתנה נגמרת יחד עם 360.** החלטת רון מ-v7.03, נשמרת במלואה |
+| `GLOW-FULL` וגם `GLOW-PAID` | **הקורס ממשיך**, 12 חודשים מהכניסה הראשונה אחרי שהתוכנית נסגרה |
+| `GLOW-FULL` בלי מחזור כלל | קונה, בדיוק כמו ב-v7.03. **לא נגע** |
+
+**`GLOW-PAID` בלי `GLOW-FULL` אינה נותנת כלום**, וההתאמה היא על השם המלא ולכן היא אינה יכולה להתבלבל עם `GLOW-FULL`. **והקנייה נספרת מכל השורות בגיליון, כמו הביטול**, כי היא עובדה על האישה ולא על המחזור.
+
+### שלוש החלטות של רון
+1. **ביטול והקפאה של 360 אינם לוקחים קורס בתשלום.** **וכדי לשלול קורס, מורידים את `GLOW-FULL`**, כי הביטול מדבר על מוצר אחר
+2. **ביטול אצל מי שמעולם לא הייתה ב-360 כן סוגר גם את הקורס**, כי אין לה שום מוצר אחר לבטל ולכן הוא יכול לדבר רק עליו
+3. **החלון בקנייה הוא 12 חודשים מהכניסה הראשונה אחרי ש-360 נסגר**, כי אין לנו תאריך קנייה. **זה לטובתה:** היא מקבלת את מה שנשאר לה ב-360 ועוד 12 חודש
+
+**ומה שהשתנה מתוך זה, ונאמר לרון במפורש: `GLOW-FULL-M` כן חלה על מי שסיימה 360 והפכה לקונה.** ב-v7.03 היא לא חלה על אף מי שיש לה מחזור. **היא עדיין אינה סימן קנייה בפני עצמה**, ובדיקה נועלת את זה.
+
+### מה שנשמר, וזה החלק שהיה מסוכן
+**זה הקובץ שקובע מי נכנסת, ולכן כל מסלול קיים נבדק אחד-אחד:** מי ש-360 פתוח לה **לעולם אינה מועברת למסך הקורס**, מחזור עתידי אינו נחשב נגמר, אישה רשומה שעוד לא שובצה למחזור נכנסת כמו תמיד, ההקפאה הרגילה חוסמת בדיוק כמו קודם, **ותקלת Redis לעולם אינה נועלת אישה משלמת.**
+
+**`qa/glow-after360-check.mjs`, 36 בדיקות בלי רשת**, מריצה את `api/access.js` האמיתי על כל 13 המצבים מול גיליון מדומה ומול Redis מדומה. **אומת שיש לה שיניים: על v7.08 היא מחזירה 26 מתוך 36**, ועשר הנפילות הן בדיוק התאים השבורים. **ו-27 הבדיקות של `qa/glow-only-check.mjs` ממשיכות לעבור בלי שינוי.**
+
+### ומה שנשאר פתוח, ורון פתח אותו באותה שיחה
+**שורת סיכום בכרטיס במסך הניהול, שאומרת בשנייה אחת מה יש לה ומה אין לה**, מתי הצטרפה לקורס ומתי הוא נגמר, ומתחתיה היסטוריה של התאריכים. רון: "כל הסיפור הזה יכול מאוד לבלבל את טלי." **הקופי הוצג לו וממתין לאישור, ולכן לא נבנה.**
+
+**ותאריך הקנייה עצמו אינו קיים אצלנו.** אנחנו יודעים מתי היא נכנסה לקורס בפעם הראשונה ולא מתי שילמה. אם מניצ'ט יכתוב אותו לעמודה, אפשר יהיה להציג אותו.
 
 **v7.08** - **סרגל הבדיקות כיסה את ראש האפליקציה, וזה נמדד ולא נוחש.** רון: "אני עדיין לא רואה כמעט בכלל את הסרגל של התאריכים למעלה, רק את הקצה התחתון של הסרגל הזה."
 
