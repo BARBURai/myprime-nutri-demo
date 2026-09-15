@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.09";
+const VERSION = "7.10";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3266,7 +3266,9 @@ function SplashScreen() {
     <div style={{ position: "absolute", inset: 0, zIndex: 200, background: C.panel, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28, textAlign: "center", fontFamily: fontStack, animation: "splashFade 2s ease forwards" }}>
       <div style={{ position: "absolute", top: 14, left: 14, background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, padding: "4px 12px", borderRadius: 999 }}>בטה</div>
       <img src={MEDAL_SRC} alt="" width={150} height={150} style={{ display: "block", marginBottom: 20 }} />
-      <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.45, maxWidth: 320 }}>ברוכה הבאה לאפליקציית המעקב היומי של מיי פריים</div>
+      {/* **"המעקב היומי" ירד מכאן.** המסך הזה נראה בכל טעינה ולכל אישה, כולל קונת
+          קורס האיפור שאין לה יומן מעקב בכלל, ואצלה הוא היה מבטיח מוצר אחר. */}
+      <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.45, maxWidth: 320 }}>ברוכה הבאה לאפליקציית מיי פריים</div>
     </div>
   );
 }

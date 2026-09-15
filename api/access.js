@@ -15,6 +15,7 @@
 //  B. 2-device limit (optional) - create a free Upstash Redis database, then set:
 //     UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Vercel env -> Redeploy.
 
+import { decideAccess } from "./_product.js";
 async function redis(base, token, ...args) {
   const path = args.map((a) => encodeURIComponent(String(a))).join("/");
   const r = await fetch(`${base}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -79,36 +80,9 @@ function findCol(headerCells, names) {
 
 function isTrue(v) { return /^\s*true\s*$/i.test(String(v || "")); }
 
-// Access window ends 70 days + N months after the (Sunday) start date, inclusive of the
-// last day. N defaults to 3 but can be overridden per participant via the sheet.
-function isExpired(startSunday, extraMonths, solo) {
-  const exp = new Date(startSunday.getTime());
-  // סולו: שימוש באפליקציה בלבד, בלי ליווי ובלי קבוצה. החלון נמדד מתאריך ההתחלה
-  // ולמשך שישה חודשים או שנה, **בלי 70 הימים ובלי `חודשי גישה נוספים`**.
-  if (solo === 6 || solo === 12) {
-    exp.setUTCMonth(exp.getUTCMonth() + solo);
-  } else {
-    const months = (Number.isFinite(extraMonths) && extraMonths > 0) ? Math.floor(extraMonths) : 3;
-    exp.setUTCDate(exp.getUTCDate() + 70);
-    exp.setUTCMonth(exp.getUTCMonth() + months);
-  }
-  const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  return today.getTime() > exp.getTime();
-}
-
-// מוצר גלו העצמאי: החלון נמדד מהיום הראשון שהיא נכנסה ולא מתאריך התחלה של מחזור,
-// כי אין לה מחזור כלל. ברירת המחדל היא 12 חודשים, ו-GLOW-FULL-M גובר עליה.
-function glowExpired(startYmd, months) {
-  const m = (Number.isFinite(months) && months > 0) ? Math.floor(months) : 12;
-  const p = String(startYmd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!p) return false;
-  const exp = new Date(Date.UTC(+p[1], +p[2] - 1, +p[3]));
-  exp.setUTCMonth(exp.getUTCMonth() + m);
-  const t = israelDay(0).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const today = new Date(Date.UTC(+t[1], +t[2] - 1, +t[3]));
-  return today.getTime() > exp.getTime();
-}
+// **שני חישובי החלון עברו ל-`api/_product.js`**, יחד עם ההכרעה עצמה, כדי שהשער
+// ומסך הניהול יקראו בדיוק את אותו כלל. עותק שני כאן היה בדיוק הדרך שבה ב-v6.77
+// השניים התחילו לחלוק בשקט.
 
 // Max concurrent devices per email: a phone and a computer. 0 (or less) = no limit.
 // The cap EVICTS rather than blocks - see the device section below for why.
@@ -376,32 +350,16 @@ export default async function handler(req, res) {
   //
   // מכאן נשאלות שתי שאלות נפרדות, והמסך נגזר מהן: 360 פתוח לה? הקורס פתוח לה?
   // ============================================================================
-  const has360 = !!startSunday;
-  // ההקפאה שלא ניתנת לפתרון, בלי תאריך חזרה או בלי שבוע, ממשיכה להחזיק אותה
-  // בחוץ ולא מכניסה אותה לשבוע שאף אחד לא בחר לה.
-  const frozenNow = !!(freeze && (!freeze.back || !freeze.week || israelDay(0) < freeze.back));
-  // ביטול בגיליון וביטול בתהליך מהמשרד מסיימים את 360 באותה צורה בדיוק.
-  const stopped360 = !!cancelled || !!clerkBlocked;
-  const expired360 = clerkUntil
-    ? israelDay(0) > clerkUntil
-    : !!(startSunday && isExpired(startSunday, extraMonths, solo));
-  const open360 = has360 && !stopped360 && !frozenNow && !expired360;
-
-  // **הקורס שנקנה בכסף שורד את סיום 360; הקורס שניתן במתנה בוובינר נגמר איתו.**
-  // זו ההחלטה של רון מ-v7.03, שנשמרת כאן במלואה: אישה בלי `GLOW-PAID` שיש לה
-  // מחזור מקבלת את הקורס כל עוד 360 פתוח, ולא רגע אחד אחריו. ומי שמעולם לא
-  // הייתה ב-360 היא קונה מעצם העובדה שאין לה מחזור, בדיוק כמו ב-v7.03.
-  //
-  // **וכדי לשלול קורס בתשלום, מורידים את `GLOW-FULL`.** ביטול של 360 אינו הלֶוֶר
-  // לזה, כי הוא מדבר על מוצר אחר.
-  const glowOwned = !!glowFull && (!has360 || !!glowPaid);
-  // **ביטול אצל מי שמעולם לא הייתה ב-360 יכול לדבר רק על הקורס עצמו**, כי אין לה
-  // שום מוצר אחר לבטל, ולכן שם הוא סוגר גם אותו. אצל מי שיש לה מחזור הביטול הוא
-  // של 360 בלבד ואינו נוגע בקורס ששילמה עליו בנפרד.
-  const glowStopped = !has360 && stopped360;
-  const glowStandalone = glowOwned && !glowStopped && !open360;
+  // ההכרעה עצמה יושבת ב-`api/_product.js` ומשמשת גם את מסך הניהול, כדי שהשניים
+  // לא יוכלו לחלוק על מה שהאישה רואה. הקריאה הראשונה היא בלי שעון הקורס, רק כדי
+  // לדעת אם צריך לתפוס אותו בכלל.
+  const facts = {
+    startSunday, cancelled, clerkBlocked, clerkUntil, freeze,
+    extraMonths, solo, glowFull, glowPaid, glowMonths,
+    glowStart: "", today: israelDay(0),
+  };
   let glowStart = "";
-  if (glowStandalone) {
+  if (decideAccess(facts).glowStandalone) {
     const RU0 = process.env.UPSTASH_REDIS_REST_URL, RT0 = process.env.UPSTASH_REDIS_REST_TOKEN;
     if (RU0 && RT0) {
       try {
@@ -413,28 +371,13 @@ export default async function handler(req, res) {
       } catch (e) { glowStart = ""; /* תקלה אצלנו לעולם אינה נועלת אישה משלמת */ }
     }
   }
-  // החלון של הקורס. הארכה ידנית מהמשרד גוברת עליו **רק אצל מי שאין לה 360 בכלל**,
-  // כי שם היא ברורה על הקורס; אצל מי שסיימה 360 ההארכה מדברת על התוכנית ואסור לה
-  // לקחת קורס בתשלום. ותקלה אצלנו לעולם אינה סוגרת חלון: בלי `glowStart` הוא פתוח.
-  const glowPast = (!has360 && clerkUntil)
-    ? israelDay(0) > clerkUntil
-    : !!(glowStart && glowExpired(glowStart, glowMonths));
-  const glowOnly = glowStandalone && !glowPast;
-
-  // אישה רשומה שעדיין לא שובצה למחזור: אין לה 360 ואין לה מה לפוג, והיא נכנסת
-  // כמו תמיד ומקבלת את מסכי ההרשמה וההמתנה. **זה המצב היחיד שבו אין מוצר פתוח
-  // ובכל זאת אין מה לחסום.**
-  // `expired360` נכלל כאן כי הוא נושא גם הארכה ידנית שנגמרה, וזו כן סוגרת גם את מי
-  // שאין לה מחזור. בלעדיו היא הייתה נכנסת בחזרה אחרי שהמשרד סגר לה את הגישה.
-  // ו-`glowOwned` נכלל כי מי שיש לה קורס אינה "ממתינה למחזור" אלא קונה שהחלון שלה
-  // נגמר, ובלי זה היא הייתה נכנסת בחזרה כ-360 אחרי שהקורס שלה פג.
-  const waiting360 = !has360 && !stopped360 && !frozenNow && !expired360 && !glowOwned;
-
-  // בלוק ההכרעה. **חוסמים רק כששני המוצרים סגורים**, וההודעה היא של הסיבה שסגרה
-  // את 360, כדי שהיא תראה את אותם מסכים שכבר קיימים ולא נוסח שני לאותו דבר.
-  if (!open360 && !glowOnly && !waiting360) {
-    if (stopped360) return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
-    if (frozenNow) return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: (freeze && freeze.back) || "" });
+  // וההכרעה הסופית, עכשיו עם שעון הקורס בידיים.
+  facts.glowStart = glowStart;
+  const decision = decideAccess(facts);
+  const glowOnly = decision.glowOnly;
+  if (!decision.allowed) {
+    if (decision.reason === "frozen") return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: (freeze && freeze.back) || "" });
+    if (decision.reason === "cancelled") return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
     return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate });
   }
 

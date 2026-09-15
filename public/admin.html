@@ -144,6 +144,27 @@
     font-size:13px;color:var(--warn);background:var(--warnbg);border-radius:7px;
     padding:5px 9px;margin-top:2px;
   }
+  /* "מה יש לה עכשיו". ארבע שורות קבועות בראש הכרטיס, לפני כל לשונית, כדי שטלי
+     תדע בשנייה אחת מה האישה הזאת רואה כשהיא פותחת את האפליקציה. */
+  .statebox{
+    margin-top:10px;border:1px solid var(--line);border-radius:10px;
+    padding:9px 11px;background:#fff;
+  }
+  .sthead{font-size:12px;font-weight:700;color:var(--ink);opacity:.72;margin-bottom:6px}
+  .sthead2{font-size:12px;font-weight:700;color:var(--ink);opacity:.72;margin:10px 0 4px}
+  .stline{display:flex;gap:10px;justify-content:space-between;align-items:baseline;font-size:13.5px;padding:2px 0}
+  .stline span{color:var(--ink);opacity:.8;flex:0 0 auto}
+  .stline b{text-align:left;font-weight:600}
+  .stscreen{margin-top:7px;padding-top:7px;border-top:1px solid var(--line);font-size:13.5px}
+  .hist{margin-top:8px}
+  .hist>summary{
+    cursor:pointer;font-size:13px;font-weight:600;color:var(--brand);
+    list-style:none;padding:4px 0;
+  }
+  .hist>summary::-webkit-details-marker{display:none}
+  .hist>summary::after{content:" ▾"}
+  .hist[open]>summary::after{content:" ▴"}
+  .histin{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:#fff}
   /* כפילות בגיליון: אותה כתובת מייל בכמה שורות, או אותו טלפון על כמה כתובות.
      הקופסה יושבת על הכרטיס שלה, כי שתי שורות נראות בדיוק כמו שורה אחת. */
   /* כותרת חלק בתוך מסך "בעיות בגיליון". שני סוגי בעיות באותו מסך, ולכן חייב
@@ -1263,6 +1284,58 @@ function render(){
   var I_BAN   = SV('<circle cx="12" cy="12" r="8.5"/><path d="m6.4 6.4 11.2 11.2"/>');
   var I_WA    = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2Zm5.1 14.1c-.2.6-1.2 1.2-1.7 1.2-.5.1-1 .1-3.1-.7-2.6-1-4.3-3.7-4.4-3.9-.1-.2-1-1.4-1-2.7s.6-1.9.9-2.1c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .5l-.4.5-.3.3c-.1.1-.2.3 0 .5.2.3.7 1.2 1.6 2 1.1.9 1.5 1 1.7 1.1.2.1.4.1.5-.1l.7-.8c.2-.2.3-.2.5-.1l2 .9c.2.1.4.2.4.3.1.1.1.6-.1 1.2Z"/></svg>';
 
+
+  // **מה יש לה עכשיו.** בקשה של רון, 15 בספטמבר 2026: "כל הסיפור הזה יכול מאוד
+  // לבלבל את טלי, אני חושב שצריך שיהיה לכל אחת שורה שמסכמת מה יש לה ומה אין לה."
+  //
+  // **ארבע שורות קבועות תמיד, גם כשהתשובה היא "אין"**, לפי הכלל של v5.07: בכלי
+  // עבודה, היעדר שורה אינו תשובה. הנתונים מגיעים מ-`api/_product.js`, שהוא אותו
+  // קובץ בדיוק שהשער מריץ, ולכן מה שכתוב כאן הוא מה שהאישה באמת רואה.
+  function stateBox(w){
+    var st = w.state || {};
+    var l360 = !w.start ? 'עוד לא שובצה למחזור'
+      : st.open360 ? 'פעיל עד '+il(st.end360 && !w.startOverride && !w.override ? st.end360 : (w.until||st.end360))
+      : w.cancelled || w.blocked ? 'בוטל'
+      : w.frozen ? 'בהקפאה'
+      : 'הסתיים ב-'+il(w.until||st.end360);
+    var src = st.glowSource === "paid" ? 'נקנה'
+      : st.glowSource === "solo" ? 'נקנה'
+      : st.glowSource === "gift" ? 'מתנה מהוובינר · נגמר יחד עם 360' : '';
+    var lGlow = !w.glowFull ? 'אין'
+      : st.glowOpen
+        ? src + (st.endGlow && st.product === "glow" ? ' · פעיל עד '+il(st.endGlow) : '')
+        : src + ' · הסתיים'+(st.endGlow?' ב-'+il(st.endGlow):'');
+    var screen = !st.allowed
+      ? (st.reason === "cancelled" ? 'חסומה, בוטלה'
+        : st.reason === "frozen" ? 'חסומה, בהקפאה' : 'חסומה, התוכנית הסתיימה')
+      : st.product === "glow" ? 'קורס האיפור בלבד'
+      : !w.start ? 'מסכי ההרשמה, עד שיהיה לה מחזור'
+      : w.glowFull ? 'התוכנית, והקורס בתוכה' : 'התוכנית';
+    return '<div class="statebox">'+
+      '<div class="sthead">מה יש לה עכשיו</div>'+
+      '<div class="stline"><span>מיי פריים 360</span><b>'+esc(l360)+'</b></div>'+
+      '<div class="stline"><span>קורס האיפור המלא</span><b>'+esc(lGlow)+'</b></div>'+
+      '<div class="stscreen">המסך שהיא רואה: <b>'+esc(screen)+'</b></div>'+
+    '</div>';
+  }
+
+  // וההיסטוריה, בדרופדאון כדי שלא תעמיס. החלטת רון.
+  function histBox(w){
+    var st = w.state || {};
+    var rows = [];
+    if (w.start) rows.push(['הצטרפה לתוכנית', il(w.start)]);
+    if (w.start && !st.open360 && (w.until||st.end360)) rows.push(['סיימה את התוכנית', il(w.until||st.end360)]);
+    if (w.glowStart) rows.push(['נכנסה לקורס לראשונה', il(w.glowStart)]);
+    if (w.glowStart && st.endGlow) rows.push(['הקורס נגמר', il(st.endGlow)]);
+    rows.push(['נכנסה לאחרונה', lastSeen(w).replace("נכנסה ","")]);
+    return '<details class="hist"><summary>היסטוריה</summary>'+
+      '<div class="histin">'+
+        rows.map(function(r){ return '<div class="stline"><span>'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>'; }).join("")+
+        '<div class="sthead2">שינויים שנעשו כאן</div>'+logLines(w)+
+        '<div class="note"><b>תאריך הקנייה של הקורס אינו קיים אצלנו.</b> מה שכתוב למעלה הוא היום הראשון שבו היא נכנסה לקורס בפועל.</div>'+
+      '</div></details>';
+  }
+
   function logLines(w){
     if(!(w.log && w.log.length)) return '<div class="empty">עוד לא נעשה כאן שום שינוי.</div>';
     return '<div class="log">'+w.log.map(function(L){
@@ -1696,6 +1769,8 @@ function render(){
           (w.newApp?' · גישה עד <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+(w.expired?" (הסתיימה)":""):"")+'</div>'+
         ((w.backSoon && w.backCohort)?'<div class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></div>':'')+
         dupBox(w)+
+        stateBox(w)+
+        histBox(w)+
         quickActs(w)+
       '</div>'+
       '<div class="tabs" role="tablist">'+TABS.map(function(t){

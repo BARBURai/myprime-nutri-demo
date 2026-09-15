@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v7.09** · עודכן: 15 בספטמבר 2026
+**גרסה נוכחית: v7.10** · עודכן: 15 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,42 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v7.10** - **"מה יש לה עכשיו" בראש הכרטיס, והיסטוריה בדרופדאון.** רון: "כל הסיפור הזה יכול מאוד לבלבל את טלי, אני חושב שצריך שיהיה לכל אחת שורה שמסכמת מה יש לה ומה אין לה, ומתי היא הצטרפה לקורס ומתי היא סיימה, כדי שתבין בשנייה אחת מה יש לה לפי המערכת."
+
+**מרגע ש-v7.09 הפרידה בין שני מוצרים, הכרטיס אומר עשרה דברים ולא אומר את הדבר האחד שטלי צריכה:** מה האישה הזאת רואה כשהיא פותחת את האפליקציה.
+
+### ארבע שורות, תמיד
+```
+מה יש לה עכשיו
+מיי פריים 360 · פעיל עד 14.03.2026
+קורס האיפור המלא · נקנה · פעיל עד 12.09.2027
+המסך שהיא רואה: התוכנית, והקורס בתוכה
+```
+
+**השורות קבועות גם כשהתשובה היא "אין"**, לפי הכלל של v5.07: בכלי עבודה, היעדר שורה אינו תשובה. **ובשורת הקורס כתוב מאיפה הוא הגיע**, "נקנה" או "מתנה מהוובינר · נגמר יחד עם 360", כי זה מה שקובע מה יקרה לה כשהתוכנית תיגמר.
+
+**וההיסטוריה בדרופדאון, החלטת רון**, כדי שלא תעמיס: הצטרפה לתוכנית · סיימה את התוכנית · נכנסה לקורס לראשונה · הקורס נגמר · נכנסה לאחרונה, **ומתחתיהן יומן השינויים שכבר היה בכרטיס.**
+
+### והחלק שבאמת חשוב כאן: הכלל עבר לקובץ משותף
+**`api/_product.js` הוא עכשיו המקום היחיד שמכריע מה יש לה**, והשער ומסך הניהול שניהם קוראים אותו. **בלי זה היה למסך עותק משלו**, וזו בדיוק הצורה של v6.77: שני הקבצים בחרו שורה אחרת מאותו גיליון, המסך הציג מחזור אחד והאפליקציה נתנה אחר, **ואף מסך לא אמר שיש בעיה.**
+
+**שני חישובי החלון נמחקו מ-`api/access.js` ולא הועתקו**, ו-`api/_sheet.js` קורא עכשיו גם את `GLOW-FULL`, `GLOW-FULL-M` ו-`GLOW-PAID`, כך שהמסך רואה בדיוק את מה שהשער רואה.
+
+### תאריך הקנייה של הקורס אינו קיים אצלנו, ורון שאל על זה במפורש
+**מה שיש הוא `glow:start`, היום הראשון שבו הקורס נפתח לה בפועל**, שנתפס ב-`HSETNX` בכניסה הראשונה שבה היא קונת קורס. **אצל מי שקנתה בזמן 360 הוא נתפס רק כשהתוכנית נסגרת**, ולכן הוא לעולם אינו מוקדם מדי ולעולם אינו מקצר לה.
+
+**לכן השורה נקראת "נכנסה לקורס לראשונה" ולא "תאריך קנייה"**, ובדיקה נופלת אם מישהו יציג את זה כקנייה. **אם מניצ'ט יכתוב תאריך קנייה לעמודה, אפשר יהיה להציג אותו.**
+
+### ומסך הפתיחה כבר לא מבטיח יומן מעקב
+רון: "יש חלון 'ברוכה הבאה לאפליקציית המעקב של מיי פריים' שקורה גם כשהיא בגלו, צריך פשוט לשנות את השם כדי שזה יהיה תקף בכל מקרה."
+
+**`SplashScreen` נראה בכל טעינה ולכל אישה**, כולל קונת קורס האיפור שאין לה יומן מעקב בכלל. הכותרת היא עכשיו **"ברוכה הבאה לאפליקציית מיי פריים"**, ובדיקה נופלת אם הנוסח הישן יחזור.
+
+### הבדיקות
+**`qa/state-box-check.mjs`, 34 בדיקות בלי רשת**, **ושמונה מהן הן העיקר: אותה אישה עוברת גם בשער וגם במסך הניהול, והתשובה חייבת להיות זהה.** **אומת שיש להן שיניים:** מסך שמחזיק עותק משלו של הכלל נתפס מיד ונוקב בשם של מי שעליה חלקו. **ושאר הבדיקות מושכות את `stateBox` ואת `histBox` מתוך `public/admin.html` ומריצות אותן**, ולא מעתיקות.
+
+**46 הבדיקות ללא רשת עוברות**, ובתוכן 296 של מסך הניהול ו-66 של הכפילויות בלי שינוי.
 
 **v7.09** - **אישה שסיימה 360 וקנתה את קורס האיפור נחסמה מקורס ששילמה עליו.** רון: "יכול להיות מישהי שהיה לה קודם את 360 ועדיין יש לה 360 עם שיעורי המתנה ופתאום החליטה לקנות גלו, יכול להיות שהיא סיימה את 360 ורצתה לקנות גלו, יכול להיות כל מיני מצבים. תחשוב על כל המצבים, לכל אחד מהם צריך שהמערכת תבין את הסיטואציה ותיתן לה את המסך הנכון."
 
