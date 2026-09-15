@@ -375,6 +375,10 @@ export default async function handler(req, res) {
   facts.glowStart = glowStart;
   const decision = decideAccess(facts);
   const glowOnly = decision.glowOnly;
+  // **הקורס המלא נפתח לה ביום 1 ולא לפניו.** לפני זה היא מקבלת בדיוק את מה שיש
+  // לה חוץ ממנו: שלושת שיעורי המתנה אם סומנו לה, ואחרת שום דבר מגלו. זה נוסע
+  // בשדה `glowFull` עצמו, ולכן המסכים באפליקציה נסגרים מאליהם בלי מסלול נוסף.
+  const glowFullNow = decision.glowFullOpen;
   if (!decision.allowed) {
     if (decision.reason === "frozen") return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: (freeze && freeze.back) || "" });
     if (decision.reason === "cancelled") return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
@@ -436,7 +440,7 @@ export default async function handler(req, res) {
       else await redis(RU, RT, "DEL", `glow:${email}`);
       // אותו דפוס בדיוק לקורס המלא: נכתב בכל כניסה ונמחק ברגע שהסימון יורד
       // מהגיליון, ולכן הסרה נכנסת לתוקף בטעינה הבאה שלה ולא מתישהו.
-      if (glowFull) await redis(RU, RT, "SET", `glowfull:${email}`, "1", "EX", 2592000);
+      if (glowFullNow) await redis(RU, RT, "SET", `glowfull:${email}`, "1", "EX", 2592000);
       else await redis(RU, RT, "DEL", `glowfull:${email}`);
       // ומי שקנתה את הקורס לבדו מסומנת ככזאת, כדי ש-api/bunny-token.js יסרב לחתום
       // לה על 88 סרטוני התוכנית. רון: "ברור שצריך שמי שקנתה קורס איפור לא תוכל
@@ -463,5 +467,5 @@ export default async function handler(req, res) {
 
   // `freeze` travels on so the diary can leave the frozen days out of her day strip and
   // label the days before them for what they are. Nothing of hers is deleted.
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull, product: glowOnly ? "glow" : "360", replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull: glowFullNow, product: glowOnly ? "glow" : "360", replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
 }

@@ -1302,6 +1302,7 @@ function render(){
       : st.glowSource === "solo" ? 'נקנה'
       : st.glowSource === "gift" ? 'מתנה מהוובינר · נגמר יחד עם 360' : '';
     var lGlow = !w.glowFull ? 'אין'
+      : st.preStart ? src + ' · נפתח ב-'+il(w.start)
       : st.glowOpen
         ? src + (st.endGlow && st.product === "glow" ? ' · פעיל עד '+il(st.endGlow) : '')
         : src + ' · הסתיים'+(st.endGlow?' ב-'+il(st.endGlow):'');
@@ -1310,6 +1311,7 @@ function render(){
         : st.reason === "frozen" ? 'חסומה, בהקפאה' : 'חסומה, התוכנית הסתיימה')
       : st.product === "glow" ? 'קורס האיפור בלבד'
       : !w.start ? 'מסכי ההרשמה, עד שיהיה לה מחזור'
+      : st.preStart ? 'מסך ההמתנה, עד שהתוכנית מתחילה'
       : w.glowFull ? 'התוכנית, והקורס בתוכה' : 'התוכנית';
     return '<div class="statebox">'+
       '<div class="sthead">מה יש לה עכשיו</div>'+

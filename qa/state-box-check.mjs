@@ -168,6 +168,26 @@ console.log("\nשורת הסיכום אומרת את מה שאושר");
   check("מי שעוד לא שובצה למחזור נאמר לה את זה במפורש", h.includes("עוד לא שובצה למחזור"), h);
 }
 
+{
+  reset();
+  // **הבאג של v7.10:** שורת הקורס נשענה על `glowOwned`, שעונה על "האם הוא שורד
+  // את סיום 360", **ולכן מתנת הוובינר הוצגה כ"הסתיים" בזמן שהתוכנית שלה רצה.**
+  CSV = [HDR, row({ email: "gift2@t.com", start: sundayMonthsAgo(1), full: "TRUE" })].join("\n");
+  const w = await one("gift2@t.com");
+  const h = mod.stateBox(w);
+  check("מתנה בזמן שהתוכנית רצה אינה מסומנת כהסתיימה", !h.includes("הסתיים"), h);
+}
+{
+  reset();
+  // לפני יום 1: יש לה את הקורס, והוא עוד לא נפתח. **שני דברים שונים.**
+  const inTwoWeeks = new Date(); inTwoWeeks.setDate(inTwoWeeks.getDate() + 14);
+  CSV = [HDR, row({ email: "pre@t.com", start: inTwoWeeks.toISOString().slice(0, 10), full: "TRUE" })].join("\n");
+  const w = await one("pre@t.com");
+  const h = mod.stateBox(w);
+  check("בהמתנה כתוב מתי הקורס נפתח ולא שהוא הסתיים", h.includes("נפתח ב-") && !h.includes("הסתיים"), h);
+  check("ושורת המסך אומרת מסך ההמתנה", h.includes("מסך ההמתנה"), h);
+}
+
 console.log("\nההיסטוריה, ובדרופדאון");
 {
   reset();

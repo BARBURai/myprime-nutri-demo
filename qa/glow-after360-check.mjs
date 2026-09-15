@@ -292,5 +292,41 @@ console.log("\nמה שאסור שיקרה");
   check("מחזור עתידי אינו נחשב נגמר", g.allowed === true && g.product === "360", g.reason);
 }
 
+console.log("\nלפני יום 1: הקורס המלא נעול, והמתנה לא");
+{
+  reset();
+  // מחזור שמתחיל בעוד שבועיים. היא נכנסת, ורואה את מסך ההמתנה.
+  CSV = [HDR, row({ email: "pre@t.com", start: daysFromNow(14), full: "TRUE" })].join("\n");
+  const g = await gate("pre@t.com");
+  check("היא נכנסת כרגיל", g.allowed === true && g.product === "360", g.reason);
+  check("**והקורס המלא עוד לא נפתח לה**", g.glowFull === false, String(g.glowFull));
+  check("ולכן גם הסרטונים שלו אינם נחתמים לה", store.kv["glowfull:pre@t.com"] === undefined);
+}
+{
+  reset();
+  // אותה אישה, עם שלושת שיעורי המתנה. **הם כן נפתחים בתקופת ההמתנה.**
+  CSV = [HDR, row({ email: "pre2@t.com", start: daysFromNow(14), full: "TRUE", bonus: "TRUE" })].join("\n");
+  const g = await gate("pre2@t.com");
+  check("שיעורי המתנה כן פתוחים לה בהמתנה", g.glow === true);
+  check("והקורס המלא עדיין לא", g.glowFull === false, String(g.glowFull));
+  check("והסרטונים החינמיים נחתמים לה", store.kv["glow:pre2@t.com"] === "1");
+}
+{
+  reset();
+  // מחזור שמתחיל היום. **מכאן הקורס פתוח.**
+  const d = new Date(); d.setDate(d.getDate() - d.getDay());
+  CSV = [HDR, row({ email: "day1@t.com", start: d.toISOString().slice(0, 10), full: "TRUE" })].join("\n");
+  const g = await gate("day1@t.com");
+  check("ביום שהתוכנית מתחילה הקורס נפתח", g.glowFull === true, String(g.glowFull));
+  check("והסרטונים שלו נחתמים לה", store.kv["glowfull:day1@t.com"] === "1");
+}
+{
+  reset();
+  // קונת הקורס לבדו: אין לה תוכנית ואין המתנה, ולכן זה אינו נוגע בה כלל.
+  CSV = [HDR, row({ email: "solo2@t.com", full: "TRUE" })].join("\n");
+  const g = await gate("solo2@t.com");
+  check("קונת הקורס לבדו אינה מושפעת מההמתנה", g.allowed === true && g.product === "glow" && g.glowFull === true, g.reason);
+}
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.\n`);
 process.exit(fail ? 1 : 0);

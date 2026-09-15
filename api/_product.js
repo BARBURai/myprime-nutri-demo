@@ -83,7 +83,19 @@ export function decideAccess(f) {
     ? today > f.clerkUntil
     : !!(endGlowAt && today > ymdOf(endGlowAt));
   const glowOnly = glowStandalone && !glowPast;
-  const glowOpen = glowOwned && !glowStopped && (open360 || glowOnly);
+  // **האם הקורס פתוח לה עכשיו.** כאן נשאל `glowFull` ולא `glowOwned`, כי `glowOwned`
+  // עונה על שאלה אחרת לגמרי, "האם הוא שורד את סיום 360", **ומתנת הוובינר אינה
+  // שורדת ובכל זאת פתוחה לה כל עוד התוכנית רצה.**
+  const glowOpen = !!f.glowFull && !glowStopped && (open360 || glowOnly);
+
+  // **לפני יום 1 הקורס המלא נעול, בדיוק כמו היומן והדוח.** החלטת רון, 15 בספטמבר
+  // 2026: "מי שנרשמת ויש לה גלו פול היום תקבל רק את גלו פול, ואני רוצה שזה ייפתח
+  // לה רק ביום שהיא מתחילה את התוכנית."
+  //
+  // **שלושת שיעורי המתנה אינם מושפעים** וממשיכים להיפתח בתקופת ההמתנה, כי זו כל
+  // מטרתם. ולקונת הקורס לבדו אין תוכנית ואין המתנה, ולכן זה אינו נוגע בה כלל.
+  const preStart = has360 && today < ymdOf(startSunday);
+  const glowFullOpen = glowOpen && !preStart;
 
   // אישה רשומה שעדיין לא שובצה למחזור: אין לה 360 ואין לה מה לפוג, והיא נכנסת
   // כמו תמיד ומקבלת את מסכי ההרשמה וההמתנה. **זה המצב היחיד שבו אין מוצר פתוח
@@ -101,6 +113,7 @@ export function decideAccess(f) {
   return {
     has360, open360, stopped360, frozenNow, expired360, waiting360,
     glowOwned, glowStopped, glowStandalone, glowPast, glowOnly, glowOpen,
+    preStart, glowFullOpen,
     // מתנה מול קנייה, כפי שהמשרד צריך לראות את זה.
     glowSource: !f.glowFull ? "" : (!has360 ? "solo" : (f.glowPaid ? "paid" : "gift")),
     end360: ymdOf(end360At),
