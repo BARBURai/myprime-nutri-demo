@@ -129,6 +129,12 @@ export async function loadSheet(csvUrl) {
     // "אפליקצי" would land on that one and read as TRUE for almost everybody.
     newapp: findCol(header, ["אפליקציית תזונה", "אפליקציה תזונה", "אפליקציה חדשה", "אפליקציה"]),
     glow: findCol(header, ["בונוס איפור"]),
+    // קורס האיפור המלא, ושתי העמודות שנלוות אליו. כולן אופציונליות, וההשוואה היא
+    // על השם המלא ולכן GLOW-FULL, GLOW-FULL-M ו-GLOW-PAID לעולם לא יתבלבלו.
+    glowFull: findCol(header, ["GLOW-FULL"]),
+    glowM: findCol(header, ["GLOW-FULL-M"]),
+    // **הסימן שמבדיל בין קורס שנקנה בכסף לבין הקורס שניתן במתנה בוובינר.**
+    glowPaid: findCol(header, ["GLOW-PAID"]),
     // שתי עמודות אופציונליות של תוכנית סולו. השוואה מדויקת, כמו כל השאר, ולכן
     // SOLO6 ו-SOLO12 לעולם לא יתבלבלו ביניהן.
     solo6: findCol(header, ["SOLO6"]),
@@ -178,6 +184,13 @@ export async function loadSheet(csvUrl) {
       sheetNewApp: rowNewApp,
       // מיי פריים Glow bonus lessons. Optional column: absent means nobody has it.
       glow: col.glow !== -1 ? isTrue(cells[col.glow]) : false,
+      glowFull: col.glowFull !== -1 ? isTrue(cells[col.glowFull]) : false,
+      glowPaid: col.glowPaid !== -1 ? isTrue(cells[col.glowPaid]) : false,
+      glowM: (() => {
+        if (col.glowM === -1) return null;
+        const n = parseInt(String(cells[col.glowM] || "").replace(/[^\d]/g, ""), 10);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      })(),
       // 6, 12, או 0. אם שתי העמודות מסומנות מנצחת הארוכה, כי אין סיבה לקצר לה.
       solo: soloOf(cells, col),
     };
@@ -200,6 +213,7 @@ export async function loadSheet(csvUrl) {
         phone: rec.phone, first: rec.first, last: rec.last, group: rec.group,
         start: rec.start, months: rec.months, cancelled: rec.cancelled,
         sheetNewApp: rec.sheetNewApp, glow: rec.glow, solo: rec.solo, rows: 1,
+        glowFull: rec.glowFull, glowPaid: rec.glowPaid, glowM: rec.glowM,
       });
       return;
     }
@@ -230,6 +244,11 @@ export async function loadSheet(csvUrl) {
       // מוציאה אותה מהאפליקציה החדשה.
       sheetNewApp: rows.some((r) => r.sheetNewApp),
       glow: win.glow,
+      glowFull: win.glowFull,
+      // **הקנייה נספרת מכל השורות, כמו הביטול**, כי היא עובדה על האישה ולא על
+      // המחזור. זה זהה למה ש-api/access.js עושה, ושם יש בדיקה שנועלת את זה.
+      glowPaid: rows.some((r) => r.glowPaid),
+      glowM: win.glowM,
       solo: win.solo,
       sheetEnd: win.start ? ymd(accessEnd(parseDateToSunday(win.start), win.months, win.solo)) : "",
       // כמה שורות יש לה, ומה תאריך ההתחלה בכל אחת. בלי זה שתי שורות נראות בדיוק

@@ -30,8 +30,8 @@ check("הם נושאים שבוע 0 ויום 0", /week: 0,\s*\n\s*day: 0,/.test(
 // she watched" on the office screen.
 {
   const us = mod.slice(mod.indexOf("export function usageSummary"));
-  const beforeGlow = us.slice(0, us.indexOf("GLOW_DAY"));
-  const glowLoop = us.slice(us.indexOf("GLOW_DAY.lessons.forEach"), us.indexOf("return {"));
+  const beforeGlow = us.slice(0, us.indexOf("GLOW"));
+  const glowLoop = us.slice(us.indexOf(".lessons.forEach"), us.indexOf("return {"));
   check("ספירת התוכנית אינה נוגעת בבונוס", !/GLOW/.test(beforeGlow) && /CONTENT_DAYS\.forEach/.test(beforeGlow));
   check("וספירת הבונוס אינה נוגעת בספירת התוכנית",
     !/vDone|vTotal|vViews|days\[/.test(glowLoop) && /gDone|gViews/.test(glowLoop));
@@ -47,7 +47,7 @@ check("העמודה אופציונלית, והיעדרה אינו שובר כל�
 check("השער מחזיר את הסימון", /startDate, phone, glow/.test(access));
 check("והשער קורא גם הוא לפי אותה כותרת", access.includes('findCol(header, ["בונוס איפור"])'));
 check("האפליקציה שומרת את הסימון ומרעננת אותו בכל טעינה", /myprime_glow/.test(app));
-check("בלי סימון לא מוצג כלום", /const showGlow = !!glow && hasGlow\(\)/.test(mod));
+check("בלי סימון לא מוצג כלום", /const showGlow = showFull \|\| \(!!glow && hasGlow\(\)\);/.test(mod));
 check("וגם עם סימון, רשימה ריקה לא מציגה כלום", /export const hasGlow = \(\) => GLOW_DAY\.lessons\.length > 0/.test(glow));
 
 console.log("\nהקופי והמסננים\n");
@@ -55,23 +55,46 @@ check("הכותרת בדיוק כפי שאושרה", glow.includes('export const
 check("שם הצ׳יפ בדיוק כפי שאושר", glow.includes('export const GLOW_CHIP = "מיי פריים Glow"'));
 check("השורה מופיעה בכרטיס של מסך היום", /glow && hasGlow\(\) && !glowStarted\(\) && <div/.test(mod));
 check("הכיתוב הקצר ביומן בדיוק כפי שאושר", glow.includes('export const GLOW_CARD_LINE = "בונוס: 3 שיעורי Glow 💄"'));
-check("סימן השפתון מופיע בארבעת המקומות", (mod.match(/GLOW_EMOJI/g) || []).length >= 4);
+check("סימן השפתון נשאר בשורה שביומן ובשורה שבמסך התוכן", (mod.match(/GLOW_EMOJI/g) || []).length >= 2);
+// רון: "אתה יכול את Glow להחליף בלוגו שצירפתי, גם בכותרת וגם בטאב, לא צריך את האמוג׳י."
+check("הלוגו מוצג בכפתור שבסרגל", /lbl === null \? <img src=\{GLOW_LOGO\}/.test(mod));
+// רון, 10 בספטמבר 2026: "הגלו לא בגודל של האותיות בשורה, הוא ענק." הכותרת היא
+// 19 פיקסלים, וגובה אות עברית בה נמדד ב-11 עד 12. רון ביקש נקודה או שתיים
+// מעל זה אחרי שראה את המסך בטלפון, ולכן 14.
+check("ובכותרת של המסך, בגובה האותיות שלצידו", /<img src=\{GLOW_LOGO\} alt="Glow" style=\{\{ height: 14/.test(mod));
+// רון: "בכפתור כשהוא לא דלוק קשה לראות אותו." אין עמעום, והבחירה מסומנת ברקע.
+check("והלוגו שבכפתור אינו מעומעם", !/opacity: view === id/.test(mod));
+// הכותרת עצמה לא נכתבה מחדש: היא מפוצלת סביב המילה Glow, והלוגו יושב במקומה.
+check("והכותרות שאושרו לא שוכתבו", /\(showFull \? GLOW_FULL_TITLE : GLOW_TITLE\)\.split\("Glow"\)/.test(mod));
+check("הקובץ עצמו קיים תחת public", (() => { try { return readFileSync(new URL("../public/glow-logo.png", import.meta.url)).length > 2000; } catch (e) { return false; } })());
+// רון פסל את הפלטה שנגזרה מהגרדיאנט: "ורדרדים מידי ילדותי מידי וזול". המג׳נטה
+// נשארת בלוגו בלבד, וסביבו חצילית עמוקה ואפור רך.
+check("לסעיף יש פלטה משלו", /export const GLOW_C = \{/.test(glow) && /ink: "#3E2148"/.test(glow));
+check("ואין בה ורוד או מג׳נטה", !/#A52AB6|#D03CCD|#EA47E3|#FBF0FC|#E8B9EE/.test(glow));
+check("והיא זו שצובעת את הכותרות, החץ והמסגרות",
+  /color: GLOW_C\.ink/.test(mod) && /background: GLOW_C\.accent/.test(mod) && /solid \$\{GLOW_C\.line\}/.test(mod) && /background: GLOW_C\.bg/.test(mod));
+// רון: "תגזור צבעים מהלוגו בכל הסעיף של Glow", ולכן גם שורות השיעורים שבתוכו.
+check("וגם שורות השיעורים שבתוך הסעיף", /tint=\{GLOW_C\}/.test(mod) && /color=\{tint \? tint\.ink : C\.brand\}/.test(mod));
+check("ומחוץ לסעיף שום שורה לא נצבעת", (mod.match(/tint=\{GLOW_C\}/g) || []).length === 2);
 // The started flag is one way. Without a reset there is no way back to what a new woman sees.
 check("יש כפתור איפוס לסימון הצפייה בסרגל הבדיקות", /איפוס Glow/.test(app) && /removeItem\(GLOW_STARTED_KEY\)/.test(app));
 check("הכיתוב של השורה הקטנה בדיוק כפי שאושר", glow.includes('export const GLOW_ROW = "שיעורי הבונוס שלך במיי פריים Glow"'));
 check("שנייה אחת של צפייה מורידה את השורה מהיומן", /if \(!startedRef\.current && t > 0\)/.test(mod) && /onStart=\{openL\.week === 0 \?/.test(mod) && /markGlowStarted\(\)/.test(mod));
-check("ובמסך התוכן יש שורה אחת שמקפיצה לרשימה ולא הרשימה עצמה", /setTypeF\("glow"\); setView\("all"\)/.test(mod));
-check("הצ׳יפ נוסף רק למי שמגיע לה", /showGlow \? \[\.\.\.FILTER_CHIPS, \["glow", .*GLOW_CHIP.*\]\] : FILTER_CHIPS/.test(mod));
-check("ובצ׳יפ הזה שורת השבועות נעלמת", /!isPdf && !isGlow &&/.test(mod));
+check("ובמסך התוכן יש שורה אחת שמקפיצה לרשימה ולא הרשימה עצמה", /onClick=\{\(\) => setView\("glow"\)\}/.test(mod));
+check("הכפתור בסרגל העליון נוסף רק למי שמגיע לה", /if \(showGlow\) tabs\.push\(\["glow", null\]\);/.test(mod));
+check("ואינו צ׳יפ סינון יותר", !/FILTER_CHIPS, \["glow"/.test(mod));
+check("ולמסך שלו אין שורת שבועות בכלל", /if \(view === "glow"\) \{/.test(mod) && !/isGlow/.test(mod));
 check("אין מקף ארוך בקופי", !/[–—]/.test(glow));
 
 console.log("\nארבעת הסרטונים\n");
-const ids = (glow.match(/videoId: "([0-9a-f-]{36})"/g) || []);
+const tasterBlock = glow.slice(glow.indexOf("export const GLOW_DAY"), glow.indexOf("export const hasGlow ="));
+const fullBlock = glow.slice(glow.indexOf("const FULL_SECTIONS_RAW"));
+const ids = (tasterBlock.match(/videoId: "([0-9a-f-]{36})"/g) || []);
 check("ארבעה סרטונים: מבוא ושלושה שיעורים", ids.length === 4, ids.length + " סרטונים");
 check("לכל אחד מזהה תקין ושונה", new Set(ids).size === 4);
-check("המבוא ראשון", glow.indexOf('"מבוא"') < glow.indexOf('"שיעור 3'));
-check("הכותרות בדיוק כפי שרון שלח", ["מבוא", "שיעור 3 - פריימר ובסיס (מייק אפ)", "שיעור 6 - איפור עיניים בסיסי", "שיעור 8 - מראה עיניים מעושן"].every((t) => glow.includes(`title: "${t}"`)));
-check("כולם מסוג וידאו ובלי דפים", (glow.match(/type: "video"/g) || []).length === 4 && !/pdf|pageImages/.test(glow));
+check("המבוא ראשון", tasterBlock.indexOf('"מבוא"') < tasterBlock.indexOf('"שיעור 3'));
+check("הכותרות בדיוק כפי שרון שלח", ["מבוא", "שיעור 3 - פריימר ובסיס (מייק אפ)", "שיעור 6 - איפור עיניים בסיסי", "שיעור 8 - מראה עיניים מעושן"].every((t) => tasterBlock.includes(`title: "${t}"`)));
+check("כולם מסוג וידאו ובלי דפים", (tasterBlock.match(/type: "video"/g) || []).length === 4 && !/pdf|pageImages/.test(glow));
 
 console.log("\nשני התיקונים שאושרו באותה גרסה\n");
 check("שבת נקראת כשישי במסך כל התוכנית", /const openDow = todayDow === 0 \? 6 : todayDow;/.test(mod));
@@ -85,18 +108,80 @@ const token = read("api/bunny-token.js");
 // Every video id in the app ships inside the JavaScript bundle, so hiding the rows is not
 // protection. The only thing that actually stops a woman without the TRUE is the server
 // refusing to sign the playback link.
-const listA = (glow.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) || []).sort();
-const listB = (ids2.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) || []).sort();
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+const idsIn = (t) => (t.match(UUID) || []).sort();
+const listA = idsIn(tasterBlock);
+const listB = idsIn(ids2.slice(0, ids2.indexOf("GLOW_FULL_VIDEO_IDS")));
 check("רשימת המזהים בשרת זהה לזו שבאפליקציה", listA.length === 4 && JSON.stringify(listA) === JSON.stringify(listB), listA.length + " מול " + listB.length);
+// ואותה השוואה לקורס המלא, וזו ההגנה האמיתית עליו: מזהה שנוסף רק באפליקציה
+// יהיה בלתי ניתן לצפייה, ומזהה שנוסף רק בשרת ייחתם לכל אישה בתוכנית.
+const fullA = idsIn(fullBlock);
+const fullB = idsIn(ids2.slice(ids2.indexOf("GLOW_FULL_VIDEO_IDS")));
+check("וגם רשימת הקורס המלא זהה בשני הצדדים", fullA.length > 0 && JSON.stringify(fullA) === JSON.stringify(fullB), fullA.length + " מול " + fullB.length);
+check("שלושת החינמיים נמצאים גם ברשימת הקורס המלא", listA.every((id) => fullA.includes(id)));
 check("שליפת הקישור בודקת אם זה סרטון בונוס", /isGlowVideo\(videoId\)/.test(token));
 check("ובלי הרשאה מחזירה סירוב", /not_entitled/.test(token) && /status\(403\)/.test(token));
 check("ההרשאה נכתבת ונמחקת בכל כניסה", /SET", `glow:\$\{email\}`/.test(access) && /DEL", `glow:\$\{email\}`/.test(access));
 check("האפליקציה שולחת את המייל בשליפת הקישור", /email=\$\{encodeURIComponent\(em\)\}/.test(mod));
-check("שיעור בונוס אינו נפתח כשאין הרשאה גם במסך", /w === 0 \? \(showGlow \? GLOW_DAY : null\)/.test(mod));
+check("שיעור בונוס אינו נפתח כשאין הרשאה גם במסך", /w === 0 \? \(showGlow \? glowDay : null\)/.test(mod));
 check("88 סרטוני התוכנית לא נגעו ולא נחסמים", !/isGlowVideo/.test(mod) && token.indexOf("isGlowVideo") > 0);
 
+console.log("\nהקורס המלא\n");
+// רון, 9 בספטמבר 2026: וובינר שנותן את הקורס המלא במתנה, לפי עמודת GLOW-FULL.
+check("העמודה נקראת בשער", access.includes('findCol(header, ["glow-full"])'));
+check("והשער מחזיר את הסימון", /phone, glow, glowFull/.test(access));
+check("ההרשאה נכתבת ונמחקת בכל כניסה, כמו הבונוס",
+  /SET", `glowfull:\$\{email\}`/.test(access) && /DEL", `glowfull:\$\{email\}`/.test(access));
+check("האפליקציה שומרת אותו בנפרד מהבונוס", /myprime_glow_full/.test(app));
+// שתי רמות: החינמיים נפתחים לשתיהן, ושאר הקורס למי שיש לה את המלא בלבד.
+check("החתימה מכירה את שתי הרשימות", /isGlowVideo\(videoId\) \|\| isGlowFullVideo\(videoId\)/.test(token));
+check("מי שיש לה את המלא רשאית גם לחינמיים", /ok = await flag\("glowfull"\);/.test(token));
+check("ומי שיש לה את הבונוס בלבד רשאית לחינמיים בלבד",
+  /if \(!ok && isGlowVideo\(videoId\)\) ok = await flag\("glow"\);/.test(token));
+// שלושת החינמיים הם חלק מהקורס, ולכן מי שקיבלה אותו רואה רשימה אחת ולא שתיים.
+check("הקורס המלא מחליף את הבונוס ואינו נוסף לצידו", /const showFull = !!glowFull && hasGlowFull\(\);/.test(mod));
+check("ומוצג בסעיפים ולא ברשימה שטוחה", /GLOW_FULL_SECTIONS\.map\(\(sec\) =>/.test(mod));
+check("המספר שמסמן הושלם נגזר מהרשימה השטוחה", /sec\.idx\.map\(\(i\) => <LessonRow key=\{"g" \+ i\} w=\{0\} d=\{0\} l=\{GLOW_FULL_DAY\.lessons\[i\]\} i=\{i\}/.test(mod));
+check("שיעור בלי מזהה אינו מרונדר", /if \(!l\.videoId\) continue;/.test(glow));
+// החלטת רון: "לא הייתי שם את זה ביומן".
+check("הקורס המלא אינו מופיע בכרטיס היומן", /glow=\{glow && !glowFull\}/.test(app));
+// **הכלל התהפך ב-v7.11, לפי החלטת רון.** מסך ההמתנה פתח את הקורס המלא לפי
+// ההחלטה של v6.96, שהתקבלה כשהוא היה מתנה מהוובינר ולא מוצר שנמכר. מעכשיו הוא
+// נפתח לה ביום 1, ובמסך ההמתנה יש שורה שאומרת לה את זה.
+check("ומסך ההמתנה אינו פותח יותר את הקורס המלא", !/glow=\{glow \|\| glowFull\}/.test(app));
+check("ובמקומו יש שורה שאומרת לה שהוא ייפתח ביום 1", app.includes("יפתח באפליקציה ביום הראשון של התוכנית"));
+check("הכיתוב הוא זה שרון אישר",
+  glow.includes('export const GLOW_FULL_TITLE = "מיי פריים Glow"')
+  && glow.includes('export const GLOW_FULL_ROW = "קורס האיפור המלא שלך במיי פריים Glow"'));
+// רון: "תוריד את המילים הקורס המלא." הן נשארות בשורה שבמסך התוכן בלבד.
+check("והמילים הקורס המלא ירדו מהכותרת", !/GLOW_FULL_TITLE = "[^"]*הקורס המלא/.test(glow));
+check("ואין לו שורה בכרטיס היומן בכלל", !/GLOW_FULL_CARD/.test(glow));
+
+console.log("\nהפריסה של הקורס המלא\n");
+// רון בדק בטלפון: "הכותרות קטנות מאוד, צריכות להיות מודגשות ויפות ואולי עם אייקון...
+// והם צריכים להיות בדרופדאון... ומתחת לנושא בסוגריים באותיות קטנות את השיעורים העיקריים."
+check("לכל סעיף אייקון ותיאור קצר", /icon: "[^"]+", sub: "[^"]+"/.test(glow));
+check("ושמונת הסעיפים נושאים אותם", (glow.match(/icon: "/g) || []).length === 8);
+check("והם עוברים לרכיב ולא נשארים בקובץ", /title: sec\.title, icon: sec\.icon \|\| "", sub: sec\.sub \|\| ""/.test(glow));
+check("הסעיף נפתח בהקשה", /setOpenSec\(\(o\) => \(\{ \.\.\.o, \[sec\.title\]: !o\[sec\.title\] \}\)\)/.test(mod));
+check("וסגור כברירת מחדל", /const \[openSec, setOpenSec\] = useState\(\{\}\);/.test(mod));
+check("השיעורים מרונדרים רק כשהסעיף פתוח", /\{open && <div style=\{\{ padding: "4px 10px 6px"[\s\S]{0,80}\{sec\.idx\.map/.test(mod));
+// רון: "חץ למטה וחץ גדול יותר ועבה", ו"הצבע יותר בולט וחזק".
+check("החץ הוא חץ למטה, גדול ועבה, בתוך עיגול מלא", /borderRadius: "50%", background: GLOW_C\.accent/.test(mod) && /<ChevronDown size=\{24\} strokeWidth=\{3\} color="#fff"/.test(mod));
+check("והוא מסתובב כשהסעיף נפתח", /transform: open \? "rotate\(180deg\)" : "none"/.test(mod));
+check("הכותרת צבועה תמיד ולא רק כשהיא פתוחה", /cursor: "pointer", background: GLOW_C\.bg \}\}>/.test(mod));
+// רון: "לא צריך לרשום מספר שיעורים."
+check("ואין מספר שיעורים בשום מקום", !/שיעורים`/.test(mod) && !/sec\.idx\.length/.test(mod));
+check("כפתור החזרה משיעור יודע לחזור לשם", /origin === "glow" \? "חזרה לשיעורי Glow"/.test(mod));
+// רון: "במקום כל התוכנית הייתי רושם מיי פריים 360", בכפתור שבסרגל בלבד.
+check("הכפתור בסרגל נקרא מיי פריים 360", /\["all", "מיי פריים 360"\]/.test(mod));
+check("וכפתורי החזרה לא נגעו", mod.includes("חזרה לכל התוכנית"));
+// שני תיקוני קופי מהבדיקה שלו.
+check("שיעור 12 הוא הארות ולא האדרות", glow.includes("שיעור 12 - הארות") && !/האדרות/.test(glow));
+check("ו-4MUST צמוד, כדי שהספרה לא תתהפך", (glow.match(/שיטת 4MUST/g) || []).length === 4 && !/4 MUST/.test(glow));
+
 console.log("\nמסך ההמתנה, לפני שהתוכנית מתחילה\n");
-check("מסך ההמתנה מקבל את הסימון", /function PreStartScreen\(\{ name, startDate, glow = false, onOpenGlow \}\)/.test(app));
+check("מסך ההמתנה מקבל את הסימון", /function PreStartScreen\(\{ name, startDate, glow = false, glowSoon = false, onOpenGlow \}\)/.test(app));
 check("והכרטיס מוצג רק למי שמגיע לה", /\{glow && hasGlow\(\) && \(/.test(app));
 check("הקופי של הכרטיס בדיוק כפי שאושר",
   app.includes("💄 בונוס שמחכה לך כבר עכשיו") &&
@@ -106,7 +191,7 @@ check("הכפתור פותח ישירות את רשימת הבונוס", /setGlo
 // Before her start date NOTHING of the programme is unlocked, so the ordinary content view
 // would be an empty screen. Landing her on the bonus list is what makes the button safe as
 // well as useful: there is no day there to press.
-check("ומסך התוכן נפתח על הבונוס ולא על היום", /useState\(startGlow \? "all" : "today"\)/.test(mod) && /useState\(startGlow \? "glow" : "all"\)/.test(mod));
+check("ומסך התוכן נפתח על הבונוס ולא על היום", /useState\((?:solo \|\| )?startGlow \? "glow" : "today"\)/.test(mod));
 check("והדגל מתאפס בסגירה, כדי שפתיחה רגילה לא תיפתח על הבונוס",
   /setSheet\(null\); setGlowDirect\(false\)/.test(app));
 check("מסך הניהול מציג את הבונוס גם למי שהמחזור שלה טרם התחיל",

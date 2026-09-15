@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Play, Maximize2, VolumeX, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search } from "lucide-react";
+import { Play, Maximize2, VolumeX, Film, Dumbbell, ClipboardCheck, FileText, Info, Download, ExternalLink, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, X, Loader, Check, Heart, Search, Settings } from "lucide-react";
 import { CONTENT_DAYS, PDF_BASE, contentForDay } from "./data";
-import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted } from "./glow";
+import { GLOW_DAY, GLOW_TITLE, GLOW_CHIP, GLOW_CARD_LINE, GLOW_ROW, GLOW_EMOJI, hasGlow, glowStarted, markGlowStarted, GLOW_FULL_DAY, GLOW_FULL_SECTIONS, GLOW_FULL_TITLE, GLOW_FULL_ROW, hasGlowFull, GLOW_LOGO, GLOW_HERO, GLOW_C, glowVideoAt, glowListFor } from "./glow";
 export { contentForDay } from "./data";
 
 
@@ -25,7 +25,51 @@ const FAV_KEY = "mp_content_fav_v1";
 const VIEWS_KEY = "mp_content_views_v1";
 function loadStore(key) { try { return JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) { return {}; } }
 function saveStore(key, obj) { try { localStorage.setItem(key, JSON.stringify(obj)); } catch (e) {} }
-function lessonKey(week, day, i) { return `W${week}D${day}-${i}`; }
+// שיעורי גלו נושאים שבוע 0 ויום 0, והם היחידים שהרשימה שלהם מתחלפת: ארבעת
+// שיעורי הדמו מול 28 שיעורי הקורס המלא. לכן שם המפתח נגזר ממזהה הסרטון ולא
+// מהמקום ברשימה. בכל שאר התוכנית המקום נשאר, כי יש שם שיעורים בלי סרטון בכלל
+// והרשימה של כל יום קבועה. ראה את ההסבר המלא ב-src/content/glow.js.
+function lessonKey(week, day, i) {
+  if (week === 0 && day === 0) {
+    const v = glowVideoAt(i);
+    if (v) return `GV-${v}`;
+  }
+  return `W${week}D${day}-${i}`;
+}
+
+// המרה חד פעמית של מה שכבר שמור על המכשיר. בלעדיה כל אישה שראתה שיעור גלו
+// הייתה מאבדת את הווי שלה ברגע שהגרסה הזאת עולה.
+//
+// **איזו רשימה שימשה כשהמפתח הישן נכתב:** מפתח עם מספר 4 ומעלה יכול היה
+// להיכתב רק מול הקורס המלא, כי בדמו יש ארבעה שיעורים בלבד. מי שיש לה מפתח
+// כזה הייתה על הקורס, וכל המפתחות שלה מומרים מולו. לכל השאר ההמרה היא מול
+// הדמו, וזה נכון לכל אישה בייצור, שם הקורס המלא מעולם לא היה קיים.
+const GLOW_MIGRATED_KEY = "mp_glow_key_v2";
+function migrateGlowKeys() {
+  try {
+    if (localStorage.getItem(GLOW_MIGRATED_KEY) === "1") return;
+    const old = /^W0D0-(\d+)$/;
+    const stores = [DONE_KEY, FAV_KEY, VIEWS_KEY].map((k) => [k, loadStore(k)]);
+    const idxOf = (o) => Object.keys(o).map((k) => (old.exec(k) || [])[1]).filter((x) => x !== undefined).map(Number);
+    const wasFull = stores.some(([, o]) => idxOf(o).some((i) => i >= 4));
+    const list = wasFull ? GLOW_FULL_DAY : GLOW_DAY;
+    stores.forEach(([key, obj]) => {
+      let touched = false;
+      Object.keys(obj).forEach((k) => {
+        const m = old.exec(k);
+        if (!m) return;
+        const v = glowVideoAt(Number(m[1]), list);
+        const val = obj[k];
+        delete obj[k];
+        touched = true;
+        if (v) obj[`GV-${v}`] = key === VIEWS_KEY ? (obj[`GV-${v}`] || 0) + val : val;
+      });
+      if (touched) saveStore(key, obj);
+    });
+    localStorage.setItem(GLOW_MIGRATED_KEY, "1");
+  } catch (e) {}
+}
+migrateGlowKeys();
 function tracksProgress(day) { return !!day; }
 // iPhone/iPad: Safari ignores the download attribute, so a plain link NAVIGATES to the PDF.
 // Inside an installed PWA there is no toolbar and no back button, so the woman gets stuck on the
@@ -205,9 +249,13 @@ export function ContentDayCard({ week, dow, C, font, onOpen, glow }) {
   );
 }
 
-export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, backRef, startGlow = false , onGlowStart }) {
+export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose, onTourEvent, glow, glowFull = false, backRef, startGlow = false , onGlowStart, solo = false, onSettings }) {
   const allDays = CONTENT_DAYS;
-  const showGlow = !!glow && hasGlow();
+  // מי שקיבלה את הקורס המלא רואה אותו במקום שלושת החינמיים, ולא לצידם: שלושתם
+  // חלק ממנו. החלטת רון, 9 בספטמבר 2026.
+  const showFull = !!glowFull && hasGlowFull();
+  const showGlow = showFull || (!!glow && hasGlow());
+  const glowDay = showFull ? GLOW_FULL_DAY : GLOW_DAY;
   // Saturday carries day-of-week 0, and "everything up to today" then matches nothing, so the
   // whole current week vanished from "כל התוכנית" - on the Saturday of week 1 the screen was
   // empty. Shabbat reads as Friday here, the same way the tracker already treats it.
@@ -227,13 +275,19 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   // Opened straight onto the bonus list. A woman who has not started yet has nothing at all
   // unlocked, so the ordinary "today" view would be an empty screen and read as broken. The
   // bonus chip hides the week row anyway, because the bonus belongs to no week.
-  const [view, setView] = useState(startGlow ? "all" : "today");
+  // solo = קונת קורס האיפור לבדו, בלי 360. אין לה ימים, אין תוכנית ואין לשוניות,
+  // ולכן המסך נפתח על הקורס ונשאר עליו. `setView` נחסם במקום לסנן כל מסלול בנפרד,
+  // כדי שגם חזרה משיעור וגם מצב ישן שנשמר לא יוכלו להוציא אותה משם.
+  const [view, setViewRaw] = useState(solo || startGlow ? "glow" : "today");
+  const setView = (v) => setViewRaw(solo ? "glow" : v);
   const [openL, setOpenL] = useState(null); // {week, day, i, pagesOnly}
   const [origin, setOrigin] = useState("today");
   const [selWeek, setSelWeek] = useState(null);
   const [dayOpen, setDayOpen] = useState({});
   const [query, setQuery] = useState("");
-  const [typeF, setTypeF] = useState(startGlow ? "glow" : "all");
+  const [typeF, setTypeF] = useState("all");
+  // איזה סעיף פתוח במסך של Glow. סגורים כברירת מחדל, כדי שכל הקורס ייראה במבט אחד.
+  const [openSec, setOpenSec] = useState({});
 
   // The phone's back button, handed up to the app. Each level does exactly what its own
   // on-screen back arrow does, and the return value says whether the press was used up.
@@ -262,7 +316,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
 
   // Week 0 is the bonus. Guarded by showGlow as well, so that even a stale open-lesson state
   // cannot render a bonus lesson for a woman who is not marked for it.
-  const dayByWD = (w, d) => (w === 0 ? (showGlow ? GLOW_DAY : null) : allDays.find((dd) => dd.week === w && dd.day === d));
+  const dayByWD = (w, d) => (w === 0 ? (showGlow ? glowDay : null) : allDays.find((dd) => dd.week === w && dd.day === d));
   const isDone = (w, d, i) => !!done[lessonKey(w, d, i)];
   const isFav = (w, d, i) => !!fav[lessonKey(w, d, i)];
   const toggleDone = (w, d, i) => setDone((s) => { const n = { ...s }; const k = lessonKey(w, d, i); if (n[k]) delete n[k]; else n[k] = 1; saveStore(DONE_KEY, n); return n; });
@@ -305,29 +359,36 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   const rowStyle = { display: "flex", alignItems: "center", gap: 10, border: `1px solid ${C.line}`, borderRadius: 14, padding: 13, marginBottom: 10, cursor: "pointer", background: C.panel };
   const iconWrap = { width: 44, height: 44, borderRadius: 12, background: C.brandBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
 
+  // רון, 9 בספטמבר 2026: "שמת את גלו בתור איזשהו סעיף סינון, זה לא טוב. זה צריך
+  // להיות למעלה בסרגל העליון... בלי להוסיף עוד שורה." ולכן כפתור שלישי בתוך אותו
+  // סרגל, ומוצג רק למי שיש לה גישה.
   function Segmented() {
+    const tabs = [["today", "היום"], ["all", "מיי פריים 360"]];
+    if (showGlow) tabs.push(["glow", null]);   // null = הלוגו עצמו, ולא טקסט
     return (
       <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 12, padding: 4, marginBottom: 14 }}>
-        {[["today", "היום"], ["all", "כל התוכנית"]].map(([id, lbl]) => (
-          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 6px", fontFamily: font, fontSize: 16, fontWeight: 700, background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl}</button>
+        {tabs.map(([id, lbl]) => (
+          <button key={id} data-tut={`content-tab-${id}`} onClick={() => setView(id)} style={{ flex: id === "glow" ? 0.72 : 1, border: "none", cursor: "pointer", borderRadius: 9, padding: "10px 4px", fontFamily: font, fontSize: 16, fontWeight: 700, whiteSpace: "nowrap", display: "flex", alignItems: "center", justifyContent: "center", background: view === id ? C.panel : "transparent", color: view === id ? C.brandD : C.sub, boxShadow: view === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none" }}>{lbl === null ? <img src={GLOW_LOGO} alt="Glow" style={{ height: 16, width: "auto", display: "block" }} /> : lbl}</button>
         ))}
       </div>
     );
   }
 
-  function LessonRow({ w, d, l, i, from }) {
+  // tint צובע את השורה בצבעי הקורס במקום בוורוד של מיי פריים. רון: "תגזור צבעים
+  // מהלוגו בכל הסעיף של Glow." מחוץ לסעיף הזה לא מועבר כלום ושום דבר לא משתנה.
+  function LessonRow({ w, d, l, i, from, tint }) {
     const tm = typeMeta(l.type);
     const meta = tm.label + (l.pdf || hasPages(l) ? " · כולל דף" : "");
     const trackD = tracksProgress(dayByWD(w, d));
     return (
-      <div onClick={() => goLesson(w, d, i, from)} role="button" style={rowStyle}>
-        <div style={iconWrap}><tm.Icon size={21} color={C.brand} /></div>
+      <div onClick={() => goLesson(w, d, i, from)} role="button" style={tint ? { ...rowStyle, border: `1px solid ${tint.line}` } : rowStyle}>
+        <div style={tint ? { ...iconWrap, background: tint.bg } : iconWrap}><tm.Icon size={21} color={tint ? tint.ink : C.brand} /></div>
         <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{l.title}</div>
           <div style={{ fontSize: 17, color: C.ink, marginTop: 4 }}>{meta}</div>
         </div>
         {trackD && isDone(w, d, i) && <Check size={20} color="#4E9E76" style={{ flexShrink: 0 }} />}
-        <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
+        <ChevronLeft size={18} color={tint ? tint.ink : C.faint} style={{ flexShrink: 0 }} />
       </div>
     );
   }
@@ -544,7 +605,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
       const nuLesson = nu ? dayByWD(nu.week, nu.day).lessons[nu.i] : null;
       const dOn = isDone(openL.week, openL.day, openL.i);
       const fOn = isFav(openL.week, openL.day, openL.i);
-      const backLabel = openL.pagesOnly ? "חזרה לדפים" : origin === "today" ? "חזרה לסרטונים שלך היום" : origin === "all" ? "חזרה לכל התוכנית" : origin === "fav" ? "חזרה למועדפים" : "חזרה לחיפוש";
+      const backLabel = openL.pagesOnly ? "חזרה לדפים" : origin === "today" ? "חזרה לסרטונים שלך היום" : origin === "all" ? "חזרה לכל התוכנית" : origin === "glow" ? "חזרה לשיעורי Glow" : origin === "fav" ? "חזרה למועדפים" : "חזרה לחיפוש";
 
       if (openL.pagesOnly) {
         // Minimal page view: only the page images + download. No video, no rest.
@@ -669,16 +730,90 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
     );
   }
 
+  // ראש המסך של קונת הקורס לבדו. אין לה סרגל תחתון וגם לא לשוניות, כי יש לה
+  // מסך אחד, וסרגל היה מציע לה לבחור בין המסך שהיא כבר נמצאת בו לבין כלום.
+  // ההגדרות יושבות בגלגל שבפינת התמונה.
+  function SoloHead() {
+    const list = showFull ? GLOW_FULL_DAY : GLOW_DAY;
+    const watched = list.lessons.reduce((n, _l, i) => n + (isDone(0, 0, i) ? 1 : 0), 0);
+    return (
+      <div>
+        <div style={{ position: "relative" }}>
+          <img src={GLOW_HERO} alt={GLOW_FULL_TITLE} style={{ display: "block", width: "100%", height: "auto" }} />
+          {onSettings && (
+            <button onClick={onSettings} aria-label="הגדרות" style={{ position: "absolute", top: "max(12px, env(safe-area-inset-top, 0px))", left: 12, width: 38, height: 38, borderRadius: 999, border: "none", cursor: "pointer", background: "rgba(255,255,255,0.92)", color: GLOW_C.ink, boxShadow: "0 2px 8px rgba(44,27,52,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Settings size={20} />
+            </button>
+          )}
+        </div>
+        {/* אין לה יומן, אין ימים ואין לוח, ולכן המספר הוא ההתמצאות היחידה שלה
+            בקורס, ושמונת הסעיפים סגורים בפתיחה. **אינו מוצג כל עוד היא על אפס**,
+            כי ביום הראשון "0 מתוך 28" הוא הדבר היחיד שהיא רואה. */}
+        {watched > 0 && (
+          <div style={{ fontSize: 16, fontWeight: 700, color: GLOW_C.ink, padding: "14px 16px 12px", lineHeight: 1.5 }}>
+            צפית ב-{watched} מתוך {list.lessons.length} שיעורים
+          </div>
+        )}
+      </div>
+    );
+  }
+
   // ---------- ALL PROGRAM ----------
+  if (view === "glow") {
+    return (
+      <div style={overlay}>
+        {!solo && <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>}
+        <div style={solo ? { ...scroll, padding: "0 0 calc(28px + env(safe-area-inset-bottom, 0px))" } : scroll}>
+          {solo ? <SoloHead /> : <Segmented />}
+          <div style={solo ? { padding: "0 16px" } : null}>
+          <div hidden={solo} style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16, flexWrap: "wrap" }}>
+            {/* הכותרת נשארת בדיוק כפי שאושרה, והלוגו יושב במקום המילה Glow שבתוכה
+                ולא לפניה. לכן היא מפוצלת סביב המילה ולא נכתבת מחדש. */}
+            {(showFull ? GLOW_FULL_TITLE : GLOW_TITLE).split("Glow").map((part, k) => (
+              <React.Fragment key={k}>
+                {k > 0 && <img src={GLOW_LOGO} alt="Glow" style={{ height: 14, width: "auto", display: "block" }} />}
+                {part.trim() && <span style={{ fontSize: 19, fontWeight: 700, color: GLOW_C.ink, lineHeight: 1.4 }}>{part.trim()}</span>}
+              </React.Fragment>
+            ))}
+          </div>
+          {showFull
+            ? GLOW_FULL_SECTIONS.map((sec) => {
+                const open = !!openSec[sec.title];
+                return (
+                  // רון: "לא מספיק ברור שאלה ספריות שצריך ללחוץ והן נפתחות. אולי גם
+                  // לשנות את הצבע ליותר בולט וחזק, ו**חץ למטה** גדול ועבה." ולכן הכותרת
+                  // צבועה תמיד בצבע המותג, ולא רק כשהיא פתוחה, והחץ מסתובב בפתיחה.
+                  <div key={sec.title} style={{ border: `1.5px solid ${GLOW_C.line}`, borderRadius: 14, marginBottom: 12, overflow: "hidden", background: C.panel, boxShadow: "0 1px 3px rgba(58,43,48,0.07)" }}>
+                    <div role="button" onClick={() => setOpenSec((o) => ({ ...o, [sec.title]: !o[sec.title] }))}
+                      style={{ display: "flex", alignItems: "center", gap: 11, padding: "15px 14px", cursor: "pointer", background: GLOW_C.bg }}>
+                      <span style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>{sec.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
+                        <div style={{ fontSize: 19, fontWeight: 800, color: GLOW_C.ink, lineHeight: 1.3 }}>{sec.title}</div>
+                        {sec.sub && <div style={{ fontSize: 13.5, color: C.sub, marginTop: 3, lineHeight: 1.4 }}>{sec.sub}</div>}
+                      </div>
+                      <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: "50%", background: GLOW_C.accent, display: "flex", alignItems: "center", justifyContent: "center", transform: open ? "rotate(180deg)" : "none", transition: "transform .18s" }}>
+                        <ChevronDown size={24} strokeWidth={3} color="#fff" />
+                      </span>
+                    </div>
+                    {open && <div style={{ padding: "4px 10px 6px", borderTop: `1.5px solid ${GLOW_C.line}` }}>{sec.idx.map((i) => <LessonRow key={"g" + i} w={0} d={0} l={GLOW_FULL_DAY.lessons[i]} i={i} from="glow" tint={GLOW_C} />)}</div>}
+                  </div>
+                );
+              })
+            : GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="glow" tint={GLOW_C} />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (view === "all") {
     const wk = selWeek == null ? (openWeeks[openWeeks.length - 1] || 1) : selWeek;
     const weekDays = openDaysList.filter((dd) => dd.week === wk);
     const isPdf = typeF === "pdf";
     // The bonus belongs to no week, so its chip hides the week row. Otherwise the same three
     // lessons would appear under every week and read as a bug.
-    const isGlow = typeF === "glow";
-    const visibleDays = isPdf || isGlow ? [] : weekDays.filter((dd) => dd.lessons.some((l) => matchesChip(l, typeF)));
-    const chips = showGlow ? [...FILTER_CHIPS, ["glow", `${GLOW_EMOJI} ${GLOW_CHIP}`]] : FILTER_CHIPS;
+    const visibleDays = isPdf ? [] : weekDays.filter((dd) => dd.lessons.some((l) => matchesChip(l, typeF)));
+    const chips = FILTER_CHIPS;
     return (
       <div style={overlay}>
         <div style={head}><span style={{ fontSize: 16.5, fontWeight: 700, color: C.brandD }}>התוכן שלי</span><button onClick={onClose} aria-label="סגירה" style={closeBtn}><X size={22} /></button></div>
@@ -689,7 +824,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
             <button onClick={() => setView("fav")} style={{ flex: 1, border: `1.5px solid ${C.line}`, background: C.panel, color: C.brandD, borderRadius: 12, padding: "11px 8px", fontFamily: font, fontSize: 16, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}><Heart size={18} /> המועדפים שלי</button>
           </div>
 
-          {!isPdf && !isGlow && (
+          {!isPdf && (
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 14 }}>
               {openWeeks.map((w) => (<button key={w} onClick={() => setSelWeek(w)} style={{ flexShrink: 0, border: "none", cursor: "pointer", borderRadius: 999, padding: "8px 16px", fontFamily: font, fontSize: 16, fontWeight: 700, background: w === wk ? C.brand : C.bg, color: w === wk ? "#fff" : C.ink }}>שבוע {w}</button>))}
             </div>
@@ -699,12 +834,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
             {chips.map(([id, lbl]) => (<button key={id} onClick={() => setTypeF(id)} style={{ border: `1.5px solid ${typeF === id ? C.brand : C.line}`, cursor: "pointer", borderRadius: 999, padding: "6px 13px", fontFamily: font, fontSize: 15, fontWeight: 600, background: typeF === id ? C.brandBg : C.panel, color: typeF === id ? C.brandD : C.ink }}>{lbl}</button>))}
           </div>
 
-          {isGlow ? (
-            <>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, marginBottom: 10, lineHeight: 1.4 }}>{GLOW_EMOJI} {GLOW_TITLE}</div>
-              {GLOW_DAY.lessons.map((l, i) => <LessonRow key={"g" + i} w={0} d={0} l={l} i={i} from="all" />)}
-            </>
-          ) : isPdf ? (
+          {isPdf ? (
             pageEntries.length === 0
               ? <div style={{ fontSize: 16, color: C.sub, textAlign: "center", padding: "22px 14px" }}>אין דפים זמינים עדיין.</div>
               : pageEntries.map((x) => <ResultRow key={lessonKey(x.week, x.day, x.i)} w={x.week} d={x.day} l={x.l} i={x.i} from="all" pagesOnly subtitle={`שבוע ${x.week} יום ${x.day} · ${x.l.pageImages.length} עמודים`} />)
@@ -767,10 +897,10 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
         {showGlow && (
           <>
             <div style={{ borderTop: `1px solid ${C.line}`, margin: "20px 0 14px" }} />
-            <div onClick={() => { setTypeF("glow"); setView("all"); }} role="button" style={rowStyle}>
+            <div onClick={() => setView("glow")} role="button" style={rowStyle}>
               <div style={{ ...iconWrap, fontSize: 22 }}>{GLOW_EMOJI}</div>
               <div style={{ flex: 1, minWidth: 0, textAlign: "right" }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{GLOW_ROW}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{showFull ? GLOW_FULL_ROW : GLOW_ROW}</div>
               </div>
               <ChevronLeft size={18} color={C.faint} style={{ flexShrink: 0 }} />
             </div>
@@ -806,14 +936,18 @@ export function usageSummary() {
   // who received the bonus would read as behind the rest in the office screen. Who is
   // watching the bonus is a different question, asked so the full Glow course can be
   // offered to exactly those women.
+  // **הרשימה שלה ולא הרשימה שקיימת בקוד.** `hasGlowFull()` אומר רק שהקורס
+  // אינו ריק, ולכן הוא נכון לכל אישה, וכך מי שיש לה את ארבעת שיעורי הדמו
+  // דווחה מ-v6.96 כ"2 מתוך 28" במסך הניהול.
   let gDone = 0, gViews = 0;
-  GLOW_DAY.lessons.forEach((l, i) => {
+  const gList = glowListFor();
+  gList.lessons.forEach((l, i) => {
     const k = lessonKey(0, 0, i);
     if (done[k]) gDone++;
     gViews += views[k] || 0;
   });
   return {
     days, videosDone: vDone, videosTotal: vTotal, views: vViews,
-    glowDone: gDone, glowTotal: GLOW_DAY.lessons.length, glowViews: gViews, glowStarted: glowStarted(),
+    glowDone: gDone, glowTotal: gList.lessons.length, glowViews: gViews, glowStarted: glowStarted(),
   };
 }

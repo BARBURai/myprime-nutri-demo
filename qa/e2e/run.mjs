@@ -52,7 +52,11 @@ const BASE = `http://127.0.0.1:${server.address().port}`;
 // two are different days, and a harness that works in UTC then puts her on the wrong
 // programme day and reports a bug that does not exist. This was found the hard way.
 const israelToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-const TODAY = israelToday();
+// **נמדד מחדש לפני כל תרחיש, ולא פעם אחת בטעינה.** ב-10 בספטמבר 2026 חבילה
+// שהתחילה ב-23:5x נכשלה בשלושת המכשירים על תרחיש היומן: הזרע נכתב עם התאריך של
+// אתמול, והדפדפן כבר נטען אחרי חצות וראה את היום החדש. **האפליקציה הייתה תקינה
+// לגמרי.** זו המלכודת הראשונה מסעיף 20, בפעם הרביעית.
+let TODAY = israelToday();
 // To put her on day N we walk back N-1 days from today, which is what the app does with
 // the date that comes from the registration sheet.
 let lastPage = null;
@@ -85,11 +89,11 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false, replies = null, aiAnswer = null, catalog = null }) {
+async function stubApi(context, { startDate, glow = false, glowFull = false, product = "360", replies = null, aiAnswer = null, catalog = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, ...(replies ? { replies } : {}) });
+    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, glowFull, product, ...(replies ? { replies } : {}) });
     // ברירת המחדל היא תשובה שלא סיימה, כדי ששום תרחיש אחר לא יקבל בטעות כרטיס
     // תוצאות. תרחיש שצריך שיחה גמורה מוסר aiAnswer משלו.
     if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify(aiAnswer || { reply: "רשמתי לך", done: false, items: [] }) }] });
@@ -114,12 +118,12 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, clock = null, replies = null, aiAnswer = null, catalog = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow, replies, aiAnswer, catalog });
+  await stubApi(context, { startDate, glow, glowFull, product, replies, aiAnswer, catalog });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
@@ -2129,6 +2133,162 @@ const CHECKS = [
       return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "שלה נשאר 112, ומה שלא נמסר עודכן ל-250" };
     },
   },
+  {
+    // רון, 9 בספטמבר 2026: "מקבל המלצה, לא לוחץ על שום המלצה, יוצא החוצה והשיחה
+    // נמחקה." שני הצדדים באותה הרצה, כי זיכרון שאינו נמחק לעולם נראה בדיוק כמו
+    // זיכרון שעובד: השיחה חוזרת אחרי יציאה, ומתאפסת אחרי שנרשמה מנה ליומן.
+    name: "השיחה במה כדאי לאכול חוזרת אחרי יציאה, ומתאפסת אחרי שנרשמה מנה",
+    async run(browser, device) {
+      const answer = { intro: "הנה רעיון", options: [{ name: "חביתה זכורה בדיקה", desc: "מהיר וקל", unit: "g", grams: 150, kcal: 300, p: 20, f: 18, c: 8 }], note: "" };
+      const { context, page, errors } = await openApp(browser, device, { day: 15, aiAnswer: answer });
+      const bad = [];
+      const txt = () => page.evaluate(() => document.body.innerText);
+      const openSheet = async () => {
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=מה כדאי לאכול").first().click();
+        await page.waitForTimeout(700);
+      };
+      await openSheet();
+      const go = page.getByRole("button", { name: "הבנתי, בואי נתחיל" });
+      if (await go.count()) { await go.first().click(); await page.waitForTimeout(400); }
+      await page.locator("textarea").first().fill("משהו קל");
+      await page.getByRole("button", { name: /קבלי המלצות/ }).first().click();
+      await page.waitForTimeout(900);
+      if (!(await txt()).includes("חביתה זכורה בדיקה")) bad.push("הרעיון לא הוצג");
+
+      // א. יוצאים בלי לגעת בשום רעיון, וחוזרים. היציאה היא הקשה על האזור הכהה
+      // שמעל המסך, כי לכפתור ה-✕ של המסכים הנשלפים אין תווית שאפשר לתפוס בה.
+      await page.mouse.click(Math.round(device.viewport.width / 2), 40);
+      await page.waitForTimeout(600);
+      if ((await txt()).includes("חביתה זכורה בדיקה")) bad.push("המסך לא נסגר");
+      await openSheet();
+      if (!(await txt()).includes("חביתה זכורה בדיקה")) bad.push("השיחה נמחקה ביציאה");
+
+      // ב. רושמים מנה ליומן, ואז השיחה הבאה מתחילה נקייה.
+      await page.locator("text=בחרי את זו").first().click();
+      await page.waitForTimeout(500);
+      await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+      await page.waitForTimeout(500);
+      const ask = page.locator('[data-ask="recqty"]');
+      if (await ask.count()) { await ask.getByRole("button", { name: /^אכלתי / }).click(); await page.waitForTimeout(900); }
+      // ההוספה ליומן מקפיצה את "לשמור למועדפים?", והיא חוסמת את המסך עד שעונים לה.
+      const no = page.getByRole("button", { name: /לא תודה/ });
+      if (await no.count()) { await no.first().click(); await page.waitForTimeout(500); }
+      const diary = await txt();
+      if (!diary.includes("חביתה זכורה בדיקה")) bad.push("המנה לא נוספה ליומן");
+      await openSheet();
+      const after = await txt();
+      if (after.includes("הנה רעיון")) bad.push("השיחה הישנה חזרה אחרי שנרשמה מנה");
+
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "חזרה אחרי יציאה, והתאפסה אחרי הרישום" };
+    },
+  },
+  {
+    // מסך הקורס העצמאי, לקונת קורס האיפור לבדו. שני הצדדים באותה הרצה, כי מסך
+    // שנעול תמיד נראה בדיוק כמו מסך שאינו נעול אף פעם: אישה של 360 שיש לה גם
+    // את הקורס חייבת להמשיך לקבל את התוכנית המלאה עם כל הלשוניות.
+    name: "קונת הקורס לבדו מקבלת מסך אחד, ואישה של 360 ממשיכה לקבל את התוכנית",
+    async run(browser, device) {
+      const bad = [];
+      // א. קנתה את הקורס לבדו.
+      {
+        const { context, page, errors } = await openApp(browser, device, { glow: true, glowFull: true, product: "glow" });
+        await page.waitForTimeout(900);
+        const t = await page.evaluate(() => document.body.innerText);
+        for (const sec of ["להתחיל מהבסיס", "פנים", "עיניים", "מפתחות לאהבה עצמית"]) {
+          if (!t.includes(sec)) bad.push("חסר הסעיף " + sec);
+        }
+        // מה שאסור שיהיה שם: יומן, מדדים, משימות ומסכי הרשמה.
+        for (const x of ["יומן המעקב שלי", "מה שהוזן היום", "הסרטונים שלך היום", "מיי פריים 360", "נתוני בסיס"]) {
+          if (t.includes(x)) bad.push("מסך 360 דלף לקורס העצמאי: " + x);
+        }
+        if (t.includes("0 מתוך 28")) bad.push("שורת ההתקדמות הוצגה כשהיא על אפס");
+        const hero = await page.locator('img[src*="glow-hero"]').count();
+        if (!hero) bad.push("תמונת הפתיחה אינה מוצגת");
+        // ההגדרות: המייל שלה, בלי תאריך גישה ובלי שדה שהיא לא מילאה.
+        await page.locator('[aria-label="הגדרות"]').first().click().catch(() => {});
+        await page.waitForTimeout(500);
+        const st = await page.evaluate(() => document.body.innerText);
+        if (!st.includes("הגדרות")) bad.push("ההגדרות לא נפתחו");
+        if (!st.includes("התנתקות מהמכשיר")) bad.push("אין התנתקות בהגדרות");
+        if (st.includes("גישה עד")) bad.push("תאריך הגישה הוצג בהגדרות");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      // ב. אישה של 360 שיש לה גם את הקורס. שום דבר לא נעול אצלה.
+      {
+        const { context, page, errors } = await openApp(browser, device, { glow: true, glowFull: true });
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("יומן המעקב שלי")) bad.push("היומן נעלם לאישה של 360");
+        const hero = await page.locator('img[src*="glow-hero"]').count();
+        if (hero) bad.push("תמונת המסך העצמאי הוצגה בתוך 360");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "הקורס העצמאי נעול, ו-360 לא נגע" };
+    },
+  },
+  {
+    // קורס האיפור המלא, למי שמסומנת בעמודה GLOW-FULL. שני הצדדים באותה הרצה,
+    // כי מסך שמראה תמיד את הקורס נראה בדיוק כמו מסך שמסנן נכון: מי שיש לה רק
+    // את הבונוס ממשיכה לראות ארבעה שיעורים ואת השורה בכרטיס היומן, ומי שיש לה
+    // את המלא רואה את הסעיפים, את כל השיעורים, ובלי שורה ביומן.
+    name: "קורס Glow המלא מוצג בסעיפים, ולמי שיש רק בונוס שום דבר לא משתנה",
+    async run(browser, device) {
+      const bad = [];
+      // א. רק הבונוס.
+      {
+        const { context, page, errors } = await openApp(browser, device, { glow: true });
+        const card = await page.evaluate(() => document.body.innerText);
+        if (!card.includes("בונוס: 3 שיעורי Glow")) bad.push("שורת הבונוס חסרה בכרטיס היומן");
+        await page.getByText("הסרטונים שלך היום").first().click().catch(() => {});
+        await page.waitForTimeout(700);
+        await page.locator("text=שיעורי הבונוס שלך במיי פריים Glow").first().click().catch(() => {});
+        await page.waitForTimeout(600);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("מיי פריים 360")) bad.push("הכפתור בסרגל אינו נקרא מיי פריים 360");
+        if (!t.includes("בונוס: שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים")) bad.push("כותרת הבונוס חסרה");
+        if (t.includes("להתחיל מהבסיס")) bad.push("הקורס המלא הוצג למי שיש לה רק בונוס");
+        if (t.includes("שיעור 13 - סומק")) bad.push("שיעור מהקורס המלא הוצג למי שיש לה רק בונוס");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+      // ב. הקורס המלא.
+      {
+        const { context, page, errors } = await openApp(browser, device, { glow: true, glowFull: true });
+        const card = await page.evaluate(() => document.body.innerText);
+        if (card.includes("בונוס: 3 שיעורי Glow")) bad.push("שורת הבונוס נשארה ביומן למי שיש לה את המלא");
+        await page.getByText("הסרטונים שלך היום").first().click().catch(() => {});
+        await page.waitForTimeout(700);
+        const row = page.locator("text=קורס האיפור המלא שלך במיי פריים Glow");
+        if (!(await row.count())) bad.push("השורה של הקורס המלא אינה מוצגת");
+        await row.first().click().catch(() => {});
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("מיי פריים")) bad.push("כותרת הקורס המלא חסרה");
+        if (t.includes("- הקורס המלא")) bad.push("המילים הקורס המלא לא ירדו מהכותרת");
+        for (const sec of ["להתחיל מהבסיס", "פנים", "עיניים", "לחיים", "שפתיים", "שיער", "מפתחות לאהבה עצמית"]) {
+          if (!t.includes(sec)) bad.push("חסר הסעיף " + sec);
+        }
+        if (!t.includes("הצללות, הארות, סומק")) bad.push("התיאור הקצר של הסעיף חסר");
+        // סגורים כברירת מחדל: הסעיפים על המסך והשיעורים לא.
+        if (t.includes("שיעור 13 - סומק")) bad.push("הסעיפים אינם סגורים כברירת מחדל");
+        await page.locator("text=לחיים").first().click().catch(() => {});
+        await page.waitForTimeout(400);
+        const t2 = await page.evaluate(() => document.body.innerText);
+        if (!t2.includes("שיעור 13 - סומק")) bad.push("הסעיף לא נפתח בהקשה");
+        if (t2.includes("שיעור 2 - עבודה עם גוואשה")) bad.push("סעיף אחר נפתח יחד איתו");
+        if (t.includes("בונוס: שלושה שיעורי איפור")) bad.push("כותרת הבונוס הוצגה למי שיש לה את המלא");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "בונוס בלבד ללא שינוי, והמלא בשמונה סעיפים" };
+    },
+  },
 ];
 
 /* ---------- run ---------- */
@@ -2144,6 +2304,7 @@ console.log(`\n  MyPrime QA שכבה 3 - ${RUN_CHK.length} בדיקות × ${RUN
 for (const device of RUN_DEV) {
   for (const c of RUN_CHK) {
     try {
+      TODAY = israelToday();   // כדי שהזרע והדפדפן יסכימו גם כשהחבילה חוצה חצות
       const { ok, detail, skip } = await c.run(browser, device);
       record(device.name, c.name, ok, detail, skip);
     } catch (e) {

@@ -18,6 +18,7 @@
 // GET  /api/admin?key=<ADMIN_KEY>              -> { ok, women[], headers, today }
 // POST /api/admin?key=<ADMIN_KEY>              -> { email, until, by }   ("" clears it)
 
+import { decideAccess } from "./_product.js";
 import { loadSheet, israelDay, accessEnd, ymd } from "./_sheet.js";
 import { KB } from "./_kb.js";
 
@@ -35,7 +36,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "6.93";
+const ADMIN_VERSION = "7.12";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -971,7 +972,7 @@ JSON בלבד, בלי שום טקסט אחר:
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
-  let overrides = {}, seen = {}, usage = {}, emailMap = {}, emailOld = {}, manual = {};
+  let overrides = {}, seen = {}, usage = {}, emailMap = {}, emailOld = {}, manual = {}, glowStart = {};
   const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
@@ -986,6 +987,9 @@ JSON בלבד, בלי שום טקסט אחר:
     // the clerk supplies one. Ours alone: the registration sheet is never written to.
     try { manual = flat(await redis(RU, RT, "HGETALL", "admin:manual")); } catch (e) {}
     try { seen = flat(await redis(RU, RT, "HGETALL", "admin:seen")); } catch (e) {}
+    // היום הראשון שבו נכנסה לקורס. **זה אינו תאריך הקנייה**, שאינו קיים אצלנו
+    // בשום מקום, אלא הרגע שבו הקורס נפתח לה בפועל. נתפס ב-HSETNX בשער.
+    try { glowStart = flat(await redis(RU, RT, "HGETALL", "glow:start")); } catch (e) {}
     try { usage = flat(await redis(RU, RT, "HGETALL", "admin:usage")); } catch (e) {}
 
     // Who is on the new app. admin:seen only starts at v4.87, so it alone would report far
@@ -1108,6 +1112,26 @@ JSON בלבד, בלי שום טקסט אחר:
     const first = (ovr && ovr.first) || w.first || "";
     const last = (ovr && ovr.last) || w.last || "";
     const seenAt = seen[w.email] || "";
+    // **מה יש לה עכשיו, ומה המסך שהיא רואה.** מחושב מ-`api/_product.js`, שהוא אותו
+    // קובץ בדיוק שהשער מריץ, ולכן המסך והאפליקציה אינם יכולים לחלוק. זה מה שנשבר
+    // ב-v6.77 כששני הקבצים החזיקו כל אחד עותק משלו.
+    const glowFullNow = (ovr && ovr.glowFull) ? ovr.glowFull === "1" : !!w.glowFull;
+    const glowPaidNow = (ovr && ovr.glowPaid) ? ovr.glowPaid === "1" : !!w.glowPaid;
+    const glowStartAt = glowStart[w.email] || "";
+    const state = decideAccess({
+      startSunday: start ? new Date(start + "T00:00:00Z") : null,
+      cancelled: !!w.cancelled,
+      clerkBlocked: blocked,
+      clerkUntil: (ovr && ovr.until) || "",
+      freeze,
+      extraMonths: w.months,
+      solo: w.solo,
+      glowFull: glowFullNow,
+      glowPaid: glowPaidNow,
+      glowMonths: w.glowM,
+      glowStart: glowStartAt,
+      today,
+    });
     let use = null;
     if (usage[w.email]) { try { use = JSON.parse(usage[w.email]); } catch (e) {} }
     return {
@@ -1145,6 +1169,25 @@ JSON בלבד, בלי שום טקסט אחר:
       // clerk must never have to guess which of the two she is looking at.
       glow: (ovr && ovr.glow) ? ovr.glow === "1" : !!w.glow,
       sheetGlow: !!w.glow,
+      // קורס האיפור המלא, ומאיפה הוא הגיע אליה. `glowSource` הוא "paid", "gift",
+      // "solo" או ריק, וזה מה שקובע מה יקרה לה כשחלון 360 ייגמר.
+      glowFull: glowFullNow,
+      glowPaid: glowPaidNow,
+      glowStart: glowStartAt,
+      state: {
+        product: state.product,
+        allowed: state.allowed,
+        reason: state.reason,
+        open360: state.open360,
+        glowOpen: state.glowOpen,
+        // **הקורס המלא נפתח לה ביום 1 ולא לפניו**, ולכן הכרטיס חייב להבדיל בין
+        // "יש לה והוא פתוח" לבין "יש לה והוא עוד לא נפתח".
+        preStart: state.preStart,
+        glowFullOpen: state.glowFullOpen,
+        glowSource: state.glowSource,
+        end360: state.end360,
+        endGlow: state.endGlow,
+      },
       glowOverride: (ovr && ovr.glow) ? { glow: ovr.glow, by: ovr.by || "" } : null,
       until,
       // `override` is only in force while it carries a date. The log survives a clearing, so

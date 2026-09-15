@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "6.93";
+const VERSION = "7.12";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1670,7 +1670,7 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
 }
 // Shown when a participant has finished signing up but her programme starts on a
 // later Sunday. Day 1 (and everything with it) unlocks at midnight on that date.
-function PreStartScreen({ name, startDate, glow = false, onOpenGlow }) {
+function PreStartScreen({ name, startDate, glow = false, glowSoon = false, onOpenGlow }) {
   // Phone only: on a desktop there is no home screen to put the icon on.
   const isPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
   const start = new Date(startDate);
@@ -1696,6 +1696,14 @@ function PreStartScreen({ name, startDate, glow = false, onOpenGlow }) {
           <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, lineHeight: 1.5 }}>💄 בונוס שמחכה לך כבר עכשיו</div>
           <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, margin: "8px 0 14px" }}>שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים Glow, עם ורד ספיבק.</div>
           <Btn onClick={onOpenGlow}>לצפייה בשיעורים</Btn>
+        </div>
+      )}
+      {/* הקורס המלא במתנה, שנפתח לה ביום הראשון. **בלי כפתור, כי אין עדיין לאן
+          ללחוץ.** הקופי הוא של רון, 15 בספטמבר 2026. מוצג למתנה בלבד: קורס
+          שנקנה בכסף פתוח לה מיד וגם בתקופת ההמתנה. */}
+      {glowSoon && (
+        <div style={{ background: C.panel, border: `1px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
+          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>💄 קורס הביוטי Glow המלא במתנה יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים של תוכנית הליווי.</div>
         </div>
       )}
       {isPhone && (
@@ -3266,7 +3274,9 @@ function SplashScreen() {
     <div style={{ position: "absolute", inset: 0, zIndex: 200, background: C.panel, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 28, textAlign: "center", fontFamily: fontStack, animation: "splashFade 2s ease forwards" }}>
       <div style={{ position: "absolute", top: 14, left: 14, background: C.brandBg, color: C.brandD, fontSize: 13, fontWeight: 700, padding: "4px 12px", borderRadius: 999 }}>בטה</div>
       <img src={MEDAL_SRC} alt="" width={150} height={150} style={{ display: "block", marginBottom: 20 }} />
-      <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.45, maxWidth: 320 }}>ברוכה הבאה לאפליקציית המעקב היומי של מיי פריים</div>
+      {/* **"המעקב היומי" ירד מכאן.** המסך הזה נראה בכל טעינה ולכל אישה, כולל קונת
+          קורס האיפור שאין לה יומן מעקב בכלל, ואצלה הוא היה מבטיח מוצר אחר. */}
+      <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.45, maxWidth: 320 }}>ברוכה הבאה לאפליקציית מיי פריים</div>
     </div>
   );
 }
@@ -4455,6 +4465,34 @@ function SheetShell({ title, onClose, children, className = "" }) {
   );
 }
 
+// ההגדרות של קונת קורס האיפור לבדה. היא לא מילאה שום פרט, ולכן אין לה פרופיל:
+// לא משקל, לא גובה, לא מטרה ולא מחזור. זו רשימה קצרה ולא מסך, וזו הסיבה שהיא
+// יושבת בגלגל שבפינת התמונה ולא בסרגל תחתון. רון: "מה בעצם צריך להיות בפרופיל
+// אם היא לא מילאה שום דבר."
+function GlowSoloSettings({ name, email, onInstall, onLogout, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(email); } catch (e) {
+      try { const t = document.createElement("textarea"); t.value = email; document.body.appendChild(t); t.select(); document.execCommand("copy"); document.body.removeChild(t); } catch (e2) { return; }
+    }
+    setCopied(true); setTimeout(() => setCopied(false), 1400);
+  };
+  const row = { width: "100%", boxSizing: "border-box", textAlign: "right", border: `1px solid ${C.line}`, background: C.panel, borderRadius: 14, padding: "14px 15px", fontFamily: fontStack, fontSize: 16.5, color: C.ink, cursor: "pointer", marginBottom: 10 };
+  return (
+    <SheetShell title="הגדרות" onClose={onClose}>
+      <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: "14px 15px", marginBottom: 14 }}>
+        {name && <div style={{ fontSize: 17, fontWeight: 700, color: C.ink, marginBottom: 6 }}>{name}</div>}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 15.5, color: C.sub, direction: "ltr", wordBreak: "break-all" }}>{email}</span>
+          {email && <button onClick={copy} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 999, padding: "4px 12px", fontSize: 13.5, fontFamily: fontStack, color: C.ink, cursor: "pointer", flexShrink: 0 }}>{copied ? "הועתק ✓" : "העתקה"}</button>}
+        </div>
+      </div>
+      {onInstall && <button style={row} onClick={onInstall}>התקנת האפליקציה על הטלפון</button>}
+      <button style={{ ...row, color: C.brandD }} onClick={onLogout}>התנתקות מהמכשיר</button>
+    </SheetShell>
+  );
+}
+
 function ActivityModal({ onClose, onAdd, weightKg }) {
   const acts = [
     { name: "ריצה", met: 9.8 },
@@ -4744,10 +4782,15 @@ function AccessGate({ status, reason, email, setEmail, name, setName, onSubmit, 
 // scope means it comes back when the app is reloaded. Asking her the same thing before
 // every single question was the complaint.
 let recIntroSeen = false;
+// **השיחה נזכרת כל עוד האפליקציה פתוחה.** רון, 9 בספטמבר 2026: "מקבל המלצה, לא
+// לוחץ על שום המלצה, יוצא החוצה והשיחה נמחקה." המסך השני, "ספרי לי מה אכלת",
+// כבר עושה בדיוק את זה מ-v4.81 דרך aiSession, וכאן זה מעולם לא הוכנס.
+// נמחק ברגע שהיא באמת רשמה מנה ליומן, כי אז השיחה הסתיימה.
+let recSession = null;
 
 function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, mealsHad, proteinFocus, onLog, onClose, onGoProfile, backRef }) {
-  const [stage, setStage] = useState(recIntroSeen ? "confirm" : "intro");
-  const [msgs, setMsgs] = useState([]);
+  const [stage, setStage] = useState(recSession ? recSession.stage : (recIntroSeen ? "confirm" : "intro"));
+  const [msgs, setMsgs] = useState(() => (recSession && recSession.msgs) || []);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(false);
@@ -4767,7 +4810,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   useEffect(() => { const el = inputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [input]);
   // Every answer is kept, not just the latest: she may scroll back and take an idea from
   // an earlier round after seeing the newer ones.
-  const [replies, setReplies] = useState([]);
+  const [replies, setReplies] = useState(() => (recSession && recSession.replies) || []);
   const lastAnswerRef = useRef(null);
   const listRef = useRef(null);
   const roundsRef = useRef(0);
@@ -4813,6 +4856,9 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   const customSens = (profile.dislikes || "").split(",").map((s) => s.trim()).filter(Boolean);
   const avoidAll = [...allergies, ...customSens].filter(Boolean);
 
+  // נזכר כל עוד האפליקציה פתוחה, בדיוק כמו aiSession במסך השני. יציאה בטעות
+  // אינה מוחקת את הרעיונות, והם חוזרים בפתיחה הבאה.
+  useEffect(() => { if (stage === "chat") recSession = { stage, msgs, replies }; }, [stage, msgs, replies]);
   const run = async (history, isRetry) => {
     setLoading(true); setErr(false); setBadAnswer(false);
     const r = await aiMealChat(history, ctx);
@@ -4941,6 +4987,7 @@ function RecommendModal({ remainingKcal, remainingProtein, profile, setProfile, 
   });
   const logChosen = () => {
     if (!chosen) return;
+    recSession = null; // נרשמה מנה ליומן, ולכן השיחה הסתיימה והבאה מתחילה נקייה
     const v = scaled(chosen);
     onLog([{ meal: chosen.meal, name: chosen.name, g: chosen.grams, unit: chosen.unit || "g", source: "estimated", kcal: v.kcal, p: v.p, f: v.f, c: v.c, servingG: chosen.grams || 1 }]);
     setChosen(null);
@@ -6143,7 +6190,7 @@ function UpdateBar({ hidden }) {
   // כשחלון פתוח הפס אינו מוצג, כדי שלא תקיש "רענון" באמצע הזנה ותאבד אותה.
   if (!stale || hidden || dismissed) return null;
   return (
-    <div style={{ position: "absolute", top: DEV ? `calc(env(safe-area-inset-top, 0px) + ${devTop}px)` : "env(safe-area-inset-top, 0px)", insetInlineStart: 0, insetInlineEnd: 0, zIndex: 60, background: C.brand, color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 14px", fontFamily: fontStack, direction: "rtl", boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}>
+    <div style={{ position: "absolute", top: DEV ? `${devTop}px` : "env(safe-area-inset-top, 0px)", insetInlineStart: 0, insetInlineEnd: 0, zIndex: 60, background: C.brand, color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 14px", fontFamily: fontStack, direction: "rtl", boxShadow: "0 2px 10px rgba(0,0,0,.18)" }}>
       <span style={{ fontSize: 15, fontWeight: 600 }}>יש גרסה חדשה של האפליקציה</span>
       <span style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
         <button onClick={() => { try { window.location.reload(); } catch (e) {} }} style={{ background: "#fff", color: C.brand, border: "none", borderRadius: 999, padding: "5px 17px", fontSize: 14.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" }}>רענון</button>
@@ -6258,7 +6305,12 @@ function DevDateBar({ onAnchor }) {
   };
   const btn = { background: "#444", color: "#fff", border: "none", borderRadius: 6, padding: "3px 9px", fontSize: 13, fontWeight: 700, fontFamily: fontStack, cursor: "pointer" };
   return (
-    <div id="mp-devbar" style={{ position: "absolute", top: "env(safe-area-inset-top, 0px)", left: 0, right: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "5px 8px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
+    // הסרגל יושב בזרימה של המסגרת ולא מרחף מעליה. **קודם הוא היה `absolute`
+    // ודחף את עצמו על האפליקציה**, ומכיוון שהוא נשבר לשלוש שורות ברוחב של
+    // טלפון הוא כיסה את סרגל התאריכים שמתחתיו. רון: "אני עדיין לא רואה כמעט
+    // בכלל את הסרגל של התאריכים למעלה, רק את הקצה התחתון." עכשיו הוא תופס את
+    // הגובה שלו והאפליקציה מתחילה מתחתיו, בכל מספר שורות ובכל רוחב מסך.
+    <div id="mp-devbar" style={{ flexShrink: 0, zIndex: 99999, background: "#222", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8, padding: "calc(5px + env(safe-area-inset-top, 0px)) 8px 5px", fontSize: 12, fontFamily: fontStack, direction: "rtl" }}>
       <span style={{ opacity: 0.7 }}>DEV - יום מדומה</span>
       <button onClick={() => setDay(addDays(TODAY, -1))} style={btn}>-1</button>
       <input type="date" value={TODAY} onChange={(e) => { if (e.target.value) setDay(e.target.value); }} style={{ fontSize: 13, padding: "2px 5px", borderRadius: 6, border: "none", fontFamily: fontStack }} />
@@ -6829,6 +6881,14 @@ export default function App() {
   // Read from storage first so the bonus is there on the very first paint, before the gate
   // has answered. The gate then rewrites it on every load.
   const [glow, setGlow] = useState(() => { try { return localStorage.getItem("myprime_glow") === "1"; } catch (e) { return false; } });
+  // מי שקיבלה את קורס האיפור המלא, לפי עמודת GLOW-FULL בגיליון. נשמר כאן כדי
+  // שהמסך ייבנה נכון עוד לפני שהשער עונה, בדיוק כמו הבונוס שמעליו.
+  const [glowFull, setGlowFull] = useState(() => { try { return localStorage.getItem("myprime_glow_full") === "1"; } catch (e) { return false; } });
+  // יש לה את הקורס המלא במתנה, והוא ייפתח ביום הראשון של התוכנית. **זה קיים רק
+  // בתקופת ההמתנה ולמתנה בלבד**, כי קורס שנקנה בכסף פתוח לה מיד.
+  const [glowSoon, setGlowSoon] = useState(() => { try { return localStorage.getItem("myprime_glow_soon") === "1"; } catch (e) { return false; } });
+  // "glow" = קנתה את קורס האיפור לבדה. ראה את ההערה בתשובת השער למטה.
+  const [product, setProduct] = useState(() => { try { return localStorage.getItem("myprime_product") === "glow" ? "glow" : "360"; } catch (e) { return "360"; } });
   // "התחילה לצפות בבונוס". נשמר על המכשיר שלה, ומוחזק כאן גם כמצב כדי שהשליחה
   // של נתוני השימוש תצא שוב באותו ביקור. בלי זה התג במניצ'ט יצא רק בכניסה הבאה
   // שלה, כלומר לרוב רק למחרת, ומי שנרשמה וצפתה באותו ערב לא הייתה מתויגת כלל.
@@ -6994,7 +7054,18 @@ export default function App() {
         // Rewritten on every load, so adding or removing her in the sheet takes effect on
         // her next entry with nothing to install.
         try { localStorage.setItem("myprime_glow", d.glow ? "1" : "0"); } catch (e) {}
+        setGlowFull(!!d.glowFull);
+        try { localStorage.setItem("myprime_glow_full", d.glowFull ? "1" : "0"); } catch (e) {}
+        setGlowSoon(!!d.glowSoon);
+        try { localStorage.setItem("myprime_glow_soon", d.glowSoon ? "1" : "0"); } catch (e) {}
         setGlow(!!d.glow);
+        // איזה מוצר היא קנתה. "glow" הוא קורס האיפור שנמכר לבדו, בלי 360, והשער
+        // מזהה אותו בכך שיש לה GLOW-FULL ואין לה תאריך התחלה. נכתב מחדש בכל
+        // כניסה, ולכן קונת גלו שנרשמת ל-360 עוברת לתוכנית המלאה מעצמה, ואישה
+        // של 360 שמסומן לה GLOW-FULL מקבלת את הקורס בתוך התוכנית. שני הכיוונים
+        // בלי שום צעד ידני.
+        setProduct(d.product === "glow" ? "glow" : "360");
+        try { localStorage.setItem("myprime_product", d.product === "glow" ? "glow" : "360"); } catch (e) {}
         // Answers the office wrote to notes she left, that she has not read yet. They light
         // the dot on the notes bubble and sit at the top of it until she taps "תודה, הבנתי".
         setReplies(Array.isArray(d.replies) ? d.replies : []);
@@ -7760,6 +7831,20 @@ export default function App() {
           <InstallGate onSkip={skipInstall} />
         ) : gate !== "ok" ? (
           <AccessGate status={gate} backDate={gateBack} reason={gateReason} email={gateEmail} setEmail={setGateEmail} name={gateName} setName={setGateName} onSubmit={submitGate} onRetry={retryGate} msg={gateMsg} notice={gateNotice} attempts={gateAttempts} agree={gateAgree} setAgree={setGateAgree} />
+        ) : product === "glow" ? (
+          /* קונת קורס האיפור לבדה, בלי 360. מסך אחד, בלי יומן, בלי מדדים, בלי
+             משימות, בלי התראות ובלי מסכי הרשמה, כי אין לה מה למלא. הסרגל התחתון
+             ירד: יש לה מסך אחד, וסרגל היה מציע לה לבחור בין המסך שהיא כבר נמצאת
+             בו לבין כלום. ההגדרות בגלגל שבפינת התמונה.
+             וברגע שייפתח לה מחזור 360, השער מפסיק להחזיר "glow" והיא מקבלת את
+             התוכנית המלאה בכניסה הבאה, בלי שום צעד ידני. */
+          <>
+            <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+              <ContentModule solo glow glowFull week={0} dow={0} todayWeek={0} todayDow={0} C={C} font={fontStack} backRef={contentBackRef} onSettings={() => setSheet("glowSettings")} onClose={() => {}} />
+            </div>
+            {sheet === "glowSettings" && <GlowSoloSettings name={gateName} email={gateEmail} onInstall={appIsPhone && !appStandalone ? () => setSheet("install") : null} onLogout={logoutDevice} onClose={() => setSheet(null)} />}
+            {sheet === "install" && <InstallGuideModal onClose={() => setSheet("glowSettings")} />}
+          </>
         ) : !onboarded ? (
           bkRestore === "offer" ? (
             <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={() => setBkRestore("none")} />
@@ -7771,7 +7856,7 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} glowSoon={glowSoon} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow && !glowFull} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={profile.weightKg} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
@@ -7836,7 +7921,7 @@ export default function App() {
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
             {sheet === "collection" && <CollectionModal checkins={checkins} startDate={profile.startDate} today={today} viewDate={selectedDate} keepShabbat={profile.keepShabbat} stepsByDate={stepsByDate} waterByDate={waterByDate} log={log} targets={targets} cupMl={profile.cupMl} activityLog={activityLog} onClose={() => setSheet(null)} />}
-            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} C={C} font={fontStack} backRef={contentBackRef} startGlow={glowDirect} onGlowStart={() => setGlowSeen(true)} onClose={() => { setSheet(null); setGlowDirect(false); }} />}
+            {sheet === "content" && CONTENT_ENABLED && <ContentModule week={programWeekFor(profile.startDate, selectedDate)} dow={dowOf(selectedDate)} todayWeek={programWeekFor(profile.startDate, TODAY)} todayDow={dowOf(TODAY)} glow={glow} glowFull={glowFull} C={C} font={fontStack} backRef={contentBackRef} startGlow={glowDirect} onGlowStart={() => setGlowSeen(true)} onClose={() => { setSheet(null); setGlowDirect(false); }} />}
             {sheet === "onboard" && <OnboardingModal onClose={() => setSheet(null)} />}
             {sheet === "catchup" && <CatchupModal progDay={programDayNumber(profile.startDate, TODAY)} onClose={() => { setSheet(null); setProfile((p) => ({ ...p, catchup: "done" })); }} />}
 
