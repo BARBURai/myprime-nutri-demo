@@ -708,7 +708,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.15";
+const VERSION = "7.16";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3787,6 +3787,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   // without ever asking her to type it: the phone already read it.
   const [scannedCode, setScannedCode] = useState("");
   const [labelSaved, setLabelSaved] = useState(false);
+  // הגיעה למסך ההזנה הידנית דרך "הערכים לא תואמים לאריזה", ולא מתפריט הוספת המזון.
+  // זה קובע שני דברים בלבד: את הכותרת, וששורת "חזרה" מחזירה אותה למסך הכמות שממנו
+  // באה ולא לתפריט, שהוא כמה מסכים אחורה ממה שביקשה.
+  const [labelFix, setLabelFix] = useState(false);
   const stopScan = () => { try { scanControlsRef.current && scanControlsRef.current(); } catch (e) {} scanControlsRef.current = null; };
   const lookupBarcode = async (code) => {
     setScanState("looking");
@@ -3905,7 +3909,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const guardedClose = () => { if (unsavedAny()) { askExit(false); return; } close(); };
 
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
-  const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
+  // מסך ההזנה הידנית מקבל חזרה משלו **רק** כשהגיעה אליו מ"עדכני מהתווית", ואז היא
+  // חוזרת למסך הכמות. בלי זה כפתור החזרה של הטלפון לא היה מוצא מה לסגור והיה סוגר
+  // את כל חלון ההוספה, כמה מסכים אחורה ממה שביקשה. זו הצורה של v6.72 ושל v5.27.
+  const back = step === "manual" && labelFix ? () => { setLabelFix(false); setStep("qty"); } : step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   // כפתור החזרה של הטלפון, שכבה אחת בכל לחיצה. בלי זה האפליקציה ידעה רק שחלון
   // ההוספה פתוח, ולחיצה מתוך מסך הכמות סגרה את כולו והחזירה אותה ליומן, כמה
   // מסכים אחורה ממה שביקשה. משתתפת דיווחה על זה מרשימת האחרונים.
@@ -3957,7 +3964,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         )}
         {step === "manual" && (
           <>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>{scannedCode ? "עדכון מהתווית" : "הזנה ידנית"}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>{labelFix || scannedCode ? "עדכון מהתווית" : "הזנה ידנית"}</div>
             <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.5, margin: "0 0 14px" }}>{mWhole ? "הקלידי את הערכים של המנה שאכלת, כמו שקיבלת אותם. הם ייכנסו ליומן בדיוק כמו שהם." : "הקלידי את הערכים מהתווית של המוצר. הוא יישמר אצלך ויופיע בחיפוש בפעם הבאה."}</p>
             {labelSaved && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 12, marginBottom: 14, fontSize: 15.5, fontWeight: 600, textAlign: "center" }}>תודה 💜 עדכנתי את הערכים אצלך.</div>}
             <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
@@ -3990,8 +3997,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               <div style={{ flex: 1 }}><label style={mLbl}>שומן (ג׳)</label><input value={mFat} onChange={(e) => setMFat(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ flex: 1 }}><label style={mLbl}>פחמימות (ג׳)</label><input value={mCarb} onChange={(e) => setMCarb(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
             </div>
-            <div style={{ marginTop: 18 }}><Btn onClick={saveManual} disabled={!mName.trim() || !(mWhole || Number(mAmount) > 0)}>הוסיפי ליומן</Btn></div>
-            <Btn variant="ghost" onClick={() => setStep("method")} style={{ marginTop: 8 }}>חזרה</Btn>
+            <div style={{ marginTop: 18 }}><Btn onClick={saveManual} disabled={!mName.trim() || !(mWhole || Number(mAmount) > 0)}>{state.editEntry ? "עדכני" : "הוסיפי ליומן"}</Btn></div>
+            {/* מי שהגיעה לכאן דרך "עדכני מהתווית" חוזרת למסך הכמות שממנו באה. "חזרה"
+                לתפריט הייתה מוציאה אותה כמה מסכים אחורה, וזו הצורה של v6.72. */}
+            <Btn variant="ghost" onClick={() => { if (labelFix) { setLabelFix(false); setStep("qty"); } else setStep("method"); }} style={{ marginTop: 8 }}>חזרה</Btn>
           </>
         )}
         {step === "list" && (
@@ -4005,6 +4014,20 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", color: C.faint }}>
                 <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+              </div>
+              {/* **מוצר באריזה כמעט תמיד לא יימצא בחיפוש בעברית, וזה לא ליקוי בחיפוש
+                  שלנו.** המוצרים הישראליים במאגר העולמי רשומים שם באנגלית בלבד, ולכן
+                  שאילתה בעברית אינה יכולה להגיע אליהם ונופלת על הפריט הגנרי שכן יש לו
+                  שם בעברית. משתתפת רשמה כך משקה יוגורט מועשר בחלבון וקיבלה 7 גרם
+                  חלבון במקום 42, בלי שום סימן לכך.
+
+                  **הברקוד אינו משתמש בשם כלל ולכן הוא חסין לזה**, ואותו מוצר בדיוק
+                  חוזר ממנו עם ערכי התווית המדויקים. לכן ההפניה יושבת כאן, ברגע שבו
+                  היא מחפשת, ולא רק כשורה ברשימה שהיא כבר עברה. */}
+              <div onClick={() => { usageBump("barcode"); setStep("barcode"); }} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, background: C.brandBg, borderRadius: 10, padding: "9px 10px", cursor: "pointer" }}>
+                <Barcode size={18} color={C.brand} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>יש לך את האריזה ביד? סריקת הברקוד תיתן את המספרים המדויקים</span>
+                <ChevronLeft size={17} color={C.brandD} style={{ flexShrink: 0 }} />
               </div>
             </div>
             <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
@@ -4349,19 +4372,33 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
-              {/* Right under the numbers she is questioning. The global barcode database
-                  often holds a generic version of a product rather than the Israeli package
-                  in her hand; the correction is filed against the barcode she scanned. */}
-              {scannedCode && String(food.id || "").startsWith("bc_") && !state.editEntry && (
+              {/* Right under the numbers she is questioning.
+                  **עד 16 בספטמבר 2026 השורה הזאת הופיעה אך ורק מיד אחרי סריקת ברקוד**,
+                  ולכן מי שהגיעה למוצר דרך חיפוש, דרך הבינה או דרך האחרונים לא יכלה
+                  לתקן ערכים שגויים בשום דרך, **וגם לא כשחזרה למוצר שכבר רשמה**: מסך
+                  העריכה נתן לה את הכמות ואת הארוחה בלבד. משתתפת דיווחה בדיוק על זה,
+                  "תיקנתי ולא שונה".
+
+                  עכשיו היא מוצגת בכל מסלול. **בעריכה זה אינו מוסיף שורה אלא מעדכן את
+                  הקיימת**, כי `commit` כבר מזהה `editEntry` ומחליף בה. */}
+              {food.per100 && (
                 <div style={{ borderTop: `1px solid ${C.line}`, marginTop: 10, paddingTop: 9, textAlign: "center" }}>
                   <button onClick={() => {
+                    // per100 של פריט קיים מחושב בחלוקה, ולכן הוא יוצא עם זנב עשרוני
+                    // ארוך. היא לא אמורה לראות 1.4000000000000001 בשדה.
+                    const r1 = (n) => { const v = Math.round((Number(n) || 0) * 10) / 10; return v ? String(v) : ""; };
                     setMName(food.name || "");
                     setMAmount(String(grams || 100));
                     setMUnit(food.unit === "ml" ? "ml" : "g");
-                    setMKcal(String(food.per100.kcal || ""));
-                    setMProt(String(food.per100.p || ""));
-                    setMFat(String(food.per100.f || ""));
-                    setMCarb(String(food.per100.c || ""));
+                    setMKcal(r1(food.per100.kcal));
+                    setMProt(r1(food.per100.p));
+                    setMFat(r1(food.per100.f));
+                    setMCarb(r1(food.per100.c));
+                    // הערכים שהוזנו כאן הם תמיד ל-100, כי מזה הם נגזרו. מתג שנשאר
+                    // מפתיחה קודמת היה מכניס אותם ליומן כמו שהם.
+                    setMWhole(false);
+                    setLabelSaved(false);
+                    setLabelFix(true);
                     setStep("manual");
                   }} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>הערכים לא תואמים לאריזה? עדכני מהתווית</button>
                 </div>

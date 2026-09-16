@@ -524,6 +524,84 @@ const CHECKS = [
     },
   },
   {
+    // משתתפת, 16 בספטמבר 2026: היא רשמה משקה יוגורט מועשר בחלבון וקיבלה 7 גרם
+    // חלבון ל-500 מ"ל במקום 42. **השורש אינו באפליקציה שלנו:** המוצר קיים במאגר
+    // העולמי עם ערכי התווית המדויקים, אבל רשום שם באנגלית בלבד, ולכן חיפוש
+    // בעברית נפל על הפריט הגנרי שכן יש לו שם בעברית.
+    //
+    // **ומה שמנע ממנה לתקן:** השורה "הערכים לא תואמים לאריזה" הופיעה אך ורק מיד
+    // אחרי סריקת ברקוד, ולא במסך העריכה. היא כתבה "תיקנתי ולא שונה".
+    //
+    // המספרים כאן הם של האריזה שהיא צילמה: 53 קק"ל ו-8.4 גרם חלבון ל-100 מ"ל.
+    name: "תיקון ערכים מהתווית של פריט שכבר ביומן, בלי להוסיף שורה",
+    async run(browser, device) {
+      const broken = { id: "y1", date: TODAY, meal: "בוקר", name: "משקה יוגורט", g: 500, unit: "ml", source: "verified", kcal: 215, p: 7, f: 3, c: 40 };
+      const { context, page, errors } = await openApp(browser, device, { day: 15, seed: { log: [broken] } });
+      const before = (await page.locator("text=חלבון 7 ·").count()) > 0;
+      await page.locator("text=משקה יוגורט").first().click();
+      await page.waitForTimeout(600);
+      const onEdit = (await page.locator("text=עריכת פריט").count()) > 0;
+      // זה מה שלא היה קיים לה בכלל.
+      const link = page.locator("text=הערכים לא תואמים לאריזה? עדכני מהתווית");
+      const hasLink = (await link.count()) > 0;
+      if (hasLink) { await link.first().click(); await page.waitForTimeout(600); }
+      const onManual = (await page.locator("text=עדכון מהתווית").count()) > 0;
+      const kcalBox = page.locator('label:text-is("קלוריות") + input');
+      const protBox = page.locator('label:text-is("חלבון (ג׳)") + input');
+      // מגיע מלא במה שיש לה עכשיו, ל-100 מ"ל, ובלי זנב עשרוני.
+      const filled = onManual ? await kcalBox.inputValue() : "";
+      const filledP = onManual ? await protBox.inputValue() : "";
+      if (onManual) {
+        await kcalBox.fill("53");
+        await protBox.fill("8.4");
+        await page.getByRole("button", { name: "עדכני" }).first().click();
+        await page.waitForTimeout(800);
+      }
+      // שורה אחת, ובה המספרים של האריזה.
+      const rows = await page.locator("text=משקה יוגורט").count();
+      const fixed = (await page.locator("text=חלבון 42 ·").count()) > 0;
+      const kcalShown = (await page.locator("text=/265 קק/").count()) > 0;
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: before && onEdit && hasLink && onManual && filled === "43" && filledP === "1.4" && rows === 1 && fixed && kcalShown && bad.length === 0,
+        detail: `לפני ${before} · בעריכה ${onEdit} · שורת התיקון ${hasLink} · מסך התווית ${onManual} · מלא ${filled}/${filledP} · שורות ${rows} · חלבון 42 ${fixed} · 265 קק"ל ${kcalShown} · שגיאות ${bad[0] || "אין"}`,
+      };
+    },
+  },
+  {
+    // **מוצר באריזה כמעט תמיד לא יימצא בחיפוש בעברית**, כי הישראליים רשומים
+    // במאגר העולמי באנגלית. הברקוד אינו משתמש בשם ולכן הוא חסין לזה, ולכן
+    // ההפניה יושבת ברגע שבו היא מחפשת ולא כשורה בתפריט שהיא כבר עברה.
+    name: "מסך החיפוש מפנה לברקוד, וההפניה אינה נגללת החוצה",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device, { day: 15 });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      // בתפריט עצמו אין אותה: היא שייכת לרגע שבו היא כבר מחפשת.
+      const notOnMenu = (await page.locator("text=יש לך את האריזה ביד?").count()) === 0;
+      await page.locator("text=חיפוש מזון").first().click();
+      await page.waitForTimeout(600);
+      const nudge = page.locator("text=יש לך את האריזה ביד?");
+      const shown = (await nudge.count()) > 0;
+      await page.locator('input[placeholder="חיפוש מזון…"]').fill("יוגורט");
+      await page.waitForTimeout(1200);
+      // הכותרת של מסך החיפוש אינה נגללת, ולכן היא נשארת על המסך עם התוצאות.
+      const stillShown = (await nudge.count()) > 0 && (await nudge.first().isVisible());
+      if (shown) { await nudge.first().click(); await page.waitForTimeout(700); }
+      const onScanner = (await page.locator('input[placeholder="חיפוש מזון…"]').count()) === 0
+        && (await page.locator("text=סריקת ברקוד").count()) > 0;
+      const bad = errors.filter((e) => !/favicon|manifest/i.test(e));
+      await context.close();
+      return {
+        ok: notOnMenu && shown && stillShown && onScanner && bad.length === 0,
+        detail: `לא בתפריט ${notOnMenu} · בחיפוש ${shown} · נשארה אחרי הקלדה ${stillShown} · פתחה את הסורק ${onScanner} · שגיאות ${bad[0] || "אין"}`,
+      };
+    },
+  },
+  {
     // משתתפת, 2 בספטמבר 2026: "אם דיווחתי אימון כוח האינדיקציה של אימון כוח
     // צריכה להתמלא אוטומטית, כמו שאחרי שהזנתי מספר צעדים האינדיקציה מתעדכנת."
     //

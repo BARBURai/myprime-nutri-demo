@@ -2,7 +2,7 @@
 
 הקובץ הזה נטען אוטומטית בכל סשן. **קרא אותו במלואו לפני כל פעולה.**
 
-**גרסה נוכחית: v7.15** · עודכן: 15 בספטמבר 2026
+**גרסה נוכחית: v7.16** · עודכן: 16 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -370,7 +370,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -969,6 +969,49 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v7.16** - **מוצר באריזה שנרשם דרך חיפוש קיבל ערכים של מוצר אחר, ולא הייתה שום דרך לתקן אותם.** משתתפת: "הכנסתי באפליקציה משקה יוגורט וחשב לא נכון קלוריות, בשורה מתחת תיקנתי ולא שונה... רשם 7 במקום 24, ומשמעותי לי לראות כמה חלבון צורכת ביום."
+
+### השורש, והוא לא ליקוי בחיפוש שלנו
+**המוצר שלה קיים במאגר העולמי עם ערכי התווית המדויקים.** נבדק מול המאגר החי: הברקוד שעל האריזה שהיא צילמה מחזיר 53 קק״ל ו-8.4 גרם חלבון ל-100 מ״ל, **כלומר בדיוק מה שכתוב עליה.**
+
+**אבל הוא רשום שם באנגלית בלבד** ("Protein Yogurt Drink With Melon And Strawberry", `lang: "en"`, בלי `product_name_he` כלל), **ולכן שאילתה בעברית אינה יכולה להגיע אליו** ונופלת על משקה יוגורט גנרי שכן יש לו שם בעברית.
+
+| ל-500 מ״ל | קלוריות | חלבון |
+|---|---|---|
+| מה שהיא קיבלה | 215 | **7** |
+| מה שכתוב על האריזה | 265 | **42** |
+
+**וזה לא המוצר שלה אלא כל המוצרים באריזה**, כי רוב הישראליים יושבים שם באנגלית. כלומר **דווקא מה שהאישה מחזיקה ביד הוא מה שהחיפוש בעברית מפספס.** **הברקוד אינו משתמש בשם ולכן הוא חסין לזה לגמרי**, וזו הסיבה האמיתית שהוא מדויק ולא סתם כותרת ברשימה.
+
+**ומה שאי אפשר לתקן, כדי שלא ייבדק שוב: לגרום לחיפוש בעברית למצוא אותם.** השם שם באנגלית, ותרגום אינו תופס שמות מותג.
+
+### א. ההפניה לברקוד יושבת ברגע שבו היא מחפשת
+שורה בכותרת הקבועה של מסך החיפוש, מתחת לשדה: **"יש לך את האריזה ביד? סריקת הברקוד תיתן את המספרים המדויקים"**, וההקשה עליה פותחת את הסורק.
+
+**בכותרת ולא ברשימה, כי הרשימה נגללת** והשורה הייתה נעלמת בדיוק כשהיא מקלידה. **ובתפריט הוספת המזון היא אינה מופיעה**, כי שם הברקוד כבר מוצע והיא כבר עברה אותו ובחרה אחרת.
+
+### ב. והתיקון, בכל מסלול ולא רק אחרי סריקה
+**השורה "הערכים לא תואמים לאריזה? עדכני מהתווית" הייתה חסומה בשלושה תנאים:** שנסרק ברקוד, שהמוצר הגיע ממנו, **ובמפורש לא במסך העריכה.** לכן מי שהגיעה דרך חיפוש, דרך הבינה או דרך האחרונים לא ראתה אותה מעולם, **וגם כשחזרה לפריט שכבר רשמה קיבלה את הכמות ואת הארוחה בלבד.** זה בדיוק ה"תיקנתי ולא שונה" שלה.
+
+**ובעריכה זה מעדכן את השורה הקיימת ולא מוסיף אחת**, כי `commit` כבר מזהה `editEntry` ומחליף בה. כפתור השמירה שם אומר "עדכני".
+
+### מה שמאפשר להציג אותה בכל מקום, וזה החלק שהיה מסוכן
+**תיקון שהיא הקלידה אינו דולף לאף אחת אחרת.** `catalogAdd` מדלג על `source: "manual"`, ולמאגר הברקודים נכתב **אך ורק** מה שנסרק, ורק אחרי שאישה שנייה הזינה אותם ערכים. **בלי זה פתיחת השורה לכל פריט הייתה נותנת לאישה אחת לשנות מספרים לכולן.** בדיקה נועלת את שניהם.
+
+**ושלושה דברים קטנים שנגררו:** המתג "ל-100" מאופס בכניסה, אחרת ערכי התווית היו נכנסים ליומן כמו שהם · הערכים מעוגלים, אחרת היא הייתה רואה `1.4000000000000001` בשדה · **וחזרה ממסך התיקון מחזירה למסך הכמות ולא לתפריט**, שהוא כמה מסכים אחורה ממה שביקשה. זו הצורה של v6.72 ושל v5.27.
+
+### הבדיקות
+**`qa/labelfix-check.mjs`, 37 בדיקות בלי רשת**, ובראשן המקרה של המשתתפת מקצה לקצה: הפריט שלה נגזר ל-43 ו-1.4, ערכי התווית על 500 מ״ל נותנים 265 ו-42, **ואותם מספרים במצב "לכל המנה" היו נותנים 53 ו-8**, שזה מה שהופך את איפוס המתג לחלק מהתיקון ולא לפרט. **אומת שיש להן שיניים: 12 האבחנות שנוגעות בשינוי נופלות כולן על v7.15.**
+
+**ומלכודת שנתפסה בבנייתה, ושווה לזכור:** שלוש מהן נוסחו קודם כחלון של תווים סביב הכיתוב ("אין `scannedCode` בטווח 120 תווים"), **והן עברו גם על הקוד הישן**, כי שם שלושת החוסמים יושבים עשר שורות מעליו. **בדיקה שעוברת על המצב השבור אינה בדיקה**, והן נועצו בתנאי עצמו.
+
+**ובשכבה 3 שני תרחישים**, וכל אחד בודק את שני הצדדים באותה הרצה: היא מתקנת פריט קיים **והיומן נשאר עם שורה אחת**, וההפניה נשארת על המסך אחרי שהיא מקלידה ופותחת את הסורק.
+
+**ושלוש בדיקות ב-`qa/addfood-check.mjs` נעוצו מחדש.** הן היו נעוצות בתחילת השורה `const back = step === "qty"`, והשינוי הוסיף ענף לפניה. **הכלל שהן שומרות עליו לא זז**, והן בודקות אותו עכשיו ולא את הפתיח של ההצהרה.
+
+### ומה שנשאר פתוח, וממתין להחלטה של רון
+**התשובה בשאלות ותשובות עדיין מתארת את השורה כשייכת לברקוד בלבד** ("סרקתי ברקוד והערכים לא תואמים לאריזה"). היא אינה שגויה, **היא צרה ממה שקיים עכשיו.** וכך גם הכיתוב עצמו, שמדבר על אריזה ולכן נקרא מוזר על מאכל ביתי. **שינוי של שניהם הוא קופי וטעון אישור.**
 
 **v7.15** - **היתר הצפייה בסרטונים נמחק ברגע שאישה נחסמת, ולא ממתין שיפוג.** רון: "צריך לבדוק שמי שמבטלת 360 מתבטל לה גם גלו המלא ואין לה גישה לאפליקציה."
 
