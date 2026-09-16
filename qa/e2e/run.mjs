@@ -529,7 +529,7 @@ const CHECKS = [
     // העולמי עם ערכי התווית המדויקים, אבל רשום שם באנגלית בלבד, ולכן חיפוש
     // בעברית נפל על הפריט הגנרי שכן יש לו שם בעברית.
     //
-    // **ומה שמנע ממנה לתקן:** השורה "הערכים לא תואמים לאריזה" הופיעה אך ורק מיד
+    // **ומה שמנע ממנה לתקן:** השורה "הערכים לא נכונים" הופיעה אך ורק מיד
     // אחרי סריקת ברקוד, ולא במסך העריכה. היא כתבה "תיקנתי ולא שונה".
     //
     // המספרים כאן הם של האריזה שהיא צילמה: 53 קק"ל ו-8.4 גרם חלבון ל-100 מ"ל.
@@ -542,7 +542,7 @@ const CHECKS = [
       await page.waitForTimeout(600);
       const onEdit = (await page.locator("text=עריכת פריט").count()) > 0;
       // זה מה שלא היה קיים לה בכלל.
-      const link = page.locator("text=הערכים לא תואמים לאריזה? עדכני מהתווית");
+      const link = page.locator("text=הערכים לא נכונים? עדכני מהתווית");
       const hasLink = (await link.count()) > 0;
       if (hasLink) { await link.first().click(); await page.waitForTimeout(600); }
       const onManual = (await page.locator("text=עדכון מהתווית").count()) > 0;
