@@ -55,14 +55,23 @@ try {
   ok("שרת שלא עונה: לא נתקעת על טוען, מגיעה להרשמה", (await seeReg(p)) > 0);
   await c.close();
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,60), false); }
-/* 4. השורה בתחתית פותחת את מסך השחזור */
+/* 4. השורה מוצגת רק כשלא הצלחנו לברר, ולא לאישה חדשה */
 try {
+  // השרת ענה ואין לה גיבוי. **אישה חדשה לא אמורה להישאל על זה בכלל.**
   const c = await ctxWith({ hasBackup: false }); const p = await c.newPage();
   await p.goto(BASE, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(3600);
-  const line = await p.locator("text=כבר היו לך נתונים באפליקציה?").count();
-  ok("השורה מוצגת בשלב הראשון", line > 0);
-  await p.locator("text=שחזור מגיבוי").first().click(); await p.waitForTimeout(600);
-  ok("והיא פותחת את מסך השחזור גם כשהשרת אמר שאין גיבוי", (await seeRestore(p)) > 0);
+  ok("נבדק ואין לה גיבוי: אין שורה כלל", (await p.locator("text=כבר היו לך נתונים באפליקציה?").count()) === 0);
+  await c.close();
+} catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,60), false); }
+try {
+  // השרת לא ענה. **כאן ורק כאן השורה מוצדקת**, כי לא ידוע אם יש לה גיבוי.
+  const c = await ctxWith({ delayMs: 30000 }); const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(9000);
+  await p.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
+  ok("השרת לא ענה: השורה כן מוצגת", (await p.locator("text=כבר היו לך נתונים באפליקציה?").count()) > 0);
+  ok("והיא בראש המסך ולא בתחתית", (await p.locator("text=כבר היו לך נתונים באפליקציה?").first().boundingBox()).y < (await p.locator("text=משקל נוכחי").first().boundingBox()).y);
+  await p.locator("text=שחזור מגיבוי").first().click(); await p.waitForTimeout(800);
+  ok("וההקשה עליה פותחת את מסך השחזור", (await seeRestore(p)) > 0);
   await c.close();
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,60), false); }
 /* 5. החסימה בסיום ההרשמה: דילגה, מילאה, ונעצרת לפני דריסה */

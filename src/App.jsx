@@ -776,9 +776,14 @@ async function bkFetch(email, timeoutMs) {
     const ctl = timeoutMs && typeof AbortController !== "undefined" ? new AbortController() : null;
     if (ctl) timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, timeoutMs);
     const r = await fetch(`/api/backup?email=${encodeURIComponent(email)}`, ctl ? { signal: ctl.signal } : undefined);
-    if (!r.ok) return { exists: false };
-    return await r.json();
-  } catch (e) { return { exists: false }; }
+    if (!r.ok) return { exists: false, failed: true };
+    const d = await r.json();
+    // **`failed` מבדיל בין "בדקנו ואין לה" לבין "לא הצלחנו לבדוק", ושתי התשובות
+    // האלה היו זהות עד כאן.** בלי ההבחנה הזאת מסך ההרשמה היה חייב לשאול כל אישה
+    // חדשה אם היו לה נתונים קודם, גם כשהשרת כבר ענה שאין לה. רון: "למה זה שואל
+    // אותי את השאלה הזאת אם זה פעם ראשונה שאני נכנס."
+    return d && d.ok === false ? { ...d, exists: false, failed: true } : d;
+  } catch (e) { return { exists: false, failed: true }; }
   finally { if (timer) clearTimeout(timer); }
 }
 // Auto-generated backup code, for women who never opened the backup screen.
@@ -1418,6 +1423,17 @@ function Onboarding({ onFinish, name, email, fixedStart, onRestore }) {
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>{name && name.trim() ? `היי ${name.trim()}, נעים להכיר!` : "נעים להכיר"}</span></div>
             <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
+            {/* **רשת ביטחון אחרונה, ורק כשאנחנו באמת לא יודעים.** `onRestore` מגיע
+                ריק ברגע שהשרת ענה שאין לה גיבוי, ולכן אישה חדשה אינה רואה כאן
+                דבר. רון: "למה זה שואל אותי את השאלה הזאת אם זה פעם ראשונה שאני
+                נכנס." **ובראש ולא בתחתית, כי אישה שהנתונים שלה נעלמו מתחילה למלא
+                לפני שהיא גוללת.** שורה אחת ולא כפתור, שלא יתחרה ב"המשך". */}
+            {onRestore && (
+              <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: -2, marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${C.line}` }}>
+                כבר היו לך נתונים באפליקציה?{" "}
+                <span role="button" tabIndex={0} onClick={onRestore} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onRestore(); }} style={{ color: C.brandD, fontWeight: 700, textDecoration: "underline", cursor: "pointer" }}>שחזור מגיבוי</span>
+              </div>
+            )}
             <Field label="גיל"><input type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} placeholder="" style={numStyle(err0 && !ageOk)} /></Field>
             {err0 && !ageOk && errNote(age === "" ? "יש למלא את הנתון" : "יש להזין גיל תקין")}
             <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !heightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
@@ -1618,23 +1634,9 @@ function Onboarding({ onFinish, name, email, fixedStart, onRestore }) {
         {step === 5 && (<OnboardNotify email={email} />)}
       </div>
 
-      <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
-          {step < 5 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
-        </div>
-        {/* **רשת ביטחון אחרונה, למי ששתי הבדיקות האוטומטיות פספסו.** הן מכסות את
-            הרוב, אבל שתיהן תלויות בשרת שעונה, וזו לא. **בשלב הראשון בלבד**, כי
-            אישה שכבר התחילה למלא עברה אותה ממילא, ואישה חדשה לא צריכה לפגוש
-            שאלה על גיבוי בשנייה הראשונה שלה. **קול המערכת, לפי סעיף 8: זו עובדה
-            שהאפליקציה אומרת מעצמה ולא משפט של ענת.** */}
-        {step === 0 && onRestore && (
-          <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 10, textAlign: "center" }}>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: C.ink, marginBottom: 3 }}>כבר היו לך נתונים באפליקציה?</div>
-            <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 7 }}>אם השתמשת באפליקציה קודם והנתונים נעלמו, אפשר לשחזר אותם מהגיבוי. צריך את קוד הגיבוי שנשלח אלייך במייל, או את הקוד שמופיע בפרופיל שלך.</div>
-            <Btn variant="ghost" onClick={onRestore} style={{ color: C.brandD }}>שחזור מגיבוי</Btn>
-          </div>
-        )}
+      <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", gap: 10, alignItems: "center" }}>
+        {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
+        {step < 5 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
       </div>
 
       {confirmNoSens && (
@@ -7404,7 +7406,9 @@ export default function App() {
     const email = (gateEmail || "").trim().toLowerCase();
     if (!email || !bkSubtle) { setBkRestore("none"); return; }
     setBkRestore("checking");
-    (async () => { const r = await bkFetch(email, 5000); setBkRestore(r && r.exists ? "offer" : "none"); })();
+    // "none" פירושו שהשרת ענה ואין לה גיבוי, ו"unknown" שלא הצלחנו לברר. **רק
+    // השני מצדיק לשאול אותה משהו במסך ההרשמה.**
+    (async () => { const r = await bkFetch(email, 5000); setBkRestore(r && r.exists ? "offer" : r && r.failed ? "unknown" : "none"); })();
   }, [gate, onboarded, saved, gateEmail, bkRestore]);
 
   // Auto-backup: debounced after EVERY change, plus a flush when the app is
@@ -7966,7 +7970,7 @@ export default function App() {
           ) : bkRestore === "checking" ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.faint, fontFamily: fontStack }}>טוען...</div>
           ) : (
-            <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} email={gateEmail} fixedStart={gateStartDate} onRestore={() => setBkRestore("offer")} /></div>
+            <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} email={gateEmail} fixedStart={gateStartDate} onRestore={bkRestore === "unknown" ? () => setBkRestore("offer") : null} /></div>
           )
         ) : (
           <>
