@@ -712,7 +712,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.21";
+const VERSION = "7.22";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -725,6 +725,13 @@ const STORAGE_KEY = "myprime_demo_state_v1";
    ============================================================ */
 const BK_CODE_KEY = "myprime_bk_code";
 const BK_LAST_KEY = "myprime_bk_last";
+// **כמה מחכים לשרת לפני שמוותרים, ונמדד ולא נוחש.** ב-v7.19 שמתי 5 שניות מהראש,
+// וב-17 בספטמבר 2026 נמדד שהקריאה הראשונה אחרי שהשרת היה רדום לוקחת **9.9 שניות**
+// (השנייה 0.85 והשלישית 0.69). כלומר קטעתי אותו באמצע, האפליקציה קיבלה "לא הצלחתי
+// לברר", **ורון קיבל את השורה על נתונים קודמים בלי שום סיבה.** אישה אמיתית שפותחת
+// בבוקר, כשהשרת רדום, הייתה מקבלת בדיוק את אותו הדבר, **ובמקרה הגרוע לא הייתה
+// מקבלת את מסך השחזור כלל אף שיש לה גיבוי.**
+const BK_WAIT_MS = 15000;
 const bkSubtle = (typeof window !== "undefined" && window.crypto && window.crypto.subtle) ? window.crypto.subtle : null;
 function bkGetCode() { try { return localStorage.getItem(BK_CODE_KEY) || ""; } catch (e) { return ""; } }
 // **הקוד נקבע ברישום, והעלאה הראשונה עוד לא קרתה.** הסימון הזה מגשר בין השניים:
@@ -6949,6 +6956,10 @@ export default function App() {
   const [showIntro, setShowIntro] = useState(saved ? false : true);
   const [notes, setNotes] = useState([]);
   const [bkRestore, setBkRestore] = useState("idle"); // idle | checking | offer | none
+  // **מי ביקש את הבדיקה, וזה מה שקובע אם ממתינים מולה או ברקע.** בדיקה שרצה
+  // מאחורי מסך הפתיחה אינה מוצגת לה כלל, ובדיקה שרצה אחרי שהיא לחצה "בואי נתחיל"
+  // חייבת להראות משהו, אחרת היא לוחצת שוב.
+  const [bkFinishWait, setBkFinishWait] = useState(false);
   const [bkBusy, setBkBusy] = useState(false);
   const [gate, setGate] = useState("checking");
   const [gateReason, setGateReason] = useState("");
@@ -7418,7 +7429,7 @@ export default function App() {
     setBkRestore("checking");
     // "none" פירושו שהשרת ענה ואין לה גיבוי, ו"unknown" שלא הצלחנו לברר. **רק
     // השני מצדיק לשאול אותה משהו במסך ההרשמה.**
-    (async () => { const r = await bkFetch(email, 5000); setBkRestore(r && r.exists ? "offer" : r && r.failed ? "unknown" : "none"); })();
+    (async () => { const r = await bkFetch(email, BK_WAIT_MS); setBkRestore(r && r.exists ? "offer" : r && r.failed ? "unknown" : "none"); })();
   }, [gate, onboarded, saved, gateEmail, bkRestore]);
 
   // Auto-backup: debounced after EVERY change, plus a flush when the app is
@@ -7557,8 +7568,9 @@ export default function App() {
   const finishOnboarding = async (p, bk) => {
     const bkEmail = (gateEmail || "").trim().toLowerCase();
     if (bkEmail && bkSubtle && bkRestore !== "skipped") {
-      setBkRestore("checking");
-      const r = await bkFetch(bkEmail, 5000);
+      setBkRestore("checking"); setBkFinishWait(true);
+      const r = await bkFetch(bkEmail, BK_WAIT_MS);
+      setBkFinishWait(false);
       if (r && r.exists) { pendingFinish.current = { p, bk }; setBkRestore("offer"); return; }
       setBkRestore("none");
     }
@@ -7770,6 +7782,7 @@ export default function App() {
     // ומתחילה מחדש חייבת לקבל את ההצעה כאילו נכנסה עכשיו.
     pendingFinish.current = null;
     setBkRestore("idle");
+    setBkFinishWait(false);
   };
   const onPickEntry = (id) => {
     if (id === "food") { openAdd("food", null); tourEvent("pickfood"); }
@@ -7982,7 +7995,15 @@ export default function App() {
         ) : !onboarded ? (
           bkRestore === "offer" ? (
             <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={skipRestore} />
-          ) : bkRestore === "checking" ? (
+          ) : bkRestore === "checking" && (showSplash || bkFinishWait) ? (
+            // **"טוען..." מוצג בשני מצבים בלבד, ובשניהם היא ממילא ממתינה.**
+            // מאחורי מסך הפתיחה, שמכסה אותו בכל מקרה, ואחרי שהיא הקישה "בואי נתחיל",
+            // שם חייב להיות חיווי אחרת היא מקישה שוב.
+            //
+            // **ומה שהוא לא עושה יותר: לעצור אישה שרק פתחה את האפליקציה.** כשהשרת
+            // רדום הבדיקה לוקחת כעשר שניות (נמדד ב-17 בספטמבר 2026), ואז היא הייתה
+            // נשארת מול "טוען..." בלי לדעת למה. עכשיו מסך ההרשמה מגיע מיד, הבדיקה
+            // ממשיכה ברקע, **ואם מסתבר שיש לה גיבוי מסך השחזור מגיע באותו רגע.**
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.faint, fontFamily: fontStack }}>טוען...</div>
           ) : (
             <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} email={gateEmail} fixedStart={gateStartDate} onRestore={bkRestore === "unknown" ? () => setBkRestore("offer") : null} /></div>
