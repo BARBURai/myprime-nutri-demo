@@ -7404,8 +7404,14 @@ export default function App() {
   //
   // התפוגה: הבדיקה מתחילה בטעינה, ומסך הפתיחה מכסה אותה שתי שניות בכל מקרה
   // (`showSplash`), ולכן ברוב המוחלט של הפעמים אף אישה לא רואה "טוען..." בכלל.
+  // **`saved` אינו נבדק כאן, וזה מכוון.** הוא נקרא מהמכשיר פעם אחת בטעינה ואינו
+  // מתעדכן, ולכן אחרי "מחיקת כל הנתונים והתחלה מחדש", שרצה בלי לרענן את המסך,
+  // הוא עדיין מחזיק את הנתונים הישנים ואומר שהיא סיימה הרשמה. **רון נתקל בזה
+  // בדיוק במסלול הזה ב-17 בספטמבר 2026 וקיבל מסך הרשמה במקום מסך שחזור.**
+  // `onboarded` הוא המצב החי, והוא נגזר מ-`saved` בטעינה ממילא, ולכן הוא לבדו
+  // גם מספיק וגם נכון בכל רגע.
   useEffect(() => {
-    if (gate !== "ok" || onboarded || (saved && saved.onboarded)) return;
+    if (gate !== "ok" || onboarded) return;
     if (bkRestore !== "idle") return;
     const email = (gateEmail || "").trim().toLowerCase();
     if (!email || !bkSubtle) { setBkRestore("none"); return; }
@@ -7759,6 +7765,11 @@ export default function App() {
     setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate)); setSelectedDate(TODAY);
     setCheckins({});
     setProfile(DEFAULT_PROFILE);
+    // **בלי האיפוס הזה הבדיקה לא תרוץ שוב באותה טעינה.** היא רצה פעם אחת ומסמנת
+    // את עצמה, ומחיקה שאינה מרעננת את המסך משאירה את הסימון הישן. מי שמוחקת
+    // ומתחילה מחדש חייבת לקבל את ההצעה כאילו נכנסה עכשיו.
+    pendingFinish.current = null;
+    setBkRestore("idle");
   };
   const onPickEntry = (id) => {
     if (id === "food") { openAdd("food", null); tourEvent("pickfood"); }

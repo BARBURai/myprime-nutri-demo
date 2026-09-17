@@ -110,6 +110,45 @@ try {
   await c.close();
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,60), false); }
 
+/* 7. **המסלול שרון נתקל בו: "מחיקת כל הנתונים" בלי לרענן את המסך.**
+   17 בספטמבר 2026, בדב: הוא מחק וקיבל מסך הרשמה במקום מסך שחזור. הסיבה
+   הייתה ש-`saved` נקרא מהמכשיר פעם אחת בטעינה, ואחרי מחיקה שאינה מרעננת
+   הוא עדיין אומר שהיא סיימה הרשמה. **הבדיקות הקודמות כאן כולן טענו את הדף
+   מחדש, ולכן אף אחת מהן לא יכלה לתפוס את זה.** */
+try {
+  const c = await ctxWith({});
+  await c.addInitScript((sd) => {
+    localStorage.setItem("myprime_demo_state_v1", JSON.stringify({
+      onboarded: true,
+      profile: { age: 52, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, startDate: sd, name: "בדיקה", tipsSeen: ["cal","steps","tracker","cabinet","trackerfill","stepbaseline","water","protein","weeklysummary","notifyAsked"], cupMl: 250, diet: [], allergies: [], backup: { enabled: true, email: "a@b.com" } },
+      log: [{ id: 1, date: sd, name: "יוגורט", kcal: 120 }], weights: [], activityLog: [], waterByDate: {}, stepsByDate: {}, favorites: [], recents: [], checkins: {}, goalAckWeek: 99,
+    }));
+    localStorage.setItem("myprime_bk_code", "TEST-CODE");
+  }, start);
+  const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(3600);
+  await p.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
+  ok("נכנסה כרגיל לאפליקציה", (await seeReg(p)) === 0 && (await seeRestore(p)) === 0);
+  // **מכאן ואילך בלי שום טעינה מחדש**, כי זה בדיוק מה שהמסלול הזה עושה.
+  // המסך נפתח מהפרופיל, ולכן עוברים לשם קודם.
+  await p.locator("text=פרופיל").last().click(); await p.waitForTimeout(900);
+  await p.locator("text=/שאלות, תשובות/").first().click(); await p.waitForTimeout(900);
+  await p.locator("text=מחיקת כל הנתונים והתחלה מחדש").click(); await p.waitForTimeout(500);
+  await p.locator("text=כן, מחקי והתחילי מחדש").click(); await p.waitForTimeout(1200);
+  // resetDemo מחזיר אותה למסך הכניסה, ולכן היא מקלידה מייל שוב. עדיין בלי טעינה.
+  // מסך הכניסה: שם, מייל, ואישור שהוא div ולא תיבת סימון.
+  await p.locator('input[placeholder="שם פרטי"]').fill("בדיקה");
+  await p.locator('input[placeholder*="המייל"]').fill("a@b.com");
+  await p.locator("text=קראתי ואני מאשרת").click();
+  await p.waitForTimeout(200);
+  await p.locator("text=כניסה").last().click();
+  await p.waitForTimeout(4500);
+  console.log("   מה על המסך:", (await p.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 160));
+  ok("אחרי מחיקה בלי רענון: מסך השחזור מגיע", (await seeRestore(p)) > 0);
+  ok("ולא מסך ההרשמה", (await seeReg(p)) === 0);
+  await c.close();
+} catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,70), false); }
+
 console.log(`\nסה"כ: ${pass} עוברים, ${fail} נכשלים`);
 await browser.close(); server.close();
 process.exit(fail ? 1 : 0);
