@@ -36,7 +36,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.17";
+const ADMIN_VERSION = "7.18";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -756,6 +756,40 @@ JSON בלבד, בלי שום טקסט אחר:
         await redis(RU, RT, "SET", "admin:faq", JSON.stringify(bank.slice(-200)));
         return res.status(200).json({ ok: true, bank });
       } catch (e) { return res.status(500).json({ ok: false, error: "bank_failed" }); }
+    }
+
+    // שאלה שהגיעה מחוץ לאפליקציה, בוואטסאפ או במייל. היא נרשמת כהערה רגילה ונענית
+    // באותה פעולה, ולכן היא לעולם אינה מופיעה בתור כממתינה ואינה מייצרת עבודה חדשה.
+    // שתי סיבות שזה נכתב ולא רק מועתק לוואטסאפ: התשובה מופיעה אצלה גם באפליקציה,
+    // וההתכתבות איתה נשארת במקום אחד במקום להתפצל בין המסך לבין הטלפון של המשרד.
+    // זו אותה צורה שבה הועברו 14 ההערות מהקובץ ב-v5.78. בקשה של רון, 17 בספטמבר 2026.
+    if (body && body.outside) {
+      if (!EMAIL_RE.test(email)) return res.status(400).json({ ok: false, error: "bad_email" });
+      const askText = String((body.outside && body.outside.text) || "").trim().slice(0, 1500);
+      const ansText = String((body.outside && body.outside.answer) || "").trim().slice(0, 1500);
+      // בלי אחד משניהם אין מה לרשום: הערה בלי תשובה הייתה נוחתת בתור כממתינה,
+      // וזו בדיוק העבודה שהמסך הזה בא לחסוך.
+      if (!askText || !ansText) return res.status(400).json({ ok: false, error: "no_text" });
+      const via = String((body.outside && body.outside.via) || "").slice(0, 20) || "וואטסאפ";
+      try {
+        const one = {
+          id: "n" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36),
+          screen: via,
+          text: askText,
+          at: new Date().toISOString(),
+        };
+        await redis(RU, RT, "LPUSH", `notes:${email}`, JSON.stringify(one));
+        await redis(RU, RT, "LTRIM", `notes:${email}`, "0", "39");
+        const raw = await redis(RU, RT, "HGET", "notes:replies", email);
+        const list = raw ? JSON.parse(raw) : [];
+        list.push({ id: "r" + Date.now().toString(36), to: one.id, text: ansText, by, at: new Date().toISOString(), read: "" });
+        await redis(RU, RT, "HSET", "notes:replies", email, JSON.stringify(list.slice(-60)));
+        // שני דברים שבמכוון אינם נוגעים כאן. המונה `notes:pending`: ההערה נולדה כבר עם
+        // תשובה ומעולם לא הייתה ממתינה, והגדלה ואז הקטנה שלו היו מציגות רגע של מספר
+        // שגוי. ויומן השינויים שב-`admin:overrides`: הוא מתעד שינויים במצב שלה, וזו
+        // התכתבות ולא שינוי. היא מתועדת ב-`notes:` ומוצגת ב"ההתכתבות עד היום".
+        return res.status(200).json({ ok: true, id: one.id });
+      } catch (e) { return res.status(500).json({ ok: false, error: "save_failed" }); }
     }
 
     // An answer to a note she wrote. It is the one thing on this screen that reaches the

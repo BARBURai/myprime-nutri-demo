@@ -21,6 +21,11 @@
 
 import { normName, plausiblePer100, sourceRank } from "../lib/foodcheck.js";
 
+// ערך ל-100 נשמר בעשירית ולא כמספר שלם. עיגול לשלם כאן היה מוחק את מה שהאפליקציה
+// שלחה נכון: 8.4 גרם חלבון הופכים ל-8, וגביע של 500 מ״ל נרשם 40 במקום 42.
+// ראה את אותה הערה ב-src/App.jsx. נמצא על ידי רון, 17 בספטמבר 2026.
+const per100Round = (n) => Math.round((Number(n) || 0) * 10) / 10;
+
 async function redisPost(base, token, cmd) {
   const r = await fetch(base, {
     method: "POST",
@@ -129,7 +134,7 @@ export default async function handler(req, res) {
     // The same arithmetic guard the shared catalog already uses: a number that cannot be
     // true never reaches storage, shared or private.
     if (!plausiblePer100(per100)) return res.status(200).json({ ok: false, reason: "rejected" });
-    const clean = { kcal: Math.round(Number(per100.kcal) || 0), p: Math.round(Number(per100.p) || 0), f: Math.round(Number(per100.f) || 0), c: Math.round(Number(per100.c) || 0) };
+    const clean = { kcal: per100Round(per100.kcal), p: per100Round(per100.p), f: per100Round(per100.f), c: per100Round(per100.c) };
     const record = { name, per100: clean, unit, ts: Date.now() };
     await redisPost(base, token, ["SET", `bcv:${code}:${uid}`, JSON.stringify(record), "EX", "31536000"]); // a year
 
@@ -166,7 +171,7 @@ export default async function handler(req, res) {
     if (!name || !plausiblePer100(per100)) return res.status(200).json({ ok: false, reason: "rejected" });
     const nName = normName(name);
     if (!nName) return res.status(200).json({ ok: false, reason: "empty" });
-    const clean = { kcal: Math.round(Number(per100.kcal) || 0), p: Math.round(Number(per100.p) || 0), f: Math.round(Number(per100.f) || 0), c: Math.round(Number(per100.c) || 0) };
+    const clean = { kcal: per100Round(per100.kcal), p: per100Round(per100.p), f: per100Round(per100.f), c: per100Round(per100.c) };
     const k = "cat:" + nName;
     let entry = null;
     const ex = await redisPost(base, token, ["GET", k]);

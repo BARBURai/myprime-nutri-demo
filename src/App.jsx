@@ -25,6 +25,10 @@ function aiHeaders() {
   return h;
 }
 const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
+// ערך תזונתי ל-100 מעוגל לעשירית ולא למספר שלם. אריזה שכתוב עליה 8.4 גרם חלבון הפכה
+// ל-8, וגביע של 500 מ״ל נרשם כ-40 גרם במקום 42. הטעות גדלה עם המנה והיא הגרועה ביותר
+// בערכים קטנים: 1.4 שהפך ל-1 הוא פער של 29 אחוז. נמצא על ידי רון, 17 בספטמבר 2026.
+const per100Round = (n) => Math.round((Number(n) || 0) * 10) / 10;
 // Shared product catalog (server side). Best-effort; never blocks the UI.
 const CATALOG_ENDPOINT = "/api/catalog";
 function catalogAdd(item) {
@@ -33,7 +37,7 @@ function catalogAdd(item) {
     // Skip combined personal meals ("a + b + c"): they are one woman's plate,
     // not a reusable product, so they should never surface to other users.
     if (!item || !item.name || g <= 0 || item.source === "manual" || item.combo || String(item.name).includes(" + ")) return;
-    const per100 = { kcal: Math.round((Number(item.kcal) || 0) / g * 100), p: Math.round((Number(item.p) || 0) / g * 100), f: Math.round((Number(item.f) || 0) / g * 100), c: Math.round((Number(item.c) || 0) / g * 100) };
+    const per100 = { kcal: per100Round((Number(item.kcal) || 0) / g * 100), p: per100Round((Number(item.p) || 0) / g * 100), f: per100Round((Number(item.f) || 0) / g * 100), c: per100Round((Number(item.c) || 0) / g * 100) };
     if (!(per100.kcal > 0)) return; // never poison the shared catalog with 0-kcal rows
     if (!nutritionPlausible(per100)) return; // never store nutritionally inconsistent data in the shared catalog
     fetch(CATALOG_ENDPOINT, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name: String(item.name).trim(), per100, unit: item.unit || "g", source: item.catSource || item.source || "estimated" }) }).catch(() => {});
@@ -708,7 +712,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.17";
+const VERSION = "7.18";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3078,7 +3082,7 @@ async function searchOpenFoodFacts(q) {
     out.push({
       id: "off_" + (p.code || out.length),
       name,
-      per100: { kcal: Math.round(kcal), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) },
+      per100: { kcal: per100Round(kcal), p: per100Round(n.proteins_100g), f: per100Round(n.fat_100g), c: per100Round(n.carbohydrates_100g) },
       measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
       def: 0,
     });
@@ -3812,7 +3816,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       if (d.status !== 1 || !d.product) { setScanState("notfound"); return; }
       const p = d.product, n = p.nutriments || {};
       const name = (p.product_name_he || p.generic_name_he || p.product_name || p.generic_name || p.brands || "מוצר").trim();
-      const per100 = { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) };
+      const per100 = { kcal: per100Round(n["energy-kcal_100g"]), p: per100Round(n.proteins_100g), f: per100Round(n.fat_100g), c: per100Round(n.carbohydrates_100g) };
       // Reject clearly-broken external data (e.g. protein entered per-package into the
       // per-100g field) instead of logging a wrong number. She is sent to the label
       // photo / manual entry instead.
@@ -3977,12 +3981,18 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
             </div>
             <div style={{ margin: "16px 0 8px" }}>
-              <div style={{ fontSize: 14, color: C.sub, fontWeight: 600, marginBottom: 6 }}>הערכים שאת מזינה הם:</div>
-              <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>
-                {[{ v: false, t: `ל-100 ${mUnit === "ml" ? "מ\"ל" : "ג׳"}` }, { v: true, t: "לכל המנה" }].map((o) => (
-                  <div key={String(o.v)} onClick={() => setMWhole(o.v)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mWhole === o.v ? C.brand : "transparent", color: mWhole === o.v ? "#fff" : C.sub }}>{o.t}</div>
-                ))}
-              </div>
+              {/* המתג אינו מוצג בתיקון מהתווית. התווית תמיד נותנת ערכים ל-100 והשדות כבר
+                  מלאים ל-100, ולכן העברתו הייתה הופכת את אותם 53 ל"53 קק״ל לכל הגביע"
+                  בלי לשנות ספרה אחת על המסך. רון תפס את זה ב-17 בספטמבר 2026.
+                  ההסבר שמתחת נשאר, כי בלעדיו היא לא יודעת לפי מה המספרים מחושבים. */}
+              {!labelFix && (<>
+                <div style={{ fontSize: 14, color: C.sub, fontWeight: 600, marginBottom: 6 }}>הערכים שאת מזינה הם:</div>
+                <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>
+                  {[{ v: false, t: `ל-100 ${mUnit === "ml" ? "מ\"ל" : "ג׳"}` }, { v: true, t: "לכל המנה" }].map((o) => (
+                    <div key={String(o.v)} onClick={() => setMWhole(o.v)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mWhole === o.v ? C.brand : "transparent", color: mWhole === o.v ? "#fff" : C.sub }}>{o.t}</div>
+                  ))}
+                </div>
+              </>)}
               <div style={{ fontSize: 13, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>
                 {mWhole
                   ? "המספרים ייכנסו ליומן בדיוק כמו שהם, בלי חישוב מחדש. מתאים כשקיבלת את הערכים של הצלחת עצמה."
@@ -6841,7 +6851,7 @@ function foodEntryFromPayload(p) {
   const name = (p.name || "").trim();
   const g = p.g;
   if (!name || !g) return null;
-  const per100 = { kcal: Math.round((p.kcal || 0) / g * 100), p: Math.round((p.p || 0) / g * 100), f: Math.round((p.f || 0) / g * 100), c: Math.round((p.c || 0) / g * 100) };
+  const per100 = { kcal: per100Round((p.kcal || 0) / g * 100), p: per100Round((p.p || 0) / g * 100), f: per100Round((p.f || 0) / g * 100), c: per100Round((p.c || 0) / g * 100) };
   // Keep the EXACT original values at the original gram amount, so re-adding at the same
   // quantity returns identical numbers instead of drifting through per100 rounding twice.
   const exact = { g: Math.round(g), kcal: Math.round(p.kcal || 0), p: Math.round(p.p || 0), f: Math.round(p.f || 0), c: Math.round(p.c || 0) };

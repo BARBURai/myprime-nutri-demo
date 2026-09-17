@@ -295,6 +295,13 @@
     color:var(--ink);font-size:15px;line-height:1.6;white-space:pre-wrap;
   }
   .qhead{font-size:14px;color:var(--ink-2);font-weight:600;margin:0 2px 12px}
+  /* שאלה שהגיעה מחוץ לאפליקציה. אותו כרטיס של פריט בתור, עם פס ורוד שאומר בלי מילה
+     שזה אזור שבו כותבים ולא אזור שבו עונים על מה שכבר הגיע. */
+  .outbar{ margin-bottom:12px; }
+  .outbox{ border-right:3px solid var(--pink); }
+  .outpick{ font-weight:600; padding:8px 0; }
+  .outhits{ display:flex; flex-direction:column; align-items:flex-start; gap:4px; padding:6px 0; }
+  .outacts{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
   .qitem{
     background:var(--card);border:1px solid var(--line);border-radius:14px;
     box-shadow:var(--sh2);padding:14px;margin-bottom:12px;
@@ -927,6 +934,11 @@ var NOTES = {}, DRAFT = {}, NOTE_TEXT = {}, NOTE_AT = {}, NOTE_SCREEN = {};
 // תור המענה: כל ההערות הפתוחות במסך אחד, אחת מתחת לשנייה. עונים, היא נעלמת, והבאה
 // כבר שם. בלי להיכנס לכל אישה בנפרד ובלי לחזור לרשימה בין אחת לשנייה.
 var QUEUE = null, QINFO = {};
+// שאלה שהגיעה מחוץ לאפליקציה, בוואטסאפ או במייל. השדות חיים כאן ולא ב-DOM בלבד, כי
+// המסך נצבע מחדש בכל הקשה בחיפוש, וטקסט שיושב רק בתיבה היה נמחק תחת האצבע. זו בדיוק
+// הצורה של v6.72. null פירושו שהטופס סגור.
+var OUT = null;
+function outOpen(){ OUT = { text:"", pick:"", find:"", ans:"", why:"", keep:true, via:"וואטסאפ" }; }
 // הערות שאין להן ניסוח מוכן, ולמה. בלי השורה הזאת נראה כאילו המסך פשוט לא מצא כלום,
 // ובפועל יש סיבה: או שזו החלטה של רון ולא תקלה, או שחסר מידע מהמשתתפת עצמה.
 var TALK = [
@@ -1671,6 +1683,49 @@ function render(){
 
   // תור המענה. כל הערה פתוחה, עם שם האישה מעליה, אחת מתחת לשנייה. עונים לאחת והיא
   // נעלמת מהתור, והבאה כבר על המסך. אין חזרה לרשימה ואין כניסה לכרטיס.
+  // שאלה שהגיעה מחוץ לאפליקציה, בוואטסאפ או במייל. יושבת בראש התור כי שם המשרד עובד.
+  // הטופס נשען על OUT ולא על ה-DOM, אחרת כל ציור מחדש היה מוחק את מה שהודבק.
+  function outsideBox(){
+    if(!OUT) return '<div class="outbar"><button class="btn" data-outopen="1">✎ שאלה שהגיעה בוואטסאפ או במייל</button></div>';
+    var picked = OUT.pick ? (DATA.women||[]).filter(function(w){ return w.email === OUT.pick; })[0] : null;
+    var fq = String(OUT.find||"").trim().toLowerCase(), hits = [];
+    if(!picked && fq.length >= 2){
+      var isP = isPhoneQ(fq), pk = phoneKey(fq);
+      hits = (DATA.women||[]).filter(function(w){
+        if((w.first+" "+w.last+" "+(w.sheetFirst||"")+" "+(w.sheetLast||"")+" "+w.email+" "+w.phone).toLowerCase().indexOf(fq) !== -1) return true;
+        return isP && phoneKey(w.phone).indexOf(pk) !== -1;
+      }).slice(0, 6);
+    }
+    var nm = function(w){ return ((w.first||"")+" "+(w.last||"")).trim() || w.email; };
+    return '<div class="qitem outbox">'+
+      '<div class="qwho"><b>שאלה שהגיעה בוואטסאפ או במייל</b>'+
+        '<button class="btn sm" data-outclose="1">סגירה</button></div>'+
+      '<label class="flabel">הדביקי כאן את מה שהיא כתבה</label>'+
+      '<textarea class="field" rows="3" id="out_q" placeholder="מה שהיא שאלה, כלשונה">'+esc(OUT.text||"")+'</textarea>'+
+      '<label class="flabel" style="margin-top:10px;display:block">של מי זה? (לא חובה)</label>'+
+      (picked
+        ? '<div class="outpick">'+esc(nm(picked))+' · '+esc(dayInProgram(picked))+
+            ' <button class="btn sm" data-outclear="1">שינוי</button></div>'
+        : '<input class="field" id="out_f" placeholder="שם או טלפון" value="'+esc(OUT.find||"")+'">'+
+          (hits.length ? '<div class="outhits">'+hits.map(function(w){
+              return '<button class="lnk" data-outpick="'+esc(w.email)+'">'+esc(nm(w))+' · '+esc(w.phone||"")+'</button>';
+            }).join("")+'</div>'
+            : (fq.length >= 2 ? '<div class="qprev-none">לא נמצאה. אפשר להמשיך בלעדיה.</div>' : ''))+
+          '<div class="qprev-none">כשמזהים אותה, הניסוח יודע באיזה שבוע היא. <b>לאותה שאלה יש תשובה אחרת בשבוע 1 ובשבוע 5.</b></div>')+
+      '<div style="margin-top:12px"><button class="btn" data-outdraft="1">✎ נסחי לי תשובה</button>'+
+        '<span class="nhint" id="out_why" style="margin:0">'+(OUT.why||"")+'</span></div>'+
+      (OUT.ans !== "" || OUT.busy
+        ? '<textarea class="field" rows="4" id="out_a" style="margin-top:10px" placeholder="התשובה. אפשר לערוך אותה לפני שליחה.">'+esc(OUT.ans||"")+'</textarea>'+
+          '<label class="bankadd"><input type="checkbox" id="out_k"'+(OUT.keep?' checked':'')+'> לשמור את השאלה והתשובה בבנק</label>'+
+          '<div class="outacts">'+
+            '<button class="btn" data-outcopy="1">העתקה</button>'+
+            (picked
+              ? '<button class="btn" data-outsend="1">שליחה אליה גם באפליקציה</button>'
+              : '<span class="qprev-none">כדי לשלוח לה גם באפליקציה צריך לזהות אותה למעלה.</span>')+
+          '</div>'
+        : '')+
+    '</div>';
+  }
   function queueScreen(){
     if(BANK === null) bankLoad();
     if(QUEUE === null){ queueLoad(); return '<div class="empty">טוען...</div>'; }
@@ -1724,9 +1779,11 @@ function render(){
           '</div>' });
       });
     });
-    if(!rows.length) return '<div class="empty">אין הערות שממתינות לתשובה. הכל טופל 🌸</div>';
+    // הטופס מוצג גם כשאין תור. שאלה שהגיעה בוואטסאפ אינה תלויה בכך שמישהי כתבה באפליקציה.
+    if(!rows.length) return outsideBox()+'<div class="empty">אין הערות שממתינות לתשובה. הכל טופל 🌸</div>';
     rows.sort(function(a,b){ return String(b.at).localeCompare(String(a.at)); });
-    return '<div class="qhead">'+rows.length+' הערות ממתינות לתשובה. עונים לאחת, היא יורדת מהתור, והבאה כאן.</div>'+
+    return outsideBox()+
+      '<div class="qhead">'+rows.length+' הערות ממתינות לתשובה. עונים לאחת, היא יורדת מהתור, והבאה כאן.</div>'+
       rows.map(function(r){ return r.html; }).join("");
   }
 
@@ -1889,6 +1946,72 @@ function render(){
     var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; SEL=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-copy]").forEach(function(el){ el.onclick=function(){
     copyText(el.getAttribute("data-copy"), el); }; });
+
+  // שאלה שהגיעה מחוץ לאפליקציה. שתי התיבות הגדולות שומרות ב-OUT בלי לצייר מחדש,
+  // אחרת כל אות הייתה מוחקת את מה שהודבק. שדה החיפוש כן מצייר, כדי להציג תוצאות,
+  // ולכן הוא מחזיר את הסמן בדיוק כמו שורת החיפוש הראשית.
+  app.querySelectorAll("[data-outopen]").forEach(function(el){ el.onclick=function(){ outOpen(); render(); }; });
+  app.querySelectorAll("[data-outclose]").forEach(function(el){ el.onclick=function(){ OUT = null; render(); }; });
+  app.querySelectorAll("[data-outclear]").forEach(function(el){ el.onclick=function(){ OUT.pick=""; OUT.find=""; render(); }; });
+  app.querySelectorAll("[data-outpick]").forEach(function(el){ el.onclick=function(){ OUT.pick = el.getAttribute("data-outpick"); render(); }; });
+  var oq = document.getElementById("out_q"); if(oq) oq.oninput = function(){ OUT.text = this.value; };
+  var oa = document.getElementById("out_a"); if(oa) oa.oninput = function(){ OUT.ans = this.value; };
+  var ok = document.getElementById("out_k"); if(ok) ok.onchange = function(){ OUT.keep = this.checked; };
+  var of = document.getElementById("out_f");
+  if(of) of.oninput = function(){ var v=this.selectionStart; OUT.find = this.value; render();
+    var n=document.getElementById("out_f"); if(n){ n.focus(); n.setSelectionRange(v,v); } };
+  app.querySelectorAll("[data-outdraft]").forEach(function(el){ el.onclick=function(){
+    var note = String(OUT.text||"").trim();
+    if(!note){ alert("צריך להדביק את מה שהיא כתבה."); return; }
+    var w = OUT.pick ? (DATA.women||[]).filter(function(x){ return x.email === OUT.pick; })[0] : null;
+    var lab = el.textContent; el.disabled = true; el.textContent = "מנסחת...";
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({
+        draftFor: note, by: WHO,
+        about: { day: w ? dayInProgram(w) : "", week: "", screen: OUT.via },
+        nearby: bankSuggest(note).map(function(e){ return { q:e.q, a:e.a }; }),
+      })})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        el.disabled = false; el.textContent = lab;
+        if(!d || !d.ok){ alert(draftWhy(d)); return; }
+        OUT.ans = d.answer;
+        OUT.why = '<b>'+esc(BASED[d.based] || "טיוטה")+'</b> '+esc(d.why||"");
+        render();
+      })
+      .catch(function(){ el.disabled = false; el.textContent = lab; alert("הניסוח נכשל. נסי שוב."); });
+  }; });
+  app.querySelectorAll("[data-outcopy]").forEach(function(el){ el.onclick=function(){
+    var t = String(OUT.ans||"").trim();
+    if(!t){ alert("אין מה להעתיק."); return; }
+    copyText(t, el);
+    // ההעתקה לבדה אינה מגיעה לבנק, כי אין לנו דרך לדעת אם באמת שלחת לה את זה.
+    // מה שנשמר הוא רק מה שנשלח דרך המסך, בדיוק כמו בתשובה רגילה.
+  }; });
+  app.querySelectorAll("[data-outsend]").forEach(function(el){ el.onclick=function(){
+    var q = String(OUT.text||"").trim(), a = String(OUT.ans||"").trim();
+    if(!q || !a){ alert("צריך גם את השאלה וגם את התשובה."); return; }
+    if(!OUT.pick){ alert("צריך לזהות אותה קודם."); return; }
+    if(!confirm("לשלוח לה את התשובה?\n\nהיא תראה אותה בתוך האפליקציה בפתיחה הבאה שלה. ההתכתבות תישמר בכרטיס שלה. אי אפשר לבטל.")) return;
+    var em = OUT.pick, keep = OUT.keep;
+    el.disabled = true;
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({ email:em, by:WHO, outside:{ text:q, answer:a, via:OUT.via } })})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok) throw new Error();
+        if(keep){
+          fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+            body:JSON.stringify({ email:em, by:WHO, bankAdd:{ q:q, a:a } })})
+            .then(function(r){ return r.json(); })
+            .then(function(b){ if(b && b.ok && b.bank) BANK = b.bank; })
+            .catch(function(){});
+        }
+        OUT = null; delete NOTES[em]; QUEUE = null;
+        return load().then(function(){ render(); });
+      })
+      .catch(function(){ el.disabled = false; alert("השליחה נכשלה. נסי שוב."); });
+  }; });
 
   // השלמת מייל לשורה שאין בה. הכתובת נכתבת קודם למניצ'ט ורק אם היא באמת נחתה שם
   // נשמר גם אצלנו, בדיוק כמו בשינוי כתובת: מניצ'ט עונה 200 גם כשהוא נכשל.
