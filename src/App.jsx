@@ -712,7 +712,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.18";
+const VERSION = "7.19";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -766,9 +766,20 @@ async function bkUpload(email, code, plaintext, notify = false) {
   const d = await r.json().catch(() => ({}));
   return !!d.ok;
 }
-async function bkFetch(email) {
-  try { const r = await fetch(`/api/backup?email=${encodeURIComponent(email)}`); if (!r.ok) return { exists: false }; return await r.json(); }
-  catch (e) { return { exists: false }; }
+// `timeoutMs` קיים בשביל שני המסלולים שחוסמים אישה על המסך בזמן שהם מחכים
+// לתשובה: הבדיקה שרצה מאחורי מסך הפתיחה, וזו שעוצרת בסיום ההרשמה. **בלי תפוגה,
+// שרת שלא עונה משאיר אותה על "טוען..." בלי דרך להתקדם**, ובסיום ההרשמה זה בדיוק
+// הרגע הכי רגיש שיש. בלי הפרמטר ההתנהגות זהה למה שהייתה, כלומר בלי תפוגה.
+async function bkFetch(email, timeoutMs) {
+  let timer = null;
+  try {
+    const ctl = timeoutMs && typeof AbortController !== "undefined" ? new AbortController() : null;
+    if (ctl) timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, timeoutMs);
+    const r = await fetch(`/api/backup?email=${encodeURIComponent(email)}`, ctl ? { signal: ctl.signal } : undefined);
+    if (!r.ok) return { exists: false };
+    return await r.json();
+  } catch (e) { return { exists: false }; }
+  finally { if (timer) clearTimeout(timer); }
 }
 // Auto-generated backup code, for women who never opened the backup screen.
 // Uppercase only, without the characters that are easy to misread on a phone
@@ -1328,7 +1339,7 @@ function InstallGate({ onSkip }) {
   );
 }
 
-function Onboarding({ onFinish, name, email, fixedStart }) {
+function Onboarding({ onFinish, name, email, fixedStart, onRestore }) {
   const [step, setStep] = useState(0);
   const [age, setAge] = useState("");
   const [heightCm, setHeightCm] = useState("");
@@ -1607,9 +1618,23 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
         {step === 5 && (<OnboardNotify email={email} />)}
       </div>
 
-      <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", gap: 10, alignItems: "center" }}>
-        {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
-        {step < 5 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
+      <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {step > 0 && (<button onClick={() => setStep(step - 1)} style={{ border: `1px solid ${C.line}`, background: C.panel, borderRadius: 12, width: 46, height: 46, cursor: "pointer", color: C.ink, flexShrink: 0 }}><ChevronRight size={20} /></button>)}
+          {step < 5 ? (<Btn disabled={step === 3 && !backupStepOk} onClick={next}>המשך</Btn>) : (<Btn onClick={() => onFinish(draft, backupSetup)}>בואי נתחיל</Btn>)}
+        </div>
+        {/* **רשת ביטחון אחרונה, למי ששתי הבדיקות האוטומטיות פספסו.** הן מכסות את
+            הרוב, אבל שתיהן תלויות בשרת שעונה, וזו לא. **בשלב הראשון בלבד**, כי
+            אישה שכבר התחילה למלא עברה אותה ממילא, ואישה חדשה לא צריכה לפגוש
+            שאלה על גיבוי בשנייה הראשונה שלה. **קול המערכת, לפי סעיף 8: זו עובדה
+            שהאפליקציה אומרת מעצמה ולא משפט של ענת.** */}
+        {step === 0 && onRestore && (
+          <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 10, textAlign: "center" }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: C.ink, marginBottom: 3 }}>כבר היו לך נתונים באפליקציה?</div>
+            <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 7 }}>אם השתמשת באפליקציה קודם והנתונים נעלמו, אפשר לשחזר אותם מהגיבוי. צריך את קוד הגיבוי שנשלח אלייך במייל, או את הקוד שמופיע בפרופיל שלך.</div>
+            <Btn variant="ghost" onClick={onRestore} style={{ color: C.brandD }}>שחזור מגיבוי</Btn>
+          </div>
+        )}
       </div>
 
       {confirmNoSens && (
@@ -7361,13 +7386,25 @@ export default function App() {
   }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, recents, checkins, goalAckWeek]);
 
   // New device: if there is no local data yet but a cloud backup exists for this email, offer restore.
+  //
+  // **הכלל היה `saved` לבדו עד v7.19, וזה מה שנשבר אצל אילה נחום.** התנאי שאל
+  // "האם יש משהו שמור על המכשיר", **והשמירה שלוש שורות מעל כותבת משהו בכל פתיחה
+  // ובלי שום תנאי**, גם למי שרק ראתה את מסך הכניסה וסגרה. כלומר די בפתיחה אחת
+  // שנקטעה כדי שהתשובה תהיה "כן" לנצח, **ומאותו רגע הצעת השחזור לא רצה לעולם
+  // ולא הייתה שום דרך אחרת להגיע אליה.** נמדד בדפדפן: אותה אישה עם אותו גיבוי
+  // מקבלת מסך שחזור על הקשר נקי, ולא מקבלת דבר אחרי פתיחה מוקדמת אחת.
+  //
+  // השאלה הנכונה היא "האם יש לה נתונים שסיימה בהם הרשמה", ולא "האם יש קובץ".
+  //
+  // התפוגה: הבדיקה מתחילה בטעינה, ומסך הפתיחה מכסה אותה שתי שניות בכל מקרה
+  // (`showSplash`), ולכן ברוב המוחלט של הפעמים אף אישה לא רואה "טוען..." בכלל.
   useEffect(() => {
-    if (gate !== "ok" || onboarded || saved) return;
+    if (gate !== "ok" || onboarded || (saved && saved.onboarded)) return;
     if (bkRestore !== "idle") return;
     const email = (gateEmail || "").trim().toLowerCase();
     if (!email || !bkSubtle) { setBkRestore("none"); return; }
     setBkRestore("checking");
-    (async () => { const r = await bkFetch(email); setBkRestore(r && r.exists ? "offer" : "none"); })();
+    (async () => { const r = await bkFetch(email, 5000); setBkRestore(r && r.exists ? "offer" : "none"); })();
   }, [gate, onboarded, saved, gateEmail, bkRestore]);
 
   // Auto-backup: debounced after EVERY change, plus a flush when the app is
@@ -7490,7 +7527,38 @@ export default function App() {
     } catch (e) { setBkBusy(false); return { ok: false, msg: "האיפוס נכשל, נסי שוב." }; }
   };
 
-  const finishOnboarding = (p, bk) => {
+  // **הרגע היחיד שבו גיבוי קיים יכול להידרס, ולכן ההגנה יושבת עליו ולא על השאלה
+  // איך היא הגיעה לכאן.** עד השורה הזאת שום דבר לא נכתב החוצה: הגיבוי האוטומטי
+  // מותנה ב-`onboarded`, שנקבע כאן. מרגע שהוא נקבע, מה שיש לה בענן נמחק ומוחלף
+  // בנתונים הריקים של ההרשמה החדשה, **ואין היסטוריה להחזיר ממנה** (`api/backup.js`
+  // שומר מקום אחד לאישה ודורס אותו).
+  //
+  // לכן: בדיקה אחרונה מולנו לפני שנוגעים במשהו. יש לה גיבוי, היא מקבלת את מסך
+  // השחזור במקום להמשיך, **ואם היא בכל זאת רוצה להתחיל מאפס יש שם כפתור.**
+  // "דילגה" נשמר כדי שלא נשאל אותה פעמיים על אותה החלטה.
+  //
+  // **ונכשל לצד הפתוח:** אין מייל, אין הצפנה, השרת לא ענה תוך חמש שניות או שאין
+  // גיבוי, והיא ממשיכה בדיוק כמו היום. תקלה אצלנו לא עוצרת נרשמת חדשה.
+  const pendingFinish = useRef(null);
+  const finishOnboarding = async (p, bk) => {
+    const bkEmail = (gateEmail || "").trim().toLowerCase();
+    if (bkEmail && bkSubtle && bkRestore !== "skipped") {
+      setBkRestore("checking");
+      const r = await bkFetch(bkEmail, 5000);
+      if (r && r.exists) { pendingFinish.current = { p, bk }; setBkRestore("offer"); return; }
+      setBkRestore("none");
+    }
+    applyOnboarding(p, bk);
+  };
+  // מי שבחרה להתחיל מאפס. **החלטה אחת ולא שתיים:** הסימון "דילגה" מונע מהבדיקה
+  // בסיום ההרשמה לעצור אותה שוב על אותו גיבוי שהיא כבר ויתרה עליו במודע.
+  const skipRestore = () => {
+    const pend = pendingFinish.current;
+    pendingFinish.current = null;
+    setBkRestore("skipped");
+    if (pend) applyOnboarding(pend.p, pend.bk);
+  };
+  const applyOnboarding = (p, bk) => {
     const backup = { enabled: !!(bk && bk.enabled), email: (bk && bk.email) || (gateEmail || "").trim().toLowerCase() };
     if (bk && bk.enabled && bk.code) { bkSetCode(bk.code); bkSetNotifyPending(true); try { localStorage.removeItem(BK_LAST_KEY); } catch (e) {} }
     // Late joiner: her first login is already past day 2, so the drip-fed tips would all
@@ -7894,11 +7962,11 @@ export default function App() {
           </>
         ) : !onboarded ? (
           bkRestore === "offer" ? (
-            <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={() => setBkRestore("none")} />
+            <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={skipRestore} />
           ) : bkRestore === "checking" ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.faint, fontFamily: fontStack }}>טוען...</div>
           ) : (
-            <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} email={gateEmail} fixedStart={gateStartDate} /></div>
+            <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} email={gateEmail} fixedStart={gateStartDate} onRestore={() => setBkRestore("offer")} /></div>
           )
         ) : (
           <>
