@@ -72,6 +72,9 @@ try {
   ok("והיא בראש המסך ולא בתחתית", (await p.locator("text=כבר היו לך נתונים באפליקציה?").first().boundingBox()).y < (await p.locator("text=משקל נוכחי").first().boundingBox()).y);
   await p.locator("text=שחזור מגיבוי").first().click(); await p.waitForTimeout(800);
   ok("וההקשה עליה פותחת את מסך השחזור", (await seeRestore(p)) > 0);
+  // **בלי זה אישה שאינה זוכרת את הקוד נתקעת מול שדה ריק**, ומ-v7.19 אפשר להגיע
+  // לכאן גם מרצון ולא רק כשהאפליקציה מצאה גיבוי בעצמה. הקופי אושר על ידי רון.
+  ok("והמסך אומר לה איפה הקוד נמצא", (await p.locator("text=הקוד נשלח אלייך במייל כשהגיבוי נוצר").count()) > 0);
   await c.close();
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,60), false); }
 /* 5. החסימה בסיום ההרשמה: דילגה, מילאה, ונעצרת לפני דריסה */
@@ -84,6 +87,29 @@ try {
   ok("אחרי דילוג היא מגיעה להרשמה", had && (await seeReg(p)) > 0);
   await c.close();
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,60), false); }
+/* 6. **הבדיקה החשובה מכולן: אישה שכבר בתוכנית אינה מושפעת בשום צורה.**
+   רון: "לא יכול לקרות מצב שבגלל כל השינוי הזה נשים שנמצאות בתוכנית מחר בבוקר
+   יגיעו בטעות למסך ההתחלתי הזה." כל מה שנבנה כאן מותנה ב-`!onboarded`, וזה
+   מה שמוכיח את זה בדפדפן במקום בקריאת קוד. **השרת מדווח שיש לה גיבוי, כלומר
+   בדיוק התנאי שמפעיל את מסך השחזור אצל מי שאין לה נתונים.** */
+try {
+  const c = await ctxWith({}); 
+  await c.addInitScript((sd) => {
+    localStorage.setItem("myprime_demo_state_v1", JSON.stringify({
+      onboarded: true,
+      profile: { age: 52, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, startDate: sd, name: "אילה", tipsSeen: ["cal","steps","tracker","cabinet","trackerfill","stepbaseline","water","protein","weeklysummary","notifyAsked"], cupMl: 250, diet: [], allergies: [] },
+      log: [{ id: 1, date: sd, name: "יוגורט", kcal: 120 }], weights: [], activityLog: [], waterByDate: {}, stepsByDate: {}, favorites: [], recents: [], checkins: {}, goalAckWeek: 99,
+    }));
+  }, start);
+  const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(3600);
+  ok("אישה שכבר בתוכנית: אין מסך הרשמה", (await seeReg(p)) === 0);
+  ok("אישה שכבר בתוכנית: אין מסך שחזור", (await seeRestore(p)) === 0);
+  ok("ואין את השורה על נתונים קודמים", (await p.locator("text=כבר היו לך נתונים באפליקציה?").count()) === 0);
+  ok("והיא רואה את האפליקציה כרגיל", (await p.locator("text=/היי אילה|היום שלך|יומן/").count()) > 0);
+  await c.close();
+} catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,60), false); }
+
 console.log(`\nסה"כ: ${pass} עוברים, ${fail} נכשלים`);
 await browser.close(); server.close();
 process.exit(fail ? 1 : 0);

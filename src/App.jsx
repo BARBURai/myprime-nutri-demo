@@ -6683,6 +6683,10 @@ function RestoreScreen({ email, busy, onRestore, onSkip }) {
         <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
         <input value={code} onChange={(e) => { setCode(e.target.value); setErr(""); }} type="password" placeholder="הקוד שבחרת" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${err ? C.amber : C.line}`, borderRadius: 10, padding: "12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
         {err && <div style={{ fontSize: 14, color: C.amber, marginTop: 6 }}>{err}</div>}
+        {/* **המסך הזה לא אמר לה איפה הקוד נמצא.** מ-v7.19 אפשר להגיע לכאן גם מרצון
+            ומראש מסך ההרשמה, ולא רק כשהאפליקציה מצאה גיבוי בעצמה, ואז אישה
+            שאינה זוכרת את הקוד נתקעת מול שדה ריק. הקופי אושר על ידי רון. */}
+        <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginTop: 10 }}>הקוד נשלח אלייך במייל כשהגיבוי נוצר, והוא מופיע גם בפרופיל שלך באפליקציה.</div>
       </div>
       <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", flexDirection: "column", gap: 8 }}>
         <Btn disabled={busy || !code.trim()} onClick={submit}>{busy ? "משחזר..." : "שחזרי את הנתונים"}</Btn>
