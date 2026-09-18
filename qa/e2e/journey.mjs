@@ -84,7 +84,7 @@ async function fillOnboarding(p) {
     if (t.includes("גיבוי מאובטח")) {
       await p.locator("button").filter({ hasText: /^כן, רוצה גיבוי מוצפן$/ }).first().click().catch(() => {});
       await p.waitForTimeout(300);
-      const pw = p.locator('input[type="password"]');
+      const pw = p.locator('input[name^="mp-bk-"]');
       for (let i = 0; i < (await pw.count()); i++) if (!(await pw.nth(i).inputValue())) await pw.nth(i).fill(BK_CODE).catch(() => {});
       await p.locator("text=קראתי והבנתי את מדיניות").first().click().catch(() => {});
       await p.waitForTimeout(200);
@@ -162,7 +162,7 @@ for (const mode of [{ name: "שרת מהיר", slowMs: 0 }, { name: "שרת רד
     ok("9. ומסך השחזור מגיע, בלי שום רענון", (await seeRestore(p)) > 0, (await p.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 80));
     ok("10. והוא אומר איפה הקוד", (await p.locator("text=הקוד נשלח אלייך במייל כשהגיבוי נוצר").count()) > 0);
 
-    await p.locator('input[type="password"]').fill(code);
+    await p.locator('input[name^="mp-bk-"]').fill(code);
     await p.waitForTimeout(300);
     await p.locator("text=שחזרי את הנתונים").click();
     await p.waitForTimeout(mode.slowMs ? 14000 : 4000);
