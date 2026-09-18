@@ -65,11 +65,11 @@ try {
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,60), false); }
 try {
   // השרת לא ענה. **כאן ורק כאן השורה מוצדקת**, כי לא ידוע אם יש לה גיבוי.
-  // **וההמתנה כאן חייבת להיות ארוכה מהתפוגה עצמה** (`BK_WAIT_MS`, 15 שניות
-  // מ-v7.22), אחרת הבדיקה מסתכלת על המסך בזמן שהבדיקה עוד רצה ורואה מסך הרשמה
+  // **וההמתנה כאן חייבת להיות ארוכה מהתפוגה עצמה** (`BK_WAIT_MS`, 30 שניות
+  // מ-v7.27), אחרת הבדיקה מסתכלת על המסך בזמן שהבדיקה עוד רצה ורואה מסך הרשמה
   // רגיל בלי השורה. זו הבדיקה ולא הקוד.
-  const c = await ctxWith({ delayMs: 30000 }); const p = await c.newPage();
-  await p.goto(BASE, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(17500);
+  const c = await ctxWith({ delayMs: 60000 }); const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(33000);
   await p.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
   ok("השרת לא ענה: השורה כן מוצגת", (await p.locator("text=כבר היו לך נתונים באפליקציה?").count()) > 0);
   ok("והיא בראש המסך ולא בתחתית", (await p.locator("text=כבר היו לך נתונים באפליקציה?").first().boundingBox()).y < (await p.locator("text=משקל נוכחי").first().boundingBox()).y);
