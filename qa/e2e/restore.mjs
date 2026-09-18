@@ -10,7 +10,7 @@ const BASE = `http://127.0.0.1:${server.address().port}`;
 const start = new Date(Date.now() - 10 * 864e5).toISOString().slice(0, 10);
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
 let pass = 0, fail = 0;
-const ok = (n, c) => { console.log(`${c ? "עובר " : "נכשל "}| ${n}`); c ? pass++ : fail++; };
+const ok = (n, c, extra) => { console.log(`${c ? "עובר " : "נכשל "}| ${n}` + (!c && extra !== undefined ? "  → " + extra : "")); c ? pass++ : fail++; };
 
 async function ctxWith({ hasBackup = true, delayMs = 0 } = {}) {
   const c = await browser.newContext({ viewport: { width: 360, height: 800 }, isMobile: true, hasTouch: true, locale: "he-IL", timezoneId: "Asia/Jerusalem", userAgent: "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36" });
@@ -149,6 +149,19 @@ try {
   console.log("   מה על המסך:", (await p.locator("body").innerText()).replace(/\s+/g, " ").slice(0, 160));
   ok("אחרי מחיקה בלי רענון: מסך השחזור מגיע", (await seeRestore(p)) > 0);
   ok("ולא מסך ההרשמה", (await seeReg(p)) === 0);
+  await c.close();
+} catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,70), false); }
+
+/* 8. **מנהל הסיסמאות של הדפדפן.** רון נתקל בזה בדב ב-18 בספטמבר 2026: מסך
+   השחזור נפתח ושדה הקוד כבר היה מלא, בלי שהקליד. **הבדיקה כאן היא שהמאפיין
+   באמת מגיע ל-DOM אחרי הבנייה**, ולא רק שהוא כתוב בקוד המקור. */
+try {
+  const c = await ctxWith({}); const p = await c.newPage();
+  await p.goto(BASE, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(3600);
+  ok("מסך השחזור מגיע", (await seeRestore(p)) > 0);
+  const attrs = await p.locator('input[type="password"]').evaluateAll((els) => els.map((e) => ({ ac: e.getAttribute("autocomplete"), nm: e.getAttribute("name") })));
+  ok("ושדה הקוד מסומן לדפדפן כקוד ולא כסיסמה", attrs.length > 0 && attrs.every((a) => a.ac === "one-time-code"), JSON.stringify(attrs));
+  ok("ויש לו שם משלו", attrs.every((a) => a.nm && !/pass|pwd/i.test(a.nm)), JSON.stringify(attrs));
   await c.close();
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,70), false); }
 

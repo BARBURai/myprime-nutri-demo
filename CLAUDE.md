@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v7.23** · עודכן: 17 בספטמבר 2026
+**גרסה נוכחית: v7.24** · עודכן: 17 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -408,7 +408,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1055,6 +1055,23 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 **מה שכן פתוח, וזו החלטה של רון ולא תקלה:**
 1. **יום אחד חסר מבטל את הגביע של כל השבוע.** זה מה שעדי נתקלת בו: "מה קרה לגביעים, קיבלתי רק 1". הכלל נעול בבדיקה, כך ששינוי שלו יהיה מפורש.
 2. **כשהיא משלימה יום מהעבר ועדיין חסר משהו לגביע, שום דבר לא אומר לה מה חסר.** היא ציפתה לגביע וקיבלה שקט.
+
+**v7.24** - **מנהל הסיסמאות של הדפדפן מילא לבד את שדה קוד הגיבוי.** רון בדב, 18 בספטמבר 2026: מסך השחזור נפתח לו **ושדה הקוד כבר היה מלא**, בלי שהקליד. "זה כנראה משהו שהיה שמור."
+
+### למה זה חמור בשני הכיוונים, ולא רק מעצבן
+**במסך השחזור** היא לוחצת "שחזרי את הנתונים", מקבלת "קוד שגוי", **ומסיקה שהגיבוי אינו עובד.**
+
+**ובמסך ההרשמה זה גרוע פי כמה, וזה מה שלא נראה בצילום:** שני שדות הקוד מתמלאים באותה סיסמה שמורה, **הם תואמים זה לזה ולכן שום דבר אינו עוצר אותה**, והיא ממשיכה הלאה. מאותו רגע **הגיבוי שלה נעול במפתח שהיא אינה מכירה**, והיא תגלה את זה רק ביום שבו תזדקק לו.
+
+**שבעה שדות באפליקציה, וכולם היו חשופים:** יצירת הקוד ואישורו בהרשמה, מסך השחזור, החלפת קוד מהפרופיל, והפעלת גיבוי מהפרופיל.
+
+### התיקון
+**כל שדה קוד מסומן עכשיו לדפדפן כקוד חד פעמי ולא כסיסמה של האתר**, ולכל אחד שם משלו. **מה שלא זז: הקוד עדיין מוסתר בהקלדה**, ובדיקה נועלת גם את זה. שינוי של זה הוא החלטה של רון ולא נעשה.
+
+### הבדיקות
+**`qa/autofill-check.mjs`, 10 בדיקות בלי רשת**, וכל אחד מחמשת המסכים נבדק בנפרד **כדי ששכחה במסך אחד לא תיבלע בסכום.** **אומת שיש לה שיניים: על v7.23 היא מחזירה 3 מתוך 10.** **ובשכבה 3 נוסף תרחיש שקורא את המאפיין מה-DOM אחרי הבנייה**, כי בדיקה שקוראת את קוד המקור בלבד אינה מוכיחה שהדפדפן באמת קיבל אותו.
+
+**ומלכודת שנתפסה בבניית הבדיקה עצמה:** ביטוי רגולרי פשוט שמחפש תגית עד סימן גדול-מ **החזיר אפס שדות**, כי בתוך התגית יושב `onChange={(e) => ...}` והחץ מכיל את הסימן הזה. **בדיקה שמחזירה אפס נראית בדיוק כמו בדיקה שעוברת**, אם סופרים רק את מה שנמצא.
 
 **v7.23** - **לאישה שהמשרד הוסיף ביד לא היה גיבוי בכלל, ואיש לא ידע.** נמצא בבדיקה של רון את v7.22 בדב: הוא נכנס עם מייל בדיקה וקיבל את השורה "כבר היו לך נתונים באפליקציה?" אף שאין לו גיבוי.
 
