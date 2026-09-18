@@ -153,14 +153,21 @@ try {
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,70), false); }
 
 /* 8. **מנהל הסיסמאות של הדפדפן.** רון נתקל בזה בדב ב-18 בספטמבר 2026: מסך
-   השחזור נפתח ושדה הקוד כבר היה מלא, בלי שהקליד. **הבדיקה כאן היא שהמאפיין
-   באמת מגיע ל-DOM אחרי הבנייה**, ולא רק שהוא כתוב בקוד המקור. */
+   השחזור נפתח ושדה הקוד כבר היה מלא, בלי שהקליד.
+
+   **v7.24 סימנה את השדה `autocomplete="one-time-code"` והשאירה אותו שדה סיסמה,
+   וזה נכשל אצל רון שעה אחרי ההעלאה:** כרום ממלא כל שדה סיסמה באותו דומיין
+   ומתעלם מהמאפיין. **הבדיקה כאן נועלת עכשיו את הכלל של v7.25: אין שדה סיסמה
+   על המסך בכלל**, והיא קוראת את ה-DOM אחרי הבנייה ולא את קוד המקור, כי בדיקה
+   שקוראת מקור אינה יכולה לדעת מה הדפדפן עושה איתו. **זה בדיוק מה שהחמיץ.** */
 try {
   const c = await ctxWith({}); const p = await c.newPage();
   await p.goto(BASE, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(3600);
   ok("מסך השחזור מגיע", (await seeRestore(p)) > 0);
-  const attrs = await p.locator('input[type="password"]').evaluateAll((els) => els.map((e) => ({ ac: e.getAttribute("autocomplete"), nm: e.getAttribute("name") })));
-  ok("ושדה הקוד מסומן לדפדפן כקוד ולא כסיסמה", attrs.length > 0 && attrs.every((a) => a.ac === "one-time-code"), JSON.stringify(attrs));
+  ok("**ואין על המסך שום שדה מסוג סיסמה**", (await p.locator('input[type="password"]').count()) === 0);
+  const attrs = await p.locator("input").evaluateAll((els) => els.filter((e) => (e.style.webkitTextSecurity || "") === "disc").map((e) => ({ t: e.getAttribute("type"), ac: e.getAttribute("autocomplete"), nm: e.getAttribute("name") })));
+  ok("שדה הקוד קיים ומוסתר בהקלדה", attrs.length > 0, JSON.stringify(attrs));
+  ok("והדפדפן רואה בו שדה טקסט שאין למלא", attrs.every((a) => a.t === "text" && a.ac === "off"), JSON.stringify(attrs));
   ok("ויש לו שם משלו", attrs.every((a) => a.nm && !/pass|pwd/i.test(a.nm)), JSON.stringify(attrs));
   await c.close();
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,70), false); }
