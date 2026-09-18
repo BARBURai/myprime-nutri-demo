@@ -53,6 +53,11 @@ const def = code.match(/const CODE_FIELD = \{[^}]*\}/);
 ok("ההגדרה קיימת", !!def, def ? "" : "CODE_FIELD חסר");
 ok("והיא שדה טקסט ולא סיסמה", !!def && /type:\s*"text"/.test(def[0]), def && def[0]);
 ok("ואומרת לדפדפן לא למלא", !!def && /autoComplete:\s*"off"/.test(def[0]));
+// **בשדה סיסמה המקלדת אינה מגדילה אות ראשונה ואינה מתקנת, ובשדה טקסט היא כן.**
+// בלי שני אלה אישה שבוחרת קוד בטלפון מקבלת אות גדולה בלי לדעת, **בשני השדות
+// יחד ולכן בלי שדבר יעצור אותה**, והגיבוי שלה ננעל במפתח שהיא אינה מכירה.
+ok("**ושהמקלדת לא תגדיל לה אות ראשונה**", !!def && /autoCapitalize:\s*"off"/.test(def[0]), def && def[0]);
+ok("ולא תתקן לה את הקוד", !!def && /autoCorrect:\s*"off"/.test(def[0]) && /spellCheck:\s*false/.test(def[0]));
 ok("וגם למנהלי סיסמאות חיצוניים", !!def && /1p-ignore/.test(def[0]) && /lpignore/.test(def[0]));
 
 let named = 0;

@@ -712,7 +712,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.25";
+const VERSION = "7.26";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -740,7 +740,14 @@ const BK_WAIT_MS = 15000;
 // **לכן השדה יוצא מעולם הסיסמאות של הדפדפן**, `type="text"`, וההסתרה נעשית ב-CSS
 // ולא על ידי סוג השדה. **מה שלא זז: הקוד עדיין מוסתר בהקלדה**, וזו החלטה של רון.
 // `data-1p-ignore` ו-`data-lpignore` אומרים את אותו הדבר למנהלי סיסמאות חיצוניים.
-const CODE_FIELD = { type: "text", autoComplete: "off", spellCheck: false, "data-1p-ignore": "", "data-lpignore": "true" };
+//
+// **ומה שנגרר מזה, ונתפס בשאלה של רון "זה לא ישפיע על אף משתמשת קיימת":**
+// בשדה סיסמה המקלדת אינה מגדילה אות ראשונה ואינה מתקנת מילים, **ובשדה טקסט
+// היא כן.** כלומר אישה שבוחרת קוד בעצמה בטלפון הייתה מקבלת אות ראשונה גדולה
+// בלי לשים לב, **ושני השדות היו מקבלים אותה ולכן מתאימים זה לזה ולא עוצרים
+// אותה.** זה בדיוק הנזק של המילוי האוטומטי: הגיבוי נעול במפתח שהיא אינה
+// מכירה. **ארבעת המאפיינים כאן מחזירים את ההתנהגות של שדה הסיסמה בדיוק.**
+const CODE_FIELD = { type: "text", autoComplete: "off", autoCapitalize: "off", autoCorrect: "off", spellCheck: false, "data-1p-ignore": "", "data-lpignore": "true" };
 const CODE_MASK = { WebkitTextSecurity: "disc", textSecurity: "disc" };
 const bkSubtle = (typeof window !== "undefined" && window.crypto && window.crypto.subtle) ? window.crypto.subtle : null;
 function bkGetCode() { try { return localStorage.getItem(BK_CODE_KEY) || ""; } catch (e) { return ""; } }
