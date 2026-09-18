@@ -35,17 +35,36 @@ async function redisCmd(base, token, cmd) {
   return d.result;
 }
 
-async function isRegistered(email) {
+// **מי שהמשרד הוסיף ביד אינה בגיליון כלל, והשער כבר יודע את זה.** `api/access.js`
+// נופל ל-`admin:manual` בדיוק כשהגיליון אינו מחזיק אותה, **וכאן זה היה חסר לגמרי**:
+// היא קיבלה גישה לאפליקציה **ולא קיבלה גיבוי בשום כיוון**, לא כתיבה ולא קריאה,
+// כלומר החלפת טלפון או מחיקה של האפליקציה היו מוחקות לה את הכל בלי שאיש ידע.
+//
+// **נמצא ב-17 בספטמבר 2026 בבדיקה של רון בדב**, כשמייל שנוסף ביד הציג את השורה
+// "כבר היו לך נתונים באפליקציה?". השורה הייתה הסימפטום, וזה השורש. **וזה נגע גם
+// לשורה בגיליון שאין בה כתובת עד שפקידה מילאה אותה.**
+//
+// **הסדר זהה לשער ואינו מתהפך: הגיליון נשאל קודם ותמיד מנצח**, והרשימה שלנו
+// נשאלת אך ורק כשהוא אינו מחזיק אותה. תקלה אצלנו אינה מרחיבה גישה לאיש.
+async function isRegistered(email, RU, RT) {
   const sheetUrl = process.env.ACCESS_SHEET_CSV_URL;
   if (!sheetUrl) return true; // demo mode: gate is open, so allow
+  let inSheet = false;
   try {
     const r = await fetch(sheetUrl, { redirect: "follow" });
     const text = await r.text();
     const list = (text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || []).map((e) => e.toLowerCase());
-    return list.includes(email);
-  } catch (e) {
-    return false;
-  }
+    inSheet = list.includes(email);
+  } catch (e) { inSheet = false; }
+  if (inSheet) return true;
+  // **אותו תנאי בדיוק שהשער בודק**, `m.start`, כדי ששתי הקריאות לא יוכלו לחלוק
+  // על השאלה מי מוכרת לנו. רשומה בלי תאריך התחלה אינה נותנת גישה ואינה נותנת גיבוי.
+  try {
+    const raw = await redisCmd(RU, RT, ["HGET", "admin:manual", email]);
+    if (!raw) return false;
+    const m = JSON.parse(raw) || {};
+    return !!m.start;
+  } catch (e) { return false; }
 }
 
 // הקופי של המייל, במקום אחד ובנפרד מהלוגיקה, כדי ששינוי נוסח לא ייגע בקוד.
@@ -97,7 +116,7 @@ export default async function handler(req, res) {
   const body = req.body || {};
   const email = String((req.query && req.query.email) || body.email || "").trim().toLowerCase();
   if (!email) return res.status(200).json({ ok: false, exists: false, reason: "no_email" });
-  if (!(await isRegistered(email))) return res.status(200).json({ ok: false, exists: false, reason: "not_registered" });
+  if (!(await isRegistered(email, RU, RT))) return res.status(200).json({ ok: false, exists: false, reason: "not_registered" });
 
   const key = `bk:${email}`;
   try {
