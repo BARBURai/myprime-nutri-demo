@@ -360,5 +360,57 @@ console.log("\nוההמתנה חלה על המתנה בלבד");
   check("ומרגע שהתוכנית התחילה השורה יורדת", g.glowSoon === false && g.glowFull === true, String(g.glowSoon));
 }
 
+console.log("\nהיתר הצפייה נמחק ברגע שהיא נחסמת");
+// **הפער שזה סוגר:** הסימונים שמתירים חתימה על קישור צפייה נכתבים בכל כניסה עם
+// תפוגה של 30 יום, והשער יצא בחסימה לפני השורות שכותבות אותם. כלומר הדלת ננעלה
+// **והכרטיס שכבר בידה נשאר תקף.** מי ששמרה מזהה סרטון מראש עוד יכלה לקבל חתימה.
+const blockedClears = async (label, before, after, email) => {
+  reset();
+  CSV = [HDR, before].join("\n");
+  await gate(email);
+  const had = store.kv["glowfull:" + email] === "1";
+  CSV = [HDR, after].join("\n");
+  const g = await gate(email);
+  check(label + " · נחסמת", g.allowed === false, g.reason);
+  check("   והיתר הצפייה נמחק", had && store.kv["glowfull:" + email] === undefined, "היה=" + had + " נשאר=" + store.kv["glowfull:" + email]);
+};
+await blockedClears("ביטול בגיליון",
+  row({ email: "z1@t.com", start: sundayMonthsAgo(1), full: "TRUE", bonus: "TRUE" }),
+  row({ email: "z1@t.com", start: sundayMonthsAgo(1), cancel: "TRUE", full: "TRUE", bonus: "TRUE" }), "z1@t.com");
+await blockedClears("חלון 360 שנגמר",
+  row({ email: "z2@t.com", start: sundayMonthsAgo(1), full: "TRUE" }),
+  row({ email: "z2@t.com", start: sundayMonthsAgo(20), full: "TRUE" }), "z2@t.com");
+{
+  reset();
+  CSV = [HDR, row({ email: "z3@t.com", start: sundayMonthsAgo(1), full: "TRUE", bonus: "TRUE" })].join("\n");
+  await gate("z3@t.com");
+  ovr("z3@t.com", { freeze: { from: monthsAgo(1), back: daysFromNow(30), week: 3 } });
+  const g = await gate("z3@t.com");
+  check("הקפאה · נחסמת", g.allowed === false && g.reason === "frozen", g.reason);
+  check("   וגם שלושת שיעורי המתנה נסגרים", store.kv["glow:z3@t.com"] === undefined);
+}
+{
+  reset();
+  // **`glowonly` הוא ההפך משני האחרים ואסור למחוק אותו:** הוא זה שמסרב לחתום על
+  // 88 סרטוני התוכנית למי שקנתה את הקורס לבדו. מחיקה שלו הייתה פותחת לה דווקא
+  // את מה שאסור לה.
+  CSV = [HDR, row({ email: "z4@t.com", full: "TRUE" })].join("\n");
+  await gate("z4@t.com");
+  check("קונת הקורס לבדו מסומנת", store.kv["glowonly:z4@t.com"] === "1");
+  CSV = [HDR, row({ email: "z4@t.com", full: "TRUE", cancel: "TRUE" })].join("\n");
+  const g = await gate("z4@t.com");
+  check("ואחרי חסימה היא עדיין מסומנת, כדי שסרטוני 360 לא ייחתמו לה",
+    g.allowed === false && store.kv["glowonly:z4@t.com"] === "1", String(store.kv["glowonly:z4@t.com"]));
+}
+{
+  reset();
+  // ומי שנכנסת רגיל לא מאבדת כלום.
+  CSV = [HDR, row({ email: "z5@t.com", start: sundayMonthsAgo(1), full: "TRUE", bonus: "TRUE" })].join("\n");
+  await gate("z5@t.com");
+  await gate("z5@t.com");
+  check("ומי שנכנסת כרגיל שומרת על ההיתר שלה",
+    store.kv["glowfull:z5@t.com"] === "1" && store.kv["glow:z5@t.com"] === "1");
+}
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.\n`);
 process.exit(fail ? 1 : 0);

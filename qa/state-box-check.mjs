@@ -95,7 +95,9 @@ const helpers = `
   const lastSeen = (w) => w.seen ? "נכנסה " + il(w.seen) : "עוד לא נכנסה";
   const logLines = (w) => "<div class='log'>" + ((w.log || []).length ? "שורה" : "אין") + "</div>";
 `;
-const mod = new Function("return (function(){" + helpers + grab("stateBox") + grab("histBox") + "return { stateBox, histBox }; })()")();
+// **`entryOf` נמשך מהקובץ ולא מועתק לכאן**, בדיוק כמו שתי האחרות, כי העתק היה
+// נסחף בעריכה הראשונה. זו המלכודת שכל הבדיקות כאן קיימות כדי למנוע.
+const mod = new Function("return (function(){" + helpers + grab("stateBox") + grab("histBox") + grab("entryOf") + "return { stateBox, histBox, entryOf }; })()")();
 
 console.log("\nהמסך והשער אינם יכולים לחלוק");
 // **זו הבדיקה שהסעיף הזה קיים בשבילה.** אותה אישה, שני קבצים, אותה תשובה.
@@ -235,6 +237,23 @@ console.log("\nמסך הפתיחה תקף גם לקונת הקורס");
   // רון: "צריך פשוט לשנות את השם כדי שזה יהיה תקף בכל מקרה." קונת הקורס אין לה
   // יומן מעקב בכלל, ומסך הפתיחה הזה נראה לה בכל טעינה.
   check("ואינה מבטיחה יומן מעקב למי שאין לה", !APP.includes("ברוכה הבאה לאפליקציית המעקב היומי"));
+}
+
+// **הבדיקות האלה חייבות לרוץ לפני השורה שמסכמת ולפני `process.exit`.** ב-v7.18
+// הוספתי בדיקות אחריו, הן היו קוד מת ולא רצו בכלל, והמונה הוא שגילה.
+console.log("\nמאיפה היא נכנסת");
+{
+  check("אפליקציה מותקנת", mod.entryOf({ usage: { standalone: 1 } }) === "אפליקציה מותקנת");
+  check("דפדפן", mod.entryOf({ usage: { standalone: 0 } }) === "דפדפן, לא מותקנת");
+  // **היעדר שורה אינו תשובה בכלי עבודה**, לפי הכלל של v5.07. פקידה שרואה שורה
+  // חסרה אינה יודעת אם היא מותקנת או שאין לנו נתון.
+  check("אין נתוני שימוש כלל", mod.entryOf({}) === "לא ידוע עדיין");
+  check("יש שימוש בלי הסימון", mod.entryOf({ usage: { videosDone: 3 } }) === "לא ידוע עדיין");
+  // אפס הוא ערך אמיתי ולא היעדר, ולכן הוא לא יכול ליפול ל"לא ידוע".
+  check("אפס נקרא כדפדפן ולא כחסר", mod.entryOf({ usage: { standalone: 0 } }) !== "לא ידוע עדיין");
+  check("השורה יושבת בקופסה עצמה", HTML.includes("<span>נכנסת מ</span>"));
+  // הערך מגיע מ-api/usage.js, ואם השדה יירד משם השורה תציג "לא ידוע" לכולן בשקט.
+  check("והשדה נשמר בשרת", readFileSync(new URL("../api/usage.js", import.meta.url), "utf8").includes("standalone:"));
 }
 
 console.log(`\n${pass} מתוך ${pass + fail} עברו.\n`);

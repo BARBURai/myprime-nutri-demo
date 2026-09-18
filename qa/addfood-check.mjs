@@ -47,9 +47,9 @@ check("✕ במסך הכמות עושה בדיוק מה שחץ החזרה עוש
 check("ומכריז על עצמו נכון לקורא מסך",
   /aria-label=\{step === "qty" && back \? "חזרה" : "סגירה"\}/.test(src));
 check("והחזרה מובילה לאן שהיא באה ממנו, חיפוש או מועדפים",
-  /const back = step === "qty" && !state\.editEntry \? \(\) => setStep\(qtyOrigin\)/.test(src));
+  /step === "qty" && !state\.editEntry \? \(\) => setStep\(qtyOrigin\)/.test(src));
 check("בעריכת פריט קיים ✕ ממשיך לסגור, כי אין לאן לחזור",
-  /const back = step === "qty" && !state\.editEntry/.test(src));
+  /step === "qty" && !state\.editEntry/.test(src));
 
 
 console.log("\nהכמות שנשארה על ברירת המחדל");
@@ -125,7 +125,7 @@ console.log("\nכפתור החזרה שואל בלחיצה הראשונה, ופ�
 // ופעם אחת לכל פתיחה של החלון.
 check("האזהרה קודמת לחזרה עצמה", src.indexOf("if (unsavedAny()) { askExit(!!back); return true; }") < src.indexOf("if (back) { back(); return true; }\n      return false;"));
 check("ואישור היציאה ממשיך את החזרה שנקטעה", /if \(exitGoBack\) \{ setExitGoBack\(false\); back && back\(\); \} else close\(\);/.test(src));
-check("ולכן שכבה אחת בכל לחיצה נשמרת", /const back = step === "qty" && !state\.editEntry \? \(\) => setStep\(qtyOrigin\)/.test(src));
+check("ולכן שכבה אחת בכל לחיצה נשמרת", /step === "qty" && !state\.editEntry \? \(\) => setStep\(qtyOrigin\)/.test(src));
 // חלונית פתוחה נסגרת קודם, אחרת החזרה מזיזה את המסך מתחתיה.
 check("חזרה סוגרת קודם חלונית פתוחה", /if \(qtyWarn\) \{ setQtyWarn\(false\); return true; \}/.test(src) && /if \(exitWarn\) \{ setExitWarn\(false\); return true; \}/.test(src));
 // הקשה מחוץ לחלון היא יציאה אמיתית, ולכן שם האישור סוגר ולא חוזר שכבה.

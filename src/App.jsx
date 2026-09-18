@@ -25,6 +25,10 @@ function aiHeaders() {
   return h;
 }
 const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
+// ערך תזונתי ל-100 מעוגל לעשירית ולא למספר שלם. אריזה שכתוב עליה 8.4 גרם חלבון הפכה
+// ל-8, וגביע של 500 מ״ל נרשם כ-40 גרם במקום 42. הטעות גדלה עם המנה והיא הגרועה ביותר
+// בערכים קטנים: 1.4 שהפך ל-1 הוא פער של 29 אחוז. נמצא על ידי רון, 17 בספטמבר 2026.
+const per100Round = (n) => Math.round((Number(n) || 0) * 10) / 10;
 // Shared product catalog (server side). Best-effort; never blocks the UI.
 const CATALOG_ENDPOINT = "/api/catalog";
 function catalogAdd(item) {
@@ -33,7 +37,7 @@ function catalogAdd(item) {
     // Skip combined personal meals ("a + b + c"): they are one woman's plate,
     // not a reusable product, so they should never surface to other users.
     if (!item || !item.name || g <= 0 || item.source === "manual" || item.combo || String(item.name).includes(" + ")) return;
-    const per100 = { kcal: Math.round((Number(item.kcal) || 0) / g * 100), p: Math.round((Number(item.p) || 0) / g * 100), f: Math.round((Number(item.f) || 0) / g * 100), c: Math.round((Number(item.c) || 0) / g * 100) };
+    const per100 = { kcal: per100Round((Number(item.kcal) || 0) / g * 100), p: per100Round((Number(item.p) || 0) / g * 100), f: per100Round((Number(item.f) || 0) / g * 100), c: per100Round((Number(item.c) || 0) / g * 100) };
     if (!(per100.kcal > 0)) return; // never poison the shared catalog with 0-kcal rows
     if (!nutritionPlausible(per100)) return; // never store nutritionally inconsistent data in the shared catalog
     fetch(CATALOG_ENDPOINT, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name: String(item.name).trim(), per100, unit: item.unit || "g", source: item.catSource || item.source || "estimated" }) }).catch(() => {});
@@ -708,7 +712,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.14";
+const VERSION = "7.25";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -721,6 +725,23 @@ const STORAGE_KEY = "myprime_demo_state_v1";
    ============================================================ */
 const BK_CODE_KEY = "myprime_bk_code";
 const BK_LAST_KEY = "myprime_bk_last";
+// **כמה מחכים לשרת לפני שמוותרים, ונמדד ולא נוחש.** ב-v7.19 שמתי 5 שניות מהראש,
+// וב-17 בספטמבר 2026 נמדד שהקריאה הראשונה אחרי שהשרת היה רדום לוקחת **9.9 שניות**
+// (השנייה 0.85 והשלישית 0.69). כלומר קטעתי אותו באמצע, האפליקציה קיבלה "לא הצלחתי
+// לברר", **ורון קיבל את השורה על נתונים קודמים בלי שום סיבה.** אישה אמיתית שפותחת
+// בבוקר, כשהשרת רדום, הייתה מקבלת בדיוק את אותו הדבר, **ובמקרה הגרוע לא הייתה
+// מקבלת את מסך השחזור כלל אף שיש לה גיבוי.**
+const BK_WAIT_MS = 15000;
+// **שדה קוד הגיבוי אינו שדה סיסמה, וזה התיקון שעבד.** ב-v7.24 סימנתי את שבעת
+// השדות `autoComplete="one-time-code"` והשארתי `type="password"`, **וזה נמדד ונכשל
+// במחשב**: כרום ממלא כל שדה סיסמה באותו דומיין ומתעלם מהמאפיין הזה לגמרי. רון
+// פתח את מסך השחזור ב-18 בספטמבר 2026 והשדה היה מלא שוב.
+//
+// **לכן השדה יוצא מעולם הסיסמאות של הדפדפן**, `type="text"`, וההסתרה נעשית ב-CSS
+// ולא על ידי סוג השדה. **מה שלא זז: הקוד עדיין מוסתר בהקלדה**, וזו החלטה של רון.
+// `data-1p-ignore` ו-`data-lpignore` אומרים את אותו הדבר למנהלי סיסמאות חיצוניים.
+const CODE_FIELD = { type: "text", autoComplete: "off", spellCheck: false, "data-1p-ignore": "", "data-lpignore": "true" };
+const CODE_MASK = { WebkitTextSecurity: "disc", textSecurity: "disc" };
 const bkSubtle = (typeof window !== "undefined" && window.crypto && window.crypto.subtle) ? window.crypto.subtle : null;
 function bkGetCode() { try { return localStorage.getItem(BK_CODE_KEY) || ""; } catch (e) { return ""; } }
 // **הקוד נקבע ברישום, והעלאה הראשונה עוד לא קרתה.** הסימון הזה מגשר בין השניים:
@@ -762,9 +783,25 @@ async function bkUpload(email, code, plaintext, notify = false) {
   const d = await r.json().catch(() => ({}));
   return !!d.ok;
 }
-async function bkFetch(email) {
-  try { const r = await fetch(`/api/backup?email=${encodeURIComponent(email)}`); if (!r.ok) return { exists: false }; return await r.json(); }
-  catch (e) { return { exists: false }; }
+// `timeoutMs` קיים בשביל שני המסלולים שחוסמים אישה על המסך בזמן שהם מחכים
+// לתשובה: הבדיקה שרצה מאחורי מסך הפתיחה, וזו שעוצרת בסיום ההרשמה. **בלי תפוגה,
+// שרת שלא עונה משאיר אותה על "טוען..." בלי דרך להתקדם**, ובסיום ההרשמה זה בדיוק
+// הרגע הכי רגיש שיש. בלי הפרמטר ההתנהגות זהה למה שהייתה, כלומר בלי תפוגה.
+async function bkFetch(email, timeoutMs) {
+  let timer = null;
+  try {
+    const ctl = timeoutMs && typeof AbortController !== "undefined" ? new AbortController() : null;
+    if (ctl) timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, timeoutMs);
+    const r = await fetch(`/api/backup?email=${encodeURIComponent(email)}`, ctl ? { signal: ctl.signal } : undefined);
+    if (!r.ok) return { exists: false, failed: true };
+    const d = await r.json();
+    // **`failed` מבדיל בין "בדקנו ואין לה" לבין "לא הצלחנו לבדוק", ושתי התשובות
+    // האלה היו זהות עד כאן.** בלי ההבחנה הזאת מסך ההרשמה היה חייב לשאול כל אישה
+    // חדשה אם היו לה נתונים קודם, גם כשהשרת כבר ענה שאין לה. רון: "למה זה שואל
+    // אותי את השאלה הזאת אם זה פעם ראשונה שאני נכנס."
+    return d && d.ok === false ? { ...d, exists: false, failed: true } : d;
+  } catch (e) { return { exists: false, failed: true }; }
+  finally { if (timer) clearTimeout(timer); }
 }
 // Auto-generated backup code, for women who never opened the backup screen.
 // Uppercase only, without the characters that are easy to misread on a phone
@@ -1324,7 +1361,7 @@ function InstallGate({ onSkip }) {
   );
 }
 
-function Onboarding({ onFinish, name, email, fixedStart }) {
+function Onboarding({ onFinish, name, email, fixedStart, onRestore }) {
   const [step, setStep] = useState(0);
   const [age, setAge] = useState("");
   const [heightCm, setHeightCm] = useState("");
@@ -1403,6 +1440,17 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Sparkles size={20} color={C.brand} /><span style={{ fontSize: 25, fontWeight: 600, color: C.ink }}>{name && name.trim() ? `היי ${name.trim()}, נעים להכיר!` : "נעים להכיר"}</span></div>
             <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.6, marginTop: 0, marginBottom: 10 }}>כמה פרטים קצרים כדי שנחשב עבורך תוכנית מדויקת ובת-קיימא.</p>
+            {/* **רשת ביטחון אחרונה, ורק כשאנחנו באמת לא יודעים.** `onRestore` מגיע
+                ריק ברגע שהשרת ענה שאין לה גיבוי, ולכן אישה חדשה אינה רואה כאן
+                דבר. רון: "למה זה שואל אותי את השאלה הזאת אם זה פעם ראשונה שאני
+                נכנס." **ובראש ולא בתחתית, כי אישה שהנתונים שלה נעלמו מתחילה למלא
+                לפני שהיא גוללת.** שורה אחת ולא כפתור, שלא יתחרה ב"המשך". */}
+            {onRestore && (
+              <div style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.6, marginTop: -2, marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${C.line}` }}>
+                כבר היו לך נתונים באפליקציה?{" "}
+                <span role="button" tabIndex={0} onClick={onRestore} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onRestore(); }} style={{ color: C.brandD, fontWeight: 700, textDecoration: "underline", cursor: "pointer" }}>שחזור מגיבוי</span>
+              </div>
+            )}
             <Field label="גיל"><input type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} placeholder="" style={numStyle(err0 && !ageOk)} /></Field>
             {err0 && !ageOk && errNote(age === "" ? "יש למלא את הנתון" : "יש להזין גיל תקין")}
             <Field label="גובה"><span style={{ display: "flex", alignItems: "center", gap: 6 }}><input type="number" inputMode="numeric" value={heightCm} onChange={(e) => setHeightCm(e.target.value)} placeholder="" style={numStyle(err0 && !heightOk)} /><span style={{ fontSize: 15, color: C.sub }}>ס״מ</span></span></Field>
@@ -1546,8 +1594,8 @@ function Onboarding({ onFinish, name, email, fixedStart }) {
                 <input value={bkEmail} onChange={(e) => setBkEmail(e.target.value)} inputMode="email" placeholder="name@example.com" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${emailOk || !bkEmail ? C.line : C.amber}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", direction: "ltr", textAlign: "left" }} />
                 <div style={{ fontSize: 13, color: C.faint, marginTop: 4, marginBottom: 12 }}>הגיבוי ישויך לאימייל הזה. אפשר לאשר או לתקן.</div>
                 <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
-                <input value={bkCode} onChange={(e) => setBkCode(e.target.value)} type="password" placeholder="קוד אישי שתזכרי" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
-                <input value={bkCode2} onChange={(e) => setBkCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב לאישור" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${bkCode2 && bkCode !== bkCode2 ? C.amber : C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", marginTop: 8 }} />
+                <input value={bkCode} onChange={(e) => setBkCode(e.target.value)} {...CODE_FIELD} name="mp-bk-new" placeholder="קוד אישי שתזכרי" style={{ ...CODE_MASK, width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+                <input value={bkCode2} onChange={(e) => setBkCode2(e.target.value)} {...CODE_FIELD} name="mp-bk-new2" placeholder="הקלדת הקוד שוב לאישור" style={{ ...CODE_MASK, width: "100%", boxSizing: "border-box", border: `1px solid ${bkCode2 && bkCode !== bkCode2 ? C.amber : C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", marginTop: 8 }} />
                 {bkCode2 && bkCode !== bkCode2 && <div style={{ fontSize: 13, color: C.amber, marginTop: 4 }}>הקודים אינם תואמים.</div>}
                 <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: "10px 12px", borderRadius: 10, lineHeight: 1.55, marginTop: 10, display: "flex", gap: 6 }}>
                   <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>בחרי קוד פשוט שתזכרי. אי אפשר לשחזר אותו - אם תשכחי, לא נוכל לפתוח את הגיבוי בטלפון חדש. רשמי אותו במקום בטוח.</span>
@@ -3078,7 +3126,7 @@ async function searchOpenFoodFacts(q) {
     out.push({
       id: "off_" + (p.code || out.length),
       name,
-      per100: { kcal: Math.round(kcal), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) },
+      per100: { kcal: per100Round(kcal), p: per100Round(n.proteins_100g), f: per100Round(n.fat_100g), c: per100Round(n.carbohydrates_100g) },
       measures: [{ label: "100 ג׳", g: 100 }, { label: "כף", g: 15 }, { label: "כפית", g: 5 }],
       def: 0,
     });
@@ -3787,6 +3835,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   // without ever asking her to type it: the phone already read it.
   const [scannedCode, setScannedCode] = useState("");
   const [labelSaved, setLabelSaved] = useState(false);
+  // הגיעה למסך ההזנה הידנית דרך "הערכים לא נכונים", ולא מתפריט הוספת המזון.
+  // זה קובע שני דברים בלבד: את הכותרת, וששורת "חזרה" מחזירה אותה למסך הכמות שממנו
+  // באה ולא לתפריט, שהוא כמה מסכים אחורה ממה שביקשה.
+  const [labelFix, setLabelFix] = useState(false);
   const stopScan = () => { try { scanControlsRef.current && scanControlsRef.current(); } catch (e) {} scanControlsRef.current = null; };
   const lookupBarcode = async (code) => {
     setScanState("looking");
@@ -3808,7 +3860,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       if (d.status !== 1 || !d.product) { setScanState("notfound"); return; }
       const p = d.product, n = p.nutriments || {};
       const name = (p.product_name_he || p.generic_name_he || p.product_name || p.generic_name || p.brands || "מוצר").trim();
-      const per100 = { kcal: Math.round(n["energy-kcal_100g"] || 0), p: Math.round(n.proteins_100g || 0), f: Math.round(n.fat_100g || 0), c: Math.round(n.carbohydrates_100g || 0) };
+      const per100 = { kcal: per100Round(n["energy-kcal_100g"]), p: per100Round(n.proteins_100g), f: per100Round(n.fat_100g), c: per100Round(n.carbohydrates_100g) };
       // Reject clearly-broken external data (e.g. protein entered per-package into the
       // per-100g field) instead of logging a wrong number. She is sent to the label
       // photo / manual entry instead.
@@ -3905,7 +3957,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const guardedClose = () => { if (unsavedAny()) { askExit(false); return; } close(); };
 
   const title = step === "method" ? "הוספת מזון" : step === "list" ? `הוספה ל${meal}` : step === "history" ? "האחרונים והמועדפים שלי" : step === "photo" ? "זוהה בתמונה" : step === "ai" ? "ספרי לי מה אכלת" : step === "barcode" ? "סריקת ברקוד" : (state.editEntry ? "עריכת פריט" : food?.name);
-  const back = step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
+  // מסך ההזנה הידנית מקבל חזרה משלו **רק** כשהגיעה אליו מ"עדכני מהתווית", ואז היא
+  // חוזרת למסך הכמות. בלי זה כפתור החזרה של הטלפון לא היה מוצא מה לסגור והיה סוגר
+  // את כל חלון ההוספה, כמה מסכים אחורה ממה שביקשה. זו הצורה של v6.72 ושל v5.27.
+  const back = step === "manual" && labelFix ? () => { setLabelFix(false); setStep("qty"); } : step === "qty" && !state.editEntry ? () => setStep(qtyOrigin) : (step === "list" || step === "history" || step === "photo" || step === "ai" || step === "barcode") ? () => { stopScan(); setStep("method"); } : null;
   // כפתור החזרה של הטלפון, שכבה אחת בכל לחיצה. בלי זה האפליקציה ידעה רק שחלון
   // ההוספה פתוח, ולחיצה מתוך מסך הכמות סגרה את כולו והחזירה אותה ליומן, כמה
   // מסכים אחורה ממה שביקשה. משתתפת דיווחה על זה מרשימת האחרונים.
@@ -3957,7 +4012,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         )}
         {step === "manual" && (
           <>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>{scannedCode ? "עדכון מהתווית" : "הזנה ידנית"}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, marginBottom: 4 }}>{labelFix || scannedCode ? "עדכון מהתווית" : "הזנה ידנית"}</div>
             <p style={{ fontSize: 14, color: C.sub, lineHeight: 1.5, margin: "0 0 14px" }}>{mWhole ? "הקלידי את הערכים של המנה שאכלת, כמו שקיבלת אותם. הם ייכנסו ליומן בדיוק כמו שהם." : "הקלידי את הערכים מהתווית של המוצר. הוא יישמר אצלך ויופיע בחיפוש בפעם הבאה."}</p>
             {labelSaved && <div style={{ background: "#E7F4EC", color: "#1E8449", borderRadius: 12, padding: 12, marginBottom: 14, fontSize: 15.5, fontWeight: 600, textAlign: "center" }}>תודה 💜 עדכנתי את הערכים אצלך.</div>}
             <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
@@ -3970,12 +4025,18 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
             </div>
             <div style={{ margin: "16px 0 8px" }}>
-              <div style={{ fontSize: 14, color: C.sub, fontWeight: 600, marginBottom: 6 }}>הערכים שאת מזינה הם:</div>
-              <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>
-                {[{ v: false, t: `ל-100 ${mUnit === "ml" ? "מ\"ל" : "ג׳"}` }, { v: true, t: "לכל המנה" }].map((o) => (
-                  <div key={String(o.v)} onClick={() => setMWhole(o.v)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mWhole === o.v ? C.brand : "transparent", color: mWhole === o.v ? "#fff" : C.sub }}>{o.t}</div>
-                ))}
-              </div>
+              {/* המתג אינו מוצג בתיקון מהתווית. התווית תמיד נותנת ערכים ל-100 והשדות כבר
+                  מלאים ל-100, ולכן העברתו הייתה הופכת את אותם 53 ל"53 קק״ל לכל הגביע"
+                  בלי לשנות ספרה אחת על המסך. רון תפס את זה ב-17 בספטמבר 2026.
+                  ההסבר שמתחת נשאר, כי בלעדיו היא לא יודעת לפי מה המספרים מחושבים. */}
+              {!labelFix && (<>
+                <div style={{ fontSize: 14, color: C.sub, fontWeight: 600, marginBottom: 6 }}>הערכים שאת מזינה הם:</div>
+                <div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>
+                  {[{ v: false, t: `ל-100 ${mUnit === "ml" ? "מ\"ל" : "ג׳"}` }, { v: true, t: "לכל המנה" }].map((o) => (
+                    <div key={String(o.v)} onClick={() => setMWhole(o.v)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mWhole === o.v ? C.brand : "transparent", color: mWhole === o.v ? "#fff" : C.sub }}>{o.t}</div>
+                  ))}
+                </div>
+              </>)}
               <div style={{ fontSize: 13, color: C.faint, marginTop: 6, lineHeight: 1.5 }}>
                 {mWhole
                   ? "המספרים ייכנסו ליומן בדיוק כמו שהם, בלי חישוב מחדש. מתאים כשקיבלת את הערכים של הצלחת עצמה."
@@ -3990,8 +4051,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               <div style={{ flex: 1 }}><label style={mLbl}>שומן (ג׳)</label><input value={mFat} onChange={(e) => setMFat(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ flex: 1 }}><label style={mLbl}>פחמימות (ג׳)</label><input value={mCarb} onChange={(e) => setMCarb(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
             </div>
-            <div style={{ marginTop: 18 }}><Btn onClick={saveManual} disabled={!mName.trim() || !(mWhole || Number(mAmount) > 0)}>הוסיפי ליומן</Btn></div>
-            <Btn variant="ghost" onClick={() => setStep("method")} style={{ marginTop: 8 }}>חזרה</Btn>
+            <div style={{ marginTop: 18 }}><Btn onClick={saveManual} disabled={!mName.trim() || !(mWhole || Number(mAmount) > 0)}>{state.editEntry ? "עדכני" : "הוסיפי ליומן"}</Btn></div>
+            {/* מי שהגיעה לכאן דרך "עדכני מהתווית" חוזרת למסך הכמות שממנו באה. "חזרה"
+                לתפריט הייתה מוציאה אותה כמה מסכים אחורה, וזו הצורה של v6.72. */}
+            <Btn variant="ghost" onClick={() => { if (labelFix) { setLabelFix(false); setStep("qty"); } else setStep("method"); }} style={{ marginTop: 8 }}>חזרה</Btn>
           </>
         )}
         {step === "list" && (
@@ -4005,6 +4068,20 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: "9px 11px", color: C.faint }}>
                 <Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש מזון…" autoFocus style={{ border: "none", outline: "none", fontSize: 16, width: "100%", fontFamily: fontStack, color: C.ink, background: "transparent" }} />
+              </div>
+              {/* **מוצר באריזה כמעט תמיד לא יימצא בחיפוש בעברית, וזה לא ליקוי בחיפוש
+                  שלנו.** המוצרים הישראליים במאגר העולמי רשומים שם באנגלית בלבד, ולכן
+                  שאילתה בעברית אינה יכולה להגיע אליהם ונופלת על הפריט הגנרי שכן יש לו
+                  שם בעברית. משתתפת רשמה כך משקה יוגורט מועשר בחלבון וקיבלה 7 גרם
+                  חלבון במקום 42, בלי שום סימן לכך.
+
+                  **הברקוד אינו משתמש בשם כלל ולכן הוא חסין לזה**, ואותו מוצר בדיוק
+                  חוזר ממנו עם ערכי התווית המדויקים. לכן ההפניה יושבת כאן, ברגע שבו
+                  היא מחפשת, ולא רק כשורה ברשימה שהיא כבר עברה. */}
+              <div onClick={() => { usageBump("barcode"); setStep("barcode"); }} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, background: C.brandBg, borderRadius: 10, padding: "9px 10px", cursor: "pointer" }}>
+                <Barcode size={18} color={C.brand} strokeWidth={2.2} style={{ flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>יש לך את האריזה ביד? סריקת הברקוד תיתן את המספרים המדויקים</span>
+                <ChevronLeft size={17} color={C.brandD} style={{ flexShrink: 0 }} />
               </div>
             </div>
             <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
@@ -4349,21 +4426,35 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             <div style={{ background: C.bg, borderRadius: 12, padding: 12, marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, marginBottom: 8 }}><span style={{ color: C.sub }}>קלוריות</span><span style={{ fontWeight: 600, color: C.ink }}>{nut.kcal} קק״ל</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, color: C.sub }}><span>חלבון {nut.p} ג׳</span><span>שומן {nut.f} ג׳</span><span>פחמימות {nut.c} ג׳</span></div>
-              {/* Right under the numbers she is questioning. The global barcode database
-                  often holds a generic version of a product rather than the Israeli package
-                  in her hand; the correction is filed against the barcode she scanned. */}
-              {scannedCode && String(food.id || "").startsWith("bc_") && !state.editEntry && (
+              {/* Right under the numbers she is questioning.
+                  **עד 16 בספטמבר 2026 השורה הזאת הופיעה אך ורק מיד אחרי סריקת ברקוד**,
+                  ולכן מי שהגיעה למוצר דרך חיפוש, דרך הבינה או דרך האחרונים לא יכלה
+                  לתקן ערכים שגויים בשום דרך, **וגם לא כשחזרה למוצר שכבר רשמה**: מסך
+                  העריכה נתן לה את הכמות ואת הארוחה בלבד. משתתפת דיווחה בדיוק על זה,
+                  "תיקנתי ולא שונה".
+
+                  עכשיו היא מוצגת בכל מסלול. **בעריכה זה אינו מוסיף שורה אלא מעדכן את
+                  הקיימת**, כי `commit` כבר מזהה `editEntry` ומחליף בה. */}
+              {food.per100 && (
                 <div style={{ borderTop: `1px solid ${C.line}`, marginTop: 10, paddingTop: 9, textAlign: "center" }}>
                   <button onClick={() => {
+                    // per100 של פריט קיים מחושב בחלוקה, ולכן הוא יוצא עם זנב עשרוני
+                    // ארוך. היא לא אמורה לראות 1.4000000000000001 בשדה.
+                    const r1 = (n) => { const v = Math.round((Number(n) || 0) * 10) / 10; return v ? String(v) : ""; };
                     setMName(food.name || "");
                     setMAmount(String(grams || 100));
                     setMUnit(food.unit === "ml" ? "ml" : "g");
-                    setMKcal(String(food.per100.kcal || ""));
-                    setMProt(String(food.per100.p || ""));
-                    setMFat(String(food.per100.f || ""));
-                    setMCarb(String(food.per100.c || ""));
+                    setMKcal(r1(food.per100.kcal));
+                    setMProt(r1(food.per100.p));
+                    setMFat(r1(food.per100.f));
+                    setMCarb(r1(food.per100.c));
+                    // הערכים שהוזנו כאן הם תמיד ל-100, כי מזה הם נגזרו. מתג שנשאר
+                    // מפתיחה קודמת היה מכניס אותם ליומן כמו שהם.
+                    setMWhole(false);
+                    setLabelSaved(false);
+                    setLabelFix(true);
                     setStep("manual");
-                  }} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>הערכים לא תואמים לאריזה? עדכני מהתווית</button>
+                  }} style={{ border: "none", background: "transparent", color: C.brandD, fontSize: 14, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", textDecoration: "underline", padding: 0 }}>הערכים לא נכונים? עדכני מהתווית</button>
                 </div>
               )}
             </div>
@@ -6396,7 +6487,7 @@ const FAQ_ITEMS = [
   { q: "למה אני לא ממלאת את החלבון בעצמי?", a: "טבעת החלבון מתעדכנת לבד מתוך המזון שאת מזינה ביומן, כך שתמיד רואות כמה חלבון אכלת מול היעד היומי - בלי צורך למלא ידנית." },
   { q: "כמה קלוריות מותר לי לאכול היום?", a: "היעד הקלורי היומי מחושב לפי הגיל, המשקל, הגובה ורמת הפעילות שלך, ומופיע בעיגול הקלוריות ('מתוך ...'). אפשר לראות אותו גם במסך הפרופיל." },
   { q: "שכחתי להזין יום שלם - מה עושים?", a: "אפשר לחזור לימים קודמים דרך סרגל הזמן שלמעלה, או בהחלקה ימינה ושמאלה על המסך, ולמלא בדיעבד." },
-  { q: "סרקתי ברקוד והערכים לא תואמים לאריזה. מה עושים?", a: "הערכים שהופיעו הם של גרסה כללית של המוצר במאגר העולמי, ולא של האריזה הישראלית. במסך שמאשר את הכמות יש שורה קטנה: \"הערכים לא תואמים לאריזה? עדכני מהתווית\". לוחצים עליה ומקלידים את המספרים מהתווית, מהעמודה של 100 גרם. מהרגע הזה המוצר יהיה נכון אצלך גם בפעם הבאה." },
+  { q: "הערכים של המוצר לא נכונים. מה עושים?", a: "אם חיפשת את המוצר לפי השם, יכול להיות שנמצא מוצר דומה ולא בדיוק זה שלך. מוצרים באריזה מזוהים הכי טוב לפי הברקוד, ולכן כדאי לסרוק אותו: בכפתור הפלוס יש \"סריקת ברקוד\".\n\nואם הערכים שעל האריזה עדיין לא תואמים, במסך שמאשר את הכמות יש שורה קטנה: \"הערכים לא נכונים? עדכני מהתווית\". לוחצים עליה ומקלידים את המספרים מהתווית, מהעמודה של 100 גרם. אפשר גם להקיש על מוצר שכבר רשמת ביומן ולעדכן אותו משם.\n\nמהרגע הזה המוצר יהיה נכון אצלך גם בפעם הבאה." },
   { q: "איך עורכים או מוחקים פריט שהוספתי?", a: "בהקשה על הפריט ברשימת 'מה שהוזן היום' ביומן אפשר לערוך אותו או למחוק אותו." },
   // בקשה של משתתפת. השאלה נשארת ברשימה תמיד, כי הכפתור עצמו קשה לגילוי.
   // התשובה זהה מילה במילה לזו שבבנק של המשרד, ובדיקה משווה ביניהן.
@@ -6607,8 +6698,12 @@ function RestoreScreen({ email, busy, onRestore, onSkip }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Lock size={22} color={C.brand} /><span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>מצאנו גיבוי מוצפן</span></div>
         <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 16 }}>קיים גיבוי מוצפן עבור <span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{email}</span>. הזיני את קוד הגיבוי כדי לשחזר את כל הנתונים שלך למכשיר הזה.</p>
         <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
-        <input value={code} onChange={(e) => { setCode(e.target.value); setErr(""); }} type="password" placeholder="הקוד שבחרת" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${err ? C.amber : C.line}`, borderRadius: 10, padding: "12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+        <input value={code} onChange={(e) => { setCode(e.target.value); setErr(""); }} {...CODE_FIELD} name="mp-bk-restore" placeholder="הקוד שבחרת" style={{ ...CODE_MASK, width: "100%", boxSizing: "border-box", border: `1px solid ${err ? C.amber : C.line}`, borderRadius: 10, padding: "12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
         {err && <div style={{ fontSize: 14, color: C.amber, marginTop: 6 }}>{err}</div>}
+        {/* **המסך הזה לא אמר לה איפה הקוד נמצא.** מ-v7.19 אפשר להגיע לכאן גם מרצון
+            ומראש מסך ההרשמה, ולא רק כשהאפליקציה מצאה גיבוי בעצמה, ואז אישה
+            שאינה זוכרת את הקוד נתקעת מול שדה ריק. הקופי אושר על ידי רון. */}
+        <div style={{ fontSize: 14, color: C.sub, lineHeight: 1.6, marginTop: 10 }}>הקוד נשלח אלייך במייל כשהגיבוי נוצר, והוא מופיע גם בפרופיל שלך באפליקציה.</div>
       </div>
       <div style={{ padding: "10px 20px 18px", borderTop: `1px solid ${C.line}`, display: "flex", flexDirection: "column", gap: 8 }}>
         <Btn disabled={busy || !code.trim()} onClick={submit}>{busy ? "משחזר..." : "שחזרי את הנתונים"}</Btn>
@@ -6656,8 +6751,8 @@ function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCo
       {mode === "reset" && (
         <>
           <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>בחרי קוד חדש. הנתונים שבמכשיר יגובו מחדש עם הקוד החדש.</div>
-          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="קוד חדש" style={inputS} />
-          <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב" style={inputS} />
+          <input value={code} onChange={(e) => setCode(e.target.value)} {...CODE_FIELD} name="mp-bk-reset" placeholder="קוד חדש" style={{ ...inputS, ...CODE_MASK }} />
+          <input value={code2} onChange={(e) => setCode2(e.target.value)} {...CODE_FIELD} name="mp-bk-reset2" placeholder="הקלדת הקוד שוב" style={{ ...inputS, ...CODE_MASK }} />
           <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onResetCode(code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מעדכנת..." : "עדכון קוד"}</Btn>
           <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setMsg(null); setMode("view"); }} style={{ color: C.sub }}>ביטול</Btn></div>
         </>
@@ -6667,8 +6762,8 @@ function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCo
           <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>אימייל לגיבוי</div>
           <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="name@example.com" style={{ ...inputS, direction: "ltr", textAlign: "left" }} />
           <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
-          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="קוד אישי שתזכרי" style={inputS} />
-          <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" placeholder="הקלדת הקוד שוב" style={inputS} />
+          <input value={code} onChange={(e) => setCode(e.target.value)} {...CODE_FIELD} name="mp-bk-on" placeholder="קוד אישי שתזכרי" style={{ ...inputS, ...CODE_MASK }} />
+          <input value={code2} onChange={(e) => setCode2(e.target.value)} {...CODE_FIELD} name="mp-bk-on2" placeholder="הקלדת הקוד שוב" style={{ ...inputS, ...CODE_MASK }} />
           <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: "10px 12px", borderRadius: 10, lineHeight: 1.55, marginBottom: 12, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>אי אפשר לשחזר את הקוד. אם תשכחי אותו, לא נוכל לפתוח את הגיבוי בטלפון חדש. רשמי אותו במקום בטוח.</span></div>
           <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onEnable(email, code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מפעיל..." : "הפעלת גיבוי מוצפן"}</Btn>
         </>
@@ -6804,7 +6899,7 @@ function foodEntryFromPayload(p) {
   const name = (p.name || "").trim();
   const g = p.g;
   if (!name || !g) return null;
-  const per100 = { kcal: Math.round((p.kcal || 0) / g * 100), p: Math.round((p.p || 0) / g * 100), f: Math.round((p.f || 0) / g * 100), c: Math.round((p.c || 0) / g * 100) };
+  const per100 = { kcal: per100Round((p.kcal || 0) / g * 100), p: per100Round((p.p || 0) / g * 100), f: per100Round((p.f || 0) / g * 100), c: per100Round((p.c || 0) / g * 100) };
   // Keep the EXACT original values at the original gram amount, so re-adding at the same
   // quantity returns identical numbers instead of drifting through per100 rounding twice.
   const exact = { g: Math.round(g), kcal: Math.round(p.kcal || 0), p: Math.round(p.p || 0), f: Math.round(p.f || 0), c: Math.round(p.c || 0) };
@@ -6871,6 +6966,10 @@ export default function App() {
   const [showIntro, setShowIntro] = useState(saved ? false : true);
   const [notes, setNotes] = useState([]);
   const [bkRestore, setBkRestore] = useState("idle"); // idle | checking | offer | none
+  // **מי ביקש את הבדיקה, וזה מה שקובע אם ממתינים מולה או ברקע.** בדיקה שרצה
+  // מאחורי מסך הפתיחה אינה מוצגת לה כלל, ובדיקה שרצה אחרי שהיא לחצה "בואי נתחיל"
+  // חייבת להראות משהו, אחרת היא לוחצת שוב.
+  const [bkFinishWait, setBkFinishWait] = useState(false);
   const [bkBusy, setBkBusy] = useState(false);
   const [gate, setGate] = useState("checking");
   const [gateReason, setGateReason] = useState("");
@@ -7314,13 +7413,33 @@ export default function App() {
   }, [onboarded, profile, log, weights, activityLog, waterByDate, stepsByDate, favorites, recents, checkins, goalAckWeek]);
 
   // New device: if there is no local data yet but a cloud backup exists for this email, offer restore.
+  //
+  // **הכלל היה `saved` לבדו עד v7.19, וזה מה שנשבר אצל אילה נחום.** התנאי שאל
+  // "האם יש משהו שמור על המכשיר", **והשמירה שלוש שורות מעל כותבת משהו בכל פתיחה
+  // ובלי שום תנאי**, גם למי שרק ראתה את מסך הכניסה וסגרה. כלומר די בפתיחה אחת
+  // שנקטעה כדי שהתשובה תהיה "כן" לנצח, **ומאותו רגע הצעת השחזור לא רצה לעולם
+  // ולא הייתה שום דרך אחרת להגיע אליה.** נמדד בדפדפן: אותה אישה עם אותו גיבוי
+  // מקבלת מסך שחזור על הקשר נקי, ולא מקבלת דבר אחרי פתיחה מוקדמת אחת.
+  //
+  // השאלה הנכונה היא "האם יש לה נתונים שסיימה בהם הרשמה", ולא "האם יש קובץ".
+  //
+  // התפוגה: הבדיקה מתחילה בטעינה, ומסך הפתיחה מכסה אותה שתי שניות בכל מקרה
+  // (`showSplash`), ולכן ברוב המוחלט של הפעמים אף אישה לא רואה "טוען..." בכלל.
+  // **`saved` אינו נבדק כאן, וזה מכוון.** הוא נקרא מהמכשיר פעם אחת בטעינה ואינו
+  // מתעדכן, ולכן אחרי "מחיקת כל הנתונים והתחלה מחדש", שרצה בלי לרענן את המסך,
+  // הוא עדיין מחזיק את הנתונים הישנים ואומר שהיא סיימה הרשמה. **רון נתקל בזה
+  // בדיוק במסלול הזה ב-17 בספטמבר 2026 וקיבל מסך הרשמה במקום מסך שחזור.**
+  // `onboarded` הוא המצב החי, והוא נגזר מ-`saved` בטעינה ממילא, ולכן הוא לבדו
+  // גם מספיק וגם נכון בכל רגע.
   useEffect(() => {
-    if (gate !== "ok" || onboarded || saved) return;
+    if (gate !== "ok" || onboarded) return;
     if (bkRestore !== "idle") return;
     const email = (gateEmail || "").trim().toLowerCase();
     if (!email || !bkSubtle) { setBkRestore("none"); return; }
     setBkRestore("checking");
-    (async () => { const r = await bkFetch(email); setBkRestore(r && r.exists ? "offer" : "none"); })();
+    // "none" פירושו שהשרת ענה ואין לה גיבוי, ו"unknown" שלא הצלחנו לברר. **רק
+    // השני מצדיק לשאול אותה משהו במסך ההרשמה.**
+    (async () => { const r = await bkFetch(email, BK_WAIT_MS); setBkRestore(r && r.exists ? "offer" : r && r.failed ? "unknown" : "none"); })();
   }, [gate, onboarded, saved, gateEmail, bkRestore]);
 
   // Auto-backup: debounced after EVERY change, plus a flush when the app is
@@ -7443,7 +7562,39 @@ export default function App() {
     } catch (e) { setBkBusy(false); return { ok: false, msg: "האיפוס נכשל, נסי שוב." }; }
   };
 
-  const finishOnboarding = (p, bk) => {
+  // **הרגע היחיד שבו גיבוי קיים יכול להידרס, ולכן ההגנה יושבת עליו ולא על השאלה
+  // איך היא הגיעה לכאן.** עד השורה הזאת שום דבר לא נכתב החוצה: הגיבוי האוטומטי
+  // מותנה ב-`onboarded`, שנקבע כאן. מרגע שהוא נקבע, מה שיש לה בענן נמחק ומוחלף
+  // בנתונים הריקים של ההרשמה החדשה, **ואין היסטוריה להחזיר ממנה** (`api/backup.js`
+  // שומר מקום אחד לאישה ודורס אותו).
+  //
+  // לכן: בדיקה אחרונה מולנו לפני שנוגעים במשהו. יש לה גיבוי, היא מקבלת את מסך
+  // השחזור במקום להמשיך, **ואם היא בכל זאת רוצה להתחיל מאפס יש שם כפתור.**
+  // "דילגה" נשמר כדי שלא נשאל אותה פעמיים על אותה החלטה.
+  //
+  // **ונכשל לצד הפתוח:** אין מייל, אין הצפנה, השרת לא ענה תוך חמש שניות או שאין
+  // גיבוי, והיא ממשיכה בדיוק כמו היום. תקלה אצלנו לא עוצרת נרשמת חדשה.
+  const pendingFinish = useRef(null);
+  const finishOnboarding = async (p, bk) => {
+    const bkEmail = (gateEmail || "").trim().toLowerCase();
+    if (bkEmail && bkSubtle && bkRestore !== "skipped") {
+      setBkRestore("checking"); setBkFinishWait(true);
+      const r = await bkFetch(bkEmail, BK_WAIT_MS);
+      setBkFinishWait(false);
+      if (r && r.exists) { pendingFinish.current = { p, bk }; setBkRestore("offer"); return; }
+      setBkRestore("none");
+    }
+    applyOnboarding(p, bk);
+  };
+  // מי שבחרה להתחיל מאפס. **החלטה אחת ולא שתיים:** הסימון "דילגה" מונע מהבדיקה
+  // בסיום ההרשמה לעצור אותה שוב על אותו גיבוי שהיא כבר ויתרה עליו במודע.
+  const skipRestore = () => {
+    const pend = pendingFinish.current;
+    pendingFinish.current = null;
+    setBkRestore("skipped");
+    if (pend) applyOnboarding(pend.p, pend.bk);
+  };
+  const applyOnboarding = (p, bk) => {
     const backup = { enabled: !!(bk && bk.enabled), email: (bk && bk.email) || (gateEmail || "").trim().toLowerCase() };
     if (bk && bk.enabled && bk.code) { bkSetCode(bk.code); bkSetNotifyPending(true); try { localStorage.removeItem(BK_LAST_KEY); } catch (e) {} }
     // Late joiner: her first login is already past day 2, so the drip-fed tips would all
@@ -7636,6 +7787,12 @@ export default function App() {
     setLog([]); setWaterByDate({}); setStepsByDate({}); setActivityLog([]); setWeights(initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate)); setSelectedDate(TODAY);
     setCheckins({});
     setProfile(DEFAULT_PROFILE);
+    // **בלי האיפוס הזה הבדיקה לא תרוץ שוב באותה טעינה.** היא רצה פעם אחת ומסמנת
+    // את עצמה, ומחיקה שאינה מרעננת את המסך משאירה את הסימון הישן. מי שמוחקת
+    // ומתחילה מחדש חייבת לקבל את ההצעה כאילו נכנסה עכשיו.
+    pendingFinish.current = null;
+    setBkRestore("idle");
+    setBkFinishWait(false);
   };
   const onPickEntry = (id) => {
     if (id === "food") { openAdd("food", null); tourEvent("pickfood"); }
@@ -7847,11 +8004,19 @@ export default function App() {
           </>
         ) : !onboarded ? (
           bkRestore === "offer" ? (
-            <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={() => setBkRestore("none")} />
-          ) : bkRestore === "checking" ? (
+            <RestoreScreen email={gateEmail} busy={bkBusy} onRestore={doRestore} onSkip={skipRestore} />
+          ) : bkRestore === "checking" && (showSplash || bkFinishWait) ? (
+            // **"טוען..." מוצג בשני מצבים בלבד, ובשניהם היא ממילא ממתינה.**
+            // מאחורי מסך הפתיחה, שמכסה אותו בכל מקרה, ואחרי שהיא הקישה "בואי נתחיל",
+            // שם חייב להיות חיווי אחרת היא מקישה שוב.
+            //
+            // **ומה שהוא לא עושה יותר: לעצור אישה שרק פתחה את האפליקציה.** כשהשרת
+            // רדום הבדיקה לוקחת כעשר שניות (נמדד ב-17 בספטמבר 2026), ואז היא הייתה
+            // נשארת מול "טוען..." בלי לדעת למה. עכשיו מסך ההרשמה מגיע מיד, הבדיקה
+            // ממשיכה ברקע, **ואם מסתבר שיש לה גיבוי מסך השחזור מגיע באותו רגע.**
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: C.faint, fontFamily: fontStack }}>טוען...</div>
           ) : (
-            <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} email={gateEmail} fixedStart={gateStartDate} /></div>
+            <div style={{ flex: 1, overflow: "hidden" }}><Onboarding onFinish={finishOnboarding} name={gateName} email={gateEmail} fixedStart={gateStartDate} onRestore={bkRestore === "unknown" ? () => setBkRestore("offer") : null} /></div>
           )
         ) : (
           <>

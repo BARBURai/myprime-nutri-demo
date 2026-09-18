@@ -380,6 +380,22 @@ export default async function handler(req, res) {
   // בשדה `glowFull` עצמו, ולכן המסכים באפליקציה נסגרים מאליהם בלי מסלול נוסף.
   const glowFullNow = decision.glowFullOpen;
   if (!decision.allowed) {
+    // **היתר הצפייה בסרטונים נמחק ברגע שהיא נחסמת, ולא ממתין שיפוג.**
+    // הסימונים האלה הם מה ש-`api/bunny-token.js` קורא כדי להחליט אם לחתום על
+    // קישור צפייה, והם נכתבים מחדש בכל כניסה עם תפוגה של 30 יום. עד כאן הם שרדו
+    // את החסימה, כי השער יצא לפני השורות שכותבות אותם: **נעלנו את הדלת ולא לקחנו
+    // את הכרטיס שכבר בידה.** מי ששמרה מזהה סרטון מראש עוד יכלה לקבל חתימה.
+    //
+    // **`glowonly` נשאר בכוונה, והוא ההפך משני האחרים:** הוא זה שמסרב לחתום על
+    // 88 סרטוני התוכנית למי שקנתה את הקורס לבדו. מחיקה שלו הייתה פותחת לה דווקא
+    // את מה שאסור לה. הכיוון כאן זהה לזה שב-`api/bunny-token.js`.
+    const RUx = process.env.UPSTASH_REDIS_REST_URL, RTx = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (RUx && RTx) {
+      try {
+        await redis(RUx, RTx, "DEL", `glow:${email}`);
+        await redis(RUx, RTx, "DEL", `glowfull:${email}`);
+      } catch (e) { /* ניקוי שנכשל לעולם אינו משנה את התשובה לאישה */ }
+    }
     if (decision.reason === "frozen") return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: (freeze && freeze.back) || "" });
     if (decision.reason === "cancelled") return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
     return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate });

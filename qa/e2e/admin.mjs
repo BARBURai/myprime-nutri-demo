@@ -108,9 +108,17 @@ async function open(browser, device, patch) {
     const url = route.request().url();
     const json = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
     if (route.request().method() === "POST") {
-      try { posts.push(JSON.parse(route.request().postData() || "{}")); } catch (e) { posts.push({}); }
+      let b = {};
+      try { b = JSON.parse(route.request().postData() || "{}"); } catch (e) { b = {}; }
+      posts.push(b);
+      // בקשת ניסוח מקבלת תשובה כמו מהשרת. בלי זה אי אפשר לבדוק את המסך שמציג אותה,
+      // והבדיקה הייתה נעצרת על תיבה ריקה בלי לדעת אם זה המסך או ה-mock.
+      if (b && b.draftFor) return json({ ok: true, answer: "תשובה מנוסחת לבדיקה", based: "kb", why: "לפי הבריף" });
       return json({ ok: true });
     }
+    // תור המענה מצפה ל-`all`, ולא ל-`notes`/`replies` של אישה אחת. בלי ההבחנה הזאת
+    // QUEUE נשאר undefined והמסך נופל על Object.keys, כלומר הבדיקה נכשלת על המוק.
+    if (url.includes("notes=all")) return json({ ok: true, all: {} });
     if (url.includes("notes=")) return json({ ok: true, notes: [], replies: [] });
     if (url.includes("bank=1")) return json({ ok: true, bank: [] });
     if (url.includes("mc=")) return json({ ok: true, found: false });
@@ -429,6 +437,51 @@ CHECKS.push({
     return {
       ok: /\(4\)/.test(label) && okSec && mail === 1 && okA && okB && card === 1 && errors.length === 0,
       detail: `האריח "${label}" · חלקים ${JSON.stringify(secs)} · מייל ${okA ? "אומר" : boxA} · טלפון ${okB ? "אומר" : boxB} · כרטיס ${card} · שגיאות ${errors[0] || "אין"}`,
+    };
+  },
+}, {
+  // שאלה שהגיעה בוואטסאפ או במייל. בודק את שני הצדדים באותה הרצה, כי טופס שנפתח
+  // תמיד נראה בדיוק כמו טופס שאינו נפתח אף פעם, וכפתור שליחה שקיים תמיד נראה בדיוק
+  // כמו אחד שמופיע רק אחרי זיהוי.
+  name: "שאלה מבחוץ: הטקסט נשמר, והשליחה נפתחת רק אחרי שזיהו אותה",
+  async run(browser, device) {
+    const { ctx, page, errors, posts } = await open(browser, device);
+    await page.locator('[data-v="notes"]').click();
+    await page.waitForTimeout(300);
+    await page.locator("[data-outopen]").click();
+    await page.waitForTimeout(250);
+    // מקלידים תו-תו ולא ב-fill, כי כתיבה בבת אחת מדלגת בדיוק על המסלול שנשבר:
+    // המסך נצבע מחדש בכל הקשה, וטקסט שיושב רק בתיבה היה נמחק תחת האצבע.
+    await page.locator("#out_q").click();
+    await page.keyboard.type("החלבון יצא לי נמוך", { delay: 25 });
+    await page.waitForTimeout(250);
+    const kept = await page.locator("#out_q").inputValue();
+    // לפני זיהוי: אין שליחה אליה, רק העתקה.
+    await page.locator("[data-outdraft]").click();
+    await page.waitForTimeout(400);
+    const ans1 = await page.locator("#out_a").inputValue().catch(() => "");
+    const sendBefore = await page.locator("[data-outsend]").count();
+    const copyBefore = await page.locator("[data-outcopy]").count();
+    // ואחרי שמזהים אותה, השליחה נפתחת.
+    await page.locator("#out_f").click();
+    await page.keyboard.type("אורלי", { delay: 40 });
+    await page.waitForTimeout(400);
+    const hits = await page.locator("[data-outpick]").count();
+    if (hits) await page.locator("[data-outpick]").first().click();
+    await page.waitForTimeout(300);
+    const sendAfter = await page.locator("[data-outsend]").count();
+    const ansKept = await page.locator("#out_a").inputValue().catch(() => "");
+    if (sendAfter) { await page.locator("[data-outsend]").click(); await page.waitForTimeout(500); }
+    const sent = posts.filter((b) => b && b.outside)[0] || null;
+    await ctx.close();
+    const ok = kept === "החלבון יצא לי נמוך" && ans1 === "תשובה מנוסחת לבדיקה"
+      && sendBefore === 0 && copyBefore === 1 && hits >= 1 && sendAfter === 1
+      && ansKept === "תשובה מנוסחת לבדיקה"
+      && !!sent && sent.outside.text === "החלבון יצא לי נמוך" && sent.outside.answer === "תשובה מנוסחת לבדיקה"
+      && errors.length === 0;
+    return {
+      ok,
+      detail: `נשמר "${kept}" · טיוטה "${ans1}" · שליחה לפני ${sendBefore} אחרי ${sendAfter} · העתקה ${copyBefore} · התאמות ${hits} · נשלח ${sent ? "כן" : "לא"} · שגיאות ${errors[0] || "אין"}`,
     };
   },
 }, {
