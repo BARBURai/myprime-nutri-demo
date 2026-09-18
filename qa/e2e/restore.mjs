@@ -168,6 +168,10 @@ try {
   const attrs = await p.locator("input").evaluateAll((els) => els.filter((e) => (e.style.webkitTextSecurity || "") === "disc").map((e) => ({ t: e.getAttribute("type"), ac: e.getAttribute("autocomplete"), nm: e.getAttribute("name") })));
   ok("שדה הקוד קיים ומוסתר בהקלדה", attrs.length > 0, JSON.stringify(attrs));
   ok("והדפדפן רואה בו שדה טקסט שאין למלא", attrs.every((a) => a.t === "text" && a.ac === "off"), JSON.stringify(attrs));
+  // **ושהמקלדת לא תיגע בקוד.** בשדה סיסמה זו ההתנהגות ממילא, ובשדה טקסט לא,
+  // ולכן זה נקרא מה-DOM ולא מקוד המקור: זה מה שהדפדפן באמת קיבל.
+  const kb = await p.locator("input").evaluateAll((els) => els.filter((e) => (e.style.webkitTextSecurity || "") === "disc").map((e) => ({ cap: e.getAttribute("autocapitalize"), cor: e.getAttribute("autocorrect") })));
+  ok("**והמקלדת לא תגדיל אות ראשונה ולא תתקן**", kb.length > 0 && kb.every((a) => a.cap === "off" && a.cor === "off"), JSON.stringify(kb));
   ok("ויש לו שם משלו", attrs.every((a) => a.nm && !/pass|pwd/i.test(a.nm)), JSON.stringify(attrs));
   await c.close();
 } catch (e) { ok("התרחיש עצמו נפל: " + String(e.message).slice(0,70), false); }
