@@ -712,7 +712,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.24";
+const VERSION = "7.25";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -732,6 +732,16 @@ const BK_LAST_KEY = "myprime_bk_last";
 // בבוקר, כשהשרת רדום, הייתה מקבלת בדיוק את אותו הדבר, **ובמקרה הגרוע לא הייתה
 // מקבלת את מסך השחזור כלל אף שיש לה גיבוי.**
 const BK_WAIT_MS = 15000;
+// **שדה קוד הגיבוי אינו שדה סיסמה, וזה התיקון שעבד.** ב-v7.24 סימנתי את שבעת
+// השדות `autoComplete="one-time-code"` והשארתי `type="password"`, **וזה נמדד ונכשל
+// במחשב**: כרום ממלא כל שדה סיסמה באותו דומיין ומתעלם מהמאפיין הזה לגמרי. רון
+// פתח את מסך השחזור ב-18 בספטמבר 2026 והשדה היה מלא שוב.
+//
+// **לכן השדה יוצא מעולם הסיסמאות של הדפדפן**, `type="text"`, וההסתרה נעשית ב-CSS
+// ולא על ידי סוג השדה. **מה שלא זז: הקוד עדיין מוסתר בהקלדה**, וזו החלטה של רון.
+// `data-1p-ignore` ו-`data-lpignore` אומרים את אותו הדבר למנהלי סיסמאות חיצוניים.
+const CODE_FIELD = { type: "text", autoComplete: "off", spellCheck: false, "data-1p-ignore": "", "data-lpignore": "true" };
+const CODE_MASK = { WebkitTextSecurity: "disc", textSecurity: "disc" };
 const bkSubtle = (typeof window !== "undefined" && window.crypto && window.crypto.subtle) ? window.crypto.subtle : null;
 function bkGetCode() { try { return localStorage.getItem(BK_CODE_KEY) || ""; } catch (e) { return ""; } }
 // **הקוד נקבע ברישום, והעלאה הראשונה עוד לא קרתה.** הסימון הזה מגשר בין השניים:
@@ -1584,8 +1594,8 @@ function Onboarding({ onFinish, name, email, fixedStart, onRestore }) {
                 <input value={bkEmail} onChange={(e) => setBkEmail(e.target.value)} inputMode="email" placeholder="name@example.com" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${emailOk || !bkEmail ? C.line : C.amber}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", direction: "ltr", textAlign: "left" }} />
                 <div style={{ fontSize: 13, color: C.faint, marginTop: 4, marginBottom: 12 }}>הגיבוי ישויך לאימייל הזה. אפשר לאשר או לתקן.</div>
                 <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
-                <input value={bkCode} onChange={(e) => setBkCode(e.target.value)} type="password" name="mp-bk-new" autoComplete="one-time-code" placeholder="קוד אישי שתזכרי" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
-                <input value={bkCode2} onChange={(e) => setBkCode2(e.target.value)} type="password" name="mp-bk-new2" autoComplete="one-time-code" placeholder="הקלדת הקוד שוב לאישור" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${bkCode2 && bkCode !== bkCode2 ? C.amber : C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", marginTop: 8 }} />
+                <input value={bkCode} onChange={(e) => setBkCode(e.target.value)} {...CODE_FIELD} name="mp-bk-new" placeholder="קוד אישי שתזכרי" style={{ ...CODE_MASK, width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+                <input value={bkCode2} onChange={(e) => setBkCode2(e.target.value)} {...CODE_FIELD} name="mp-bk-new2" placeholder="הקלדת הקוד שוב לאישור" style={{ ...CODE_MASK, width: "100%", boxSizing: "border-box", border: `1px solid ${bkCode2 && bkCode !== bkCode2 ? C.amber : C.line}`, borderRadius: 10, padding: "11px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none", marginTop: 8 }} />
                 {bkCode2 && bkCode !== bkCode2 && <div style={{ fontSize: 13, color: C.amber, marginTop: 4 }}>הקודים אינם תואמים.</div>}
                 <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: "10px 12px", borderRadius: 10, lineHeight: 1.55, marginTop: 10, display: "flex", gap: 6 }}>
                   <Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>בחרי קוד פשוט שתזכרי. אי אפשר לשחזר אותו - אם תשכחי, לא נוכל לפתוח את הגיבוי בטלפון חדש. רשמי אותו במקום בטוח.</span>
@@ -6688,7 +6698,7 @@ function RestoreScreen({ email, busy, onRestore, onSkip }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><Lock size={22} color={C.brand} /><span style={{ fontSize: 24, fontWeight: 600, color: C.ink }}>מצאנו גיבוי מוצפן</span></div>
         <p style={{ fontSize: 16, color: C.sub, lineHeight: 1.65, marginTop: 0, marginBottom: 16 }}>קיים גיבוי מוצפן עבור <span style={{ direction: "ltr", unicodeBidi: "isolate" }}>{email}</span>. הזיני את קוד הגיבוי כדי לשחזר את כל הנתונים שלך למכשיר הזה.</p>
         <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
-        <input value={code} onChange={(e) => { setCode(e.target.value); setErr(""); }} type="password" name="mp-bk-restore" autoComplete="one-time-code" placeholder="הקוד שבחרת" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${err ? C.amber : C.line}`, borderRadius: 10, padding: "12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+        <input value={code} onChange={(e) => { setCode(e.target.value); setErr(""); }} {...CODE_FIELD} name="mp-bk-restore" placeholder="הקוד שבחרת" style={{ ...CODE_MASK, width: "100%", boxSizing: "border-box", border: `1px solid ${err ? C.amber : C.line}`, borderRadius: 10, padding: "12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
         {err && <div style={{ fontSize: 14, color: C.amber, marginTop: 6 }}>{err}</div>}
         {/* **המסך הזה לא אמר לה איפה הקוד נמצא.** מ-v7.19 אפשר להגיע לכאן גם מרצון
             ומראש מסך ההרשמה, ולא רק כשהאפליקציה מצאה גיבוי בעצמה, ואז אישה
@@ -6741,8 +6751,8 @@ function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCo
       {mode === "reset" && (
         <>
           <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.6, marginBottom: 10 }}>בחרי קוד חדש. הנתונים שבמכשיר יגובו מחדש עם הקוד החדש.</div>
-          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" name="mp-bk-reset" autoComplete="one-time-code" placeholder="קוד חדש" style={inputS} />
-          <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" name="mp-bk-reset2" autoComplete="one-time-code" placeholder="הקלדת הקוד שוב" style={inputS} />
+          <input value={code} onChange={(e) => setCode(e.target.value)} {...CODE_FIELD} name="mp-bk-reset" placeholder="קוד חדש" style={{ ...inputS, ...CODE_MASK }} />
+          <input value={code2} onChange={(e) => setCode2(e.target.value)} {...CODE_FIELD} name="mp-bk-reset2" placeholder="הקלדת הקוד שוב" style={{ ...inputS, ...CODE_MASK }} />
           <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onResetCode(code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מעדכנת..." : "עדכון קוד"}</Btn>
           <div style={{ marginTop: 8 }}><Btn variant="ghost" onClick={() => { setMsg(null); setMode("view"); }} style={{ color: C.sub }}>ביטול</Btn></div>
         </>
@@ -6752,8 +6762,8 @@ function BackupModal({ backup, gateEmail, busy, onEnable, onBackupNow, onResetCo
           <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>אימייל לגיבוי</div>
           <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="name@example.com" style={{ ...inputS, direction: "ltr", textAlign: "left" }} />
           <div style={{ fontSize: 14, color: C.ink, marginBottom: 6 }}>קוד גיבוי</div>
-          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" name="mp-bk-on" autoComplete="one-time-code" placeholder="קוד אישי שתזכרי" style={inputS} />
-          <input value={code2} onChange={(e) => setCode2(e.target.value)} type="password" name="mp-bk-on2" autoComplete="one-time-code" placeholder="הקלדת הקוד שוב" style={inputS} />
+          <input value={code} onChange={(e) => setCode(e.target.value)} {...CODE_FIELD} name="mp-bk-on" placeholder="קוד אישי שתזכרי" style={{ ...inputS, ...CODE_MASK }} />
+          <input value={code2} onChange={(e) => setCode2(e.target.value)} {...CODE_FIELD} name="mp-bk-on2" placeholder="הקלדת הקוד שוב" style={{ ...inputS, ...CODE_MASK }} />
           <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, padding: "10px 12px", borderRadius: 10, lineHeight: 1.55, marginBottom: 12, display: "flex", gap: 6 }}><Info size={14} style={{ flexShrink: 0, marginTop: 1 }} /><span>אי אפשר לשחזר את הקוד. אם תשכחי אותו, לא נוכל לפתוח את הגיבוי בטלפון חדש. רשמי אותו במקום בטוח.</span></div>
           <Btn disabled={busy || !codeOk} onClick={async () => { const r = await run(() => onEnable(email, code)); if (r.ok) { setCode(""); setCode2(""); setMode("view"); } }}>{busy ? "מפעיל..." : "הפעלת גיבוי מוצפן"}</Btn>
         </>
