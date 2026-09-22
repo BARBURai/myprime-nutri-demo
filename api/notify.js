@@ -43,6 +43,12 @@ function israelDay(offsetDays) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
+// שעת ישראל, לרישום התוצאה בדוח. **מחושבת באותו אזור זמן כמו התאריך ולא ב-UTC**,
+// כי מספר שנרשם ב-UTC נקרא כשעה אחרת לגמרי, וזו המלכודת של סעיף 20.
+function israelClock() {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", hour: "2-digit", minute: "2-digit" }).format(new Date());
+}
+
 // The windows each push is allowed to fire in, decided by Ron on 10 August 2026.
 // The tracker opens on program day 3 (CHECKIN_UNLOCK = { week: 1, day: 3 } in src/App.jsx),
 // so before that the card does not exist and there is nothing to fill in.
@@ -314,6 +320,24 @@ export default async function handler(req, res) {
     const chunk = dead.slice(i, i + 100);
     try { await redisCmd(RU, RT, ["HDEL", "push:subs", ...chunk]); pruned += chunk.length; } catch (e) {}
   }
+
+  // ===== רישום התוצאה, v7.30 =====
+  //
+  // **עד כאן שום דבר לא נרשם.** הפונקציה ספרה לעצמה כמה נשלחו וכמה נכשלו, החזירה את
+  // המספר בתשובה, **והתשובה נזרקה.** וורסל אינה שומרת גוף תשובה, ולכן לשאלה "האם כל
+  // הנשים קיבלו את הודעת הבוקר" **לא הייתה תשובה בשום מקום, לאף אחד.**
+  //
+  // זה נכתב עכשיו לרשומה יומית אחת, ו-`api/usage-report.js` מציג אותה בדוח הבוקר של רון.
+  // **המפתח מכיל את השעה**, כדי שהערב, שרץ בכמה קבוצות, לא ידרוס את עצמו.
+  //
+  // **נכשל לצד הפתוח:** רישום שלא נכתב אינו משנה דבר לאף אישה, וההתראות כבר יצאו.
+  // **והכתיבה מחכה לתשובה ואינה נשארת ברקע**, כי בוורסל עבודה שנשארת ברקע נקטעת,
+  // וזה בדיוק הבאג של v6.17.
+  const stamp = { sent, failed, pruned, quiet, total: entries.length, outbox: outbox.length, at: israelClock() };
+  try {
+    await redisCmd(RU, RT, ["HSET", `push:log:${israelDay(0)}`, morning ? "morning" : `evening:${serve.join("-")}`, JSON.stringify(stamp)]);
+    await redisCmd(RU, RT, ["EXPIRE", `push:log:${israelDay(0)}`, 1209600]); // שבועיים
+  } catch (e) { console.warn("push log write failed:", String(e)); }
 
   return res.status(200).json({ ok: true, kind: morning ? "morning" : "evening", hours: morning ? null : serve, sent, pruned, failed, quiet, total: entries.length });
 }
