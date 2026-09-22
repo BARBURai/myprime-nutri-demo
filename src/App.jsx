@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, lazy, Suspense } from "react";
 import {
   Home, BookOpen, TrendingDown, ChefHat, User, Plus, Check, Search,
   Barcode, Camera, ChevronRight, ChevronLeft, ChevronDown, Pencil, Trash2, Minus, X,
@@ -13,6 +13,11 @@ import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
 import { GLOW_STARTED_KEY, hasGlow, glowStarted } from "./content/glow";
+
+// **הפעם הראשונה שיש כאן טעינה מושהית, וזה מכוון.** האפליקציה כולה נבנית היום
+// לקובץ אחד של כ-1,480 קילובייט, ולכן כל אישה מורידה גם מה שלא תפתח לעולם.
+// תרגול הנשימה נכנס מחוץ לקובץ הזה, ומי שאינה נוגעת בו אינה משלמת עליו דבר.
+const BreathCircle = lazy(() => import("./features/BreathCircle"));
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -712,7 +717,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.27";
+const VERSION = "7.28";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5387,7 +5392,7 @@ function CheckinCard({ date, today, week, phaseWeek, tasks, answers, auto, locke
   );
 }
 
-function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate, tipsSeen, onTipsSeen, prevAnswers, setPrevValue, prevRemaining }) {
+function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate, tipsSeen, onTipsSeen, prevAnswers, setPrevValue, prevRemaining, onBreath }) {
   const hasAuto = tasks.some((t) => t.auto);
   const showAutoNote = hasAuto && !(tipsSeen || []).includes("autotasks");
   const dd = parseDay(date);
@@ -5440,6 +5445,11 @@ function CheckinModal({ tasks, answers, auto, setValue, onClose, date, startDate
                       <span style={{ fontSize: 16, color: C.ink }}>{t.label}{t.optional ? <span style={{ color: C.faint, fontSize: 13 }}> (רשות)</span> : null}</span>
                       {t.auto && t.auto !== "protein" && !done && <span style={{ fontSize: 12.5, color: C.amber, marginTop: 2 }}>{autoNote}</span>}
                       {strengthAuto && <span style={{ fontSize: 12.5, color: C.brandD, marginTop: 2 }}>נרשם ביומן הפעילות</span>}
+                      {/* התרגול יושב על המשימה עצמה ולא כאריח נפרד, כי זה המקום
+                          שבו היא כבר מחפשת אותו. החלטת רון, 22 בספטמבר 2026. */}
+                      {t.id === "breathing" && onBreath && (
+                        <button onClick={onBreath} style={{ alignSelf: "flex-start", marginTop: 4, border: "none", background: "transparent", color: C.brandD, fontSize: 13.5, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", padding: 0, textDecoration: "underline" }}>תרגול מודרך</button>
+                      )}
                     </div>
                     {autoPill ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, color: done ? C.brandD : C.faint, background: done ? C.brandBg : "transparent", padding: "5px 9px", borderRadius: 9, whiteSpace: "nowrap" }}>{done ? <Check size={14} /> : null}{t.auto === "steps" && auto.steps != null ? `${auto.steps.toLocaleString()} · ` : ""}{t.auto === "water" && auto.water != null ? `${auto.water} · ` : ""}אוטומטי</span>
@@ -8091,7 +8101,10 @@ export default function App() {
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} backRef={recBackRef} />}
             {sheet === "stepSetup" && stepAction && <StepSetupModal action={stepAction} profile={profile} stepsByDate={stepsByDate} startDate={profile.startDate} programWeek={programWeek} onBaseline={confirmBaseline} onIncrease={confirmIncrease} onClose={() => setSheet(null)} />}
-            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} />}
+            {sheet === "checkin" && <CheckinModal tasks={tasksForDate(profile.startDate, selectedDate, profile.keepShabbat, profile.fasting)} answers={checkins[selectedDate] || {}} auto={autoStatusFor(selectedDate, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} setValue={(id, v) => setCheckinValue(selectedDate, id, v)} prevAnswers={checkins[addDays(selectedDate, -1)] || {}} setPrevValue={(id, v) => setCheckinValue(addDays(selectedDate, -1), id, v)} prevRemaining={remainingRequired(profile.startDate, addDays(selectedDate, -1), profile.keepShabbat, checkins, stepsByDate, waterByDate, log, targets, profile.cupMl || DEFAULT_CUP_ML, activityLog)} onClose={() => setSheet(null)} date={selectedDate} startDate={profile.startDate} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} onBreath={() => setSheet("breath")} />}
+            {/* fallback={null} בכוונה: הקובץ קטן ומקומי, ומסך טעינה שמהבהב לרגע
+                גרוע מכלום. אם הוא לא נטען, ההקשה פשוט לא פותחת דבר. */}
+            {sheet === "breath" && <Suspense fallback={null}><BreathCircle C={C} font={fontStack} onClose={() => setSheet("checkin")} onDone={() => setCheckinValue(selectedDate, "breathing", true)} /></Suspense>}
             {sheet === "lossStop" && <LossStopSheet onAck={ackLossStop} />}
             {sheet === "fastLoss" && <FastLossSheet onClose={() => setSheet(null)} />}
             {sheet === "rateCap" && <RateCapSheet onClose={() => setSheet(null)} />}

@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v7.27** · עודכן: 18 בספטמבר 2026
+**גרסה נוכחית: v7.28** · עודכן: 18 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -107,8 +107,9 @@ npm run lint || true   # אם מוגדר
 ```bash
 grep -c "<TutorialOverlay" src/App.jsx                            # חייב 2
 grep -c "AddModal state={modal}" src/App.jsx                      # חייב 1
-grep -o 'sheet === "[a-zA-Z]*"' src/App.jsx | sort -u | wc -l     # חייב 26
+grep -o 'sheet === "[a-zA-Z]*"' src/App.jsx | sort -u | wc -l     # חייב 27
 grep -c '"guide":' src/content/data.js                            # חייב 1
+grep -c '<BreathCircle' src/App.jsx                               # חייב 1
 grep -c '{favPrompt && (' src/App.jsx                             # חייב 1
 grep -c '<NotesFab' src/App.jsx                                   # חייב 1
 ```
