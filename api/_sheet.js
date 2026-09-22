@@ -103,14 +103,102 @@ export function pickRow(rows) {
   return best;
 }
 
+// ===== מטמון משותף לגיליון, 60 שניות. v7.30 =====
+//
+// **נמדד בייצור ב-22.09.2026**, 13 קריאות רצופות למסלול הדחייה של השער, כלומר מסלול
+// שכמעט אינו נוגע ב-Redis ורובו הוא משיכת הגיליון:
+//
+//   1.4 · 1.3 · **14.2** · 1.2 · 1.1 · **19.0** · 1.4 · 1.1 · 1.0 · **15.7** · 0.3 · 0.8 · 1.0
+//
+// **הרגיל הוא כשנייה, ושלוש מתוך 13 קפצו ל-14 עד 19 שניות.** כלומר כרבע מפתיחות
+// האפליקציה נתקעות בדלת, **וזה מה שחתך את הבדיקה של אילה נחום ב-v7.27.**
+//
+// הגיליון זהה לכל הנשים, ולכן עותק אחד משותף מספיק. **וגוגל ממילא מגישה אותו מהמטמון
+// שלה באיחור של דקות** (סעיף 26), ולכן דקה אחת אינה מוסיפה השהיה מורגשת: מה שפקידה
+// שומרת במסך הניהול חל מיד כמו תמיד, כי הוא אינו עובר דרך הגיליון.
+//
+// **כל שלב כאן נכשל לצד הפתוח.** אין Redis, תקלה ב-Redis, מטמון ריק או ערך גדול מדי,
+// כולם מסתיימים במשיכה ישירה מגוגל, כלומר בדיוק ההתנהגות שהייתה עד כה.
+export const SHEET_TTL = 60;
+export const SHEET_KEY = "sheet:csv:v1";
+// גודל שמרני. הכתיבה היא POST עם גוף JSON ולא כתובת, ולכן אין מגבלת אורך כתובת,
+// **ומעליו אנחנו מוותרים על המטמון במקום לסכן בקשה שתידחה.** אם זה קורה, זה נכתב
+// ללוג של וורסל במפורש ולא נבלע בשקט.
+const SHEET_MAX = 800000;
+
+async function redisPost(base, token, cmd, ms) {
+  const r = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(cmd),
+    // **המתנה חסומה.** Redis שאינו עונה אינו רשאי לעכב אישה, כי מאחוריו יש מסלול
+    // שעובד. זה בדיוק הלקח של v7.19 ושל v7.27: **המתנה בלי תקרה היא מה שפגע באילה.**
+    signal: ms ? AbortSignal.timeout(ms) : undefined,
+  });
+  const d = await r.json();
+  return d.result;
+}
+
+// **האם מה שחזר הוא באמת הגיליון.** זו ההגנה החשובה ביותר כאן, והיא נוספה אחרי שרון
+// שאל "מה הסיכון למשתתפות קיימות".
+//
+// **בלעדיה היה סיכון אמיתי, והוא לא קיים היום:** תשובה פגומה מגוגל, שנראית כמו CSV
+// ואינה מכילה אף אישה, הייתה נשמרת ל-60 שניות **ומוגשת לכל מי שפותחת באותה דקה.**
+// כולן היו מקבלות "לא רשומה", **וזה נספר כניסיון כושל, וחמישה כאלה נועלים אישה.**
+// כלומר המטמון היה הופך תקלה רגעית של אישה אחת לנעילה של רבות.
+//
+// **השומר יכול רק למנוע שמירה ולעולם לא לשנות את מה שמוחזר**, ולכן במצב הגרוע ביותר
+// ההתנהגות חוזרת בדיוק לזו שבייצור היום.
+//
+// **ואין כאן סף על אורך.** הייתה שם תחילה דרישה ל-200 תווים לפחות, **וזה היה מספר
+// שהמצאתי ולא מדדתי**, כלומר בדיוק מה שכלל 2 בסעיף 31 אוסר. הבדיקה שמריצה את השער
+// האמיתי תפסה אותו מיד: היא פסלה גיליון תקין בן 181 תווים. **שם העמודה הוא הסימן
+// שבאמת אומר משהו, והאורך אינו מוסיף לו דבר.**
+function looksLikeSheet(text) {
+  if (!text) return false;
+  // שמות שיושבים בשורת הכותרות של הגיליון ואינם יכולים להופיע בדף שגיאה של גוגל.
+  const head = text.slice(0, 4000);
+  if (head.indexOf("PERSONAL START") === -1 && head.indexOf("CF_EMAIL") === -1) return false;
+  // **ושורת נתונים אחת לפחות מעבר לכותרת.** זה אינו מספר שהמצאתי אלא תכונה של הקובץ
+  // עצמו: כותרת בלי אף אישה אינה גיליון שאפשר להגיש ממנו תשובה.
+  const lines = text.split(/\r?\n/);
+  return lines.length > 1 && lines.slice(1).some((l) => l.trim().length > 0);
+}
+
+// הטקסט הגולמי של הגיליון, מהמטמון המשותף אם יש בו, ואחרת מגוגל.
+// שלוש נקודות קריאה משתמשות בזה: השער, מסך הניהול, והגיבוי.
+export async function fetchSheetText(csvUrl, RU, RT) {
+  if (RU && RT) {
+    try {
+      const hit = await redisPost(RU, RT, ["GET", SHEET_KEY], 2500);
+      // **גם בקריאה מהמטמון נבדק שזה גיליון**, ולא רק בכתיבה, כדי שרשומה שנכתבה
+      // בגרסה ישנה או ביד לא תוכל להגיש זבל לאף אישה.
+      if (typeof hit === "string" && looksLikeSheet(hit)) return hit;
+    } catch (e) { /* מטמון הוא קיצור דרך ולעולם לא שער */ }
+  }
+  // ביטול מטמון: הגרסה המפורסמת של גוגל יכולה להגיש עותק ישן במשך דקות.
+  const bust = (csvUrl.indexOf("?") === -1 ? "?" : "&") + "_=" + Date.now();
+  const r = await fetch(csvUrl + bust, { redirect: "follow", cache: "no-store", headers: { "cache-control": "no-cache" } });
+  if (!r.ok) throw new Error("sheet fetch failed: " + r.status);
+  const text = await r.text();
+  if (RU && RT && text) {
+    if (!looksLikeSheet(text)) {
+      // לא נשמר, **ומוחזר כרגיל.** כלומר בדיוק ההתנהגות שבייצור היום, בלי הגברה.
+      console.warn(`sheet cache skipped: not a sheet (${text.length} bytes)`);
+    } else if (text.length > SHEET_MAX) {
+      console.warn(`sheet cache off: ${text.length} bytes > ${SHEET_MAX}`);
+    } else {
+      try { await redisPost(RU, RT, ["SET", SHEET_KEY, text, "EX", String(SHEET_TTL)], 4000); } catch (e) {}
+    }
+  }
+  return text;
+}
+
 // Reads the published CSV and returns one object per registered woman.
 // `headers` reports which columns were located, so a renamed column shows up as a missing
 // field on screen instead of silently reading as blank.
-export async function loadSheet(csvUrl) {
-  const bust = (csvUrl.includes("?") ? "&" : "?") + "_=" + Date.now();
-  const r = await fetch(csvUrl + bust, { redirect: "follow", cache: "no-store", headers: { "cache-control": "no-cache" } });
-  if (!r.ok) throw new Error("sheet fetch failed: " + r.status);
-  const lines = (await r.text()).split(/\r?\n/);
+export async function loadSheet(csvUrl, RU, RT) {
+  const lines = (await fetchSheetText(csvUrl, RU, RT)).split(/\r?\n/);
   if (!lines.length) return { women: [], headers: {} };
 
   const header = parseCsvLine(lines[0]);

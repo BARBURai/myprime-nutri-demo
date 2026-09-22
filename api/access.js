@@ -16,6 +16,7 @@
 //     UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Vercel env -> Redeploy.
 
 import { decideAccess } from "./_product.js";
+import { fetchSheetText } from "./_sheet.js";
 async function redis(base, token, ...args) {
   const path = args.map((a) => encodeURIComponent(String(a))).join("/");
   const r = await fetch(`${base}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -96,10 +97,12 @@ export default async function handler(req, res) {
   // from a device that has already been pushed out is what sends her back to the form.
   const isLogin = !!(req.query && (req.query.login === "1" || req.query.login === "true"));
   const sheetUrl = process.env.ACCESS_SHEET_CSV_URL;
+  // מפתחות Redis, בראש הקובץ כדי שגם משיכת הגיליון תוכל להשתמש במטמון המשותף.
+  // **הם אופציונליים בכל מסלול**, ובלעדיהם הכל עובד בדיוק כמו קודם.
+  const RU = process.env.UPSTASH_REDIS_REST_URL, RT = process.env.UPSTASH_REDIS_REST_TOKEN;
 
   // Logout: free this device's slot. No sheet lookup needed.
   if (req.query && req.query.logout) {
-    const RU = process.env.UPSTASH_REDIS_REST_URL, RT = process.env.UPSTASH_REDIS_REST_TOKEN;
     if (RU && RT && email && device) { try { await redis(RU, RT, "ZREM", `devices:${email}`, device); } catch (e) {} }
     return res.status(200).json({ ok: true });
   }
@@ -132,11 +135,11 @@ export default async function handler(req, res) {
   let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false, glowFull = false;
   let solo = 0, glowMonths = null, glowPaid = false;
   try {
-    // Cache-busting: Google's published CSV can serve a stale copy for a few minutes.
-    // Appending a timestamp helps fetch a fresher version, and we ask fetch not to cache.
-    const bust = (sheetUrl.indexOf("?") === -1 ? "?" : "&") + "_cb=" + Date.now();
-    const r = await fetch(sheetUrl + bust, { redirect: "follow", cache: "no-store", headers: { "cache-control": "no-cache" } });
-    const text = await r.text();
+    // המשיכה עצמה, וביטול המטמון שבתוכה, עברו ל-`_sheet.js` כדי שעותק אחד ישרת את כל
+    // הנשים לדקה. **הקריאה נכשלת לצד הפתוח:** בלי Redis או בתקלה שלו היא מושכת מגוגל
+    // בדיוק כמו קודם. **ותשובה שאינה תקינה מגוגל זורקת ונוחתת על `fetch_failed`**, שהוא
+    // "תקלה טכנית זמנית" ואינו נספר כניסיון כושל, במקום להיקרא כאישה שאינה רשומה.
+    const text = await fetchSheetText(sheetUrl, RU, RT);
     const lines = text.split(/\r?\n/);
 
     // Locate the "ביטלה" (cancellation) and start-date columns by header name.
@@ -402,8 +405,7 @@ export default async function handler(req, res) {
   }
 
   // 3) optional max-2-concurrent-devices check
-  const RU = process.env.UPSTASH_REDIS_REST_URL;
-  const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // RU ו-RT כבר הוכרזו בראש הפונקציה, לצד משיכת הגיליון.
   if (RU && RT && device) {
     const TTL = 60 * 60 * 24; // a device counts as "active" for 24h since last seen
     const now = Date.now();
