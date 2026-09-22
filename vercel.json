@@ -1,16 +1,16 @@
 {
   "crons": [
-    { "path": "/api/notify", "schedule": "0 12 * * *" },
-    { "path": "/api/notify", "schedule": "0 13 * * *" },
-    { "path": "/api/notify", "schedule": "0 14 * * *" },
-    { "path": "/api/notify", "schedule": "0 15 * * *" },
-    { "path": "/api/notify", "schedule": "0 16 * * *" },
-    { "path": "/api/notify", "schedule": "0 17 * * *" },
-    { "path": "/api/notify", "schedule": "0 18 * * *" },
-    { "path": "/api/notify", "schedule": "0 19 * * *" },
-    { "path": "/api/notify", "schedule": "0 20 * * *" },
-    { "path": "/api/notify", "schedule": "0 21 * * *" },
-    { "path": "/api/notify?kind=morning", "schedule": "0 4 * * *" },
+    { "path": "/api/notify", "schedule": "5 12 * * *" },
+    { "path": "/api/notify", "schedule": "5 13 * * *" },
+    { "path": "/api/notify", "schedule": "5 14 * * *" },
+    { "path": "/api/notify", "schedule": "5 15 * * *" },
+    { "path": "/api/notify", "schedule": "5 16 * * *" },
+    { "path": "/api/notify", "schedule": "5 17 * * *" },
+    { "path": "/api/notify", "schedule": "5 18 * * *" },
+    { "path": "/api/notify", "schedule": "5 19 * * *" },
+    { "path": "/api/notify", "schedule": "5 20 * * *" },
+    { "path": "/api/notify", "schedule": "5 21 * * *" },
+    { "path": "/api/notify?kind=morning", "schedule": "5 4 * * *" },
     { "path": "/api/notify?kind=morning", "schedule": "0 5 * * *" },
     { "path": "/api/usage-report", "schedule": "0 5 * * *" }
   ]

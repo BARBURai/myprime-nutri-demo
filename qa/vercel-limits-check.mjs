@@ -39,5 +39,29 @@ const crons = vercel.crons || [];
 check("אין טווח שעות בשום cron", crons.every((c) => !/\d+-\d+ /.test(String(c.schedule || ""))), crons.map((c) => c.schedule).join(" | "));
 check("אין שדות משלנו בקובץ", !Object.keys(vercel).some((k) => k.startsWith("_")), Object.keys(vercel).join(", "));
 
+// ===== סדר ההרצה מול cron-job.org, v7.29 =====
+//
+// שתי שכבות מתזמנות את אותה התראה (סעיף 7): cron-job.org, שמדויק לשניות, ומשימות ה-cron
+// של וורסל כרשת ביטחון. **מי שתופס ראשון את הסימון "נשלח היום" ב-Redis הוא היחיד ששולח**,
+// ולכן הסדר ביניהן אינו פרט אלא הוא שקובע מי עובד.
+//
+// נמדד בלוג של 22.09.2026: וורסל רץ ב-04:00:01 UTC ותפס, cron-job.org הגיע ב-04:00:29
+// וקיבל "already sent today (morning)". **כלומר השירות המדויק לא שלח את התראת הבוקר,
+// והגיבוי הפך לראשי.** זה הפוך בדיוק מהסיבה שבגללה הוא נוסף: וורסל נמדדה ב-07:53 וב-07:25
+// במקום 07:00. ביום שבו היא תאחר שוב, אין מי שיכסה, כי הסימון כבר נתפס.
+//
+// התיקון: וורסל מתעוררת בדקה 5 ולא בדקה 0. cron-job.org שולח, וורסל הופכת לגיבוי אמיתי.
+// **והחלון בקוד הוא 07:00 עד 08:59 בירושלים**, ולכן דקה 5 עדיין בתוכו בנוחות.
+console.log("\nסדר ההרצה: cron-job.org שולח, וורסל מגבה\n");
+const morning = crons.filter((c) => String(c.path || "").includes("kind=morning"));
+check("יש שתי משימות בוקר", morning.length === 2, morning.map((c) => c.schedule).join(" | "));
+const firstMorning = morning.map((c) => String(c.schedule || "").split(" ")).filter((f) => f[1] === "4")[0];
+check("משימת הבוקר המוקדמת קיימת (שעה 4 UTC)", !!firstMorning, morning.map((c) => c.schedule).join(" | "));
+check(
+  "והיא אינה בדקה 0, אחרת היא תתפוס את הסימון לפני cron-job.org",
+  !!firstMorning && Number(firstMorning[0]) >= 3,
+  firstMorning ? firstMorning.join(" ") : "לא נמצאה"
+);
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
