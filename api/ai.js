@@ -77,38 +77,48 @@ export default async function handler(req, res) {
   }
 
   // --- per-user rate limit (server side) ---
+  //
+  // **קוראים לפני, סופרים אחרי שהצליח.** v7.36
+  //
+  // עד כאן שלושת המונים עשו INCR לפני שהבינה נקראה בכלל, ולא היה בשום מקום
+  // DECR. **כלומר כל ניסיון שנכשל גזל מהאישה מכסה**, גם כשלא קיבלה שום תשובה.
+  //
+  // **נילי קוניאק, 22 בספטמבר 2026:** "אני רואה שהאפליקציה כבר מגבילה אותי במספר
+  // המנות שאני מצלמת, אבל בוודאות לא הגעתי ל-70 תמונות." היא צדקה.
+  //
+  // **הגבולות לא זזו באף כיוון.** קודם היה INCR ואחריו `> LIMIT`, ועכשיו GET ואחריו
+  // `>= LIMIT`. שתי הצורות מחזירות בדיוק את אותה תשובה על כל מספר, ובדיקה נועלת את זה.
+  //
+  // **ושום מונה קיים אינו נגע ואינו מתאפס.** מה שכבר נספר לאשה נשאר כפי שהוא, כי אין לנו
+  // שום רישום שאומר אילו מהניסיונות הישנים נכשלו. **השבה לאחור היא החלטה של רון,
+  // והיא נפרדת מהתיקון הזה.**
+  let counters = null;
   if (base && token) {
     try {
       const uid = String(req.headers["x-user-id"] || "").trim().toLowerCase();
       const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
       const id = uid || (fwd ? "ip:" + fwd : "anon");
-
       const dayKey = `ai:day:${id}:${israelDay()}`;
-      const dayCount = await redis(base, token, "INCR", dayKey);
-      if (dayCount === 1) await redis(base, token, "EXPIRE", dayKey, 172800); // ~48h
-      if (dayCount > DAILY_LIMIT) {
+      const minKey = `ai:min:${id}:${Math.floor(Date.now() / 60000)}`;
+      const photoKey = `ai:photos:${id}`;
+
+      const dayHad = Number(await redis(base, token, "GET", dayKey)) || 0;
+      if (dayHad >= DAILY_LIMIT) {
         return res.status(429).json({ error: "limit", scope: "day", message: "הגעת למכסת ניתוחי ה-AI להיום 💜 אפשר להמשיך לתעד ארוחות דרך חיפוש או ברקוד, ומחר המכסה מתאפסת." });
       }
-      if (dayCount === DAILY_LIMIT) { res.setHeader("x-ai-limit", "soft"); } // last allowed call: answer it, and flag so the client notes this was the last for today
-
-      const minKey = `ai:min:${id}:${Math.floor(Date.now() / 60000)}`;
-      const minCount = await redis(base, token, "INCR", minKey);
-      if (minCount === 1) await redis(base, token, "EXPIRE", minKey, 120);
-      if (minCount > BURST_LIMIT) {
+      const minHad = Number(await redis(base, token, "GET", minKey)) || 0;
+      if (minHad >= BURST_LIMIT) {
         return res.status(429).json({ error: "limit", scope: "burst", message: "רגע, יותר מדי בקשות בבת אחת. נסי שוב עוד דקה." });
       }
-
-      // Photo budget: a hard per-user cap on meal photos for the whole program.
-      // Only photo calls are counted. The count is returned so the client can show gentle nudges.
+      let photoHad = 0;
       if (isPhoto) {
-        const photoKey = `ai:photos:${id}`;
-        const photoCount = await redis(base, token, "INCR", photoKey);
-        if (photoCount === 1) await redis(base, token, "EXPIRE", photoKey, 18144000); // ~210 days (covers the access window)
-        res.setHeader("x-photo-count", String(photoCount));
-        if (photoCount > PHOTO_LIMIT) {
+        photoHad = Number(await redis(base, token, "GET", photoKey)) || 0;
+        if (photoHad >= PHOTO_LIMIT) {
+          res.setHeader("x-photo-count", String(photoHad));
           return res.status(429).json({ error: "limit", scope: "photos", message: "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים." });
         }
       }
+      counters = { id, dayKey, minKey, photoKey, dayHad, photoHad };
     } catch (e) {
       // If the limiter itself errors, do not block the user - just log.
       console.warn("rate-limit error:", String(e));
@@ -129,6 +139,38 @@ export default async function handler(req, res) {
       body: JSON.stringify(body),
     });
     const data = await r.json();
+
+    // **עכשיו, ורק עכשיו, זה נספר.** הבינה ענתה, ולכן האישה קיבלה משהו תמורת
+    // מה שנגרע לה. קריאה שנכשלה אצל אנתרופיק אינה עולה לה בכלום.
+    //
+    // **וניסיון חוזר על אותה תמונה נספר פעם אחת בלבד.** האפליקציה שולחת מזהה
+    // לכל תמונה, ומשתמשת באותו מזהה כשהיא שולחת שוב אחרי שהקשר נפל.
+    // בלי זה, הניסיון החוזר היה גובה ממנה תמונה שנייה על אותה צלחת.
+    if (counters && r.ok) {
+      try {
+        let fresh = true;
+        const rid = String(req.headers["x-request-id"] || "").trim().slice(0, 64);
+        if (rid) {
+          const claimed = await redis(base, token, "SET", `ai:req:${rid}`, "1", "NX", "EX", 900);
+          fresh = claimed === "OK";
+        }
+        if (fresh) {
+          const dayNow = await redis(base, token, "INCR", counters.dayKey);
+          if (dayNow === 1) await redis(base, token, "EXPIRE", counters.dayKey, 172800); // ~48h
+          if (dayNow === DAILY_LIMIT) res.setHeader("x-ai-limit", "soft"); // her last one for today
+          const minNow = await redis(base, token, "INCR", counters.minKey);
+          if (minNow === 1) await redis(base, token, "EXPIRE", counters.minKey, 120);
+          if (isPhoto) {
+            const photoNow = await redis(base, token, "INCR", counters.photoKey);
+            if (photoNow === 1) await redis(base, token, "EXPIRE", counters.photoKey, 18144000); // ~210 days
+            res.setHeader("x-photo-count", String(photoNow));
+          }
+        } else if (isPhoto) {
+          res.setHeader("x-photo-count", String(counters.photoHad));
+        }
+      } catch (e) { console.warn("counter error:", String(e)); }
+    }
+
     // Best-effort usage logging for the daily morning report (never blocks the response).
     if (base && token && r.ok && data && data.usage) {
       try {
