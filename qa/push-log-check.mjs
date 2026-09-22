@@ -8,7 +8,9 @@
 //
 // הבדיקה מריצה את `fetchSheetText` **האמיתי** מול Redis מדומה ומול גוגל מדומה, ולכן היא
 // בודקת התנהגות ולא נוסח של קוד. שאר האבחנות קוראות את הקבצים, והן נוסחו כך שהן נופלות
-// על הקוד הקודם. **אומת: על v7.29 הבדיקה מחזירה 8 מתוך 27.**
+// על הקוד הקודם. **אומת פעמיים: על v7.29, לפני שהמטמון היה קיים, היא מחזירה 6 מתוך 40
+// באבחנות שהיו אז. ועל v7.30, שבו המטמון קיים אבל בלי השומר, היא מחזירה 41 מתוך 48,
+// כלומר שבע אבחנות השומר נופלות בדיוק.**
 
 import { readFileSync } from "node:fs";
 
@@ -98,7 +100,8 @@ if (typeof fetchSheetText !== "function") {
   console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
   process.exit(1);
 }
-const CSV = "email,start\na@b.com,2026-01-04\n";
+// חייב להיראות כמו הגיליון האמיתי, אחרת השומר `looksLikeSheet` פוסל אותו ובצדק.
+const CSV = "ID,F_NAME,CF_EMAIL,360 - FINAL  PERSONAL START\n0501111111,רונית,a@b.com,2026-01-04\n" + "x".repeat(300);
 let googleHits = 0;
 const realFetch = globalThis.fetch;
 const mock = (redis) => async (url, opt) => {
@@ -145,6 +148,63 @@ globalThis.fetch = async (url, opt) => {
 let threw = false;
 try { await fetchSheetText("https://x/y", "redis://r", "t"); } catch (e) { threw = true; }
 check("תשובה שאינה תקינה מגוגל זורקת ואינה נקראת כגיליון ריק", threw);
+// ===== השומר: מה שאינו הגיליון לא נשמר, ולעולם לא מוגש לאישה =====
+//
+// **זו השאלה של רון, "מה הסיכון למשתתפות קיימות", בצורת בדיקה.** בלי השומר, תשובה
+// פגומה מגוגל הייתה נשמרת ל-60 שניות ומוגשת לכל מי שפותחת באותה דקה, כולן היו מקבלות
+// "לא רשומה", **וזה נספר כניסיון כושל וחמישה כאלה נועלים אישה.**
+console.log("\nהשומר: זבל אינו נכנס למטמון ואינו יוצא ממנו\n");
+const GARBAGE = "<html><title>Error 500</title><body>Temporary error</body></html>" + "y".repeat(300);
+
+// א. גוגל מחזירה דף שגיאה עם סטטוס תקין: מוחזר כרגיל ו**אינו נשמר**
+let saved = null, cache = null;
+globalThis.fetch = async (url, opt) => {
+  if (String(url).indexOf("redis://") === 0) {
+    const cmd = JSON.parse(opt.body);
+    if (cmd[0] === "GET") return { ok: true, json: async () => ({ result: cache }) };
+    if (cmd[0] === "SET") { saved = cmd[2]; cache = cmd[2]; return { ok: true, json: async () => ({ result: "OK" }) }; }
+  }
+  return { ok: true, status: 200, text: async () => GARBAGE };
+};
+const got = await fetchSheetText("https://x/y", "redis://r", "t");
+check("דף שגיאה מוחזר כרגיל, בדיוק כמו היום", got === GARBAGE);
+check("**ודף שגיאה אינו נשמר למטמון**", saved === null, saved ? "נשמר" : "");
+
+// ב. רשומה פגומה שכבר יושבת במטמון אינה מוגשת, אלא נמשכת מגוגל מחדש
+cache = GARBAGE; saved = null; googleHits = 0;
+globalThis.fetch = async (url, opt) => {
+  if (String(url).indexOf("redis://") === 0) {
+    const cmd = JSON.parse(opt.body);
+    if (cmd[0] === "GET") return { ok: true, json: async () => ({ result: cache }) };
+    if (cmd[0] === "SET") { saved = cmd[2]; return { ok: true, json: async () => ({ result: "OK" }) }; }
+  }
+  googleHits++;
+  return { ok: true, status: 200, text: async () => CSV };
+};
+check("**רשומה פגומה במטמון אינה מוגשת לאישה**", (await fetchSheetText("https://x/y", "redis://r", "t")) === CSV);
+check("ובמקומה נמשך הגיליון האמיתי מגוגל", googleHits === 1, String(googleHits));
+check("והגיליון האמיתי מחליף אותה במטמון", saved === CSV);
+
+// ג. טקסט קצר מדי, למשל תשובה שנקטעה באמצע
+saved = null; cache = null;
+globalThis.fetch = async (url, opt) => {
+  if (String(url).indexOf("redis://") === 0) {
+    const cmd = JSON.parse(opt.body);
+    if (cmd[0] === "GET") return { ok: true, json: async () => ({ result: cache }) };
+    if (cmd[0] === "SET") { saved = cmd[2]; return { ok: true, json: async () => ({ result: "OK" }) }; }
+  }
+  return { ok: true, status: 200, text: async () => "ID,CF_EMAIL\n" };
+};
+check("כותרת בלי אף אישה אינה נשמרת", saved === null && (await fetchSheetText("https://x/y", "redis://r", "t")) === "ID,CF_EMAIL\n" && saved === null);
+// **ומה שהשומר הזה אינו תופס, ונאמר במפורש כדי שלא ייקרא כהבטחה:** תשובה שנקטעה
+// באמצע ויש בה כותרת ושורות אחדות **נראית תקינה ותישמר.** לזהות אותה מחייב לדעת מה
+// הגודל הצפוי של הגיליון, **וזה מספר שלא מדדתי**, ולכן לא המצאתי אותו. ראה כלל 2
+// בסעיף 31. זה מצב שלא נראה מעולם, והוא נרשם ולא נסגר.
+
+// ד. Redis שתקוע: יש תקרת המתנה, ולא ממתינים לו לנצח
+check("לקריאה מהמטמון יש תקרת המתנה", /redisPost\(RU, RT, \["GET", SHEET_KEY\], \d+\)/.test(read("api/_sheet.js")), "בלי תקרה");
+check("וגם לכתיבה", /\["SET", SHEET_KEY[\s\S]{0,80}\], \d+\)/.test(read("api/_sheet.js")), "בלי תקרה");
+
 globalThis.fetch = realFetch;
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");

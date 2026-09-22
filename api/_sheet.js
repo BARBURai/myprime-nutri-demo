@@ -126,14 +126,43 @@ export const SHEET_KEY = "sheet:csv:v1";
 // ללוג של וורסל במפורש ולא נבלע בשקט.
 const SHEET_MAX = 800000;
 
-async function redisPost(base, token, cmd) {
+async function redisPost(base, token, cmd, ms) {
   const r = await fetch(base, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify(cmd),
+    // **המתנה חסומה.** Redis שאינו עונה אינו רשאי לעכב אישה, כי מאחוריו יש מסלול
+    // שעובד. זה בדיוק הלקח של v7.19 ושל v7.27: **המתנה בלי תקרה היא מה שפגע באילה.**
+    signal: ms ? AbortSignal.timeout(ms) : undefined,
   });
   const d = await r.json();
   return d.result;
+}
+
+// **האם מה שחזר הוא באמת הגיליון.** זו ההגנה החשובה ביותר כאן, והיא נוספה אחרי שרון
+// שאל "מה הסיכון למשתתפות קיימות".
+//
+// **בלעדיה היה סיכון אמיתי, והוא לא קיים היום:** תשובה פגומה מגוגל, שנראית כמו CSV
+// ואינה מכילה אף אישה, הייתה נשמרת ל-60 שניות **ומוגשת לכל מי שפותחת באותה דקה.**
+// כולן היו מקבלות "לא רשומה", **וזה נספר כניסיון כושל, וחמישה כאלה נועלים אישה.**
+// כלומר המטמון היה הופך תקלה רגעית של אישה אחת לנעילה של רבות.
+//
+// **השומר יכול רק למנוע שמירה ולעולם לא לשנות את מה שמוחזר**, ולכן במצב הגרוע ביותר
+// ההתנהגות חוזרת בדיוק לזו שבייצור היום.
+//
+// **ואין כאן סף על אורך.** הייתה שם תחילה דרישה ל-200 תווים לפחות, **וזה היה מספר
+// שהמצאתי ולא מדדתי**, כלומר בדיוק מה שכלל 2 בסעיף 31 אוסר. הבדיקה שמריצה את השער
+// האמיתי תפסה אותו מיד: היא פסלה גיליון תקין בן 181 תווים. **שם העמודה הוא הסימן
+// שבאמת אומר משהו, והאורך אינו מוסיף לו דבר.**
+function looksLikeSheet(text) {
+  if (!text) return false;
+  // שמות שיושבים בשורת הכותרות של הגיליון ואינם יכולים להופיע בדף שגיאה של גוגל.
+  const head = text.slice(0, 4000);
+  if (head.indexOf("PERSONAL START") === -1 && head.indexOf("CF_EMAIL") === -1) return false;
+  // **ושורת נתונים אחת לפחות מעבר לכותרת.** זה אינו מספר שהמצאתי אלא תכונה של הקובץ
+  // עצמו: כותרת בלי אף אישה אינה גיליון שאפשר להגיש ממנו תשובה.
+  const lines = text.split(/\r?\n/);
+  return lines.length > 1 && lines.slice(1).some((l) => l.trim().length > 0);
 }
 
 // הטקסט הגולמי של הגיליון, מהמטמון המשותף אם יש בו, ואחרת מגוגל.
@@ -141,8 +170,10 @@ async function redisPost(base, token, cmd) {
 export async function fetchSheetText(csvUrl, RU, RT) {
   if (RU && RT) {
     try {
-      const hit = await redisPost(RU, RT, ["GET", SHEET_KEY]);
-      if (typeof hit === "string" && hit.length > 0) return hit;
+      const hit = await redisPost(RU, RT, ["GET", SHEET_KEY], 2500);
+      // **גם בקריאה מהמטמון נבדק שזה גיליון**, ולא רק בכתיבה, כדי שרשומה שנכתבה
+      // בגרסה ישנה או ביד לא תוכל להגיש זבל לאף אישה.
+      if (typeof hit === "string" && looksLikeSheet(hit)) return hit;
     } catch (e) { /* מטמון הוא קיצור דרך ולעולם לא שער */ }
   }
   // ביטול מטמון: הגרסה המפורסמת של גוגל יכולה להגיש עותק ישן במשך דקות.
@@ -151,10 +182,13 @@ export async function fetchSheetText(csvUrl, RU, RT) {
   if (!r.ok) throw new Error("sheet fetch failed: " + r.status);
   const text = await r.text();
   if (RU && RT && text) {
-    if (text.length <= SHEET_MAX) {
-      try { await redisPost(RU, RT, ["SET", SHEET_KEY, text, "EX", String(SHEET_TTL)]); } catch (e) {}
-    } else {
+    if (!looksLikeSheet(text)) {
+      // לא נשמר, **ומוחזר כרגיל.** כלומר בדיוק ההתנהגות שבייצור היום, בלי הגברה.
+      console.warn(`sheet cache skipped: not a sheet (${text.length} bytes)`);
+    } else if (text.length > SHEET_MAX) {
       console.warn(`sheet cache off: ${text.length} bytes > ${SHEET_MAX}`);
+    } else {
+      try { await redisPost(RU, RT, ["SET", SHEET_KEY, text, "EX", String(SHEET_TTL)], 4000); } catch (e) {}
     }
   }
   return text;
