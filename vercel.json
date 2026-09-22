@@ -10,7 +10,7 @@
     { "path": "/api/notify", "schedule": "0 19 * * *" },
     { "path": "/api/notify", "schedule": "0 20 * * *" },
     { "path": "/api/notify", "schedule": "0 21 * * *" },
-    { "path": "/api/notify?kind=morning", "schedule": "0 4 * * *" },
+    { "path": "/api/notify?kind=morning", "schedule": "5 4 * * *" },
     { "path": "/api/notify?kind=morning", "schedule": "0 5 * * *" },
     { "path": "/api/usage-report", "schedule": "0 5 * * *" }
   ]
