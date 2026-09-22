@@ -25,6 +25,8 @@
 // protecting, which meant it was available every moment except the one moment it
 // was needed. A participant lost ten weeks of tracking that way on 22 August 2026.
 
+import { fetchSheetText } from "./_sheet.js";
+
 async function redisCmd(base, token, cmd) {
   const r = await fetch(base, {
     method: "POST",
@@ -51,8 +53,7 @@ async function isRegistered(email, RU, RT) {
   if (!sheetUrl) return true; // demo mode: gate is open, so allow
   let inSheet = false;
   try {
-    const r = await fetch(sheetUrl, { redirect: "follow" });
-    const text = await r.text();
+    const text = await fetchSheetText(sheetUrl, RU, RT);
     const list = (text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || []).map((e) => e.toLowerCase());
     inSheet = list.includes(email);
   } catch (e) { inSheet = false; }

@@ -129,6 +129,30 @@ export default async function handler(req, res) {
   const f2 = (x) => (Math.round(x * 100) / 100).toFixed(2);
   const f1 = (x) => (Math.round(x * 10) / 10).toFixed(1);
 
+  // ===== ההתראות, v7.30 =====
+  //
+  // **רון, 22 בספטמבר 2026: "עוד לא הבנתי אם כולן קיבלו הודעת בוקר היום".** עד כאן לא
+  // הייתה לזה תשובה בשום מקום: `api/notify.js` ספר לעצמו וורסל לא שומרת גוף תשובה.
+  // עכשיו כל שליחה נרשמת ב-`push:log:<תאריך>`, וזה מציג אותה.
+  //
+  // **הדוח רץ ב-08:00 בישראל**, כלומר אחרי התראת הבוקר של היום ואחרי תזכורות הערב של
+  // אתמול, ולכן אלה שני התאריכים שמוצגים.
+  //
+  // **ושורה שאין לה נתון אומרת "לא נרשמה" ואינה נעלמת**, לפי הכלל של v5.07: בכלי
+  // עבודה, היעדר שורה אינו תשובה. **זו בדיוק השורה שתספר לרון שהבוקר לא יצא.**
+  const pushLog = async (d) => { try { return (await redisCmd(base, token, ["HGETALL", `push:log:${d}`])) || []; } catch (e) { return []; } };
+  const flatten = (arr) => { const o = {}; if (Array.isArray(arr)) for (let i = 0; i < arr.length; i += 2) o[arr[i]] = arr[i + 1]; else Object.assign(o, arr || {}); return o; };
+  const todayLog = flatten(await pushLog(israelDay(0)));
+  const nightLog = flatten(await pushLog(day));
+  const readStamp = (raw) => { try { return JSON.parse(raw); } catch (e) { return null; } };
+  const pushLine = (raw) => {
+    const v = readStamp(raw);
+    if (!v) return `<span style="color:#C0392B">לא נרשמה</span>`;
+    const bad = v.failed ? ` · <span style="color:#C0392B">נכשלו ${v.failed}</span>` : " · נכשלו 0";
+    return `נשלחו ${Number(v.sent || 0).toLocaleString()}${bad} · דילגו ${Number(v.quiet || 0).toLocaleString()} <span style="color:#8a8a90;font-weight:400">(${v.at || "?"})</span>`;
+  };
+  const eveningKeys = Object.keys(nightLog).filter((k) => k.indexOf("evening") === 0).sort();
+
   const row = (label, value) => `<tr><td style="padding:7px 0;color:#6b6b72;font-size:15px">${label}</td><td style="padding:7px 0;text-align:left;font-weight:600;color:#1f1f24;font-size:15px">${value}</td></tr>`;
   const html = `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:18px;color:#1f1f24">
     <h2 style="margin:0 0 2px;color:#D45D79;font-size:20px">דוח שימוש יומי · MyPrime</h2>
@@ -151,12 +175,18 @@ export default async function handler(req, res) {
       ${row("נחסך מתשובות חוזרות (קריאות)", `${cacheHits.toLocaleString()} ≈ ₪${f2(savedNis)}`)}
       <tr><td colspan="2" style="border-top:1px solid #eee;padding-top:6px"></td></tr>
       ${row("מיילים עם 3 מכשירים או יותר", `${sharedEmails.toLocaleString()} <span style="color:#8a8a90;font-weight:400">מתוך ${trackedEmails.toLocaleString()}</span>`)}
+      <tr><td colspan="2" style="border-top:1px solid #eee;padding-top:6px"></td></tr>
+      <tr><td colspan="2" style="padding:4px 0 2px;color:#1f1f24;font-size:15px;font-weight:700">התראות</td></tr>
+      ${row(`תוכן בוקר · היום ${israelDay(0)}`, pushLine(todayLog.morning))}
+      ${eveningKeys.length
+        ? eveningKeys.map((k) => row(`תזכורת ערב · אתמול, שעה ${k.replace("evening:", "").replace(/-/g, " ו-")}`, pushLine(nightLog[k]))).join("")
+        : row("תזכורת ערב · אתמול", `<span style="color:#C0392B">לא נרשמה</span>`)}
     </table>
     <div style="color:#a0a0a6;font-size:12px;margin-top:14px;line-height:1.6">העלות מחושבת מהטוקנים בפועל לפי מחירי Sonnet ($${priceIn}/$${priceOut} למיליון, שער ${usdNis}). טוקנים של הנחיות שמורות מחויבים ב-10% מהקלט בקריאה וב-125% בשמירה. הערכה - לנתון הרשמי ראה את עמוד ה-Usage בקונסול.</div>
   </div>`;
 
   const RESEND = process.env.RESEND_API_KEY;
-  const summary = { ok: true, day, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, cReadTok, cWriteTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis), cacheNis: f2(cacheNis), sharedEmails, trackedEmails };
+  const summary = { ok: true, day, push: { morning: readStamp(todayLog.morning), evening: eveningKeys.map((k) => ({ hours: k.replace("evening:", ""), ...(readStamp(nightLog[k]) || {}) })) }, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, cReadTok, cWriteTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis), cacheNis: f2(cacheNis), sharedEmails, trackedEmails };
   if (!RESEND) return res.status(200).json({ ...summary, emailed: false, reason: "no RESEND_API_KEY (preview only)" });
 
   const to = process.env.REPORT_TO || "Ron@myprime.co.il";
