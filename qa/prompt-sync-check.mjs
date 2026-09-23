@@ -73,7 +73,11 @@ const CASES = [
   },
   {
     name: "הנחיות הזנת האוכל (aiNutritionChat)",
-    appSrc: () => region(app, "async function aiNutritionChat(messages) {", "const res = await fetch(AI_ENDPOINT", "aiNutritionChat"),
+    // **העוגן הסופי הוא השורה שמיד אחרי מחרוזת ההנחיות ולא הקריאה לשרת.** ב-v7.36
+    // נוספו שם תקרת המתנה וניסיון חוזר, והקריאה הפסיקה להיראות כמו קודם, ולכן החיתוך
+    // גלש והבדיקה נפלה אף שההנחיות עצמן לא זזו באות אחת. עוגן שמשתנה עם כל תיקון
+    // בקוד סביבו הופך בדיקה אמיתית לרעש.
+    appSrc: () => region(app, "async function aiNutritionChat(messages) {", "const reqId = newReqId();", "aiNutritionChat"),
     qaSrc: () => region(qa, "const NUTRITION_SYSTEM =", "\n// analyzeMeal prompt", "NUTRITION_SYSTEM"),
   },
   {
