@@ -18,9 +18,9 @@
 import { normName } from "../lib/foodcheck.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
-const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 30);
+export const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 30);
 const BURST_LIMIT = Number(process.env.AI_BURST_LIMIT || 10);
-const PHOTO_LIMIT = Number(process.env.AI_PHOTO_LIMIT || 70);
+export const PHOTO_LIMIT = Number(process.env.AI_PHOTO_LIMIT || 70);
 
 async function redis(base, token, ...args) {
   const path = args.map((a) => encodeURIComponent(String(a))).join("/");

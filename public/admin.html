@@ -1351,6 +1351,26 @@ function render(){
     return u.standalone ? 'אפליקציה מותקנת' : 'דפדפן, לא מותקנת';
   }
 
+  // **שימוש בבינה.** רון, 23 בספטמבר 2026: "איך אני יכול לדעת כמה תמונות היא בפועל
+  // צרכה?" אותם מונים ש-api/ai.js עוצר לפיהם, ואותן תקרות. **רק לאפליקציה החדשה**, כי
+  // בקג'אבי אין שום שימוש כזה. **ושורה שלא נקראה אומרת "לא ידוע" ולא אפס**, לפי v5.07.
+  function aiBox(w){
+    if(!w.newApp) return '';
+    var L = (DATA && DATA.aiLimits) || {};
+    var line = function(label, n, max, full){
+      var v = (typeof n !== "number") ? 'לא ידוע'
+        : n + (max ? ' מתוך ' + max : '') + ((max && n >= max) ? ' · ' + full : '');
+      var hot = (typeof n === "number" && max && n >= max);
+      return '<div class="stline"><span>'+esc(label)+'</span><b'+(hot?' style="color:#C0392B"':'')+'>'+esc(v)+'</b></div>';
+    };
+    var a = w.ai || {};
+    return '<div class="statebox">'+
+      '<div class="sthead">שימוש בבינה</div>'+
+      line('צילומי ארוחה, לכל התוכנית', a.photos, L.photos, 'הגיעה למכסה')+
+      line('פניות לבינה היום, טקסט וצילום', a.today, L.day, 'הגיעה למכסה היומית')+
+    '</div>';
+  }
+
   // וההיסטוריה, בדרופדאון כדי שלא תעמיס. החלטת רון.
   function histBox(w){
     var st = w.state || {};
@@ -1862,6 +1882,7 @@ function render(){
         ((w.backSoon && w.backCohort)?'<div class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></div>':'')+
         dupBox(w)+
         stateBox(w)+
+        aiBox(w)+
         histBox(w)+
         quickActs(w)+
       '</div>'+
