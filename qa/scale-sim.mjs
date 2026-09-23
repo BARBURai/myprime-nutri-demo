@@ -1,4 +1,4 @@
-// qa/scale-sim.mjs · v7.42
+// qa/scale-sim.mjs · v7.43
 //
 // **עדיפות 1 של רון, 23 בספטמבר 2026: סקייל ל-10,000 נשים בלי שהמערכת קורסת.**
 //
@@ -101,7 +101,7 @@ const row = (i) => {
 };
 let SHEET = "";
 const access = (await import("../api/access.js")).default;
-const SHEET_MAX = 800000; // api/_sheet.js
+const SHEET_MAX = 5000000; // api/_sheet.js, בבתים מ-v7.43
 for (const rows of [4642, 8000, 10000, 20000]) {
   SHEET = [HEADER, ...Array.from({ length: rows }, (_, i) => row(i))].join("\n");
   db = { str: {}, hash: {} };
@@ -115,7 +115,7 @@ for (const rows of [4642, 8000, 10000, 20000]) {
   console.log(`   ${fmt(rows).padStart(6)} שורות · ${fmt(SHEET.length).padStart(9)} תווים · מטמון ${cached ? "נשמר" : "כבוי, כל פתיחה הולכת לגוגל"}`
     + ` · ${stats.cmds} פקודות Redis · ${kb(stats.bytes)} מ-Redis · עיבוד ${ms.toFixed(0)}ms · allowed=${r.out && r.out.allowed}`);
 }
-console.log(`   הרף של המטמון: ${fmt(SHEET_MAX)} תווים, כלומר כ-${fmt(SHEET_MAX / 97)} שורות של 97 תווים`);
+console.log(`   הרף של המטמון: ${fmt(SHEET_MAX)} בתים`);
 
 // =====================================================================
 // ב. חיפוש מזון

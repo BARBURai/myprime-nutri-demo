@@ -121,10 +121,17 @@ export function pickRow(rows) {
 // כולם מסתיימים במשיכה ישירה מגוגל, כלומר בדיוק ההתנהגות שהייתה עד כה.
 export const SHEET_TTL = 60;
 export const SHEET_KEY = "sheet:csv:v1";
-// גודל שמרני. הכתיבה היא POST עם גוף JSON ולא כתובת, ולכן אין מגבלת אורך כתובת,
-// **ומעליו אנחנו מוותרים על המטמון במקום לסכן בקשה שתידחה.** אם זה קורה, זה נכתב
-// ללוג של וורסל במפורש ולא נבלע בשקט.
-const SHEET_MAX = 800000;
+// **תקרה בבתים ולא בתווים. v7.43.** הכתיבה היא POST עם גוף JSON, ומה ש-Upstash מגביל
+// הוא גודל הבקשה בבתים. אות עברית היא שני בתים, ולכן ספירת תווים הטעתה.
+//
+// **עד v7.42 זה היה 800 אלף תווים, מספר שמרני שלא נמדד.** בגיליון של 23.09.2026 נמדדו
+// 4,642 שורות ו-451,696 תווים, כלומר כ-97 לשורה, **והמטמון היה נכבה בסביבות 8,200
+// שורות.** `qa/scale-sim.mjs` הראתה את זה על השער האמיתי.
+//
+// **5 מיליון בתים הם חצי מתקרת הבקשה של Upstash, 10MB**, לפי צילום של החבילה ששלח רון
+// ולא לפי מדידה שלי. **מעליו אנחנו מוותרים על המטמון במקום לסכן בקשה שתידחה**, וזה
+// נכתב ללוג של וורסל במפורש ולא נבלע בשקט.
+const SHEET_MAX_BYTES = 5000000;
 
 async function redisPost(base, token, cmd, ms) {
   const r = await fetch(base, {
@@ -185,8 +192,8 @@ export async function fetchSheetText(csvUrl, RU, RT) {
     if (!looksLikeSheet(text)) {
       // לא נשמר, **ומוחזר כרגיל.** כלומר בדיוק ההתנהגות שבייצור היום, בלי הגברה.
       console.warn(`sheet cache skipped: not a sheet (${text.length} bytes)`);
-    } else if (text.length > SHEET_MAX) {
-      console.warn(`sheet cache off: ${text.length} bytes > ${SHEET_MAX}`);
+    } else if (Buffer.byteLength(text, "utf8") > SHEET_MAX_BYTES) {
+      console.warn(`sheet cache off: ${Buffer.byteLength(text, "utf8")} bytes > ${SHEET_MAX_BYTES}`);
     } else {
       try { await redisPost(RU, RT, ["SET", SHEET_KEY, text, "EX", String(SHEET_TTL)], 4000); } catch (e) {}
     }
