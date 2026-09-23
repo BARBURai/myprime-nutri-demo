@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v7.36** · עודכן: 22 בספטמבר 2026
+**גרסה נוכחית: v7.37** · עודכן: 23 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -487,7 +487,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1111,6 +1111,45 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v7.37** - **הדוח היומי אומר כמה נשים היו אמורות לקבל כל התראה, וכמה מהן לא קיבלו ולמה.**
+
+**רון, 23 בספטמבר 2026, על השורה של v7.30: "אני רוצה לדעת כמה קיבלו וכמה לא קיבלו מאלה
+שאמורות לקבל, לא מאלה שלא אמורות לקבל."** הוא צדק, ושלושה דברים היו חסרים בה:
+
+| | |
+|---|---|
+| **מכשירים ולא נשים** | אישה עם טלפון ומחשב נספרה פעמיים. 325 היו מכשירים, מתוך 435 רשומים |
+| **מכשיר שנזרק לא הוצג** | הסרת האפליקציה או כיבוי התראות נמחקו מהרשימה בשקט, ולא נספרו ככישלון |
+| **מי שלא אישרה התראות לא הופיעה בשום מספר** | ההתראות יודעות רק על מכשירים רשומים, **ולכן המכנה "כמה אמורות לקבל" לא היה קיים במערכת בכלל** |
+
+**ו"דילגו" ערבב** מי שסיימה את התוכנית, מי שבהקפאה ומי שהמחזור שלה עוד לא התחיל.
+
+### מה נבנה, בשני חלקים מופרדים
+1. **`api/notify.js` רושם אחרי השליחה מי קיבלה, לפי מייל**: `push:who:<תאריך>:<בוקר או ערב>:<קיבלה, תקלה, נזרק, השלימה>`. **הוא אינו קורא את הגיליון ורץ אחרי שכל ההתראות כבר יצאו**, ולכן אינו יכול לעכב אף אחת. הרצה ידנית עם `&only=` אינה נרשמת.
+2. **`api/usage-report.js` קורא את הגיליון ומצליב**, דרך `api/_pushaudit.js`. **אמורות לקבל:** באפליקציה החדשה, בימים 1 עד 69 בבוקר ו-3 עד 70 בערב, לא ביטלה, לא חסומה ולא בהקפאה, ואף אחת בשבת ובחג. **אותו כלל ש-notify שולח לפיו**, ובדיקה נועלת שהחלונות זהים.
+
+```
+אמורות לקבל · קיבלו · לא קיבלו
+   לא אישרו התראות · הסירו את האפליקציה או כיבו התראות · תקלה בשליחה
+   יש לה התראות ולא נשלח אליה   (רק כשיש, ובאדום. זו התקלה שחשוב לראות)
+ובערב: השלימו את היום לפני התזכורת, ולכן לא נשלח להן. מחוץ למכנה, כי זה בכוונה
+```
+
+**אישה שקיבלה בלפחות מכשיר אחד נספרת כמי שקיבלה.** **ומי שהסירה את האפליקציה ביום קודם
+נספרת למחרת תחת "לא אישרו התראות"**, כי המכשיר שלה כבר נמחק. זה כתוב בהערה שבתחתית הדוח.
+
+**נכשל לצד הישן:** גיליון שלא נקרא, או בוקר שאין לו עדיין רישום לפי אישה, מציגים את השורה
+של v7.30 ולצידה "מול הגיליון: לא נמדד". **ויום שקט כתוב במפורש**, כי עד כאן כל שבת הייתה
+נראית כ"נשלחו 0".
+
+**`qa/push-audit-check.mjs`, 53 בדיקות בלי רשת**, מריצה את `api/notify.js` ואת
+`api/usage-report.js` **האמיתיים ברצף**, מול Redis מדומה, גיליון מדומה ושירות התראות מדומה,
+והזמן מוקפא ליום חול. **ואחת מהן היא העיקר: אותם מכשירים נשלחים בדיוק כמו קודם, גם כשהרישום
+נכשל.** **אומת שיש לה שיניים: על הקוד הקודם 37 מתוך 53**, ובדיקות השליחה עוברות בשתי הגרסאות.
+
+**ו-`qa/push-batch-check.mjs` נעוצה מחדש** על תחילת השורה `outbox.push`, שנוסף לה המייל. הכלל
+שהיא שומרת עליו לא זז.
 
 **v7.36** - **ניסיון שנכשל בצילום ארוחה אינו גוזל מהאישה תמונה או מכסה יומית.**
 

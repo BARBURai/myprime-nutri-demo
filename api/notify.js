@@ -21,6 +21,7 @@
 //   Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, VAPID_PUBLIC, VAPID_PRIVATE, VAPID_SUBJECT, CRON_SECRET, NOTIFY_SECRET
 import webpush from "web-push";
 import { isQuietDay, isErev, isErevYomTov, wasYomTov, erevHour } from "./_hebcal.js";
+import { whoKey, WHO_TTL } from "./_pushaudit.js";
 
 async function redisCmd(base, token, cmd) {
   const r = await fetch(base, {
@@ -258,6 +259,9 @@ export default async function handler(req, res) {
   // would have stopped without anyone noticing.
   const outbox = [];
   let quiet = 0;
+  // מי לא קיבלה תזכורת ערב כי כבר השלימה את היום. **זה בכוונה, ולכן הדוח מוציא אותן
+  // מהמכנה של מי שהייתה אמורה לקבל**, ולא סופר אותן כמי שפספסה. ראה api/_pushaudit.js.
+  const doneSkip = [];
   for (const [endpoint, val] of entries) {
     let rec;
     try { rec = JSON.parse(val); } catch (e) { continue; }
@@ -272,7 +276,7 @@ export default async function handler(req, res) {
     // That reaches her at any hour, including long after this reminder has gone out, and it
     // reaches her even if she has notifications turned off.
     if (frozen.has((rec.email || "").trim().toLowerCase())) { quiet++; continue; }
-    if (!morning && doneToday.has((rec.email || "").trim().toLowerCase())) { quiet++; continue; }
+    if (!morning && doneToday.has((rec.email || "").trim().toLowerCase())) { quiet++; doneSkip.push(rec.email); continue; }
     if (!morning && !hasTracker(rec.startDate, today)) { quiet++; continue; }
     if (!morning && !serve.includes(reminderHourOf(rec, today))) { quiet++; continue; }
     if (morning) {
@@ -289,7 +293,7 @@ export default async function handler(req, res) {
         tag: "daily-content",
       });
     }
-    outbox.push({ endpoint, sub, payload });
+    outbox.push({ endpoint, sub, payload, email: rec.email });
   }
 
   // Batches rather than all at once. A thousand simultaneous requests is its own way to fail,
@@ -298,13 +302,15 @@ export default async function handler(req, res) {
   const BATCH = 25;
   let sent = 0, failed = 0;
   const dead = [];
+  const who = { sent: [], failed: [], pruned: [] };
   for (let i = 0; i < outbox.length; i += BATCH) {
     const slice = outbox.slice(i, i + BATCH);
     // allSettled, not all: one refused subscription must not abandon the other twenty four.
     const results = await Promise.allSettled(slice.map((x) => webpush.sendNotification(x.sub, x.payload)));
     results.forEach((r, j) => {
-      if (r.status === "fulfilled") { sent++; return; }
+      if (r.status === "fulfilled") { sent++; who.sent.push(slice[j].email); return; }
       const code = r.reason && r.reason.statusCode;
+      who[code === 404 || code === 410 ? "pruned" : "failed"].push(slice[j].email);
       // 404 and 410 mean the browser threw the subscription away: the app was uninstalled, or
       // notifications were turned off. Anything else is this run's problem, not hers, so the
       // subscription stays and is tried again tomorrow.
@@ -338,6 +344,28 @@ export default async function handler(req, res) {
     await redisCmd(RU, RT, ["HSET", `push:log:${israelDay(0)}`, morning ? "morning" : `evening:${serve.join("-")}`, JSON.stringify(stamp)]);
     await redisCmd(RU, RT, ["EXPIRE", `push:log:${israelDay(0)}`, 1209600]); // שבועיים
   } catch (e) { console.warn("push log write failed:", String(e)); }
+
+  // ===== מי קיבלה, לפי מייל. v7.37 =====
+  //
+  // **המספרים שמעל הם של מכשירים**, ואישה עם טלפון ומחשב נספרת בהם פעמיים. כאן נרשם מי
+  // קיבלה, מי נכשלה ומי שהמכשיר שלה נזרק, **לפי אישה**, והדוח של הבוקר מצליב את זה מול
+  // הגיליון כדי לומר כמה היו אמורות לקבל וכמה לא קיבלו. ראה api/_pushaudit.js.
+  //
+  // **רץ אחרי שכל ההתראות כבר יצאו**, ולכן אינו יכול לעכב אף אחת. **ונכשל בשקט**: רישום
+  // שלא נכתב פירושו שורה של "לא נמדד" בדוח, ולא שום דבר אצל אישה.
+  // **והרצה ידנית לטלפון אחד אינה נרשמת**, כדי שבדיקה של רון לא תיראה בדוח כשליחה אמיתית.
+  if (!only) {
+    const whoDay = israelDay(0);
+    const lists = { ...who, done: doneSkip };
+    for (const status of Object.keys(lists)) {
+      const emails = [...new Set(lists[status].map((e) => String(e || "").trim().toLowerCase()).filter(Boolean))];
+      if (!emails.length) continue;
+      try {
+        await redisCmd(RU, RT, ["SADD", whoKey(whoDay, kind, status), ...emails]);
+        await redisCmd(RU, RT, ["EXPIRE", whoKey(whoDay, kind, status), WHO_TTL]);
+      } catch (e) { console.warn("push who write failed:", String(e)); }
+    }
+  }
 
   return res.status(200).json({ ok: true, kind: morning ? "morning" : "evening", hours: morning ? null : serve, sent, pruned, failed, quiet, total: entries.length });
 }
