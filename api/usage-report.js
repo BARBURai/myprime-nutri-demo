@@ -19,6 +19,9 @@
 // Manual test:  /api/usage-report?secret=<NOTIFY_SECRET>&force=1            (reports yesterday)
 //               /api/usage-report?secret=<NOTIFY_SECRET>&force=1&day=2026-06-09
 
+import { loadSheet } from "./_sheet.js";
+import { auditPush, loadAuditInputs, loadWho } from "./_pushaudit.js";
+
 async function redisCmd(base, token, cmd) {
   const r = await fetch(base, {
     method: "POST",
@@ -153,6 +156,55 @@ export default async function handler(req, res) {
   };
   const eveningKeys = Object.keys(nightLog).filter((k) => k.indexOf("evening") === 0).sort();
 
+  // ===== בנשים ולא במכשירים, ומול מי שהייתה אמורה לקבל. v7.37 =====
+  //
+  // **רון, 23 בספטמבר 2026: "אני רוצה לדעת כמה קיבלו וכמה לא קיבלו מאלה שאמורות לקבל,
+  // לא מאלה שלא אמורות לקבל."** השורה של v7.30 ספרה מכשירים, לא הציגה מכשירים שנזרקו,
+  // ולא ידעה בכלל על מי שלא אישרה התראות. החישוב ב-api/_pushaudit.js.
+  //
+  // **כל כשל כאן חוזר לשורה הישנה**, ולא מעלים אותה. הגיליון שלא נקרא, או בוקר שעוד אין
+  // לו רישום לפי אישה, מציגים את מה שהיה עד היום ולצידו "לא נמדד".
+  let auditIn = null;
+  try {
+    const csvUrl = process.env.ACCESS_SHEET_CSV_URL;
+    if (csvUrl) auditIn = await loadAuditInputs({ redisCmd, base, token, loadSheet, csvUrl });
+  } catch (e) { console.warn("push audit: sheet not read:", String(e)); }
+  const auditOf = async (kind, date) => {
+    const quietProbe = auditPush({ kind, date, women: [], who: {} });
+    if (quietProbe.quiet) return { quiet: true };
+    if (!auditIn) return null;
+    const who = await loadWho({ redisCmd, base, token, date, kind });
+    if (!who) return null;
+    return auditPush({ kind, date, ...auditIn, who });
+  };
+  const morningAudit = await auditOf("morning", israelDay(0));
+  const eveningAudit = await auditOf("evening", day);
+
+  const RED = (x) => `<span style="color:#C0392B">${x}</span>`;
+  const GRAY = (x) => `<span style="color:#8a8a90;font-weight:400">${x}</span>`;
+  const n = (x) => Number(x || 0).toLocaleString();
+  const sub = (label, value) => `<tr><td style="padding:3px 16px 3px 0;color:#8a8a90;font-size:14px">${label}</td><td style="padding:3px 0;text-align:left;color:#1f1f24;font-size:14px">${value}</td></tr>`;
+  const pushBlock = (title, at, a, fallback) => {
+    const head = `<tr><td style="padding:10px 0 3px;color:#1f1f24;font-size:15px;font-weight:700">${title}</td><td style="padding:10px 0 3px;text-align:left">${at ? GRAY(`(${at})`) : ""}</td></tr>`;
+    if (a && a.quiet) return head + row("", GRAY("שבת או חג, לא נשלחות התראות"));
+    if (!a) return head + row("", fallback + (fallback.indexOf("לא נרשמה") === -1 ? " " + GRAY("· מול הגיליון: לא נמדד") : ""));
+    const miss = a.should - a.got;
+    return head
+      + row("אמורות לקבל", `${n(a.should)} נשים`)
+      + row("קיבלו", n(a.got))
+      + row("לא קיבלו", n(miss))
+      + sub("לא אישרו התראות", n(a.noSub))
+      + sub("הסירו את האפליקציה או כיבו התראות", n(a.pruned))
+      + sub("תקלה בשליחה", a.failed ? RED(n(a.failed)) : "0")
+      + (a.missed ? sub("יש לה התראות ולא נשלח אליה", RED(n(a.missed))) : "")
+      + (a.done != null && title.indexOf("ערב") !== -1 ? sub("השלימו את היום לפני התזכורת, ולכן לא נשלח להן", n(a.done)) : "");
+  };
+  const stampAt = (raw) => { const v = readStamp(raw); return v && v.at ? v.at : ""; };
+  const eveningAt = eveningKeys.map((k) => stampAt(nightLog[k])).filter(Boolean).join(", ");
+  const eveningFallback = eveningKeys.length
+    ? eveningKeys.map((k) => `שעה ${k.replace("evening:", "").replace(/-/g, " ו-")}: ${pushLine(nightLog[k])}`).join("<br>")
+    : RED("לא נרשמה");
+
   const row = (label, value) => `<tr><td style="padding:7px 0;color:#6b6b72;font-size:15px">${label}</td><td style="padding:7px 0;text-align:left;font-weight:600;color:#1f1f24;font-size:15px">${value}</td></tr>`;
   const html = `<div dir="rtl" style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:18px;color:#1f1f24">
     <h2 style="margin:0 0 2px;color:#D45D79;font-size:20px">דוח שימוש יומי · MyPrime</h2>
@@ -177,16 +229,15 @@ export default async function handler(req, res) {
       ${row("מיילים עם 3 מכשירים או יותר", `${sharedEmails.toLocaleString()} <span style="color:#8a8a90;font-weight:400">מתוך ${trackedEmails.toLocaleString()}</span>`)}
       <tr><td colspan="2" style="border-top:1px solid #eee;padding-top:6px"></td></tr>
       <tr><td colspan="2" style="padding:4px 0 2px;color:#1f1f24;font-size:15px;font-weight:700">התראות</td></tr>
-      ${row(`תוכן בוקר · היום ${israelDay(0)}`, pushLine(todayLog.morning))}
-      ${eveningKeys.length
-        ? eveningKeys.map((k) => row(`תזכורת ערב · אתמול, שעה ${k.replace("evening:", "").replace(/-/g, " ו-")}`, pushLine(nightLog[k]))).join("")
-        : row("תזכורת ערב · אתמול", `<span style="color:#C0392B">לא נרשמה</span>`)}
+      ${pushBlock(`תוכן בוקר · היום ${israelDay(0)}`, stampAt(todayLog.morning), morningAudit, pushLine(todayLog.morning))}
+      ${pushBlock(`תזכורת ערב · ${day === israelDay(1) ? "אתמול " : ""}${day}`, eveningAt, eveningAudit, eveningFallback)}
     </table>
+    <div style="color:#a0a0a6;font-size:12px;margin-top:10px;line-height:1.6">בהתראות נספרות נשים ולא מכשירים. "אמורות לקבל" הן נשים באפליקציה החדשה, בימים שבהם ההתראה הזאת נשלחת להן, שלא ביטלו ואינן בהקפאה. אישה שקיבלה בלפחות מכשיר אחד נספרת כמי שקיבלה. "לא אישרו התראות" כולל גם מי שכיבתה אותן או הסירה את האפליקציה בימים קודמים.</div>
     <div style="color:#a0a0a6;font-size:12px;margin-top:14px;line-height:1.6">העלות מחושבת מהטוקנים בפועל לפי מחירי Sonnet ($${priceIn}/$${priceOut} למיליון, שער ${usdNis}). טוקנים של הנחיות שמורות מחויבים ב-10% מהקלט בקריאה וב-125% בשמירה. הערכה - לנתון הרשמי ראה את עמוד ה-Usage בקונסול.</div>
   </div>`;
 
   const RESEND = process.env.RESEND_API_KEY;
-  const summary = { ok: true, day, push: { morning: readStamp(todayLog.morning), evening: eveningKeys.map((k) => ({ hours: k.replace("evening:", ""), ...(readStamp(nightLog[k]) || {}) })) }, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, cReadTok, cWriteTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis), cacheNis: f2(cacheNis), sharedEmails, trackedEmails };
+  const summary = { ok: true, day, pushAudit: { morning: morningAudit, evening: eveningAudit }, push: { morning: readStamp(todayLog.morning), evening: eveningKeys.map((k) => ({ hours: k.replace("evening:", ""), ...(readStamp(nightLog[k]) || {}) })) }, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, cReadTok, cWriteTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis), cacheNis: f2(cacheNis), sharedEmails, trackedEmails };
   if (!RESEND) return res.status(200).json({ ...summary, emailed: false, reason: "no RESEND_API_KEY (preview only)" });
 
   const to = process.env.REPORT_TO || "Ron@myprime.co.il";

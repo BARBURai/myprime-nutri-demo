@@ -117,7 +117,9 @@ console.log("\nוהצורה בקוד, כדי שלא תיסחף חזרה\n");
 const src = (await import("node:fs")).readFileSync("api/notify.js", "utf8");
 check("אין יותר await על שליחה בודדת בתוך לולאה", !/for \([\s\S]{0,2500}await webpush\.sendNotification/.test(src));
 check("השליחה עוברת דרך Promise.allSettled", src.includes("Promise.allSettled"));
-check("ההחלטה מי מקבלת מופרדת מהשליחה עצמה", src.includes("outbox.push({ endpoint, sub, payload })"));
+// נעוץ בתחילת השורה ולא בכולה: ב-v7.37 נוסף לה המייל, כדי שאפשר יהיה לרשום מי קיבלה.
+// **הכלל שהבדיקה שומרת עליו לא זז**: ההחלטה נכנסת לרשימה, והשליחה רצה אחריה.
+check("ההחלטה מי מקבלת מופרדת מהשליחה עצמה", src.includes("outbox.push({ endpoint, sub, payload"));
 // The response is what tells us afterwards whether a night went out whole. Losing a counter
 // would make a partial run indistinguishable from a complete one.
 check("התשובה עדיין מדווחת את כל המונים", ["sent", "pruned", "failed", "quiet", "total"].every((k) => res.body && typeof res.body[k] === "number"), JSON.stringify(res.body));
