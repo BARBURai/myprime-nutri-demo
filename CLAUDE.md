@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v7.40** · עודכן: 23 בספטמבר 2026
+**גרסה נוכחית: v7.41** · עודכן: 23 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -508,7 +508,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1132,6 +1132,35 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v7.41** - **קופסת "שימוש בבינה" בכרטיס של כל אישה במסך הניהול.**
+
+**רון, 23 בספטמבר 2026, על נילי קוניאק: "איך אני יכול לדעת כמה תמונות היא בפועל צרכה?"**
+**המונים ישבו ב-Redis מאז ומתמיד ושום מסך לא הציג אותם**, ולכן התשובה היחידה הייתה
+להיכנס ל-Upstash.
+
+```
+שימוש בבינה
+צילומי ארוחה, לכל התוכנית      23 מתוך 70
+פניות לבינה היום, טקסט וצילום   4 מתוך 30
+```
+
+- **אותם מונים ש-`api/ai.js` עוצר לפיהם, ואותן תקרות**, שמיובאות משם ולא מועתקות. `ai.js`
+  השתנה רק בכך ששתי התקרות מסומנות `export`.
+- **קריאה בלבד.** שום דבר לא נכתב למונה של אישה, ובדיקה סופרת כתיבות ונופלת על אחת.
+- **באדום עם "הגיעה למכסה"** כשהמונה בתקרה. **ו"לא ידוע" ולא אפס** כשהקריאה נכשלה, לפי v5.07.
+- **רק לאפליקציה החדשה**, כי בקג'אבי אין שימוש כזה. **ומי שהמשרד החליף לה כתובת נספרת תחת
+  החדשה**, כי זו הכתובת שהאפליקציה שולחת.
+- **קריאה אחת לכל 200 נשים, בגוף הבקשה**, כי 2,000 מפתחות בכתובת אחת חורגים מהאורך שהשרת מקבל.
+
+**ומה שהמספר של התמונות אינו אומר:** הוא כולל ניסיונות שנכשלו **לפני** v7.39, ואין דרך להפריד
+ביניהם. מ-v7.39 נספר רק מה שהצליח.
+
+**`qa/admin-ai-check.mjs`, 16 בדיקות בלי רשת**, מריצה את `api/admin.js` האמיתי ומושכת את
+`aiBox` מתוך `public/admin.html`. **ובשכבה 3 תרחיש שבודק את שני הצדדים באותה הרצה**: אישה עם
+מונים רואה מספרים, ואישה בלי רואה "לא ידוע". **מסך הניהול עומד על 30 מתוך 30.** **ובגרסה
+הראשונה של התרחיש הטלפון נפל**, כי שם הכרטיס הפתוח מכסה את הרשימה ואין על מה להקיש. זו הייתה
+הבדיקה ולא המסך, והכרטיס השני נפתח עכשיו בדף חדש.
 
 **v7.40** - **מספור בלבד, אחרי ש-v7.39 עלתה לייצור.**
 

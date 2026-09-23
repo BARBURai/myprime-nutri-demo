@@ -21,6 +21,7 @@
 import { decideAccess } from "./_product.js";
 import { loadSheet, israelDay, accessEnd, ymd } from "./_sheet.js";
 import { KB } from "./_kb.js";
+import { DAILY_LIMIT, PHOTO_LIMIT } from "./ai.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -36,7 +37,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.40";
+const ADMIN_VERSION = "7.41";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1272,6 +1273,40 @@ JSON בלבד, בלי שום טקסט אחר:
   }
   women.forEach((w) => { const n = parseInt(pending[w.email], 10); if (n > 0) w.notes = n; });
 
+  // ===== שימוש בבינה, לכל אישה. v7.41 =====
+  //
+  // **רון, 23 בספטמבר 2026, על נילי קוניאק: "איך אני יכול לדעת כמה תמונות היא בפועל
+  // צרכה?"** המונים יושבים ב-Redis מאז ומתמיד, ושום מסך לא הציג אותם. אלה אותם מונים
+  // בדיוק ש-`api/ai.js` סופר ועוצר לפיהם, **ואותן תקרות, שמיובאות משם ולא מועתקות.**
+  //
+  // **קריאה בלבד.** שום דבר כאן אינו כותב למונה של אישה.
+  //
+  // **המפתח הוא המייל שבתוקף**, כי זה מה שהאפליקציה שולחת: מי שהמשרד החליף לה כתובת
+  // נספרת תחת הכתובת החדשה עוד לפני שהגיליון התעדכן.
+  //
+  // **קריאה אחת לכל 200 נשים**, בגוף הבקשה ולא בכתובת, כי 2,000 מפתחות בכתובת אחת
+  // חורגים מהאורך שהשרת מקבל. **ותקלה משאירה את השורה על "לא ידוע"**, ולא על אפס.
+  const forAi = women.filter((w) => w.newApp);
+  if (RU && RT && forAi.length) {
+    const mget = async (keys) => {
+      const out = [];
+      for (let i = 0; i < keys.length; i += 200) {
+        const r = await fetch(RU, { method: "POST", headers: { Authorization: `Bearer ${RT}`, "Content-Type": "application/json" }, body: JSON.stringify(["MGET", ...keys.slice(i, i + 200)]) });
+        if (!r.ok) throw new Error("redis " + r.status);
+        const d = await r.json();
+        if (!Array.isArray(d.result)) throw new Error("redis mget");
+        out.push(...d.result);
+      }
+      return out;
+    };
+    try {
+      const aiEmail = (w) => String(w.pendingEmail || w.email || "").trim().toLowerCase();
+      const photos = await mget(forAi.map((w) => `ai:photos:${aiEmail(w)}`));
+      const days = await mget(forAi.map((w) => `ai:day:${aiEmail(w)}:${today}`));
+      forAi.forEach((w, i) => { w.ai = { photos: parseInt(photos[i], 10) || 0, today: parseInt(days[i], 10) || 0 }; });
+    } catch (e) { /* the line reads "not known", never zero */ }
+  }
+
   // The tile and the queue must say the same number. The tile used to add up only the women
   // the list itself holds, and the queue reads the pending hash straight, so a woman who
   // wrote a note and is not on the list - no address in her row, or a row the reader had to
@@ -1324,5 +1359,5 @@ JSON בלבד, בלי שום טקסט אחר:
   women.forEach((w) => { if (w.dupRows > 1 || (w.dupPhone && w.dupPhone.length)) markIgnore("dup", w.email, w); });
   noEmail.forEach((r) => markIgnore("mail", r.phone, r));
 
-  return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, women, notesTotal, notesOff, noEmail });
+  return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, aiLimits: { photos: PHOTO_LIMIT, day: DAILY_LIMIT }, women, notesTotal, notesOff, noEmail });
 }

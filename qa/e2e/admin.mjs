@@ -168,6 +168,34 @@ const CHECKS = [
     },
   },
   {
+    // שימוש בבינה, v7.41. בודק את שני הצדדים באותה הרצה: אישה עם מונים רואה מספרים,
+    // ואישה שהמונים שלה לא נקראו רואה "לא ידוע" ולא אפס. קופסה שמציגה תמיד אפס נראית
+    // בדיוק כמו קופסה שעובדת.
+    name: "שימוש בבינה: מספרים למי שנקראה, 'לא ידוע' למי שלא",
+    async run(browser, device) {
+      const { ctx, page, errors } = await open(browser, device, (d) => {
+        d.aiLimits = { photos: 70, day: 30 };
+        d.women[0].ai = { photos: 70, today: 4 };
+        return d;
+      });
+      await page.locator('[data-open="lior5066@gmail.com"]').first().click();
+      await page.waitForTimeout(400);
+      const a = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+      if (process.env.SHOT && device.isMobile) await page.locator(".card.open .statebox").nth(1).screenshot({ path: process.env.SHOT });
+      await ctx.close();
+      // בטלפון הכרטיס הפתוח מכסה את הרשימה, ולכן השנייה נפתחת בדף חדש.
+      const two = await open(browser, device, (d) => { d.aiLimits = { photos: 70, day: 30 }; return d; });
+      await two.page.locator('[data-open="ronit@test.com"]').first().click();
+      await two.page.waitForTimeout(400);
+      const b = (await two.page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+      errors.push(...two.errors);
+      await two.ctx.close();
+      const okA = a.includes("שימוש בבינה") && a.includes("70 מתוך 70 · הגיעה למכסה") && a.includes("4 מתוך 30");
+      const okB = b.includes("שימוש בבינה") && (b.match(/לא ידוע/g) || []).length >= 2;
+      return { ok: okA && okB && errors.length === 0, detail: `עם מונים ${okA ? "מוצג" : a.slice(0, 160)} · בלי מונים ${okB ? "לא ידוע" : b.slice(0, 160)} · שגיאות ${errors[0] || "אין"}` };
+    },
+  },
+  {
     // זה מה שהיה שבור: כל בחירה בתפריט זרקה שגיאה ושום דבר לא קרה.
     name: "כל שבע הפעולות המהירות קופצות לשדה שלהן",
     async run(browser, device) {
