@@ -37,7 +37,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.46";
+const ADMIN_VERSION = "7.47";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1113,7 +1113,7 @@ JSON בלבד, בלי שום טקסט אחר:
     if (!m || !m.start) continue;
     const st = new Date(m.start + "T00:00:00Z");
     const mMonths = (Number.isFinite(m.months) && m.months > 0) ? m.months : null;
-    const mSolo = (m.solo === 6 || m.solo === 12) ? m.solo : 0;
+    const mSolo = (m.solo === 6 || m.solo === 12 || m.solo === 10) ? m.solo : 0;
     manualRows.push({
       email: em,
       first: m.first || "",

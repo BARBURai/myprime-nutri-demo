@@ -10,11 +10,18 @@
 // סוף חלון 360: 70 יום ועוד N חודשים מתאריך ההתחלה, כולל היום האחרון.
 // סולו הוא שימוש באפליקציה בלבד, בלי ליווי ובלי קבוצה, ושם החלון נמדד מתאריך
 // ההתחלה ולמשך שישה חודשים או שנה, **בלי 70 הימים ובלי חודשי גישה נוספים.**
+// הערך 10 מסמן **שבועות** ולא חודשים: עמודה `SOLO10WEEK`, מסלול של 70 ימי התוכנית
+// בלבד. הוא נושא קבוע משלו כדי שאף אחד לא יקרא אותו כעשרה חודשים.
+export const SOLO_10_WEEKS = 10;
+
 export function end360(startSunday, extraMonths, solo) {
   if (!startSunday) return null;
   const exp = new Date(startSunday.getTime());
   if (solo === 6 || solo === 12) {
     exp.setUTCMonth(exp.getUTCMonth() + solo);
+  } else if (solo === SOLO_10_WEEKS) {
+    // סולו 10 שבועות: 70 ימי התוכנית בלבד, ונסגר בסוף השבת של שבוע 10. v7.47.
+    exp.setUTCDate(exp.getUTCDate() + 70);
   } else {
     const months = (Number.isFinite(extraMonths) && extraMonths > 0) ? Math.floor(extraMonths) : 3;
     exp.setUTCDate(exp.getUTCDate() + 70);

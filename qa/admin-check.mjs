@@ -889,6 +889,50 @@ console.log("\nבנק התשובות");
   CSV2 = null;
 }
 
+// סולו 10 שבועות, עמודה SOLO10WEEK. v7.47. הערך 10 הוא שבועות ולא חודשים: החלון
+// הוא 70 ימי התוכנית בלבד, בלי חודשי גישה נוספים, ונסגר בסוף השבת של שבוע 10.
+{
+  console.log("\nסולו 10 שבועות\n");
+  const sunAgo = (weeks) => { const d = new Date(); d.setUTCDate(d.getUTCDate() - d.getUTCDay() - weeks * 7); return d.toISOString().slice(0, 10); };
+  const plusDays = (start, n) => { const d = new Date(start + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  CSV2 = [
+    'ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים,SOLO6,SOLO12,SOLO10WEEK',
+    `972510000011,עשר,פעילה,w10@test.com,${sunAgo(3)} 12:00:00,FALSE,,,,,TRUE`,
+    `972510000012,עשר,נגמרה,w10old@test.com,${sunAgo(11)} 12:00:00,FALSE,,,,,TRUE`,
+    `972510000013,עשר,ושש,w10s6@test.com,${sunAgo(11)} 12:00:00,FALSE,,,TRUE,,TRUE`,
+    `972510000014,עשר,חודשים,w10m@test.com,${sunAgo(11)} 12:00:00,FALSE,,5,,,TRUE`,
+    `972510000015,רגילה,ליד,plain10@test.com,${sunAgo(3)} 12:00:00,FALSE,,,,,`,
+  ].join("\n");
+  const all = (await callAdmin({ key: KEY })).body.women;
+  const at = (em) => all.find((w) => w.email === em);
+
+  check("סולו 10 שבועות מסומנת במסך בערך 10", at("w10@test.com").solo === 10);
+  check("החלון שלה הוא בדיוק 70 יום מההתחלה", at("w10@test.com").until === plusDays(at("w10@test.com").start, 70),
+    at("w10@test.com").until);
+  check("היא פתוחה בשבוע 4", at("w10@test.com").expired === false);
+  check("והשער מסכים", (await callAccess("w10@test.com")).body.allowed === true);
+  check("מי שהתחילה לפני 11 שבועות כבר נסגרה במסך", at("w10old@test.com").expired === true);
+  check("והשער סוגר אותה", (await callAccess("w10old@test.com")).body.reason === "expired");
+  check("סולו 6 וגם 10 שבועות: מנצחת הארוכה", at("w10s6@test.com").solo === 6 &&
+    (await callAccess("w10s6@test.com")).body.allowed === true);
+  check("חודשי גישה נוספים אינם חלים על 10 שבועות", at("w10m@test.com").expired === true &&
+    (await callAccess("w10m@test.com")).body.reason === "expired");
+  check("אישה רגילה ליד העמודה החדשה לא נגעה", at("plain10@test.com").solo === 0 &&
+    at("plain10@test.com").until === at("plain10@test.com").sheetEnd);
+  check("מי שבסולו 10 שבועות אינה נספרת כחסרת קבוצה", at("w10@test.com").needsGroup === false);
+  await callAdmin({ key: KEY }, "POST", { email: "w10old@test.com", until: "2030-01-01", by: "רון" });
+  const ext = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "w10old@test.com");
+  check("הארכה ידנית גוברת גם על 10 שבועות", ext.until === "2030-01-01" && ext.expired === false);
+  check("והשער נותן לה להיכנס", (await callAccess("w10old@test.com")).body.allowed === true);
+
+  const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  const pp = html.match(/function progPill\(w\)\{[\s\S]*?\n\}/);
+  const progPill = pp ? new Function(pp[0] + "; return progPill;")() : () => "";
+  check("התג אומר 10 שבועות ולא 10 חודשים", progPill({ solo: 10 }).indexOf("סולו 10 שבועות") !== -1);
+  check("ויש לה אפשרות משלה בסינון", /PROG==="10w" && w\.solo!==10/.test(html) && /value="10w"/.test(html));
+  CSV2 = null;
+}
+
 console.log("\nחיפוש, תגי תוכנית ותאריך במסך הניהול");
 {
   // הכל נמשך מ-public/admin.html ולא מועתק, כדי שעריכה שם תישבר כאן ולא תעבור בשקט.

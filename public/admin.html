@@ -430,7 +430,7 @@
 // store: a change made here never touches that file, because ManyChat and the access gate
 // both depend on it. The screen therefore always shows the sheet's value next to a manual
 // change rather than replacing it.
-var PROG = "";   // סינון לפי תוכנית: "" הכל, "360", "6" או "12"
+var PROG = "";   // סינון לפי תוכנית: "" הכל, "360", "6", "12" או "10w"
 var UNTILING = "";   // הכרטיס שבו שדה "גישה עד" פתוח לעריכה
 var KEY = "", WHO = "", DATA = null, APP = "new", YEAR = null, MONTH = null, COHORT = "", GROUP = "", SHOWCANCELLED = false, MISSING = false, EDITING = "";
 var HEB_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -1037,6 +1037,8 @@ function teamBlock(){
 // החלטת רון: תג לא יורד, כי צריך לדעת באיזו תוכנית היא הייתה. הביטול הוא תג
 // נוסף לצידו ולא במקומו.
 function progPill(w){
+  // הערך 10 הוא עשרה שבועות ולא חודשים, עמודה SOLO10WEEK. v7.47.
+  if(w.solo===10) return '<span class="grp solopill">סולו 10 שבועות</span>';
   if(w.solo) return '<span class="grp solopill">סולו '+w.solo+'</span>';
   return '<span class="grp p360pill">360</span>';
 }
@@ -1072,7 +1074,7 @@ function render(){
   // A group is a cohort AND a letter together. Every cohort runs א..ה (two to five of them),
   // so "קבוצה ב" of the January intake and "קבוצה ב" of the April intake are different
   // groups of different women. Merging them by letter alone is what produced "ב (522)".
-  var pool = [], nNew = 0, nOld = 0, n360 = 0, nS6 = 0, nS12 = 0;
+  var pool = [], nNew = 0, nOld = 0, n360 = 0, nS6 = 0, nS12 = 0, nS10w = 0;
   DATA.women.forEach(function(w){
     if(w.cancelled && !SHOWCANCELLED) return;
     if(!w.start) return;
@@ -1081,10 +1083,11 @@ function render(){
     if(APP==="old" && w.newApp) return;
     // הספירה לפני הסינון עצמו, בדיוק כמו אפליקציה חדשה מול קג'אבי, כדי שהמספר
     // שליד כל אפשרות יגיד כמה יש בה ולא כמה נשארו אחרי שכבר בחרו אותה.
-    if(w.solo===6) nS6++; else if(w.solo===12) nS12++; else n360++;
+    if(w.solo===6) nS6++; else if(w.solo===12) nS12++; else if(w.solo===10) nS10w++; else n360++;
     if(PROG==="360" && w.solo) return;
     if(PROG==="6" && w.solo!==6) return;
     if(PROG==="12" && w.solo!==12) return;
+    if(PROG==="10w" && w.solo!==10) return;
     pool.push(w);
   });
 
@@ -1266,10 +1269,11 @@ function render(){
           '<option value="-"'+(GROUP==="-"?" selected":"")+'>ללא קבוצה ('+noGroup+')</option>'+
         '</select></span>'+
         (MISSING ? '' : '<span class="sel"><select id="fProg" aria-label="תוכנית">'+
-          '<option value=""'+(PROG?"":" selected")+'>כל התוכניות ('+(n360+nS6+nS12)+')</option>'+
+          '<option value=""'+(PROG?"":" selected")+'>כל התוכניות ('+(n360+nS6+nS12+nS10w)+')</option>'+
           '<option value="360"'+(PROG==="360"?" selected":"")+'>360 ('+n360+')</option>'+
           '<option value="6"'+(PROG==="6"?" selected":"")+'>סולו 6 ('+nS6+')</option>'+
           '<option value="12"'+(PROG==="12"?" selected":"")+'>סולו 12 ('+nS12+')</option>'+
+          '<option value="10w"'+(PROG==="10w"?" selected":"")+'>סולו 10 שבועות ('+nS10w+')</option>'+
         '</select></span>')+
         // הבורר הזה מוצג גם ב"חסרות קבוצה", כי מ-v6.69 הוא מסנן אותה. בלעדיו
         // אי אפשר היה להחזיר משם את מי שאינה באפליקציה החדשה.

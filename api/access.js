@@ -181,7 +181,7 @@ export default async function handler(req, res) {
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
     let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, glowFullCol = -1, emailCol = -1, headerFound = false;
-    let solo6Col = -1, solo12Col = -1, glowFullMCol = -1, glowPaidCol = -1;
+    let solo6Col = -1, solo12Col = -1, solo10wCol = -1, glowFullMCol = -1, glowPaidCol = -1;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
       cancelCol = findCol(header, ["ביטלה"]);
@@ -208,6 +208,8 @@ export default async function handler(req, res) {
       // כדי ששניהם לא יוכלו לחלוק על אורך החלון שלה.
       solo6Col = findCol(header, ["SOLO6"]);
       solo12Col = findCol(header, ["SOLO12"]);
+      // 10 שבועות ולא חודשים, ולכן הערך שלה הוא 10 והחלון נסגר ביום 70. v7.47.
+      solo10wCol = findCol(header, ["SOLO10WEEK"]);
       // Read the same column the office screen reads, so the two can never disagree about
       // who a row belongs to.
       emailCol = findCol(header, ["CF_EMAIL", "מייל", "email", "אימייל"]);
@@ -248,6 +250,7 @@ export default async function handler(req, res) {
       }
       if (solo12Col !== -1 && isYes(cells[solo12Col])) hit.solo = 12;
       else if (solo6Col !== -1 && isYes(cells[solo6Col])) hit.solo = 6;
+      else if (solo10wCol !== -1 && isYes(cells[solo10wCol])) hit.solo = 10;
 
       // Start date: prefer the exact column; else first date-looking token in the row.
       let raw = null;
@@ -319,7 +322,7 @@ export default async function handler(req, res) {
           glow = !!m.glow;
           glowFull = !!m.glowFull;
           glowPaid = !!m.glowPaid;
-          solo = (m.solo === 6 || m.solo === 12) ? m.solo : 0;
+          solo = (m.solo === 6 || m.solo === 12 || m.solo === 10) ? m.solo : 0;
           const mm = parseInt(m.months, 10);
           if (Number.isFinite(mm) && mm > 0) extraMonths = mm;
           const gm = parseInt(m.glowM, 10);
