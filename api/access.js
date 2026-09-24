@@ -17,11 +17,43 @@
 
 import { decideAccess } from "./_product.js";
 import { fetchSheetText } from "./_sheet.js";
-async function redis(base, token, ...args) {
-  const path = args.map((a) => encodeURIComponent(String(a))).join("/");
-  const r = await fetch(`${base}/${path}`, { headers: { Authorization: `Bearer ${token}` } });
-  const d = await r.json();
-  return d.result;
+// ===== תקרת המתנה ל-Upstash, 3 שניות לפנייה. v7.45 =====
+//
+// **כל פנייה כאן כבר עטופה ב-try/catch שנכשל לצד הפתוח**, ולכן תקלה אינה נועלת אישה.
+// **מה שלא היה מכוסה הוא פנייה שנתקעת ואינה עונה**, כי היא לעולם אינה נכשלת, והאישה
+// ממתינה מול המסך בלי סוף. מהביקורת של הופ, ובאישור רון: "מאשר 3 שניות, מקובל עליי".
+//
+// **נמדד 23.09.2026:** פנייה ישירה 0.23 שניות בחציון ו-0.70 באיטית מתוך 20, **ודרך השרת
+// 0.84 באיטית.** כלומר 3 שניות הן פי שלושה ומעלה מהאיטית שנמדדה.
+//
+// **ואחרי פנייה אחת שנתקעה, השער מוותר על Upstash לשארית הכניסה**, אחרת כל אחת מכעשרים
+// הפניות הייתה ממתינה 3 שניות משלה. **המצב נשמר לכל כניסה בנפרד ולא לכל הקובץ**, כי
+// וורסל יכולה להריץ כמה כניסות באותו תהליך, ותקיעה אצל אחת אינה אומרת דבר על השנייה.
+//
+// **המחיר, שרון קיבל במפורש:** בדקות של תקיעה אישה מוקפאת או חסומה עלולה להיכנס, ומי
+// שנוספה ביד ואינה בגיליון לא. **כל מי שבגיליון נכנסת כרגיל.**
+export const REDIS_WAIT_MS = 3000;
+function redisForLogin() {
+  let stalled = false;
+  const redis = async (base, token, ...args) => {
+    if (stalled) throw new Error("redis stalled earlier in this login");
+    const path = args.map((a) => encodeURIComponent(String(a))).join("/");
+    // טיימר רגיל ולא `AbortSignal.timeout`, כי זה האחרון אינו מחזיק את התהליך חי.
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), REDIS_WAIT_MS);
+    try {
+      const r = await fetch(`${base}/${path}`, { headers: { Authorization: `Bearer ${token}` }, signal: ctl.signal });
+      const d = await r.json();
+      return d.result;
+    } catch (e) {
+      if (ctl.signal.aborted) stalled = true;
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  redis.stalled = () => stalled;
+  return redis;
 }
 
 function parseDateToSunday(s) {
@@ -90,6 +122,7 @@ function isTrue(v) { return /^\s*true\s*$/i.test(String(v || "")); }
 const MAX_DEVICES = 2;
 
 export default async function handler(req, res) {
+  const redis = redisForLogin();
   const email = String((req.query && req.query.email) || "").trim().toLowerCase();
   const device = String((req.query && req.query.device) || "").trim();
   // Set when she actually typed her email, as opposed to the silent check every time the
@@ -139,7 +172,9 @@ export default async function handler(req, res) {
     // הנשים לדקה. **הקריאה נכשלת לצד הפתוח:** בלי Redis או בתקלה שלו היא מושכת מגוגל
     // בדיוק כמו קודם. **ותשובה שאינה תקינה מגוגל זורקת ונוחתת על `fetch_failed`**, שהוא
     // "תקלה טכנית זמנית" ואינו נספר כניסיון כושל, במקום להיקרא כאישה שאינה רשומה.
-    const text = await fetchSheetText(sheetUrl, RU, RT);
+    // **ואם Upstash כבר נתקע בכניסה הזאת, הולכים ישר לגוגל** בלי לנסות את המטמון,
+    // אחרת היא ממתינה עוד 2.5 שניות לקריאה ועוד 4 לכתיבה. v7.45.
+    const text = await fetchSheetText(sheetUrl, redis.stalled() ? null : RU, RT);
     const lines = text.split(/\r?\n/);
 
     // Locate the "ביטלה" (cancellation) and start-date columns by header name.
