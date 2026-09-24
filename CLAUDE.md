@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v7.44** · עודכן: 24 בספטמבר 2026
+**גרסה נוכחית: v7.45** · עודכן: 24 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -489,11 +489,13 @@ pageImages: []
 
 **0. הענף. זה הדבר הראשון, לפני כל קריאה אחרת.** ענף ברירת המחדל בריפו הוא `main`, **ולכן סשן חדש נפתח על הקוד והקובץ הזה של הייצור, שאינם העדכניים.** מיד בפתיחה: `git fetch origin Dev && git checkout Dev`, ולקרוא את הקובץ הזה מחדש מהענף `Dev`. **ל-`main` ול-`Dev` היסטוריות נפרדות** (ראה v7.32), **ועבודה נעשית על `Dev` בלבד.**
 
-**עדכון, 24 בספטמבר 2026 בבוקר: בדב v7.44, בייצור v7.43.** v7.43 עלתה לייצור באישור מפורש של רון, "מאשר להעלות את v7.43 למיין", ונבדקה אחרי העלייה: שתי כתובות הייצור מגישות אותה, והשער ענה בשלוש קריאות ב-1.28, 0.81 ו-0.83 שניות. **תרגול הנשימה עדיין בדב בלבד.** הצעד הבא הוא תקרת ההמתנה שלמטה.
+**עדכון, 24 בספטמבר 2026: בדב v7.45, בייצור v7.43.** v7.45 היא תקרת ההמתנה של 3 שניות ל-Upstash בשער (סעיף 17), **והיא בדב בלבד וממתינה לבדיקה של רון.** ההבדלים בין דב למיין: תרגול הנשימה, ותקרת ההמתנה.
+
+**הרישום הקודם, 24 בספטמבר 2026 בבוקר: בדב v7.44, בייצור v7.43.** v7.43 עלתה לייצור באישור מפורש של רון, "מאשר להעלות את v7.43 למיין", ונבדקה אחרי העלייה: שתי כתובות הייצור מגישות אותה, והשער ענה בשלוש קריאות ב-1.28, 0.81 ו-0.83 שניות. **תרגול הנשימה עדיין בדב בלבד.** הצעד הבא הוא תקרת ההמתנה שלמטה.
 
 **הרישום הקודם, 23 בספטמבר 2026 בלילה: בדב v7.43, בייצור v7.41.** v7.43 היא מטמון הגיליון בלבד (סעיף 17). **רון מתכנן לאשר אותה לייצור ב-24 בספטמבר בבוקר, ליד האייפון, ורק במילים "מאשר להעלות את v7.43 למיין".** המועמד נבנה על גבי מיין ונושא רק את `api/_sheet.js`, את הבדיקה ואת מספר הגרסה, **בלי תרגול הנשימה.** נבדק לפני ההעלאה: 2,450 הנשים האמיתיות בשער הישן והחדש, אפס הבדלים בתשובה ובפקודות · ישנה וחדשה לסירוגין ובשני הכיוונים, כלומר גם חזרה לאחור · שכבה 3 מלאה.
 
-**ואחריה, באישור רון: תקרת המתנה של 3 שניות לכל פנייה ל-Upstash בשער בלבד** (`api/access.js`), מהביקורת של הופ. **אחרי פנייה אחת שנתקעה השער מוותר על Upstash לשארית הכניסה**, וכל פנייה שנכשלת נופלת לכלל הקיים שאינו נועל אישה. **נמדד 23.09: פנייה ישירה לאפסטאש 0.23 שניות בחציון ו-0.70 באיטית מתוך 20, ודרך השרת 0.84 באיטית.** רון קיבל את המחיר: בדקות תקיעה אישה מוקפאת או חסומה עלולה להיכנס, ומי שנוספה ביד ואינה בגיליון (אחת היום) לא. **לא נבנה עד אחרי ההעלאה של v7.43.** ובביקורת עצמה שתי אי-דיוקים: יש עשרה עותקים של פונקציית הפנייה ולא ארבעה, ו-`api/usage.js` כן בודק שגיאות.
+**ואחריה, באישור רון: תקרת המתנה של 3 שניות לכל פנייה ל-Upstash בשער בלבד** (`api/access.js`), מהביקורת של הופ. **אחרי פנייה אחת שנתקעה השער מוותר על Upstash לשארית הכניסה**, וכל פנייה שנכשלת נופלת לכלל הקיים שאינו נועל אישה. **נמדד 23.09: פנייה ישירה לאפסטאש 0.23 שניות בחציון ו-0.70 באיטית מתוך 20, ודרך השרת 0.84 באיטית.** רון קיבל את המחיר: בדקות תקיעה אישה מוקפאת או חסומה עלולה להיכנס, ומי שנוספה ביד ואינה בגיליון (אחת היום) לא. **נבנה ב-v7.45, אחרי ש-v7.43 עלתה, ונמצא בדב.** ובביקורת עצמה שתי אי-דיוקים: יש עשרה עותקים של פונקציית הפנייה ולא ארבעה, ו-`api/usage.js` כן בודק שגיאות.
 
 **המצב הקודם: בדב v7.42, בייצור v7.41.** ההבדל היחיד ביניהם בקוד הוא **תרגול הנשימה המודרך** (`src/features/BreathCircle.jsx`, `breathPlan.js`, `qa/breath-check.mjs`), שממתין לבדיקה של רון, **ומספר הגרסה.**
 
@@ -587,7 +589,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1211,6 +1213,22 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v7.45** - **תקרת המתנה של 3 שניות לכל פנייה ל-Upstash בשער, ואחרי פנייה אחת שנתקעה השער מוותר עליו לשארית הכניסה.** בדב בלבד. מהביקורת של הופ, ובאישור רון: "מאשר 3 שניות, מקובל עליי".
+
+**כל פנייה ב-`api/access.js` כבר נכשלה לצד הפתוח, אבל פנייה שנתקעת לעולם אינה נכשלת**, ולכן אישה הייתה ממתינה מול המסך בלי סוף. **הכניסה הראשונה שנוגעת ב-Upstash היא `admin:emailold`**, ולכן בתקיעה מלאה השער מוותר אחרי 3 שניות, קורא את הגיליון ישר מגוגל ולא מהמטמון, ומדלג על כל השאר.
+
+**המצב נשמר לכל כניסה בנפרד**, ולא לכל הקובץ, כי וורסל יכולה להריץ כמה כניסות באותו תהליך. **טיימר רגיל ולא `AbortSignal.timeout`**, כי האחרון אינו מחזיק את התהליך חי, וזה נתפס בבדיקה.
+
+**המחיר, שרון קיבל:** בזמן תקיעה סימון של המשרד אינו נקרא, כלומר מוקפאת או חסומה עלולה להיכנס, ומי שנוספה ביד ואינה בגיליון (אחת היום) לא. **זו בדיוק ההתנהגות של היום בכל תקלה אחרת של Upstash.**
+
+### מה נבדק
+- **`qa/redis-stall-check.mjs`, 25 בדיקות בלי רשת עם שעון אמיתי**, מריצה את השער האמיתי: תקין, תקיעה מלאה, תקיעה באמצע, איטי של 2.9 שניות שאינו נחתך והכרעת המשרד נאכפת, שגיאה מיידית, שתי כניסות במקביל, והתנתקות. **ובדיקה אחת שלי נפלה על סף שהמצאתי**, 10 פניות בזמן שגיאה, כשהמספר האמיתי הוא 9 **גם בקוד שלפני השינוי**. היא נועצה במספר שנמדד על שתי הגרסאות.
+- **2,449 הנשים האמיתיות**, עם הגיליון ועם סימוני המשרד מהייצור: **Upstash תקין, אפס הבדלים בתשובה ובפקודות** · **תקיעה מלאה בחדש מול תקלה מלאה בישן, אפס הבדלים**.
+- **כניסה אחת בזמן תקיעה על הגיליון האמיתי: 3,024, 3,013 ו-3,013 מילישניות**, ועוד זמן המשיכה מגוגל. **בהרצה של 600 כניסות במקביל בתהליך אחד נמדדו 8.2 שניות**, וזה מהבדיקה ולא מהקוד: כולן פירקו את הגיליון באותו רגע.
+- **`qa/push-log-check.mjs` נעוצה מחדש** על שורת הקריאה לגיליון, שהשתנתה כאן. הכלל שהיא שומרת עליו לא זז.
+
+**ומה שלא נגע:** האפליקציה בטלפון, `api/_sheet.js`, ושאר תשעת העותקים של פונקציית הפנייה בקבצים האחרים.
 
 **v7.44** - **מספור בלבד, אחרי ש-v7.43 עלתה לייצור**, באישור מפורש של רון: "מאשר להעלות את v7.43 למיין".
 

@@ -80,7 +80,9 @@ check("המספרים חוזרים גם בתשובת ה-JSON", /push: \{ morning
 console.log("\nמטמון הגיליון: שלוש נקודות הקריאה, ואף אחת לא מושכת לבד\n");
 for (const f of ["api/access.js", "api/backup.js"]) {
   const src = read(f);
-  check(`${f} משתמש ב-fetchSheetText`, /fetchSheetText\(sheetUrl, RU, RT\)/.test(src), "לא נמצא");
+  // v7.45: בשער הקריאה היא `redis.stalled() ? null : RU`, כלומר אחרי תקיעה של Upstash הולכים
+  // ישר לגוגל. הכלל שנבדק כאן לא זז: הגיליון נקרא דרך המטמון המשותף.
+  check(`${f} משתמש ב-fetchSheetText`, /fetchSheetText\(sheetUrl, (redis\.stalled\(\) \? null : )?RU, RT\)/.test(src), "לא נמצא");
   check(`${f} אינו מושך את הגיליון לבד`, !/fetch\(sheetUrl/.test(src), "נשארה משיכה ישירה");
 }
 const sheet = read("api/_sheet.js");
