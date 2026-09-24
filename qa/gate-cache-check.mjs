@@ -103,6 +103,36 @@ const d = await call("ronit@test.com");
 ck("**אישה משלמת אינה נעולה בגלל Redis**", d && d.allowed === true, JSON.stringify(d));
 globalThis.fetch = keep;
 
+// ---------- גודל הגיליון. v7.43 ----------
+// **עד v7.42 המטמון נכבה מעל 800 אלף תווים**, כלומר בסביבות 8,200 שורות, וכל פתיחה חזרה
+// לגוגל. **התקרה היא עכשיו 5 מיליון בתים**, ונמדדת בבתים כי אות עברית היא שניים.
+console.log("\nגיליון גדול\n");
+const bigRow = (i) => `05${String(i).padStart(8, "0")},שם${i},משפחה${i},w${i}@test.com,${sunday} 12:00:00,,א,` + "x".repeat(40);
+const bigSheet = (n) => "ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,pad\n"
+  + Array.from({ length: n }, (_, i) => bigRow(i)).join("\n") + "\n";
+
+store = {}; googleBody = bigSheet(10000); googleHits = 0;
+const g1 = await call("w5000@test.com");
+ck("**גיליון של 10,000 שורות נשמר במטמון**", typeof store["sheet:csv:v1"] === "string"
+  && googleBody.length > 800000, `${googleBody.length} תווים, נשמר: ${typeof store["sheet:csv:v1"]}`);
+ck("ואישה מתוכו נכנסת", g1 && g1.allowed === true, JSON.stringify(g1));
+googleHits = 0;
+await call("w7000@test.com");
+ck("והשנייה אינה נוגעת בגוגל", googleHits === 0, String(googleHits));
+
+// **בעברית מספר התווים קטן ממספר הבתים.** 3 מיליון תווים, רובם עבריים, הם יותר מ-5 מיליון
+// בתים. בדיקה שסופרת תווים הייתה שומרת אותו.
+store = {};
+const heb = "ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,pad\n"
+  + `0501111111,רונית,לוי,ronit@test.com,${sunday} 12:00:00,,א,x\n` + "ש".repeat(3000000) + "\n";
+googleBody = heb;
+const g2 = await call("ronit@test.com");
+ck("**גיליון מעל התקרה בבתים אינו נשמר, גם כשהוא מתחתיה בתווים**",
+  !store["sheet:csv:v1"] && heb.length < 5000000 && Buffer.byteLength(heb) > 5000000,
+  `${heb.length} תווים, ${Buffer.byteLength(heb)} בתים`);
+ck("**ואישה רשומה עדיין נכנסת, מגוגל**", g2 && g2.allowed === true, JSON.stringify(g2));
+googleBody = SHEET;
+
 console.log("\nומי שבאמת אינה רשומה\n");
 store = {};
 const e = await call("stranger@test.com");
