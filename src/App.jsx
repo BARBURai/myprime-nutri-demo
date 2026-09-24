@@ -729,7 +729,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.47";
+const VERSION = "7.48";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3309,6 +3309,7 @@ function localFoodMatch(name) {
   }
   return null;
 }
+const CATALOG_IN_RECONCILE = false;
 async function lookupProduct(name, en) {
   const ck = reconKey(name, en);
   if (RECON_CACHE.has(ck)) return RECON_CACHE.get(ck);
@@ -3316,8 +3317,11 @@ async function lookupProduct(name, en) {
   // 1. Local spine - instant, no network (basic staples: sugar, milk, oil, salt...).
   const lf = localFoodMatch(name);
   if (lf && lf.per100 && lf.per100.kcal != null) result = { name: lf.name, per100: lf.per100, source: "verified" };
-  // 2. Our shared catalog - fast, grows with use (anything resolved before).
-  if (!result) { try { const cat = await catalogSearch(name); const hit = (cat || []).find((c) => c.per100 && c.per100.kcal && nutritionPlausible(c.per100) && strongMatch(name, c.name)); if (hit) result = { name: hit.name, per100: hit.per100, source: hit.source === "verified" ? "db" : "estimated" }; } catch (e) {} }
+  // 2. **המאגר המשותף אינו נשאל כאן, בכוונה. v7.48**
+  //    עד v7.47 החיפוש בו החזיר אפס תוצאות בייצור, ולכן השורה הזאת לא החליפה אף מספר
+  //    מעולם. מרגע שהחיפוש עובד היא הייתה מתחילה לדרוס את הערכת הבינה ואת המאגר הלאומי
+  //    בשיחת "ספרי לי מה אכלת", וזו החלטה נפרדת שלא התקבלה. המאגר מוצג בחיפוש הרגיל בלבד.
+  if (!result && CATALOG_IN_RECONCILE) { try { const cat = await catalogSearch(name); const hit = (cat || []).find((c) => c.per100 && c.per100.kcal && nutritionPlausible(c.per100) && strongMatch(name, c.name)); if (hit) result = { name: hit.name, per100: hit.per100, source: hit.source === "verified" ? "db" : "estimated" }; } catch (e) {} }
   // 3. Israeli national DB (Hebrew name).
   if (!result) { try { const il = await searchIsraeliDB(name); for (const r of il) if (r.per100 && r.per100.kcal && nutritionPlausible(r.per100) && strongMatch(name, r.name)) { result = { ...r, source: "db" }; break; } } catch (e) {} }
   // 4. USDA FoodData Central (English query).
@@ -3722,9 +3726,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
     const run = ++searchRunRef.current;
     const alive = () => run === searchRunRef.current;
     setSearching(true);
-    let ilFound = false, fbSet = false;
+    let ilFound = false, fbSet = false, catFound = false;
     const tA = setTimeout(async () => {
-      catalogSearch(q).then((cat) => { if (alive()) setCatResults(cat || []); }).catch(() => { if (alive()) setCatResults([]); });
+      catalogSearch(q).then((cat) => { catFound = (cat || []).length > 0; if (alive()) setCatResults(cat || []); }).catch(() => { if (alive()) setCatResults([]); });
       try {
         const items = await searchIsraeliDB(q);
         if (!alive()) return;
@@ -3737,7 +3741,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       if (q.length < 3) { setSearching(false); return; }
       try {
         let items = await searchOpenFoodFacts(q); let src = "off";
-        if (!items.length && alive()) { const en = await translateFoodToEnglish(q); if (en && alive()) { items = await searchUSDA(en); src = "usda"; } }
+        // התרגום לאנגלית הוא קריאה לבינה. כשהמאגר שלנו כבר מצא לה את המזון, היא מיותרת. v7.48
+        if (!items.length && alive() && !catFound) { const en = await translateFoodToEnglish(q); if (en && alive()) { items = await searchUSDA(en); src = "usda"; } }
         if (!alive() || ilFound) return;
         fbSet = items.length > 0;
         setDbResults(items); setDbSource(src);

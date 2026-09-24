@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v7.47** · עודכן: 24 בספטמבר 2026
+**גרסה נוכחית: v7.48** · עודכן: 24 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -489,7 +489,9 @@ pageImages: []
 
 **0. הענף. זה הדבר הראשון, לפני כל קריאה אחרת.** ענף ברירת המחדל בריפו הוא `main`, **ולכן סשן חדש נפתח על הקוד והקובץ הזה של הייצור, שאינם העדכניים.** מיד בפתיחה: `git fetch origin Dev && git checkout Dev`, ולקרוא את הקובץ הזה מחדש מהענף `Dev`. **ל-`main` ול-`Dev` היסטוריות נפרדות** (ראה v7.32), **ועבודה נעשית על `Dev` בלבד.**
 
-**עדכון, 24 בספטמבר 2026: בדב v7.46, בייצור v7.45.** v7.45, תקרת ההמתנה של 3 שניות בשער, עלתה לייצור באישור מפורש של רון, "מאשר להעלות את v7.45 למיין". נבדק אחרי העלייה: שתי כתובות הייצור מגישות אותה, והשער ענה ב-1.26, 0.75 ו-0.68 שניות. **ההבדל היחיד בין דב למיין בקוד הוא תרגול הנשימה.** הצעד הבא שהוצע: חיפוש המזון בלי סריקת כל המסד (`api/catalog.js:113`), ממתין לתוכנית ולאישור.
+**עדכון, 24 בספטמבר 2026 אחר הצהריים: בדב v7.48, בייצור v7.45.** v7.48 היא חיפוש המזון מהמאגר הגדול אחרי סינון (סעיף 17), **בדב בלבד וממתינה לבדיקה של רון.** בדב יש מסד Redis נפרד עם מעט פריטים, ולכן שם החיפוש יתמלא רק אחרי כמה רישומים. **ההבדלים בין דב למיין: תרגול הנשימה, סולו 10 שבועות (v7.47), וחיפוש המזון.**
+
+**הרישום הקודם, 24 בספטמבר 2026: בדב v7.46, בייצור v7.45.** v7.45, תקרת ההמתנה של 3 שניות בשער, עלתה לייצור באישור מפורש של רון, "מאשר להעלות את v7.45 למיין". נבדק אחרי העלייה: שתי כתובות הייצור מגישות אותה, והשער ענה ב-1.26, 0.75 ו-0.68 שניות. **ההבדל היחיד בין דב למיין בקוד הוא תרגול הנשימה.** הצעד הבא שהוצע: חיפוש המזון בלי סריקת כל המסד (`api/catalog.js:113`), ממתין לתוכנית ולאישור.
 
 **הרישום הקודם, 24 בספטמבר 2026: בדב v7.45, בייצור v7.43.** v7.45 היא תקרת ההמתנה של 3 שניות ל-Upstash בשער (סעיף 17), **והיא בדב בלבד וממתינה לבדיקה של רון.** ההבדלים בין דב למיין: תרגול הנשימה, ותקרת ההמתנה.
 
@@ -591,7 +593,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1215,6 +1217,45 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v7.48** - **המאגר הגדול מוצג בחיפוש המזון, אחרי סינון.** בדב בלבד. אישור רון: "מאשר, תבנה כ-v7.48 בדב".
+
+**הרקע:** נשים כותבות שמוצרים חסרים בחיפוש, **וחיפוש המאגר הגדול (`cat:*`, כ-9,000 פריטים) החזיר בייצור אפס תוצאות על כל מילה.** הוא הריץ `KEYS cat:*` בכל הקשה. הסיבה המדויקת לאפס לא הוכחה, והפתרון מייתר אותה.
+
+**המאגר ממשיך להתמלא בדיוק כמו קודם, מכל פריט שנרשם.** רון: "אם אנחנו כן משתמשים בו, אז למה שהוא לא יגדל?" **מה שנוסף הוא שער בינו לבין החיפוש**, `lib/catfilter.js`:
+
+| הבדיקה | מה נופל בה, מהמאגר האמיתי |
+|---|---|
+| **השם** | כמות ("שתי ביצים", "חצי פיתה") 778 · כמה מזונות יחד ("פיתה + חומוס") 714 · תיאור ארוך של צלחת 363 |
+| **המספרים** | `plausiblePer100` הקיים. 6 בלבד, כי השער הזה כבר היה בכתיבה |
+| **הבינה, פעם אחת לכל פריט** | שם עם שגיאת כתיב, או מספרים שאינם של המזון. **למשל "שיבולת שועל דקה טבעית" עם 253 קק״ל ואפס פחמימות**, שעבר את בדיקת המספרים |
+
+**סוגריים, מילת גודל ו"טרי" יורדים מהשם במקום לפסול אותו**, כי הערכים ל-100 גרם אינם תלויים בהם: "נקטרינה בינונית", "נקטרינה קטנה" ו"נקטרינה (חצי)" הם שורה אחת, "נקטרינה". **וגרש עברי ורגיל הם אותו חיפוש.** 6,122 פריטים שונים עוברים את בדיקת השם ונשלחים לבינה.
+
+**מה שלא עבר נשאר במאגר ואינו מוצג. שום דבר לא נמחק.**
+
+### איך זה רץ
+- **`catidx`** הוא מה שהחיפוש קורא, `HSCAN` עם `MATCH`, **פקודה אחת להקשה ובלי KEYS.** הסדר: שם זהה, מתחיל במילה, מילה בתוך השם, ואז לפי מספר הרישומים. עד 8, **ורק פריט שנרשם ב-180 הימים האחרונים**, כמו התפוגה של `cat:*`.
+- **`catjudge`** שומר את תשובת הבינה **יחד עם הערכים שנבדקו**, ולכן רישום חוזר אינו שואל שוב. ערכים חדשים ממקור אמין יותר נבדקים מחדש.
+- **הבדיקה רצה בסוף רישום מזון, בקבוצות של עד 40 פריטים לקריאה**, קודם מה שנרשם עכשיו (`catidx:pending`) ואז מה שכבר היה במאגר (`catidx:cursor`), עד שהמעבר נגמר. נעילה אחת (`catidx:lock`). **האפליקציה אינה ממתינה לה**, כי הרישום נשלח ברקע.
+- **הבינה היא אותו מודל של האפליקציה**, ועלות הבדיקה נכנסת לאותם מונים של הדוח היומי. **הערכה, לא מדידה:** כ-155 קריאות למעבר על המאגר הקיים, כמה דולרים בסך הכל.
+- **כשהבינה אינה בטוחה היא אומרת לא. וכשהיא אינה עונה, או שאין מפתח, שום דבר אינו מוצג** והפריט ממתין לפעם הבאה. **תקלה כאן לעולם אינה מכשילה את הרישום עצמו.**
+- **מחיקה מהמשרד** (`action=del`) מוציאה גם מהחיפוש ונרשמת כפסולה, כדי שרישום הבא לא יחזיר.
+
+### באפליקציה, שני שינויים ובלי קופי חדש
+1. **התרגום לאנגלית, שהוא קריאה לבינה, אינו נקרא כשהמאגר כבר מצא.** זה החיסכון.
+2. **המאגר אינו נשאל בשיחת "ספרי לי מה אכלת"** (`CATALOG_IN_RECONCILE = false`). עד כאן הוא החזיר שם אפס ולכן לא החליף מספר מעולם, **ומרגע שהחיפוש עובד הוא היה מתחיל לדרוס את הערכת הבינה ואת המאגר הלאומי.** זו החלטה נפרדת שלא התקבלה.
+
+**הכותרת "מהקטלוג שלנו" בחיפוש קיימת מזמן**, והיא זו שהנשים יראו.
+
+### ההדגמה לרון, על המאגר האמיתי
+קריאה בלבד של `cat:*` מהייצור (שמות מזון ומספרים, בלי שום פרט אישי), וחמש קריאות לבינה דרך `/api/ai` של הייצור, על 40 המועמדים הראשונים לכל מילה. **בבינה היא קשוחה:** ב"קוטג" היא פסלה 11 מתוך 40, ובהם "קוטג' 5% סטראוס" על שגיאת הכתיב, וב"שיבולת" 16 מתוך 40, ובהם שיבולת שועל מבושלת עם 375 קק״ל. **ופסילה בטעות רק מסתירה**, והאישה מוצאת את המזון במאגר הלאומי או בבינה כמו היום.
+
+### הבדיקות
+**`qa/catalog-index-check.mjs`, 86 בדיקות בלי רשת**, מריצה את `api/catalog.js` האמיתי מול Redis מדומה ובינה מדומה: פריט טוב נכנס ונבדק פעם אחת · שם של צלחת נכנס למאגר ולא לחיפוש ובלי קריאה לבינה · פריט שהבינה פסלה נשאר במאגר ואינו מוצג · בינה שנופלת, מחזירה 500 או מדלגת על שורה · אין מפתח · המעבר על 120 פריטים ישנים מסתיים, כל פריט נשאל פעם אחת ושום דבר לא נמחק · שתי הרצות במקביל · סדר התוצאות · מחיקה מהמשרד. **על הקוד של v7.47 היא נופלת.** **ו-`qa/scale-sim.mjs` מודדת עכשיו את האינדקס:** פקודה אחת להקשה גם ב-100,000 פריטים.
+
+### ומה שנשאר, ואינו נבנה כאן
+**בייצור האינדקס ריק עד שהגרסה עולה, ומתמלא ממנו והלאה**, מהרישומים של הנשים עצמן. **שורות `KEYS` אחרות** (`api/usage-report.js`, `api/admin.js`, `api/_pushaudit.js`, ורשימת הניהול כאן) רצות פעם ביום ולא בכל הקשה, ונשארו.
 
 **v7.47** - **מסלול סולו של 10 שבועות, עמודה `SOLO10WEEK`.** בדב בלבד. אישור רון: "מאשר את שניהם", על התוכנית שהוצגה לו.
 

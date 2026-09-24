@@ -58,6 +58,7 @@ const exec = ([op, key, ...a]) => {
     case "KEYS": { const re = globRe(key); return Object.keys(db.str).filter((k) => re.test(k)); }
     case "HGET": return (db.hash[key] || {})[a[0]] ?? null;
     case "HGETALL": return Object.entries(db.hash[key] || {}).flat();
+    case "HSCAN": { const re = globRe(a[a.indexOf("MATCH") + 1] || "*"); return ["0", Object.entries(db.hash[key] || {}).filter(([f]) => re.test(f)).flat()]; }
     case "HSET": case "HSETNX": { db.hash[key] = db.hash[key] || {}; db.hash[key][a[0]] = a[1]; return 1; }
     case "HDEL": return a.length;
     case "INCR": { db.str[key] = String((+db.str[key] || 0) + 1); return +db.str[key]; }
@@ -124,7 +125,9 @@ const catalog = (await import("../api/catalog.js")).default;
 const food = (i) => JSON.stringify({ name: `מוצר ${i}`, per100: { kcal: 100, p: 5, f: 3, c: 12 }, unit: "g", source: "off", seen: 1, ts: 1 });
 for (const n of [8896, 30000, 100000]) {
   db = { str: {}, hash: {} };
-  for (let i = 0; i < n; i++) db.str[`cat:מוצר_דוגמה_${i}`] = food(i);
+  // מ-v7.48 החיפוש קורא את האינדקס catidx בלבד. מלאים את שניהם, כמו אחרי שהמעבר על המאגר הסתיים
+  db.hash.catidx = {};
+  for (let i = 0; i < n; i++) { db.str[`cat:מוצר_דוגמה_${i}`] = food(i); db.hash.catidx[`מוצר_דוגמה_${i}`] = JSON.stringify({ ...JSON.parse(food(i)), ts: Date.now() }); }
   resetStats();
   const t = performance.now();
   const r = await call(catalog, { q: "דוגמה_12" });

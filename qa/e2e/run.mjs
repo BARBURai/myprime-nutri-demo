@@ -89,7 +89,7 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false, glowFull = false, product = "360", replies = null, aiAnswer = null, catalog = null }) {
+async function stubApi(context, { startDate, glow = false, glowFull = false, product = "360", replies = null, aiAnswer = null, catalog = null, ilFood = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
@@ -101,7 +101,7 @@ async function stubApi(context, { startDate, glow = false, glowFull = false, pro
     // לדרוס. בלי זה אף מסלול השוואה אינו רץ בכלל, ובדיקה על "המאגר לא דרס" הייתה
     // עוברת גם על הקוד השבור.
     if (url.includes("/api/catalog")) return json({ items: catalog || [] });
-    if (url.includes("/api/il-food")) return json({ items: [] });
+    if (url.includes("/api/il-food")) return json({ items: ilFood || [] });
     return json({ ok: true });
   });
 }
@@ -118,12 +118,12 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null, ilFood = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow, glowFull, product, replies, aiAnswer, catalog });
+  await stubApi(context, { startDate, glow, glowFull, product, replies, aiAnswer, catalog, ilFood });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
@@ -2170,12 +2170,15 @@ const CHECKS = [
           { name: "לחם בדיקה", en: "bread", unit: "g", grams: 100, kcal: 300, protein: 9, fat: 3, carbs: 50 },
         ],
       };
-      // אותם שני שמות במאגר, עם ערכים אחרים לגמרי. בלי התיקון שניהם נדרסים.
-      const catalog = [
-        { name: "יוגורט בדיקה", per100: { kcal: 38, p: 8, f: 3, c: 4 }, source: "verified" },
-        { name: "לחם בדיקה", per100: { kcal: 250, p: 8, f: 3, c: 45 }, source: "verified" },
+      // אותם שני שמות במאגר הלאומי, עם ערכים אחרים לגמרי. בלי התיקון שניהם נדרסים.
+      // **מ-v7.48 המאגר הלאומי ולא המאגר שלנו**, כי המאגר שלנו אינו נשאל בשיחה עם הבינה.
+      // ולכן המאגר שלנו מקבל כאן ערך שלישי, 180, שאסור לו להופיע בכרטיס.
+      const ilFood = [
+        { name: "יוגורט בדיקה", per100: { kcal: 38, p: 8, f: 3, c: 4 } },
+        { name: "לחם בדיקה", per100: { kcal: 250, p: 8, f: 3, c: 45 } },
       ];
-      const { context, page, errors } = await openApp(browser, device, { day: 15, aiAnswer: answer, catalog });
+      const catalog = [{ name: "לחם בדיקה", per100: { kcal: 180, p: 6, f: 2, c: 33 }, source: "verified" }];
+      const { context, page, errors } = await openApp(browser, device, { day: 15, aiAnswer: answer, catalog, ilFood });
       const bad = [];
       await page.locator('[aria-label="הוספה"]').click();
       await page.waitForTimeout(400);
@@ -2192,6 +2195,7 @@ const CHECKS = [
       if (!card.includes("112")) bad.push("הקלוריות שהיא מסרה נדרסו על ידי המאגר");
       if (!card.includes("לפי מה שהזנת")) bad.push('התג "לפי מה שהזנת" אינו מוצג');
       if (!card.includes("250")) bad.push("הפריט שלא נמסרו ערכיו לא התעדכן מהמאגר");
+      if (card.includes("180")) bad.push("המאגר שלנו דרס מספר בשיחה עם הבינה, וזה כבוי מ-v7.48");
       if (!/מהמאגר/.test(card)) bad.push('הפריט שהתעדכן אינו מסומן "מהמאגר"');
       if (/עדכנתי את הקלוריות לפי המאגר: סה״כ 288/.test(card)) bad.push("ההודעה על עדכון סוכמת גם את מה שלא נגע");
 
