@@ -177,6 +177,39 @@ const record = (device, name, ok, detail, skip) => {
 
 const CHECKS = [
   {
+    // v7.50: הזנה ידנית במצב "ל-100 גרם" נשלחת כמועמד לחיפוש לכל הנשים, ובמצב "לכל המנה"
+    // לא, כי אלה ערכי הצלחת שלה ולא של המוצר. שני הצדדים באותה הרצה, כי קריאה שלא נשלחת
+    // אף פעם נראית בדיוק כמו קריאה שלא נשלחת בכוונה.
+    name: "הזנה ידנית: ל-100 גרם נשלח לחיפוש המשותף, ולכל המנה לא",
+    async run(browser, device) {
+      const bad = [];
+      for (const whole of [false, true]) {
+        const { context, page, errors } = await openApp(browser, device);
+        const sent = [];
+        page.on("request", (rq) => { if (rq.url().includes("/api/catalog?action=label")) sent.push(rq.postData() || ""); });
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator("text=הזנה ידנית").first().click();
+        await page.waitForTimeout(400);
+        await page.locator('input[placeholder="לדוגמה: חטיף חלבון"]').fill("קוטג' 5% תנובה");
+        if (whole) { await page.locator("text=לכל המנה").first().click(); await page.waitForTimeout(200); }
+        const nums = page.locator('input[inputmode="decimal"]');
+        const n = await nums.count();
+        const vals = ["100", "95", "11", "5", "2"];
+        for (let i = 0; i < Math.min(n, vals.length); i++) await nums.nth(i).fill(vals[i]);
+        await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+        await page.waitForTimeout(900);
+        if (!whole && !(sent.length === 1 && sent[0].includes("קוטג") && sent[0].includes('"kcal":95'))) bad.push("ל-100 גרם לא נשלח: " + JSON.stringify(sent).slice(0, 80));
+        if (whole && sent.length) bad.push("לכל המנה נשלח, ואסור");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "ל-100 נשלח פעם אחת, לכל המנה לא נשלח" };
+    },
+  },
+  {
     // משתתפת, 25 בספטמבר 2026: "בחלון של הוספת רגישויות ואלרגיות לא ניתן לרשום דבר."
     // מקלידים בשדה "רגישויות נוספות" בפרופיל כמו אישה, מקישים על הפלוס, ובודקים שהצ'יפ נוצר.
     name: "רגישויות נוספות בפרופיל: אפשר להקליד ולהוסיף",

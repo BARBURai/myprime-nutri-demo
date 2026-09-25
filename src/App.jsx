@@ -76,6 +76,11 @@ async function catalogBarcodePut(code, name, per100, unit) {
     return await r.json();
   } catch (e) { return { ok: false }; }
 }
+// ערכים שהיא הקלידה מתווית, ל-100 גרם, בלי ברקוד. v7.50: מועמד לחיפוש לכל הנשים, והשרת
+// מציג אותו רק אחרי ארבע בדיקות. נשלחים שם המוצר והמספרים בלבד. לא ממתינים לתשובה.
+function catalogLabelPut(name, per100, unit) {
+  try { fetch(`${CATALOG_ENDPOINT}?action=label`, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name, per100, unit }) }).catch(() => {}); } catch (e) { /* ignore */ }
+}
 async function catalogSearch(term) {
   try {
     const r = await fetch(`${CATALOG_ENDPOINT}?q=${encodeURIComponent(term)}`, { headers: aiHeaders() });
@@ -729,7 +734,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.49";
+const VERSION = "7.50";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3711,6 +3716,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       setTimeout(() => commit(entry), 1200);
       return;
     }
+    // בלי ברקוד, ובמצב "ל-100 גרם" בלבד: גם זה ערך מתווית. v7.50
+    if (!mWhole) catalogLabelPut(name, { kcal: Number(mKcal) || 0, p: Number(mProt) || 0, f: Number(mFat) || 0, c: Number(mCarb) || 0 }, mUnit);
     commit(entry);
   };
 

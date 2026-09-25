@@ -4,8 +4,8 @@
 //
 // Entry gate: only values that pass plausiblePer100 (Atwater + range) are stored.
 // Keys: cat:<normName>      -> { name, per100:{kcal,p,f,c}, unit, source, seen, ts }
-//       catidx / catjudge   -> what search shows, and why. v7.48, see below
-//                              (search reads ONLY catidx; cat:* is never scanned per keystroke)
+//       labidx / labjudge   -> what search shows, and why: label values only, v7.50. See below
+//                              (search reads ONLY labidx; cat:* is never scanned per keystroke)
 //       bc:<code>           -> the SHARED values for a barcode, once two different women
 //                              typed the same thing off the package
 //       bcv:<code>:<userId> -> one woman's own correction, private until a second woman
@@ -22,24 +22,30 @@
 // Env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, NOTIFY_SECRET (for admin)
 
 import { normName, plausiblePer100, sourceRank } from "../lib/foodcheck.js";
-import { cleanName, nameProblem, indexField, searchKey, escapeGlob, hitRank, JUDGE_SYSTEM, judgePrompt, parseJudge } from "../lib/catfilter.js";
+import { cleanName, nameProblem, dairyProblem, indexField, searchKey, escapeGlob, hitRank, JUDGE_SYSTEM, judgePrompt, parseJudge } from "../lib/catfilter.js";
 import { DEFAULT_MODEL } from "./ai.js";
 
-// ---------- מה מוצג בחיפוש. v7.48 ----------
-// **המאגר `cat:*` ממשיך להתמלא בדיוק כמו קודם.** החיפוש כבר אינו סורק אותו (`KEYS cat:*`
-// החזיר 9,000 מפתחות בכל הקשה, ובייצור לא החזיר אף תוצאה), אלא קורא את האינדקס:
-//   catidx          hash  שדה = שם נקי   ->  { name, per100, unit, source, seen, ts }
-//   catjudge        hash  שדה = שם נקי   ->  { ok, p, why, ts }   תשובת הבינה, עם הערכים שנבדקו
-//   catidx:pending  set   מפתחות cat: שממתינים לבדיקה
-//   catidx:cursor   מחרוזת  היכן עומד המעבר החד פעמי על מה שכבר במאגר, "done" בסיום
-//   catidx:lock     מונע משתי הרצות לבדוק את אותם פריטים
-// פריט נכנס לאינדקס רק אם עבר את שלוש הבדיקות של lib/catfilter.js. ראה שם.
-const IDX = "catidx", JUDGE = "catjudge", PENDING = "catidx:pending", CURSOR = "catidx:cursor", LOCK = "catidx:lock";
+// ---------- מה מוצג בחיפוש. v7.48, ומ-v7.50 ערכים מתווית בלבד ----------
+// **החיפוש מציג רק מה שנשים הקלידו בעצמן מתווית, לכל 100 גרם.** החלטת רון אחרי ההדגמה של
+// v7.48: המאגר הגדול `cat:*` הוא העתקים מהמאגרים הרשמיים והערכות של הבינה, "איך אני יודע
+// שזה נכון בכלל אם הם לא הקלידו את זה ידנית". **הוא ממשיך להתמלא כמו קודם ואינו מוצג.**
+//
+// שני מקורות, ושניהם ערכים מתווית: הזנה ידנית במצב "ל-100 גרם" (`action=label`), ותיקון
+// ברקוד מהתווית (`action=bc`, שנשמר ב-`bcv:*`). כל פריט עובר ארבע בדיקות: המספרים, השם,
+// יצרן או אחוז שומן במוצרי חלב, ובדיקת בינה חד פעמית. ראה lib/catfilter.js.
+//   labidx          hash  שדה = שם נקי   ->  { name, per100, unit, source, seen, ts }
+//   labjudge        hash  שדה = שם נקי   ->  { ok, p, why, ts }   תשובת הבינה, עם הערכים שנבדקו
+//   labidx:pending  set   מועמדים שממתינים לבדיקה, כל אחד JSON של { name, per100, unit }
+//   labidx:cursor   מחרוזת  היכן עומד המעבר החד פעמי על תיקוני הברקוד הקיימים, "done" בסיום
+//   labidx:lock     מונע משתי הרצות לבדוק את אותם פריטים
+// **המפתחות של v7.48 (`catidx` ו-`catjudge`) אינם נקראים יותר**, כדי שמה שנכנס שם מהמאגר
+// הגדול בדב לא יוצג.
+const IDX = "labidx", JUDGE = "labjudge", PENDING = "labidx:pending", CURSOR = "labidx:cursor", LOCK = "labidx:lock";
 const JUDGE_BATCH = 40;
-const INDEX_MAX_AGE_MS = 180 * 24 * 3600 * 1000; // כמו התפוגה של cat:*
+const PENDING_MAX = 2000; // תקרה, כדי שמישהי ששולחת אלפי שמות לא תהפוך לחשבון בינה
 const JUDGE_TIMEOUT_MS = 25000;
 
-const qualifies = (o) => !!(o && o.name && o.per100 && Number(o.per100.kcal) > 0 && plausiblePer100(o.per100) && !nameProblem(o.name));
+const qualifies = (o) => !!(o && o.name && o.per100 && Number(o.per100.kcal) > 0 && plausiblePer100(o.per100) && !nameProblem(o.name) && !dairyProblem(o.name));
 const safeParse = (v) => { if (!v) return null; try { return JSON.parse(v); } catch (e) { return null; } };
 
 async function logJudgeUsage(base, token, usage) {
@@ -75,90 +81,86 @@ async function askJudge(entries, base, token) {
   finally { clearTimeout(timer); }
 }
 
-// פריט שעבר נכנס לאינדקס. אם כבר יש שם פריט באותו שם נקי, מנצח המקור האמין יותר.
+// פריט שעבר נכנס לאינדקס. **אם כבר יש שם פריט באותו שם, הראשון נשאר:** אישה שנייה עם
+// אותם ערכים מחזקת אותו (seen), ואישה שנייה עם ערכים אחרים אינה דורסת אותו.
 async function putIndex(base, token, field, o) {
-  const ex = safeParse(await redisPost(base, token, ["HGET", IDX, field]));
-  if (ex && sourceRank(ex.source) > sourceRank(o.source)) {
-    ex.seen = Math.max(ex.seen || 1, o.seen || 1); ex.ts = Math.max(ex.ts || 0, o.ts || 0);
-    await redisPost(base, token, ["HSET", IDX, field, JSON.stringify(ex)]);
-    return;
-  }
-  const rec = { name: cleanName(o.name), per100: o.per100, unit: o.unit === "ml" ? "ml" : "g", source: o.source || "estimated", seen: Math.max(o.seen || 1, (ex && ex.seen) || 1), ts: o.ts || Date.now() };
+  const rec = { name: cleanName(o.name), per100: o.per100, unit: o.unit === "ml" ? "ml" : "g", source: "label", seen: 1, ts: Date.now() };
   await redisPost(base, token, ["HSET", IDX, field, JSON.stringify(rec)]);
 }
 
-// **העבודה שמכניסה פריטים לאינדקס.** רצה בסוף כל רישום של מזון, ולוקחת עד 40 פריטים:
-// קודם אלה שנוספו לאחרונה, ואז מה שכבר היה במאגר לפני הגרסה הזאת, עד שהמעבר עליו נגמר.
-// **האפליקציה אינה ממתינה לה**, כי הרישום נשלח ברקע ואיש אינו קורא את התשובה.
+// מועמד חדש לחיפוש. נכנס לרשימת ההמתנה, ונבדק ברשימה הבאה שרצה.
+async function addCandidate(base, token, name, per100, unit) {
+  const o = { name: String(name).trim(), per100, unit: unit === "ml" ? "ml" : "g" };
+  if (!qualifies(o)) return false;
+  const n = Number(await redisPost(base, token, ["SCARD", PENDING])) || 0;
+  if (n >= PENDING_MAX) return false;
+  await redisPost(base, token, ["SADD", PENDING, JSON.stringify(o)]);
+  return true;
+}
+
+// **העבודה שמכניסה פריטים לאינדקס.** רצה אחרי כל הקלדה מתווית, ולוקחת עד 40 מועמדים:
+// קודם אלה שהגיעו עכשיו, ואז תיקוני הברקוד שכבר היו לפני הגרסה הזאת, עד שהמעבר עליהם נגמר.
+// **האפליקציה אינה ממתינה לה**, כי הבקשה נשלחת ברקע ואיש אינו קורא את התשובה.
 export async function fillIndex(base, token) {
   if (!process.env.ANTHROPIC_API_KEY) return { ran: false, reason: "no_key" };
   const got = await redisPost(base, token, ["SET", LOCK, "1", "NX", "EX", "60"]);
   if (got !== "OK") return { ran: false, reason: "locked" };
   try {
-    // **קוראים ולא מוציאים.** פריט יוצא מרשימת ההמתנה רק אחרי שהוטפל, ולכן ריצה שנקטעה
+    // **קוראים ולא מוציאים.** מועמד יוצא מרשימת ההמתנה רק אחרי שהוטפל, ולכן ריצה שנקטעה
     // באמצע אינה מאבדת אותו.
-    let keys = (await redisPost(base, token, ["SRANDMEMBER", PENDING, String(JUDGE_BATCH)])) || [];
-    if (!Array.isArray(keys)) keys = [keys];
-    const fromPending = [...keys];
-    let cursor = await redisPost(base, token, ["GET", CURSOR]);
+    let members = (await redisPost(base, token, ["SRANDMEMBER", PENDING, String(JUDGE_BATCH)])) || [];
+    if (!Array.isArray(members)) members = [members];
+    const cands = members.map((m) => ({ m, o: safeParse(m) }));
+    const cursor = await redisPost(base, token, ["GET", CURSOR]);
     let nextCursor = null;
-    if (keys.length < JUDGE_BATCH && cursor !== "done") {
-      const sc = await redisPost(base, token, ["SCAN", cursor || "0", "MATCH", "cat:*", "COUNT", "80"]);
-      if (Array.isArray(sc)) { nextCursor = String(sc[0]); keys = keys.concat(sc[1] || []); }
+    if (cands.length < JUDGE_BATCH && cursor !== "done") {
+      const sc = await redisPost(base, token, ["SCAN", cursor || "0", "MATCH", "bcv:*", "COUNT", "200"]);
+      if (Array.isArray(sc)) {
+        nextCursor = String(sc[0]);
+        const keys = sc[1] || [];
+        const vals = keys.length ? ((await redisPost(base, token, ["MGET", ...keys])) || []) : [];
+        vals.forEach((v) => { const o = safeParse(v); if (o) cands.push({ m: null, o: { name: o.name, per100: o.per100, unit: o.unit } }); });
+      }
     }
-    keys = [...new Set(keys)];
-    const done = async () => {
-      // מה שלא נשאר לבדיקה חוזרת יוצא מרשימת ההמתנה
-      const drop = fromPending.filter((k) => !retrySet.has(k));
-      if (drop.length) await redisPost(base, token, ["SREM", PENDING, ...drop]);
-    };
-    const retrySet = new Set();
-    if (!keys.length) { if (nextCursor !== null) await redisPost(base, token, ["SET", CURSOR, nextCursor === "0" ? "done" : nextCursor]); return { ran: true, judged: 0 }; }
-
-    const vals = (await redisPost(base, token, ["MGET", ...keys])) || [];
-    // שם נקי אחד -> הפריט הטוב ביותר מאלה שהגיעו
+    // שם נקי אחד -> המועמד הראשון שהגיע
     const byField = new Map();
-    keys.forEach((k, i) => {
-      const o = safeParse(vals[i]);
-      if (!qualifies(o)) return;
-      const f = indexField(o.name);
-      const cur = byField.get(f);
-      if (!cur || sourceRank(o.source) > sourceRank(cur.o.source) || (sourceRank(o.source) === sourceRank(cur.o.source) && (o.seen || 1) > (cur.o.seen || 1))) byField.set(f, { k, o });
-    });
+    for (const c of cands) {
+      if (!qualifies(c.o)) continue;
+      const f = indexField(c.o.name);
+      if (f && !byField.has(f)) byField.set(f, c);
+    }
     const fields = [...byField.keys()];
+    const existing = fields.length ? ((await redisPost(base, token, ["HMGET", IDX, ...fields])) || []) : [];
     const verdicts = fields.length ? ((await redisPost(base, token, ["HMGET", JUDGE, ...fields])) || []) : [];
     const toJudge = [];
     for (let i = 0; i < fields.length; i++) {
-      const { k, o } = byField.get(fields[i]);
+      const { o } = byField.get(fields[i]);
+      const ex = safeParse(existing[i]);
+      if (ex) {
+        // כבר מוצג: אותם ערכים מחזקים אותו, ערכים אחרים אינם דורסים
+        if (sameValues(ex.per100, o.per100)) { ex.seen = (ex.seen || 1) + 1; ex.ts = Date.now(); await redisPost(base, token, ["HSET", IDX, fields[i], JSON.stringify(ex)]); }
+        continue;
+      }
       const v = safeParse(verdicts[i]);
-      // כבר נבדק על אותם ערכים: לא שואלים שוב
       if (v && (v.admin || sameValues(v.p, o.per100))) { if (v.ok) await putIndex(base, token, fields[i], o); continue; }
-      toJudge.push({ field: fields[i], k, o });
+      toJudge.push({ field: fields[i], c: byField.get(fields[i]) });
     }
-    const now = toJudge.slice(0, JUDGE_BATCH), later = toJudge.slice(JUDGE_BATCH);
-    if (later.length) await redisPost(base, token, ["SADD", PENDING, ...later.map((x) => x.k)]);
+    const now = toJudge.slice(0, JUDGE_BATCH);
+    const keep = new Set(toJudge.slice(JUDGE_BATCH).map((x) => x.c.m).filter(Boolean));
     let judged = 0;
     if (now.length) {
-      const res = await askJudge(now.map((x) => ({ name: cleanName(x.o.name), per100: x.o.per100, unit: x.o.unit })), base, token);
-      const retry = [];
+      const res = await askJudge(now.map((x) => ({ name: cleanName(x.c.o.name), per100: x.c.o.per100, unit: x.c.o.unit })), base, token);
       for (let i = 0; i < now.length; i++) {
         const ans = res ? res.ok[i] : null;
-        if (ans === null) { retry.push(now[i].k); continue; } // לא ענתה: נבדוק שוב בפעם הבאה
+        const { field, c } = now[i];
+        if (ans === null) { if (c.m) keep.add(c.m); else await redisPost(base, token, ["SADD", PENDING, JSON.stringify(c.o)]); continue; } // לא ענתה: שוב בפעם הבאה
         judged++;
-        const { field, o } = now[i];
-        await redisPost(base, token, ["HSET", JUDGE, field, JSON.stringify({ ok: ans, p: o.per100, why: res.why[i], ts: Date.now() })]);
-        if (ans) await putIndex(base, token, field, o);
-        else {
-          // נפסל: יוצא מהאינדקס, אבל רק אם מה שיושב שם הוא אותם ערכים שנפסלו
-          const ex = safeParse(await redisPost(base, token, ["HGET", IDX, field]));
-          if (ex && sameValues(ex.per100, o.per100)) await redisPost(base, token, ["HDEL", IDX, field]);
-        }
+        await redisPost(base, token, ["HSET", JUDGE, field, JSON.stringify({ ok: ans, p: c.o.per100, why: res.why[i], ts: Date.now() })]);
+        if (ans) await putIndex(base, token, field, c.o);
       }
-      retry.forEach((k) => retrySet.add(k));
-      if (retry.length) await redisPost(base, token, ["SADD", PENDING, ...retry]);
     }
-    later.forEach((x) => retrySet.add(x.k));
-    await done();
+    const drop = members.filter((m) => !keep.has(m));
+    if (drop.length) await redisPost(base, token, ["SREM", PENDING, ...drop]);
     if (nextCursor !== null) await redisPost(base, token, ["SET", CURSOR, nextCursor === "0" ? "done" : nextCursor]);
     return { ran: true, judged };
   } finally {
@@ -223,7 +225,7 @@ export default async function handler(req, res) {
       const old = safeParse(await redisPost(base, token, ["GET", k]));
       await redisPost(base, token, ["DEL", k]);
       // ויוצא גם מהחיפוש, ונרשם כפסול כדי שרישום הבא של אותו שם לא יחזיר אותו
-      const f = indexField(old ? old.name : k.slice(4));
+      const f = indexField(old ? old.name : (raw.startsWith("cat:") ? raw.slice(4) : raw));
       if (f) {
         await redisPost(base, token, ["HDEL", IDX, f]);
         await redisPost(base, token, ["HSET", JUDGE, f, JSON.stringify({ ok: false, p: old ? old.per100 : null, why: "deleted by admin", ts: Date.now(), admin: true })]);
@@ -273,7 +275,7 @@ export default async function handler(req, res) {
         const flat = sc[1] || [];
         for (let j = 0; j + 1 < flat.length; j += 2) {
           const o = safeParse(flat[j + 1]);
-          if (o && o.per100 && Date.now() - (o.ts || 0) < INDEX_MAX_AGE_MS) hits.push({ field: flat[j], o });
+          if (o && o.per100) hits.push({ field: flat[j], o });
         }
         cur = String(sc[0]);
         if (cur === "0") break;
@@ -318,7 +320,27 @@ export default async function handler(req, res) {
         }
       }
     } catch (e) { /* staying private is the safe failure */ }
+    // ומועמד לחיפוש לכל הנשים, אחרי הבדיקות. תקלה כאן אינה משנה את התשובה לה.
+    try { await addCandidate(base, token, name, clean, unit); await fillIndex(base, token); } catch (e) { /* ignore */ }
     return res.status(200).json({ ok: true, shared });
+  }
+
+  // --- ערכים שהיא הקלידה מתווית, בלי ברקוד. v7.50 ---
+  // הזנה ידנית במצב "ל-100 גרם". שום דבר לא נשמר על שמה: רק שם המוצר והמספרים, כמועמד
+  // לחיפוש, והוא מוצג לאחרות רק אם עבר את ארבע הבדיקות.
+  if (req.method === "POST" && q.action === "label") {
+    const uid = String(req.headers["x-user-id"] || "").trim();
+    if (!uid) return res.status(200).json({ ok: false, reason: "no_user" });
+    let body;
+    try { body = typeof req.body === "string" ? JSON.parse(req.body) : req.body; } catch (e) { return res.status(400).json({ ok: false, reason: "bad_body" }); }
+    const name = String((body && body.name) || "").trim();
+    const per100 = body && body.per100;
+    const unit = body && body.unit === "ml" ? "ml" : "g";
+    if (!name || !plausiblePer100(per100)) return res.status(200).json({ ok: false, reason: "rejected" });
+    const clean = { kcal: per100Round(per100.kcal), p: per100Round(per100.p), f: per100Round(per100.f), c: per100Round(per100.c) };
+    let queued = false;
+    try { queued = await addCandidate(base, token, name, clean, unit); if (queued) await fillIndex(base, token); } catch (e) { /* ignore */ }
+    return res.status(200).json({ ok: true, queued });
   }
 
   // --- add / upsert ---
@@ -349,17 +371,6 @@ export default async function handler(req, res) {
     }
     await redisPost(base, token, ["SET", k, JSON.stringify(entry), "EX", "15552000"]); // ~180d, refreshed on each use
 
-    // **מכאן v7.48: האם הפריט מוצג בחיפוש.** המאגר כבר התעדכן למעלה בדיוק כמו קודם, וכל
-    // מה שלמטה עטוף כך שתקלה בו לעולם אינה משנה את התשובה.
-    try {
-      if (qualifies(entry)) {
-        const f = indexField(entry.name);
-        const v = safeParse(await redisPost(base, token, ["HGET", JUDGE, f]));
-        if (v && (v.admin || sameValues(v.p, entry.per100))) { if (v.ok) await putIndex(base, token, f, entry); }
-        else await redisPost(base, token, ["SADD", PENDING, k]);
-      }
-      await fillIndex(base, token);
-    } catch (e) { /* the log itself already succeeded */ }
     return res.status(200).json({ ok: true, key: k, seen: entry.seen, source: entry.source });
   }
 

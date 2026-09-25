@@ -1,4 +1,4 @@
-// מה מתוך המאגר הגדול מוצג בחיפוש לכל הנשים. v7.48
+// מה מוצג בחיפוש המזון לכל הנשים. v7.48, ומ-v7.50 ערכים מתווית בלבד
 //
 //   node qa/catalog-index-check.mjs
 //
@@ -12,7 +12,7 @@ process.env.UPSTASH_REDIS_REST_TOKEN = "t";
 process.env.ANTHROPIC_API_KEY = "k";
 
 import { readFileSync } from "node:fs";
-import { nameProblem, cleanName, parseJudge, escapeGlob, indexField } from "../lib/catfilter.js";
+import { nameProblem, dairyProblem, cleanName, parseJudge, escapeGlob, indexField } from "../lib/catfilter.js";
 
 // ---------- Redis מדומה ----------
 let str = new Map(), hash = new Map(), sets = new Map(), cmds = [];
@@ -52,6 +52,7 @@ function redis(cmd) {
       for (const [f, v] of H(a)) if (rx.test(f)) out.push(f, v);
       return ["0", out];
     }
+    case "SCARD": return S(a).size;
     case "SADD": { r.forEach((x) => S(a).add(x)); return r.length; }
     case "SRANDMEMBER": return [...S(a)].slice(0, Number(r[0]) || 1);
     case "SREM": { let n = 0; r.forEach((x) => { if (S(a).delete(x)) n++; }); return n; }
@@ -120,152 +121,150 @@ ck("מילת גודל יורדת: \"נקטרינה בינונית-קטנה\" -> 
 ck("וסימני קריאה: \"קוטג 2%!!!\" -> \"קוטג 2%\"", cleanName("קוטג 2%!!!") === "קוטג 2%");
 ck("גרש עברי ורגיל הם אותו פריט", indexField("קוטג׳ 5%") === indexField("קוטג' 5%"), indexField("קוטג׳ 5%") + " / " + indexField("קוטג' 5%"));
 
-console.log("\nב. פריט טוב: נכנס למאגר, נבדק פעם אחת, ומופיע בחיפוש\n");
+const label = (name, per100, who = "w@test.co", unit = "g") => call({ method: "POST", query: { action: "label" }, headers: { "x-user-id": who }, body: { name, per100, unit } });
+const bc = (code, name, per100, who = "w@test.co") => call({ method: "POST", query: { action: "bc" }, headers: { "x-user-id": who }, body: { code, name, per100, unit: "g" } });
+const COT = { kcal: 95, p: 11, f: 5, c: 2 };
+
+console.log("\nב. כלל היצרן או אחוז השומן במוצרי חלב, החלטת רון\n");
+for (const [n, want] of [["קוטג", "generic"], ["קוטג' 5%", null], ["קוטג׳ 5% תנובה", null], ["יוגורט דנונה", null], ["יוגורט ללא סוכר", "generic"], ["לבנה", "generic"], ["חלב שקדים אלפרו", null], ["פשטידת גבינה", null], ["טחינה הר ברכה", null]]) {
+  ck(`"${n}" -> ${want || "מוצג"}`, dairyProblem(n) === want, dairyProblem(n));
+}
+
+console.log("\nג. המאגר הגדול ממשיך להתמלא, ואינו מוצג בחיפוש\n");
 reset();
 let r = await log("נקטרינה", NECT);
-ck("הרישום מצליח כמו תמיד", r.ok === true, JSON.stringify(r));
-ck("ונכנס למאגר הגדול", inStore("נקטרינה"));
-ck("והבינה נשאלה עליו פעם אחת", aiCalls === 1, aiCalls);
-ck("ואחרי שנבדק הוא יוצא מרשימת ההמתנה", !(sets.get("catidx:pending") || new Set()).size);
-let items = await search("נקט");
-ck("**מופיע בחיפוש \"נקט\"**", items.length === 1 && items[0].name === "נקטרינה", JSON.stringify(items.map((i) => i.name)));
-ck("עם הערכים שלו ל-100 גרם", items[0] && items[0].per100.kcal === 44 && items[0].per100.p === 1.1, JSON.stringify(items[0] && items[0].per100));
-ck("**והחיפוש אינו משתמש ב-KEYS**, ולוקח פקודה אחת", !cmds.includes("KEYS") && cmds.length === 1, cmds.join(","));
-await log("נקטרינה", NECT);
-await log("נקטרינה", NECT);
-ck("**רישום חוזר של אותו פריט אינו שואל את הבינה שוב**", aiCalls === 1, aiCalls);
-ck("וסופר את השימוש", JSON.parse(hash.get("catidx").get("נקטרינה")).seen === 3);
+ck("רישום ארוחה נשמר במאגר הגדול כמו קודם", r.ok === true && inStore("נקטרינה"), JSON.stringify(r));
+ck("**ואינו מופיע בחיפוש**", (await search("נקט")).length === 0);
+ck("**ואינו נשלח לבינה**", aiCalls === 0, aiCalls);
+H("catidx").set("יוגורט ישן", JSON.stringify({ name: "יוגורט ישן", per100: COT, unit: "g", source: "estimated", seen: 5, ts: Date.now() }));
+ck("**ומה שנכנס לאינדקס של v7.48 אינו נקרא**", (await search("יוגורט")).length === 0);
 
-console.log("\nג. שם של צלחת אישית: נכנס למאגר, לא לחיפוש, ובלי קריאה לבינה\n");
+console.log("\nד. הזנה ידנית מתווית: נבדקת פעם אחת, ומופיעה לכל הנשים\n");
 reset();
-for (const n of ["שתי ביצים", "חצי פיתה", "פיתה + חומוס + סלט", "אייס קפה קטן ארומה עם חלב רגיל וסוכר"]) {
-  r = await log(n, { kcal: 150, p: 10, f: 10, c: 5 });
-  ck(`"${n}": הרישום מצליח ונשמר במאגר`, r.ok === true && inStore(n.toLowerCase()), JSON.stringify(r));
+r = await label("קוטג' 5% תנובה", COT);
+ck("נכנס לבדיקה", r.ok === true && r.queued === true, JSON.stringify(r));
+ck("הבינה נשאלה פעם אחת", aiCalls === 1, aiCalls);
+let items = await search("קוטג");
+ck("**מופיע בחיפוש \"קוטג\"**", items.length === 1 && items[0].name === "קוטג' 5% תנובה", JSON.stringify(items.map((i) => i.name)));
+ck("עם הערכים שהקלידה", items[0] && items[0].per100.kcal === 95 && items[0].per100.p === 11);
+ck("ומסומן כמקור תווית", items[0] && items[0].source === "label", items[0] && items[0].source);
+ck("**והחיפוש פקודה אחת, בלי KEYS**", !cmds.includes("KEYS") && cmds.length === 1, cmds.join(","));
+ck("ואחרי שנבדק יצא מרשימת ההמתנה", !(sets.get("labidx:pending") || new Set()).size);
+await label("קוטג׳ 5% תנובה", COT, "b@test.co");
+ck("**אישה שנייה עם אותם ערכים מחזקת אותו, בלי בינה**", aiCalls === 1 && JSON.parse(H("labidx").get(indexField("קוטג' 5% תנובה"))).seen === 2, aiCalls);
+await label("קוטג' 5% תנובה", { kcal: 150, p: 8, f: 11, c: 3 }, "c@test.co");
+ck("**ואישה שלישית עם ערכים אחרים אינה דורסת**", (await search("קוטג"))[0].per100.kcal === 95 && aiCalls === 1);
+
+console.log("\nה. מה שנפסל לפני הבינה: לא נכנס ולא עולה כסף\n");
+reset();
+for (const [n, p] of [["קוטג", COT], ["יוגורט ללא סוכר", { kcal: 60, p: 5, f: 2, c: 5 }], ["שתי ביצים", { kcal: 150, p: 12, f: 10, c: 1 }], ["פיתה + חומוס", { kcal: 250, p: 8, f: 9, c: 33 }], ["עוגת שוקולד", { kcal: 900, p: 1, f: 1, c: 1 }]]) {
+  r = await label(n, p);
+  ck(`"${n}": לא נכנס`, r.queued !== true, JSON.stringify(r));
 }
-ck("**אף אחד מהם אינו מגיע לבינה**", aiCalls === 0, aiCalls);
-ck("**ואינו מופיע בחיפוש \"ביצ\"**", (await search("ביצ")).length === 0);
-ck("ולא \"פיתה\"", (await search("פיתה")).length === 0);
+ck("**אף אחד מהם לא הגיע לבינה**", aiCalls === 0, aiCalls);
+ck("ואין תוצאות", (await search("קוטג")).length === 0 && (await search("יוגורט")).length === 0);
 
-console.log("\nד. שם תקין עם מספרים שאינם מתיישבים: נדחה כמו קודם\n");
+console.log("\nו. הבינה פוסלת\n");
 reset();
-r = await log("עוגת שוקולד", { kcal: 900, p: 1, f: 1, c: 1 });
-ck("נדחה כבר בשער הקיים", r.ok === false && r.reason === "rejected", JSON.stringify(r));
-ck("ולא נשאל עליו אף אחד", aiCalls === 0);
+r = await label("שיבולת שועל", OATS_BAD);
+ck("לא מופיע בחיפוש", (await search("שיבולת")).length === 0);
+ck("והפסילה נשמרת עם הסיבה", /values off/.test(JSON.parse(H("labjudge").get("שיבולת שועל")).why));
+await label("שיבולת שועל", OATS_BAD, "b@test.co");
+ck("ואינה נשאלת שוב על אותם ערכים", aiCalls === 1, aiCalls);
 
-console.log("\nה. שם תקין שהבינה פוסלת: במאגר, לא בחיפוש\n");
+console.log("\nז. תיקון ברקוד מהתווית\n");
 reset();
-r = await log("שיבולת שועל", OATS_BAD, "usda");
-ck("הרישום מצליח", r.ok === true);
-ck("והפריט במאגר הגדול, לא נמחק", inStore("שיבולת שועל"));
-ck("**אבל אינו מופיע בחיפוש**", (await search("שיבולת")).length === 0);
-ck("והפסילה נשמרת עם הסיבה", /values off/.test(JSON.parse(hash.get("catjudge").get("שיבולת שועל")).why));
-await log("שיבולת שועל", OATS_BAD, "usda");
-ck("ואינו נשאל שוב על אותם ערכים", aiCalls === 1, aiCalls);
-aiBad.delete("שיבולת שועל");
-await log("שיבולת שועל", { kcal: 379, p: 13, f: 6.5, c: 67.7 }, "verified");
-ck("**ערכים נכונים ממקור אמין יותר נבדקים מחדש**", aiCalls === 2, aiCalls);
-ck("ועכשיו מופיע, עם הערכים הנכונים", (await search("שיבולת"))[0]?.per100.kcal === 379, JSON.stringify((await search("שיבולת"))[0]));
-aiBad.add("שיבולת שועל");
+r = await bc("7290000000001", "טחינה הר ברכה", { kcal: 640, p: 24, f: 55, c: 12 });
+ck("נשמר לה כמו קודם", r.ok === true && str.has("bcv:7290000000001:w@test.co"), JSON.stringify(r));
+ck("**ומופיע בחיפוש לכל הנשים**", (await search("טחינה"))[0]?.name === "טחינה הר ברכה", JSON.stringify(await search("טחינה")));
 
-console.log("\nו. הבינה נופלת או אינה עונה\n");
+console.log("\nח. הבינה נופלת, מחזירה 500, מדלגת על שורה, או שאין מפתח\n");
 for (const mode of ["down", "500"]) {
   reset(); aiMode = mode;
-  r = await log("נקטרינה", NECT);
-  ck(`${mode}: הרישום עדיין מצליח`, r.ok === true && inStore("נקטרינה"), JSON.stringify(r));
-  ck(`${mode}: **הפריט אינו מוצג**, כי לא נבדק`, (await search("נקט")).length === 0);
-  ck(`${mode}: ונשאר ממתין לבדיקה`, sets.get("catidx:pending")?.has("cat:נקטרינה"));
+  r = await label("קוטג' 5% תנובה", COT);
+  ck(`${mode}: הבקשה עונה`, r.ok === true, JSON.stringify(r));
+  ck(`${mode}: **לא מוצג, כי לא נבדק**`, (await search("קוטג")).length === 0);
+  ck(`${mode}: ונשאר ממתין`, (sets.get("labidx:pending") || new Set()).size === 1);
   aiMode = "ok";
-  await log("מלפפון", { kcal: 15, p: 0.7, f: 0.1, c: 3.6 });
-  ck(`${mode}: ובפעם הבאה שהבינה עונה, הוא נבדק ומופיע`, (await search("נקט")).length === 1);
+  await label("טחינה הר ברכה", { kcal: 640, p: 24, f: 55, c: 12 });
+  ck(`${mode}: ובפעם הבאה נבדק ומופיע`, (await search("קוטג")).length === 1);
 }
-reset(); aiSkip = new Set(["נקטרינה"]);
-await log("נקטרינה", NECT);
-ck("שורה שהבינה דילגה עליה אינה נחשבת תשובה, ואינה מוצגת", (await search("נקט")).length === 0 && !hash.get("catjudge")?.has("נקטרינה"));
-ck("ונשארת לבדיקה חוזרת", sets.get("catidx:pending")?.has("cat:נקטרינה"));
-
-console.log("\nז. אין מפתח לבינה: שום דבר אינו מוצג, ושום דבר אינו נשבר\n");
+reset(); aiSkip = new Set(["קוטג' 5% תנובה"]);
+await label("קוטג' 5% תנובה", COT);
+ck("שורה שהבינה דילגה עליה אינה מוצגת ונשארת ממתינה", (await search("קוטג")).length === 0 && (sets.get("labidx:pending") || new Set()).size === 1);
 reset(); delete process.env.ANTHROPIC_API_KEY;
-r = await log("נקטרינה", NECT);
-ck("הרישום מצליח והמאגר גדל", r.ok === true && inStore("נקטרינה"));
-ck("ואין תוצאות לא בדוקות בחיפוש", (await search("נקט")).length === 0);
+r = await label("קוטג' 5% תנובה", COT);
+ck("אין מפתח: הבקשה עונה, ושום דבר אינו מוצג", r.ok === true && (await search("קוטג")).length === 0);
 process.env.ANTHROPIC_API_KEY = "k";
 
-console.log("\nח. מה שכבר היה במאגר לפני הגרסה הזאת עובר את אותה בדיקה, פעם אחת\n");
+console.log("\nט. תיקוני הברקוד שכבר היו לפני הגרסה הזאת נבדקים פעם אחת\n");
 reset();
-const now = Date.now();
-const old = [];
-for (let i = 0; i < 120; i++) {
-  const bad = i % 4 === 0, junk = i % 4 === 1;
-  const name = junk ? `שתי פרוסות לחם ${String.fromCharCode(1488 + (i % 22))}${String.fromCharCode(1488 + Math.floor(i / 22))}` : bad ? "שיבולת שועל" + (i ? " דקה " + String.fromCharCode(1488 + (i % 22)) + String.fromCharCode(1488 + Math.floor(i / 22)) : "") : `מזון בדיקה ${String.fromCharCode(1489 + (i % 21))}${String.fromCharCode(1489 + Math.floor(i / 21))}`;
-  old.push(name);
-  str.set("cat:" + name.toLowerCase(), JSON.stringify({ name, per100: bad ? OATS_BAD : { kcal: 100, p: 5, f: 3, c: 13 }, unit: "g", source: "estimated", seen: 1, ts: now }));
+const L = (i) => String.fromCharCode(1489 + (i % 21)) + String.fromCharCode(1489 + Math.floor(i / 21));
+const oldGood = [];
+for (let i = 0; i < 60; i++) {
+  const junk = i % 3 === 0;
+  const name = junk ? `קוטג ${L(i)}` : `חטיף בדיקה ${L(i)}`;
+  if (!junk) oldGood.push(name);
+  str.set(`bcv:72900${i}:u${i}@t`, JSON.stringify({ name, per100: { kcal: 400, p: 8, f: 18, c: 50 }, unit: "g", ts: 1 }));
 }
-aiBad = new Set(old.filter((n) => n.startsWith("שיבולת שועל")));
-for (let i = 0; i < 20 && str.get("catidx:cursor") !== "done"; i++) await fillIndex("https://redis.test", "t");
-ck("**המעבר מסתיים**", str.get("catidx:cursor") === "done", str.get("catidx:cursor"));
-const idx = hash.get("catidx") || new Map();
-const goodOld = old.filter((n) => n.startsWith("מזון בדיקה"));
-ck(`**כל ${goodOld.length} הטובים באינדקס**`, goodOld.every((n) => idx.has(n)), goodOld.filter((n) => !idx.has(n)).join(","));
-ck("**אף אחד מאלה שהבינה פסלה**", ![...idx.keys()].some((f) => f.startsWith("שיבולת")));
-ck("**ואף שם של צלחת**", ![...idx.keys()].some((f) => f.includes("פרוסות")));
-ck("וכל פריט נשאל פעם אחת בלבד", new Set(aiSeen.map((l) => l.replace(/^\d+\. /, ""))).size === aiSeen.length, aiSeen.length);
-ck("ובקבוצות של עד 40", aiCalls <= Math.ceil(90 / 40) + 2, aiCalls);
-ck("**ושום דבר לא נמחק מהמאגר**", old.every((n) => str.has("cat:" + n.toLowerCase())));
-aiBad = new Set(["שיבולת שועל"]);
+for (let i = 0; i < 20 && str.get("labidx:cursor") !== "done"; i++) await fillIndex("https://redis.test", "t");
+ck("**המעבר מסתיים**", str.get("labidx:cursor") === "done", str.get("labidx:cursor"));
+const idx = H("labidx");
+ck(`כל ${oldGood.length} הטובים מוצגים`, oldGood.every((n) => idx.has(indexField(n))), oldGood.filter((n) => !idx.has(indexField(n))).join(","));
+ck("**ואף קוטג בלי יצרן ובלי אחוז**", ![...idx.keys()].some((f) => f.startsWith("קוטג")));
+ck("וכל פריט נשאל פעם אחת", new Set(aiSeen.map((l) => l.replace(/^\d+\. /, ""))).size === aiSeen.length, aiSeen.length);
 
-console.log("\nט. שתי הרצות במקביל אינן בודקות את אותו פריט פעמיים\n");
+console.log("\nי. שתי הרצות במקביל\n");
 reset();
-for (let i = 0; i < 30; i++) str.set(`cat:פרי ${i}`, JSON.stringify({ name: `פרי ${i}`, per100: { kcal: 50, p: 1, f: 0, c: 12 }, unit: "g", source: "estimated", seen: 1, ts: Date.now() }));
+for (let i = 0; i < 10; i++) sets.set("labidx:pending", (sets.get("labidx:pending") || new Set()).add(JSON.stringify({ name: `חטיף ${L(i)}`, per100: { kcal: 400, p: 8, f: 18, c: 50 }, unit: "g" })));
+str.set("labidx:cursor", "done");
 const [a1, a2] = await Promise.all([fillIndex("https://redis.test", "t"), fillIndex("https://redis.test", "t")]);
 ck("אחת רצה והשנייה מוותרת", [a1.reason, a2.reason].includes("locked"), JSON.stringify([a1, a2]));
-ck("והנעילה משתחררת בסוף", !str.has("catidx:lock"));
+ck("והנעילה משתחררת", !str.has("labidx:lock"));
 
-console.log("\nי. סדר התוצאות, ופריטים ישנים\n");
+console.log("\nיא. סדר התוצאות, תווים מיוחדים, ותקרת ההמתנה\n");
 reset();
-for (const [n, seen] of [["מיץ תפוח", 9], ["תפוח עץ ירוק", 2], ["תפוח", 1], ["עוגת תפוחים", 20]]) {
-  str.set("cat:" + n, JSON.stringify({ name: n, per100: { kcal: 52, p: 0.3, f: 0.2, c: 14 }, unit: "g", source: "estimated", seen, ts: Date.now() }));
-}
-str.set("cat:אגס ישן", JSON.stringify({ name: "אגס ישן", per100: { kcal: 57, p: 0.4, f: 0.1, c: 15 }, unit: "g", source: "estimated", seen: 1, ts: Date.now() - 200 * 24 * 3600 * 1000 }));
-for (let i = 0; i < 5; i++) await fillIndex("https://redis.test", "t");
-items = await search("תפוח");
-ck("שם זהה ראשון, ואחריו מה שמתחיל במילה", items[0]?.name === "תפוח" && items[1]?.name === "תפוח עץ ירוק", items.map((i) => i.name).join(" | "));
-ck("ורק אחריהם התאמה באמצע השם", items.slice(2).map((i) => i.name).join("|") === "עוגת תפוחים|מיץ תפוח", items.map((i) => i.name).join(" | "));
-ck("פריט שלא נרשם 180 יום אינו מוצג", (await search("אגס")).length === 0);
-ck("כוכבית בשאילתה אינה מחזירה את כל המאגר", (await search("**")).length === 0);
+for (const n of ["יוגורט דנונה 3%", "משקה יוגורט יטבתה", "יוגורט"]) await label(n, { kcal: 60, p: 5, f: 3, c: 5 });
+items = await search("יוגורט");
+ck("שם שמתחיל במילה קודם להתאמה באמצע", items[0]?.name === "יוגורט דנונה 3%" && items[1]?.name === "משקה יוגורט יטבתה", items.map((i) => i.name).join(" | "));
+ck("\"יוגורט\" לבדו לא נכנס בכלל", !items.some((i) => i.name === "יוגורט"));
+ck("כוכבית אינה מחזירה הכל", (await search("**")).length === 0);
 ck("escapeGlob", escapeGlob("a*b[c]") === "a\\*b\\[c\\]");
-reset();
-for (const n of ["נקטרינה קטנה", "נקטרינה בינונית", "נקטרינה גדולה"]) await log(n, NECT);
-items = await search("נקטרינה");
-ck("**שלושה גדלים של אותו פרי הם שורה אחת בחיפוש**", items.length === 1 && items[0].name === "נקטרינה", items.map((i) => i.name).join(" | "));
-ck("ונבדקו בבינה פעם אחת", aiCalls === 1, aiCalls);
-await log("קוטג׳ 5%", { kcal: 95, p: 11, f: 5, c: 2 });
-ck("**חיפוש עם גרש רגיל מוצא את מה שנרשם עם גרש עברי**", (await search("קוטג' 5")).length === 1 && (await search("קוטג")).length === 1);
+reset(); delete process.env.ANTHROPIC_API_KEY;
+for (let i = 0; i < 2000; i++) sets.set("labidx:pending", (sets.get("labidx:pending") || new Set()).add("x" + i));
+r = await label("טחינה הר ברכה", { kcal: 640, p: 24, f: 55, c: 12 });
+ck("מעל 2,000 ממתינים לא מוסיפים עוד", r.queued === false && sets.get("labidx:pending").size === 2000, JSON.stringify(r));
+process.env.ANTHROPIC_API_KEY = "k";
 
-console.log("\nיא. מחיקה מהמשרד\n");
+console.log("\nיב. מחיקה מהמשרד\n");
 process.env.NOTIFY_SECRET = "s";
 reset();
-await log("נקטרינה", NECT);
-await call({ query: { action: "del", key: "נקטרינה", secret: "s" } });
-ck("הפריט יוצא מהחיפוש", (await search("נקט")).length === 0);
-await log("נקטרינה", NECT);
-ck("**ורישום חדש של אותו שם אינו מחזיר אותו**", (await search("נקט")).length === 0);
+await label("קוטג' 5% תנובה", COT);
+await call({ query: { action: "del", key: "קוטג' 5% תנובה", secret: "s" } });
+ck("יוצא מהחיפוש", (await search("קוטג")).length === 0);
+await label("קוטג' 5% תנובה", COT, "b@test.co");
+ck("**והקלדה חוזרת אינה מחזירה אותו**", (await search("קוטג")).length === 0);
 
-console.log("\nיב. הפענוח של תשובת הבינה\n");
+console.log("\nיג. הפענוח של תשובת הבינה\n");
 let pj = parseJudge("1:OK\n2:BAD typo\n3: ok\nsomething else\n2:OK", 4);
 ck("OK, BAD, רווחים ואותיות קטנות", pj.ok[0] === true && pj.ok[1] === false && pj.ok[2] === true, JSON.stringify(pj.ok));
-ck("שורה שלא נענתה נשארת null ולא נחשבת פסולה", pj.ok[3] === null);
+ck("שורה שלא נענתה נשארת null", pj.ok[3] === null);
 ck("תשובה ראשונה לשורה קובעת", pj.ok[1] === false && pj.why[1] === "typo");
-ck("מספר מחוץ לטווח מתעלמים ממנו", parseJudge("9:OK", 2).ok.every((x) => x === null));
 
-console.log("\nיג. באפליקציה\n");
+console.log("\nיד. באפליקציה\n");
 const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
-ck("**התרגום לבינה אינו נקרא כשהמאגר כבר מצא**", /if \(!items\.length && alive\(\) && !catFound\) \{ const en = await translateFoodToEnglish\(q\)/.test(app));
-ck("והמאגר מסמן שמצא", /catFound = \(cat \|\| \[\]\)\.length > 0/.test(app));
-ck("**המאגר אינו דורס מספרים בשיחה עם הבינה**, כמו עד היום", /const CATALOG_IN_RECONCILE = false;/.test(app) && /if \(!result && CATALOG_IN_RECONCILE\) \{ try \{ const cat = await catalogSearch\(name\)/.test(app));
-ck("הכותרת בחיפוש קיימת ולא השתנתה", app.includes(">מהקטלוג שלנו</div>"));
+const save = app.slice(app.indexOf("const saveManual = () => {"), app.indexOf("// Two-stage search."));
+ck("**הזנה ידנית ל-100 גרם בלי ברקוד נשלחת כמועמד**", /if \(!mWhole\) catalogLabelPut\(name, \{/.test(save));
+ck("**וערכים של מנה שלמה לא נשלחים**: הקריאה היחידה נמצאת בתוך if (!mWhole)", (save.match(/catalogLabelPut\(/g) || []).length === 1 && save.includes("if (!mWhole) catalogLabelPut("));
+ck("ועם ברקוד היא הולכת בדרך של הברקוד ויוצאת לפני", save.indexOf("catalogBarcodePut(") < save.indexOf("catalogLabelPut(") && /setTimeout\(\(\) => commit\(entry\), 1200\);\s*return;/.test(save));
+ck("השמירה ביומן עדיין מסומנת manual, ולכן המאגר הגדול מדלג עליה", /source: "manual"/.test(save));
+ck("התרגום לבינה אינו נקרא כשהקטלוג מצא", /if \(!items\.length && alive\(\) && !catFound\) \{ const en = await translateFoodToEnglish\(q\)/.test(app));
+ck("המאגר אינו דורס מספרים בשיחה עם הבינה", /const CATALOG_IN_RECONCILE = false;/.test(app));
 const srv = readFileSync(new URL("../api/catalog.js", import.meta.url), "utf8");
 const searchBlock = srv.slice(srv.indexOf("// --- search ---"), srv.indexOf("// --- her correction"));
-ck("**חיפוש השם בשרת אינו סורק את המאגר (KEYS)**", searchBlock.length > 100 && !searchBlock.includes('"KEYS"'));
+ck("**החיפוש בשרת קורא רק את labidx, בלי KEYS**", searchBlock.includes('"HSCAN", IDX') && !searchBlock.includes('"KEYS"') && /const IDX = "labidx"/.test(srv));
+const upsert = srv.slice(srv.indexOf("// --- add / upsert ---"));
+ck("**רישום ארוחה לא מזין את החיפוש**", !upsert.includes("addCandidate") && !upsert.includes("fillIndex") && !upsert.includes("PENDING"));
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);

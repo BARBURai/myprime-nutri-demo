@@ -125,9 +125,9 @@ const catalog = (await import("../api/catalog.js")).default;
 const food = (i) => JSON.stringify({ name: `מוצר ${i}`, per100: { kcal: 100, p: 5, f: 3, c: 12 }, unit: "g", source: "off", seen: 1, ts: 1 });
 for (const n of [8896, 30000, 100000]) {
   db = { str: {}, hash: {} };
-  // מ-v7.48 החיפוש קורא את האינדקס catidx בלבד. מלאים את שניהם, כמו אחרי שהמעבר על המאגר הסתיים
-  db.hash.catidx = {};
-  for (let i = 0; i < n; i++) { db.str[`cat:מוצר_דוגמה_${i}`] = food(i); db.hash.catidx[`מוצר_דוגמה_${i}`] = JSON.stringify({ ...JSON.parse(food(i)), ts: Date.now() }); }
+  // מ-v7.50 החיפוש קורא את האינדקס labidx בלבד. מלאים את שניהם, כמו אחרי שהמעבר על המאגר הסתיים
+  db.hash.labidx = {};
+  for (let i = 0; i < n; i++) { db.str[`cat:מוצר_דוגמה_${i}`] = food(i); db.hash.labidx[`מוצר_דוגמה_${i}`] = JSON.stringify({ ...JSON.parse(food(i)), ts: Date.now() }); }
   resetStats();
   const t = performance.now();
   const r = await call(catalog, { q: "דוגמה_12" });
