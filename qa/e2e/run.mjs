@@ -210,6 +210,42 @@ const CHECKS = [
     },
   },
   {
+    // v7.51: היא מקלידה "קוטג'" בלבד, 5 גרם שומן ויצרן. אחוז השומן נגזר מהשדה, והשם המלא
+    // מגיע גם ליומן שלה וגם לחיפוש המשותף. ובמצב "לכל המנה" שדה היצרן אינו קיים.
+    name: "הזנה ידנית: אחוז השומן והיצרן נכנסים לשם, ביומן ובחיפוש",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const bad = [];
+      const sent = [];
+      page.on("request", (rq) => { if (rq.url().includes("/api/catalog?action=label")) sent.push(rq.postData() || ""); });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=הזנה ידנית").first().click();
+      await page.waitForTimeout(400);
+      await page.locator('input[placeholder="לדוגמה: חטיף חלבון"]').fill("קוטג'");
+      const brand = page.locator('input[placeholder="לדוגמה: תנובה"]');
+      if (!(await brand.count())) bad.push("שדה היצרן חסר ב-ל-100 גרם");
+      else await brand.fill("תנובה");
+      await page.locator("text=לכל המנה").first().click(); await page.waitForTimeout(200);
+      if (await brand.count()) bad.push("שדה היצרן מוצג בלכל המנה");
+      await page.locator("text=ל-100 ג׳").first().click(); await page.waitForTimeout(200);
+      const nums = page.locator('input[inputmode="decimal"]');
+      const vals = ["100", "95", "11", "5", "2"];
+      const n = await nums.count();
+      for (let i = 0; i < Math.min(n, vals.length); i++) await nums.nth(i).fill(vals[i]);
+      await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+      await page.waitForTimeout(1000);
+      const want = "קוטג' 5% תנובה";
+      if (!(sent.length === 1 && JSON.parse(sent[0]).name === want)) bad.push("נשלח לחיפוש: " + JSON.stringify(sent).slice(0, 90));
+      if (!(await page.locator(`text=${want}`).count())) bad.push("ביומן אין את השם המלא");
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.join(" · ") || `"${want}" ביומן ובחיפוש, ושדה היצרן רק ב-ל-100` };
+    },
+  },
+  {
     // משתתפת, 25 בספטמבר 2026: "בחלון של הוספת רגישויות ואלרגיות לא ניתן לרשום דבר."
     // מקלידים בשדה "רגישויות נוספות" בפרופיל כמו אישה, מקישים על הפלוס, ובודקים שהצ'יפ נוצר.
     name: "רגישויות נוספות בפרופיל: אפשר להקליד ולהוסיף",

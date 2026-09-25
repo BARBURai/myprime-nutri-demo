@@ -13,6 +13,7 @@ import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
 import { GLOW_STARTED_KEY, hasGlow, glowStarted } from "./content/glow";
+import { labelName } from "../lib/catfilter.js";
 
 // **הפעם הראשונה שיש כאן טעינה מושהית, וזה מכוון.** האפליקציה כולה נבנית היום
 // לקובץ אחד של כ-1,480 קילובייט, ולכן כל אישה מורידה גם מה שלא תפתח לעולם.
@@ -734,7 +735,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.50";
+const VERSION = "7.51";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3688,7 +3689,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [histQ, setHistQ] = useState(""); // חיפוש בתוך האחרונים והמועדפים, חוצה את שתי הלשוניות
   const [delTarget, setDelTarget] = useState(null); // { item, list } pending delete confirmation
   const [aiAsOne, setAiAsOne] = useState(true); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product (default = one product, recommended)
-  const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
+  const [mName, setMName] = useState(""); const [mBrand, setMBrand] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
   const [mKcal, setMKcal] = useState(""); const [mProt, setMProt] = useState(""); const [mFat, setMFat] = useState(""); const [mCarb, setMCarb] = useState("");
   // המספרים שהיא מחזיקה ביד הם או מהתווית, שהיא תמיד ל-100 גרם, או של המנה עצמה,
   // כמו שהיא מקבלת ממנוע AI חיצוני. השדות זהים ורק החישוב משתנה, ולכן זה מתג ולא מסך.
@@ -3697,7 +3698,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const mLbl = { display: "block", fontSize: 13, color: C.sub, marginBottom: 4 };
   const saveManual = () => {
     if (labelSaved) return; // the thank-you is showing and the entry is already on its way
-    const name = mName.trim();
+    // במצב "ל-100 גרם": אחוז השומן של מוצר חלב והיצרן נכנסים לשם, ביומן ובחיפוש כאחד. v7.51
+    const name = mWhole ? mName.trim() : labelName(mName, mBrand, mFat);
     // בערכים של מנה שלמה המשקל אינו נתון שיש לה, ולכן הוא לא נדרש ואינו משפיע על החישוב.
     const amount = Math.round(Number(mAmount) || 0) || (mWhole ? 1 : 0);
     if (!name || amount <= 0) return;
@@ -4080,6 +4082,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             </div>
             <label style={mLbl}>שם המוצר</label>
             <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="לדוגמה: חטיף חלבון" style={mInput} />
+            {!mWhole && (<><label style={{ ...mLbl, marginTop: 12 }}>יצרן (לא חובה)</label>
+            <input value={mBrand} onChange={(e) => setMBrand(e.target.value)} placeholder="לדוגמה: תנובה" style={mInput} data-brand="1" /></>)}
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               <div style={{ flex: 1 }}><label style={mLbl}>{mWhole ? "כמות (לא חובה)" : "כמות שאכלת"}</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
@@ -4502,6 +4506,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                     // ארוך. היא לא אמורה לראות 1.4000000000000001 בשדה.
                     const r1 = (n) => { const v = Math.round((Number(n) || 0) * 10) / 10; return v ? String(v) : ""; };
                     setMName(food.name || "");
+                    setMBrand("");
                     setMAmount(String(grams || 100));
                     setMUnit(food.unit === "ml" ? "ml" : "g");
                     setMKcal(r1(food.per100.kcal));

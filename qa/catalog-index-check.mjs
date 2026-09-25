@@ -12,7 +12,7 @@ process.env.UPSTASH_REDIS_REST_TOKEN = "t";
 process.env.ANTHROPIC_API_KEY = "k";
 
 import { readFileSync } from "node:fs";
-import { nameProblem, dairyProblem, cleanName, parseJudge, escapeGlob, indexField } from "../lib/catfilter.js";
+import { nameProblem, dairyProblem, cleanName, parseJudge, escapeGlob, indexField, labelName } from "../lib/catfilter.js";
 
 // ---------- Redis מדומה ----------
 let str = new Map(), hash = new Map(), sets = new Map(), cmds = [];
@@ -265,6 +265,26 @@ const searchBlock = srv.slice(srv.indexOf("// --- search ---"), srv.indexOf("// 
 ck("**החיפוש בשרת קורא רק את labidx, בלי KEYS**", searchBlock.includes('"HSCAN", IDX') && !searchBlock.includes('"KEYS"') && /const IDX = "labidx"/.test(srv));
 const upsert = srv.slice(srv.indexOf("// --- add / upsert ---"));
 ck("**רישום ארוחה לא מזין את החיפוש**", !upsert.includes("addCandidate") && !upsert.includes("fillIndex") && !upsert.includes("PENDING"));
+
+console.log("\nטו. אחוז השומן והיצרן בשם, v7.51\n");
+for (const [args, want] of [
+  [["קוטג'", "", "5"], "קוטג' 5%"],
+  [["קוטג׳", "תנובה", "5"], "קוטג׳ 5% תנובה"],
+  [["יוגורט", "", "0"], "יוגורט 0%"],
+  [["גבינה לבנה", "", "4.8"], "גבינה לבנה 4.8%"],
+  [["קוטג' 3%", "", "5"], "קוטג' 3%"],
+  [["קוטג' 5% תנובה", "תנובה", "5"], "קוטג' 5% תנובה"],
+  [["יוגורט", "", ""], "יוגורט"],
+  [["חטיף חלבון", "", "7"], "חטיף חלבון"],
+  [["חטיף חלבון", "נייצ'ר ואלי", "7"], "חטיף חלבון נייצ'ר ואלי"],
+  [["פשטידת גבינה", "", "9"], "פשטידת גבינה"],
+]) ck(`${JSON.stringify(args)} -> "${want}"`, labelName(...args) === want, labelName(...args));
+ck("**מוצר חלב עם שדה שומן מלא תמיד עובר את כלל היצרן או האחוז**", dairyProblem(labelName("קוטג'", "", "5")) === null && dairyProblem(labelName("לבן", "", "1.5")) === null);
+ck("**ושדה שומן ריק אינו נחשב אפס**", dairyProblem(labelName("יוגורט", "", "")) === "generic");
+ck("**האפליקציה בונה את השם דרך labelName, ורק במצב ל-100**", /const name = mWhole \? mName\.trim\(\) : labelName\(mName, mBrand, mFat\);/.test(save));
+ck("ואותו שם הולך ליומן ולחיפוש", /const entry = \{ meal, name,/.test(save) && save.includes("catalogLabelPut(name,"));
+ck("**שדה היצרן מוצג רק במצב ל-100**", /\{!mWhole && \(<><label style=\{\{ \.\.\.mLbl, marginTop: 12 \}\}>יצרן \(לא חובה\)<\/label>/.test(app) && app.includes('placeholder="לדוגמה: תנובה"'));
+ck("ומתאפס בתיקון מהתווית", /setMName\(food\.name \|\| ""\);\s*setMBrand\(""\);/.test(app));
 
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
