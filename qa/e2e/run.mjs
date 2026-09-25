@@ -177,6 +177,33 @@ const record = (device, name, ok, detail, skip) => {
 
 const CHECKS = [
   {
+    // משתתפת, 25 בספטמבר 2026: "בחלון של הוספת רגישויות ואלרגיות לא ניתן לרשום דבר."
+    // מקלידים בשדה "רגישויות נוספות" בפרופיל כמו אישה, מקישים על הפלוס, ובודקים שהצ'יפ נוצר.
+    name: "רגישויות נוספות בפרופיל: אפשר להקליד ולהוסיף",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const bad = [];
+      await page.locator("text=פרופיל").last().click();
+      await page.waitForTimeout(700);
+      await page.locator("text=העדפות תזונה").first().click();
+      await page.waitForTimeout(400);
+      const input = page.locator('input[placeholder^="הקלידי והוסיפי"]').first();
+      if (!(await input.count())) bad.push("השדה לא נמצא");
+      else {
+        await input.click();
+        await page.keyboard.type("בלי חריף", { delay: 40 });
+        const typed = await input.inputValue();
+        if (typed !== "בלי חריף") bad.push(`אחרי הקלדה השדה מכיל "${typed}"`);
+        await page.locator('button[aria-label="הוספה"]').first().click();
+        await page.waitForTimeout(300);
+        if (!(await page.locator("text=בלי חריף").count())) bad.push("הצ'יפ לא נוצר");
+      }
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "הוקלד ונוסף" };
+    },
+  },
+  {
     // **החלבון היה המשימה האוטומטית היחידה שדרשה הצלחה ולא דיווח**, ולכן מי שלא
     // תיעדה את כל מה שאכלה לא סגרה את היום, לא קיבלה מדליה, והרצף שלה נשבר.
     // עכשיו היא מסומנת לבד למי שהגיעה ליעד, ומי שלא יכולה לסמן בעצמה. הבדיקה
