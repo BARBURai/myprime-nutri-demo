@@ -1511,19 +1511,10 @@ function render(){
         '</div>';
       }
       if(r) return '<div class="note-card done">'+head+'<div class="nsent">סומנה כטופלה '+esc(stamp(r.at))+(r.by?' · '+esc(r.by):'')+', בלי תשובה אליה.</div></div>';
-      var sug = bankSuggest(n.text);
+      // **התשובות המוכנות אינן מוצגות יותר, מ-v7.49.** רון: "תוריד את התשובות המוכנות
+      // מראש... תשאיר רק את המודל של נסח לי תשובה". הבנק עצמו נשאר, כי "נסחי לי
+      // תשובה" שולח ממנו לבינה את התשובות הדומות כדוגמאות (bankSuggest, nearby).
       return '<div class="note-card">'+head+
-        (BANK === null ? '<div class="nhint" style="margin-top:10px">טוען תשובות מוכנות...</div>' :
-         !sug.length ? '<div class="whybox"><b>אין ניסוח מוכן להערה הזאת</b>'+
-            (talkWhy(n.text) ? '<span>'+esc(talkWhy(n.text))+'</span>'
-                             : '<span>אפשר לכתוב תשובה כאן, או ללחוץ "העתקה לצ\'אט" כדי לדון בה איתי.</span>')+
-          '</div>' :
-         '<div class="sugbox"><div class="flabel">תשובות מוכנות שמתאימות לשאלה הזאת</div>'+
-            sug.map(function(e){
-              return '<button class="sug" data-usebank="'+esc(e.id)+'" data-note="'+esc(n.id)+'">'+
-                '<b>'+esc(e.q)+'</b><span>'+esc(e.a)+'</span>'+
-                '<i class="use">\u2190 להשתמש בתשובה הזאת</i></button>';
-            }).join("")+'</div>')+
         '<div class="flabel" style="margin-top:10px">התשובה שהיא תראה באפליקציה</div>'+
         // ניסוח טיוטה. היא נכתבת לתוך התיבה שמתחת, והפקידה עורכת ושולחת. שום דבר
         // ממנה לא מגיע למשתתפת בלי שאדם קרא אותו ולחץ "שלחי לה".
@@ -1538,7 +1529,7 @@ function render(){
           '<button class="btn ghost" data-notedone="'+esc(n.id)+'" data-for="'+esc(w.email)+'">סימון כטופל בלי תשובה</button>'+
           '<button class="btn ghost" data-toclaude="'+esc(n.id)+'" data-for="'+esc(w.email)+'">העתקה לצ\'אט</button>'+
         '</div>'+
-        '<label class="bankadd"><input type="checkbox" id="bk_'+esc(n.id)+'" checked> לשמור את השאלה והתשובה בבנק, כדי שיוצעו בפעם הבאה</label>'+
+        '<label class="bankadd"><input type="checkbox" id="bk_'+esc(n.id)+'" checked> לשמור את השאלה והתשובה, כדי שהניסוח הבא ילמד ממנה</label>'+
       '</div>';
     }).join("");
   }
@@ -1757,7 +1748,7 @@ function render(){
         '<span class="nhint" id="out_why" style="margin:0">'+(OUT.why||"")+'</span></div>'+
       (OUT.ans !== "" || OUT.busy
         ? '<textarea class="field" rows="4" id="out_a" style="margin-top:10px" placeholder="התשובה. אפשר לערוך אותה לפני שליחה.">'+esc(OUT.ans||"")+'</textarea>'+
-          '<label class="bankadd"><input type="checkbox" id="out_k"'+(OUT.keep?' checked':'')+'> לשמור את השאלה והתשובה בבנק</label>'+
+          '<label class="bankadd"><input type="checkbox" id="out_k"'+(OUT.keep?' checked':'')+'> לשמור את השאלה והתשובה, כדי שהניסוח הבא ילמד ממנה</label>'+
           '<div class="outacts">'+
             '<button class="btn" data-outcopy="1">העתקה</button>'+
             (picked

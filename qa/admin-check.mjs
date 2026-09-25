@@ -795,6 +795,19 @@ console.log("\nבנק התשובות");
   check("ולהערה שיש לה ניסוח לא נאמר כלום", !talkWhy("חסרה לי רובריקה בפעילות הגופנית של הליכה מהירה"));
 }
 
+// v7.49: רון, 25 בספטמבר 2026: "תוריד את התשובות המוכנות מראש... תשאיר רק את המודל של
+// נסח לי תשובה". הבנק נשאר, כי הניסוח שולח ממנו דוגמאות לבינה.
+{
+  const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  const card = html.slice(html.indexOf("function tabNotes"), html.indexOf("function tabPerm"));
+  check("כרטיס ההערה נמצא", card.length > 500);
+  check("אין בכרטיס קופסת תשובות מוכנות", !card.includes('class="sugbox"') && !card.includes("data-usebank"));
+  check("ואין בו \"אין ניסוח מוכן\"", !card.includes("אין ניסוח מוכן"));
+  check("כפתור \"נסחי לי תשובה\" נשאר", card.includes("נסחי לי תשובה"));
+  check("והניסוח עדיין שולח דוגמאות מהבנק", (html.match(/nearby: bankSuggest\(note\)/g) || []).length === 2);
+  check("ותיבת הסימון אומרת את הנוסח שאושר, בשני המקומות", (html.match(/כדי שהניסוח הבא ילמד ממנה/g) || []).length === 2 && !html.includes("כדי שיוצעו בפעם הבאה"));
+}
+
 // השם ברישום מגיע ממניצ'ט, וחלק מהנשים נרשמו בוואטסאפ בשם של בעלן. השדות
 // F_NAME ו-L_NAME הם שדות מותאמים אישית ולא שדות מערכת, ולכן ניתן לכתוב אליהם.
 {
