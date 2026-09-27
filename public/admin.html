@@ -610,6 +610,8 @@ function usageBars(u, mode, upToDay){
 }
 
 function usagePanel(w){
+  if(w.usageLoading) return '<div class="stats"><div class="meta">טוען...</div></div>';
+  if(w.usageFailed) return '<div class="stats"><div class="meta">נתוני השימוש לא נטענו. אפשר לנסות שוב בעוד רגע.</div></div>';
   var u = w.usage;
   if(!u) return '<div class="stats"><div class="meta">אין עדיין נתוני שימוש. הם נאספים בפעם הבאה שהיא תפתח את האפליקציה.</div></div>';
 
@@ -754,6 +756,27 @@ function notesLoad(email){
       render();
     })
     .catch(function(){ NOTES[email] = { state:"failed" }; render(); });
+}
+
+// **נתוני השימוש של אישה אחת, כשהכרטיס שלה נפתח. v7.53.** עד כאן הם הגיעו עם הרשימה,
+// של כל הנשים בכל טעינה, והרשימה עצמה מעולם לא השתמשה בהם. נשמרים כאן עד שהדף
+// נטען מחדש, ולכן שמירה שטוענת את הרשימה מחדש אינה מושכת אותם שוב.
+var USE = {};
+function usageLoad(email){
+  USE[email] = { state:"loading" };
+  fetch("/api/admin?key="+encodeURIComponent(KEY)+"&usage="+encodeURIComponent(email))
+    .then(function(r){ return r.json(); })
+    .then(function(d){ USE[email] = (d && d.ok) ? { state:"ok", u:d.usage || null } : { state:"failed", t:Date.now() }; render(); })
+    .catch(function(){ USE[email] = { state:"failed", t:Date.now() }; render(); });
+}
+// מצמיד לאישה את מה שנטען, כדי ש-usagePanel ו-entryOf ימשיכו לקרוא את w.usage כמו תמיד.
+// **טעינה שנכשלה מנוסה שוב אחרי 15 שניות**, ועד אז היא נקראת כ"לא ידוע" ולא כאפס.
+function attachUsage(w){
+  var s = USE[w.email];
+  if(!s || (s.state === "failed" && Date.now() - s.t > 15000)){ usageLoad(w.email); s = USE[w.email]; }
+  w.usageLoading = s.state === "loading";
+  w.usageFailed = s.state === "failed";
+  w.usage = s.state === "ok" ? s.u : null;
 }
 
 function mcLoad(email){
@@ -1350,6 +1373,7 @@ function render(){
   // **הערך הוא של הכניסה האחרונה בלבד.** מי שמשתמשת גם בטלפון וגם במחשב תתחלף
   // בין השניים, ולכן הוא נאמר כ"בכניסה האחרונה" ולא כעובדה קבועה עליה.
   function entryOf(w){
+    if(w.usageLoading) return 'טוען...';
     var u = w.usage;
     if(!u || typeof u.standalone === "undefined") return 'לא ידוע עדיין';
     return u.standalone ? 'אפליקציה מותקנת' : 'דפדפן, לא מותקנת';
@@ -1855,6 +1879,7 @@ function render(){
   }
 
   function womanCard(w){
+    attachUsage(w);
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
     var body = TAB==="notes"  ? tabNotes(w)
              : TAB==="cohort" ? tabCohort(w)

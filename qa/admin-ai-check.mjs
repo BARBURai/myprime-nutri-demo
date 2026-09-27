@@ -36,6 +36,9 @@ const kv = {
 };
 const hash = { "admin:emailmap": { "new@t.co": "old@t.co" } };
 let mgetFails = false, mgetCalls = 0, mgetMax = 0, writes = 0;
+// **מה שהמסך רשאי לכתוב מ-v7.53, ואינו נתון של אף אישה:** העותק המשותף של הגיליון,
+// ורשימת מי שפתחה את האפליקציה לפני v4.87, שנאספת פעם אחת. כל כתיבה אחרת נספרת.
+const OURS = /^(sheet:csv:v1|admin:appold|admin:appold:done)$/;
 globalThis.fetch = async (url, opts) => {
   const u = String(url);
   if (u.startsWith("https://sheet.test")) return { ok: true, status: 200, text: async () => CSV };
@@ -46,11 +49,11 @@ globalThis.fetch = async (url, opts) => {
       if (mgetFails) return { ok: false, status: 500, json: async () => ({}) };
       return { ok: true, json: async () => ({ result: cmd.slice(1).map((k) => kv[k] ?? null) }) };
     }
-    if (/^(SET|INCR|DEL|HSET|HDEL|EXPIRE)$/.test(cmd[0])) writes++;
+    if (/^(SET|INCR|DEL|HSET|HDEL|EXPIRE)$/.test(cmd[0]) && !OURS.test(cmd[1])) writes++;
     return { ok: true, json: async () => ({ result: null }) };
   }
   const [cmd, a, b] = u.replace("https://redis.test/", "").split("/").map(decodeURIComponent);
-  if (/^(SET|INCR|DEL|HSET|HDEL|EXPIRE|HINCRBY)$/.test(cmd)) writes++;
+  if (/^(SET|INCR|DEL|HSET|HDEL|EXPIRE|HINCRBY|SADD)$/.test(cmd) && !OURS.test(a)) writes++;
   let result = null;
   if (cmd === "HGETALL") { const o = hash[a] || {}; result = Object.entries(o).flat(); }
   else if (cmd === "HGET") result = (hash[a] || {})[b] ?? null;
