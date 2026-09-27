@@ -166,7 +166,7 @@ export default async function handler(req, res) {
   } catch (e) { /* the map is a bridge, never a gate: a Redis hiccup falls back to the file */ }
 
   let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false, glowFull = false;
-  let solo = 0, glowMonths = null, glowPaid = false;
+  let solo = 0, glowMonths = null, glowPaid = false, glowSolo = false;
   try {
     // המשיכה עצמה, וביטול המטמון שבתוכה, עברו ל-`_sheet.js` כדי שעותק אחד ישרת את כל
     // הנשים לדקה. **הקריאה נכשלת לצד הפתוח:** בלי Redis או בתקלה שלו היא מושכת מגוגל
@@ -181,7 +181,7 @@ export default async function handler(req, res) {
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
     let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, glowFullCol = -1, emailCol = -1, headerFound = false;
-    let solo6Col = -1, solo12Col = -1, solo10wCol = -1, glowFullMCol = -1, glowPaidCol = -1;
+    let solo6Col = -1, solo12Col = -1, solo10wCol = -1, glowFullMCol = -1, glowPaidCol = -1, glowSoloCol = -1;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
       cancelCol = findCol(header, ["ביטלה"]);
@@ -204,6 +204,9 @@ export default async function handler(req, res) {
       // עמודה אופציונלית: כל עוד היא אינה קיימת, שום דבר לא משתנה לאף אישה.
       // ההתאמה היא על השם המלא, ולכן היא אינה יכולה להתבלבל עם GLOW-FULL.
       glowPaidCol = findCol(header, ["GLOW-PAID"]);
+      // **הטבת Glow לקונות סולו. v7.54.** הקורס פתוח לה בדיוק כמו התוכנית שלה.
+      // עמודה אופציונלית: כל עוד היא אינה קיימת, שום דבר לא משתנה לאף אישה.
+      glowSoloCol = findCol(header, ["GLOW-SOLO"]);
       // שתי עמודות אופציונליות של תוכנית סולו, נקראות כאן בדיוק כמו במסך הניהול
       // כדי ששניהם לא יוכלו לחלוק על אורך החלון שלה.
       solo6Col = findCol(header, ["SOLO6"]);
@@ -239,11 +242,12 @@ export default async function handler(req, res) {
       const cells = parseCsvLine(line);
       const isYes = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
 
-      const hit = { phone: "", glow: false, glowFull: false, glowPaid: false, solo: 0, months: null, glowM: null, cancelled: false, start: null };
+      const hit = { phone: "", glow: false, glowFull: false, glowPaid: false, glowSolo: false, solo: 0, months: null, glowM: null, cancelled: false, start: null };
       if (phoneCol !== -1 && cells[phoneCol]) hit.phone = String(cells[phoneCol]).replace(/[^\d]/g, "");
       if (glowCol !== -1) hit.glow = isYes(cells[glowCol]);
       if (glowFullCol !== -1) hit.glowFull = isYes(cells[glowFullCol]);
       if (glowPaidCol !== -1) hit.glowPaid = isYes(cells[glowPaidCol]);
+      if (glowSoloCol !== -1) hit.glowSolo = isYes(cells[glowSoloCol]);
       if (glowFullMCol !== -1) {
         const gm = parseInt(String(cells[glowFullMCol] || "").replace(/[^\d]/g, ""), 10);
         if (Number.isFinite(gm) && gm > 0) hit.glowM = gm;
@@ -288,6 +292,7 @@ export default async function handler(req, res) {
       // ולא על המחזור. אישה שקנתה את הקורס לא תאבד אותו מפני שהשורה המנצחת
       // היא דווקא זו שאין בה את הסימון.
       glowPaid = hits.some((h) => h.glowPaid);
+      glowSolo = hits.some((h) => h.glowSolo);
       let win = hits[0];
       for (let k = 1; k < hits.length; k++) {
         const h = hits[k];
@@ -322,6 +327,7 @@ export default async function handler(req, res) {
           glow = !!m.glow;
           glowFull = !!m.glowFull;
           glowPaid = !!m.glowPaid;
+          glowSolo = !!m.glowSolo;
           solo = (m.solo === 6 || m.solo === 12 || m.solo === 10) ? m.solo : 0;
           const mm = parseInt(m.months, 10);
           if (Number.isFinite(mm) && mm > 0) extraMonths = mm;
@@ -396,7 +402,7 @@ export default async function handler(req, res) {
   // לדעת אם צריך לתפוס אותו בכלל.
   const facts = {
     startSunday, cancelled, clerkBlocked, clerkUntil, freeze,
-    extraMonths, solo, glowFull, glowPaid, glowMonths,
+    extraMonths, solo, glowFull, glowPaid, glowSolo, glowMonths,
     glowStart: "", today: israelDay(0),
   };
   let glowStart = "";

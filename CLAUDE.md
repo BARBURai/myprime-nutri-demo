@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v7.53** · עודכן: 27 בספטמבר 2026
+**גרסה נוכחית: v7.54** · עודכן: 27 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -492,7 +492,7 @@ pageImages: []
 
 **0. הענף. זה הדבר הראשון, לפני כל קריאה אחרת.** ענף ברירת המחדל בריפו הוא `main`, **ולכן סשן חדש נפתח על הקוד והקובץ הזה של הייצור, שאינם העדכניים.** מיד בפתיחה: `git fetch origin Dev && git checkout Dev`, ולקרוא את הקובץ הזה מחדש מהענף `Dev`. **ל-`main` ול-`Dev` היסטוריות נפרדות** (ראה v7.32), **ועבודה נעשית על `Dev` בלבד.**
 
-**עדכון, 27 בספטמבר 2026 בערב: בדב v7.53, בייצור v7.51.** v7.53 היא מהירות מסך הניהול (סעיף 17), בדב וממתינה לבדיקה של רון. **ההבדלים בין דב למיין: תרגול הנשימה, ומהירות מסך הניהול.** **ו-GLOW-SOLO בתכנון, ראה סעיף 9.** **והצעד הבא בסקייל שנמצא בדרך: תשובת הרשימה של מסך הניהול עצמה**, כ-930 בתים לאישה (נמדד בסימולציה), כלומר 9.3 מיליון ב-10,000. **אם לוורסל יש תקרה של 4.5MB לתשובה, והיא לא אומתה**, זה נשבר בסביבות 4,800 שורות בגיליון.
+**עדכון, 27 בספטמבר 2026 בלילה: בדב v7.54, בייצור v7.51.** v7.54 היא GLOW-SOLO ו-v7.53 מהירות מסך הניהול (סעיף 17), שתיהן בדב וממתינות לבדיקה של רון. **ההבדלים בין דב למיין: תרגול הנשימה, מהירות מסך הניהול, ו-GLOW-SOLO.** **רון דיווח שהטעינה הראשונה של מסך הניהול בדב על v7.53 לקחה "הרבה הרבה מאוד זמן". לא נמדד ולא אובחן.** **והצעד הבא בסקייל שנמצא בדרך: תשובת הרשימה של מסך הניהול עצמה**, כ-930 בתים לאישה (נמדד בסימולציה), כלומר 9.3 מיליון ב-10,000. **אם לוורסל יש תקרה של 4.5MB לתשובה, והיא לא אומתה**, זה נשבר בסביבות 4,800 שורות בגיליון.
 
 **הרישום הקודם, 27 בספטמבר 2026: בדב v7.52, בייצור v7.51.** v7.51 עלתה לייצור באישור מפורש של רון, "מאשר להעלות את v7.51 למיין בלי הנשימה", ולכן **ההבדל היחיד בין דב למיין בקוד הוא תרגול הנשימה.** רון הוסיף לגיליון את העמודה `SOLO10WEEK`.
 
@@ -562,16 +562,19 @@ pageImages: []
 - **אפשרי היום, בלי קוד:** כל יום ראשון שהיא בוחרת, **או "עכשיו" כיום ראשון של השבוע הנוכחי**, כלומר היא נכנסת ליום 4 אם קנתה ברביעי, וכל השיעורים שעברו פתוחים לה. **המחיר: הגביע של השבוע הראשון.**
 - **התחלה אמיתית בכל יום בשבוע** היא שינוי בחישובים שכל 1,300 הנשים נשענות עליהם. **ההמלצה: רק אחרי הוצאת הפונקציות הטהורות עם בדיקות אמיתיות**, שלב (ד) בעדיפות 1.
 
-### GLOW-SOLO, בתכנון. 27 בספטמבר 2026
+### GLOW-SOLO, נבנה ב-v7.54. 27 בספטמבר 2026
 **רון:** תווית חדשה לנשים שקנו את Glow בהטבה לקונות סולו (190 ₪, קופון S19, `myprime.co.il/Glow/solo/`). **הקורס ל-10 שבועות בלבד**, כמו חלון סולו 10 שבועות.
 
 **מה שרון הכריע:**
-- **GLOW-SOLO לבד נותן את הקורס**, בלי צורך ב-GLOW-FULL, עד סוף השבת של שבוע 10 מתאריך ההתחלה.
+- **GLOW-SOLO לבד נותן את הקורס**, בלי צורך ב-GLOW-FULL. **והקורס פתוח בדיוק כמו התוכנית שלה.** רון: "יהיה להן תאריך התחלה של סולו, וזה תאריך ההתחלה ותאריך הסיום של גלו."
 - **GLOW-FULL + GLOW-PAID גובר תמיד.** רון: "זה אומר שהיא שילמה לשנה, למה אתה שובר את זה". כלומר GLOW-SOLO רק נותן קורס קצר, ולעולם אינו מקצר קנייה.
 - **לפני יום 1 הקורס מחכה ליום 1**, כמו המתנה.
 - **הארכה ידנית של המשרד מאריכה גם את הקורס.** רון: "כשהמשרד מאריך, הכוונה היא בדרך כלל לתת לה עוד זמן בכל מה שיש לה."
 
-**מה שעוד פתוח:** GLOW-SOLO אצל מי שאין לה תאריך התחלה (ההמלצה: 70 יום מהכניסה הראשונה לקורס), והנוסח בכרטיס, "קורס האיפור המלא · הטבת סולו · פעיל עד 06.12.2026". **לא נבנה כלום.** המקום: `decideAccess` ב-`api/_product.js`, שהשער ומסך הניהול קוראים שניהם.
+- **הנוסח בכרטיס אושר:** "הטבת סולו · פעיל עד 06.12.2026".
+- **בלי תאריך התחלה**, מצב שרון אומר שאינו קורה, הקורס אינו נפתח, ולעולם אינו הופך לקנייה של 12 חודשים.
+
+**מה שעוד פתוח:** **במסך ההמתנה אין לה שורה על הקורס**, כי השורה הקיימת אומרת "במתנה" והיא שילמה עליו. אם רון ירצה שורה משלה, זה קופי חדש.
 
 ### נדחה בהחלטת רון, 27 בספטמבר 2026: מכשיר משותף יורש את הנתונים של הקודמת
 **רון מצא בבדיקה:** נרשם עם מייל חדש באותו דפדפן, ודילג על כל ההרשמה עם המשקל והגובה של משתמש הבדיקה הקודם.
@@ -618,7 +621,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs && node qa/glow-solo-benefit-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1242,6 +1245,16 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v7.54** - **GLOW-SOLO: הטבת Glow לקונות סולו, והקורס פתוח בדיוק כמו התוכנית שלה.** בדב בלבד. רון: 190 ₪, קופון S19, `myprime.co.il/Glow/solo/`.
+
+**ההחלטות של רון, בסבב אחד:** התווית לבדה מספיקה, בלי GLOW-FULL · **"יהיה להן תאריך התחלה של סולו, וזה תאריך ההתחלה ותאריך הסיום של גלו"** · מחכה ליום 1, כמו המתנה · הארכה של המשרד מאריכה גם את הקורס · **ו-GLOW-FULL עם GLOW-PAID תמיד גובר: "זה אומר שהיא שילמה לשנה, למה אתה שובר את זה."** **ותיקון שלי שנאמר לו:** בהצעה הראשונה GLOW-SOLO גבר על הקנייה, וזה היה שגוי.
+
+**המימוש, בקובץ המשותף `api/_product.js`:** GLOW-SOLO מתנהג כמו מתנת הוובינר, כלומר הקורס פתוח כל עוד התוכנית פתוחה, **בלי לדרוש GLOW-FULL.** `paidYear`, כלומר GLOW-FULL ו-GLOW-PAID יחד, מבטל את ההטבה. **וההטבה לעולם אינה נקראת כקנייה עצמאית:** בלי תאריך התחלה הקורס פשוט אינו נפתח. **השורה "במתנה" במסך ההמתנה אינה מוצגת לה**, כי היא שילמה. העמודה נקראת משתי השורות כמו הקנייה, בשער (`api/access.js`) ובמסך (`api/_sheet.js`).
+
+**בכרטיס:** "הטבת סולו · פעיל עד" ותאריך סוף התוכנית, **כולל הארכה של המשרד** · "הטבת סולו · נפתח ב-" לפני יום 1 · "הטבת סולו · הסתיים".
+
+**`qa/glow-solo-benefit-check.mjs`, 23 בדיקות בלי רשת**, מריצה את השער ואת מסך הניהול האמיתיים על אותו גיליון ואת `stateBox` מתוך המסך. ובהן: קנייה עם GLOW-SOLO זהה בדיוק לקנייה בלעדיה · **גיליון בלי העמודה: חמש נשים בלי ההטבה מקבלות תשובה זהה** · והשער והמסך מסכימים על כל אישה. **אומת שיש לה שיניים: על v7.53 היא מחזירה 13 מתוך 23.**
 
 **v7.53** - **מסך הניהול: שלושה דברים שעשו אותו איטי, ושאחד מהם היה שובר אותו בסביבות 5,300 נשים.** בדב בלבד. אישור רון: "מאשר את שניהם", ועל השלישי "מאשר, תוסיף את סעיף 3".
 

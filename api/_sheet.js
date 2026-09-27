@@ -237,6 +237,8 @@ export async function loadSheet(csvUrl, RU, RT) {
     glowM: findCol(header, ["GLOW-FULL-M"]),
     // **הסימן שמבדיל בין קורס שנקנה בכסף לבין הקורס שניתן במתנה בוובינר.**
     glowPaid: findCol(header, ["GLOW-PAID"]),
+    // **הטבת Glow לקונות סולו. v7.54.** הקורס פתוח לה בדיוק כמו התוכנית שלה. ראה _product.js.
+    glowSolo: findCol(header, ["GLOW-SOLO"]),
     // שתי עמודות אופציונליות של תוכנית סולו. השוואה מדויקת, כמו כל השאר, ולכן
     // SOLO6 ו-SOLO12 לעולם לא יתבלבלו ביניהן.
     solo6: findCol(header, ["SOLO6"]),
@@ -290,6 +292,7 @@ export async function loadSheet(csvUrl, RU, RT) {
       glow: col.glow !== -1 ? isTrue(cells[col.glow]) : false,
       glowFull: col.glowFull !== -1 ? isTrue(cells[col.glowFull]) : false,
       glowPaid: col.glowPaid !== -1 ? isTrue(cells[col.glowPaid]) : false,
+      glowSolo: col.glowSolo !== -1 ? isTrue(cells[col.glowSolo]) : false,
       glowM: (() => {
         if (col.glowM === -1) return null;
         const n = parseInt(String(cells[col.glowM] || "").replace(/[^\d]/g, ""), 10);
@@ -317,7 +320,7 @@ export async function loadSheet(csvUrl, RU, RT) {
         phone: rec.phone, first: rec.first, last: rec.last, group: rec.group,
         start: rec.start, months: rec.months, cancelled: rec.cancelled,
         sheetNewApp: rec.sheetNewApp, glow: rec.glow, solo: rec.solo, rows: 1,
-        glowFull: rec.glowFull, glowPaid: rec.glowPaid, glowM: rec.glowM,
+        glowFull: rec.glowFull, glowPaid: rec.glowPaid, glowSolo: rec.glowSolo, glowM: rec.glowM,
       });
       return;
     }
@@ -352,6 +355,8 @@ export async function loadSheet(csvUrl, RU, RT) {
       // **הקנייה נספרת מכל השורות, כמו הביטול**, כי היא עובדה על האישה ולא על
       // המחזור. זה זהה למה ש-api/access.js עושה, ושם יש בדיקה שנועלת את זה.
       glowPaid: rows.some((r) => r.glowPaid),
+      // ההטבה היא עובדה על האישה, כמו הקנייה, ולכן גם היא נספרת מכל השורות.
+      glowSolo: rows.some((r) => r.glowSolo),
       glowM: win.glowM,
       solo: win.solo,
       sheetEnd: win.start ? ymd(accessEnd(parseDateToSunday(win.start), win.months, win.solo)) : "",
