@@ -89,7 +89,7 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false, glowFull = false, product = "360", replies = null, aiAnswer = null, catalog = null }) {
+async function stubApi(context, { startDate, glow = false, glowFull = false, product = "360", replies = null, aiAnswer = null, catalog = null, ilFood = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
@@ -101,7 +101,7 @@ async function stubApi(context, { startDate, glow = false, glowFull = false, pro
     // לדרוס. בלי זה אף מסלול השוואה אינו רץ בכלל, ובדיקה על "המאגר לא דרס" הייתה
     // עוברת גם על הקוד השבור.
     if (url.includes("/api/catalog")) return json({ items: catalog || [] });
-    if (url.includes("/api/il-food")) return json({ items: [] });
+    if (url.includes("/api/il-food")) return json({ items: ilFood || [] });
     return json({ ok: true });
   });
 }
@@ -118,12 +118,12 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null, ilFood = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow, glowFull, product, replies, aiAnswer, catalog });
+  await stubApi(context, { startDate, glow, glowFull, product, replies, aiAnswer, catalog, ilFood });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
@@ -176,6 +176,102 @@ const record = (device, name, ok, detail, skip) => {
 };
 
 const CHECKS = [
+  {
+    // v7.50: הזנה ידנית במצב "ל-100 גרם" נשלחת כמועמד לחיפוש לכל הנשים, ובמצב "לכל המנה"
+    // לא, כי אלה ערכי הצלחת שלה ולא של המוצר. שני הצדדים באותה הרצה, כי קריאה שלא נשלחת
+    // אף פעם נראית בדיוק כמו קריאה שלא נשלחת בכוונה.
+    name: "הזנה ידנית: ל-100 גרם נשלח לחיפוש המשותף, ולכל המנה לא",
+    async run(browser, device) {
+      const bad = [];
+      for (const whole of [false, true]) {
+        const { context, page, errors } = await openApp(browser, device);
+        const sent = [];
+        page.on("request", (rq) => { if (rq.url().includes("/api/catalog?action=label")) sent.push(rq.postData() || ""); });
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator("text=הזנה ידנית").first().click();
+        await page.waitForTimeout(400);
+        await page.locator('input[placeholder="לדוגמה: חטיף חלבון"]').fill("קוטג' 5% תנובה");
+        if (whole) { await page.locator("text=לכל המנה").first().click(); await page.waitForTimeout(200); }
+        const nums = page.locator('input[inputmode="decimal"]');
+        const n = await nums.count();
+        const vals = ["100", "95", "11", "5", "2"];
+        for (let i = 0; i < Math.min(n, vals.length); i++) await nums.nth(i).fill(vals[i]);
+        await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+        await page.waitForTimeout(900);
+        if (!whole && !(sent.length === 1 && sent[0].includes("קוטג") && sent[0].includes('"kcal":95'))) bad.push("ל-100 גרם לא נשלח: " + JSON.stringify(sent).slice(0, 80));
+        if (whole && sent.length) bad.push("לכל המנה נשלח, ואסור");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "ל-100 נשלח פעם אחת, לכל המנה לא נשלח" };
+    },
+  },
+  {
+    // v7.51: היא מקלידה "קוטג'" בלבד, 5 גרם שומן ויצרן. אחוז השומן נגזר מהשדה, והשם המלא
+    // מגיע גם ליומן שלה וגם לחיפוש המשותף. ובמצב "לכל המנה" שדה היצרן אינו קיים.
+    name: "הזנה ידנית: אחוז השומן והיצרן נכנסים לשם, ביומן ובחיפוש",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const bad = [];
+      const sent = [];
+      page.on("request", (rq) => { if (rq.url().includes("/api/catalog?action=label")) sent.push(rq.postData() || ""); });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=הזנה ידנית").first().click();
+      await page.waitForTimeout(400);
+      await page.locator('input[placeholder="לדוגמה: חטיף חלבון"]').fill("קוטג'");
+      const brand = page.locator('input[placeholder="לדוגמה: תנובה"]');
+      if (!(await brand.count())) bad.push("שדה היצרן חסר ב-ל-100 גרם");
+      else await brand.fill("תנובה");
+      await page.locator("text=לכל המנה").first().click(); await page.waitForTimeout(200);
+      if (await brand.count()) bad.push("שדה היצרן מוצג בלכל המנה");
+      await page.locator("text=ל-100 ג׳").first().click(); await page.waitForTimeout(200);
+      const nums = page.locator('input[inputmode="decimal"]');
+      const vals = ["100", "95", "11", "5", "2"];
+      const n = await nums.count();
+      for (let i = 0; i < Math.min(n, vals.length); i++) await nums.nth(i).fill(vals[i]);
+      await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+      await page.waitForTimeout(1000);
+      const want = "קוטג' 5% תנובה";
+      if (!(sent.length === 1 && JSON.parse(sent[0]).name === want)) bad.push("נשלח לחיפוש: " + JSON.stringify(sent).slice(0, 90));
+      if (!(await page.locator(`text=${want}`).count())) bad.push("ביומן אין את השם המלא");
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.join(" · ") || `"${want}" ביומן ובחיפוש, ושדה היצרן רק ב-ל-100` };
+    },
+  },
+  {
+    // משתתפת, 25 בספטמבר 2026: "בחלון של הוספת רגישויות ואלרגיות לא ניתן לרשום דבר."
+    // מקלידים בשדה "רגישויות נוספות" בפרופיל כמו אישה, מקישים על הפלוס, ובודקים שהצ'יפ נוצר.
+    name: "רגישויות נוספות בפרופיל: אפשר להקליד ולהוסיף",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const bad = [];
+      await page.locator("text=פרופיל").last().click();
+      await page.waitForTimeout(700);
+      await page.locator("text=העדפות תזונה").first().click();
+      await page.waitForTimeout(400);
+      const input = page.locator('input[placeholder^="הקלידי והוסיפי"]').first();
+      if (!(await input.count())) bad.push("השדה לא נמצא");
+      else {
+        await input.click();
+        await page.keyboard.type("בלי חריף", { delay: 40 });
+        const typed = await input.inputValue();
+        if (typed !== "בלי חריף") bad.push(`אחרי הקלדה השדה מכיל "${typed}"`);
+        await page.locator('button[aria-label="הוספה"]').first().click();
+        await page.waitForTimeout(300);
+        if (!(await page.locator("text=בלי חריף").count())) bad.push("הצ'יפ לא נוצר");
+      }
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "הוקלד ונוסף" };
+    },
+  },
   {
     // **החלבון היה המשימה האוטומטית היחידה שדרשה הצלחה ולא דיווח**, ולכן מי שלא
     // תיעדה את כל מה שאכלה לא סגרה את היום, לא קיבלה מדליה, והרצף שלה נשבר.
@@ -2170,12 +2266,15 @@ const CHECKS = [
           { name: "לחם בדיקה", en: "bread", unit: "g", grams: 100, kcal: 300, protein: 9, fat: 3, carbs: 50 },
         ],
       };
-      // אותם שני שמות במאגר, עם ערכים אחרים לגמרי. בלי התיקון שניהם נדרסים.
-      const catalog = [
-        { name: "יוגורט בדיקה", per100: { kcal: 38, p: 8, f: 3, c: 4 }, source: "verified" },
-        { name: "לחם בדיקה", per100: { kcal: 250, p: 8, f: 3, c: 45 }, source: "verified" },
+      // אותם שני שמות במאגר הלאומי, עם ערכים אחרים לגמרי. בלי התיקון שניהם נדרסים.
+      // **מ-v7.48 המאגר הלאומי ולא המאגר שלנו**, כי המאגר שלנו אינו נשאל בשיחה עם הבינה.
+      // ולכן המאגר שלנו מקבל כאן ערך שלישי, 180, שאסור לו להופיע בכרטיס.
+      const ilFood = [
+        { name: "יוגורט בדיקה", per100: { kcal: 38, p: 8, f: 3, c: 4 } },
+        { name: "לחם בדיקה", per100: { kcal: 250, p: 8, f: 3, c: 45 } },
       ];
-      const { context, page, errors } = await openApp(browser, device, { day: 15, aiAnswer: answer, catalog });
+      const catalog = [{ name: "לחם בדיקה", per100: { kcal: 180, p: 6, f: 2, c: 33 }, source: "verified" }];
+      const { context, page, errors } = await openApp(browser, device, { day: 15, aiAnswer: answer, catalog, ilFood });
       const bad = [];
       await page.locator('[aria-label="הוספה"]').click();
       await page.waitForTimeout(400);
@@ -2192,6 +2291,7 @@ const CHECKS = [
       if (!card.includes("112")) bad.push("הקלוריות שהיא מסרה נדרסו על ידי המאגר");
       if (!card.includes("לפי מה שהזנת")) bad.push('התג "לפי מה שהזנת" אינו מוצג');
       if (!card.includes("250")) bad.push("הפריט שלא נמסרו ערכיו לא התעדכן מהמאגר");
+      if (card.includes("180")) bad.push("המאגר שלנו דרס מספר בשיחה עם הבינה, וזה כבוי מ-v7.48");
       if (!/מהמאגר/.test(card)) bad.push('הפריט שהתעדכן אינו מסומן "מהמאגר"');
       if (/עדכנתי את הקלוריות לפי המאגר: סה״כ 288/.test(card)) bad.push("ההודעה על עדכון סוכמת גם את מה שלא נגע");
 

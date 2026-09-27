@@ -13,6 +13,7 @@ import { SWEETS } from "./sweets";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
 import { GLOW_STARTED_KEY, hasGlow, glowStarted } from "./content/glow";
+import { labelName } from "../lib/catfilter.js";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -70,6 +71,11 @@ async function catalogBarcodePut(code, name, per100, unit) {
     const r = await fetch(`${CATALOG_ENDPOINT}?action=bc`, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ code, name, per100, unit }) });
     return await r.json();
   } catch (e) { return { ok: false }; }
+}
+// ערכים שהיא הקלידה מתווית, ל-100 גרם, בלי ברקוד. v7.50: מועמד לחיפוש לכל הנשים, והשרת
+// מציג אותו רק אחרי ארבע בדיקות. נשלחים שם המוצר והמספרים בלבד. לא ממתינים לתשובה.
+function catalogLabelPut(name, per100, unit) {
+  try { fetch(`${CATALOG_ENDPOINT}?action=label`, { method: "POST", headers: aiHeaders(), body: JSON.stringify({ name, per100, unit }) }).catch(() => {}); } catch (e) { /* ignore */ }
 }
 async function catalogSearch(term) {
   try {
@@ -724,7 +730,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.45";
+const VERSION = "7.51";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3304,6 +3310,7 @@ function localFoodMatch(name) {
   }
   return null;
 }
+const CATALOG_IN_RECONCILE = false;
 async function lookupProduct(name, en) {
   const ck = reconKey(name, en);
   if (RECON_CACHE.has(ck)) return RECON_CACHE.get(ck);
@@ -3311,8 +3318,11 @@ async function lookupProduct(name, en) {
   // 1. Local spine - instant, no network (basic staples: sugar, milk, oil, salt...).
   const lf = localFoodMatch(name);
   if (lf && lf.per100 && lf.per100.kcal != null) result = { name: lf.name, per100: lf.per100, source: "verified" };
-  // 2. Our shared catalog - fast, grows with use (anything resolved before).
-  if (!result) { try { const cat = await catalogSearch(name); const hit = (cat || []).find((c) => c.per100 && c.per100.kcal && nutritionPlausible(c.per100) && strongMatch(name, c.name)); if (hit) result = { name: hit.name, per100: hit.per100, source: hit.source === "verified" ? "db" : "estimated" }; } catch (e) {} }
+  // 2. **המאגר המשותף אינו נשאל כאן, בכוונה. v7.48**
+  //    עד v7.47 החיפוש בו החזיר אפס תוצאות בייצור, ולכן השורה הזאת לא החליפה אף מספר
+  //    מעולם. מרגע שהחיפוש עובד היא הייתה מתחילה לדרוס את הערכת הבינה ואת המאגר הלאומי
+  //    בשיחת "ספרי לי מה אכלת", וזו החלטה נפרדת שלא התקבלה. המאגר מוצג בחיפוש הרגיל בלבד.
+  if (!result && CATALOG_IN_RECONCILE) { try { const cat = await catalogSearch(name); const hit = (cat || []).find((c) => c.per100 && c.per100.kcal && nutritionPlausible(c.per100) && strongMatch(name, c.name)); if (hit) result = { name: hit.name, per100: hit.per100, source: hit.source === "verified" ? "db" : "estimated" }; } catch (e) {} }
   // 3. Israeli national DB (Hebrew name).
   if (!result) { try { const il = await searchIsraeliDB(name); for (const r of il) if (r.per100 && r.per100.kcal && nutritionPlausible(r.per100) && strongMatch(name, r.name)) { result = { ...r, source: "db" }; break; } } catch (e) {} }
   // 4. USDA FoodData Central (English query).
@@ -3674,7 +3684,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [histQ, setHistQ] = useState(""); // חיפוש בתוך האחרונים והמועדפים, חוצה את שתי הלשוניות
   const [delTarget, setDelTarget] = useState(null); // { item, list } pending delete confirmation
   const [aiAsOne, setAiAsOne] = useState(true); const [aiOneName, setAiOneName] = useState(""); // feature: combine AI components into one product (default = one product, recommended)
-  const [mName, setMName] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
+  const [mName, setMName] = useState(""); const [mBrand, setMBrand] = useState(""); const [mAmount, setMAmount] = useState(""); const [mUnit, setMUnit] = useState("g");
   const [mKcal, setMKcal] = useState(""); const [mProt, setMProt] = useState(""); const [mFat, setMFat] = useState(""); const [mCarb, setMCarb] = useState("");
   // המספרים שהיא מחזיקה ביד הם או מהתווית, שהיא תמיד ל-100 גרם, או של המנה עצמה,
   // כמו שהיא מקבלת ממנוע AI חיצוני. השדות זהים ורק החישוב משתנה, ולכן זה מתג ולא מסך.
@@ -3683,7 +3693,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const mLbl = { display: "block", fontSize: 13, color: C.sub, marginBottom: 4 };
   const saveManual = () => {
     if (labelSaved) return; // the thank-you is showing and the entry is already on its way
-    const name = mName.trim();
+    // במצב "ל-100 גרם": אחוז השומן של מוצר חלב והיצרן נכנסים לשם, ביומן ובחיפוש כאחד. v7.51
+    const name = mWhole ? mName.trim() : labelName(mName, mBrand, mFat);
     // בערכים של מנה שלמה המשקל אינו נתון שיש לה, ולכן הוא לא נדרש ואינו משפיע על החישוב.
     const amount = Math.round(Number(mAmount) || 0) || (mWhole ? 1 : 0);
     if (!name || amount <= 0) return;
@@ -3702,6 +3713,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       setTimeout(() => commit(entry), 1200);
       return;
     }
+    // בלי ברקוד, ובמצב "ל-100 גרם" בלבד: גם זה ערך מתווית. v7.50
+    if (!mWhole) catalogLabelPut(name, { kcal: Number(mKcal) || 0, p: Number(mProt) || 0, f: Number(mFat) || 0, c: Number(mCarb) || 0 }, mUnit);
     commit(entry);
   };
 
@@ -3717,9 +3730,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
     const run = ++searchRunRef.current;
     const alive = () => run === searchRunRef.current;
     setSearching(true);
-    let ilFound = false, fbSet = false;
+    let ilFound = false, fbSet = false, catFound = false;
     const tA = setTimeout(async () => {
-      catalogSearch(q).then((cat) => { if (alive()) setCatResults(cat || []); }).catch(() => { if (alive()) setCatResults([]); });
+      catalogSearch(q).then((cat) => { catFound = (cat || []).length > 0; if (alive()) setCatResults(cat || []); }).catch(() => { if (alive()) setCatResults([]); });
       try {
         const items = await searchIsraeliDB(q);
         if (!alive()) return;
@@ -3732,7 +3745,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       if (q.length < 3) { setSearching(false); return; }
       try {
         let items = await searchOpenFoodFacts(q); let src = "off";
-        if (!items.length && alive()) { const en = await translateFoodToEnglish(q); if (en && alive()) { items = await searchUSDA(en); src = "usda"; } }
+        // התרגום לאנגלית הוא קריאה לבינה. כשהמאגר שלנו כבר מצא לה את המזון, היא מיותרת. v7.48
+        if (!items.length && alive() && !catFound) { const en = await translateFoodToEnglish(q); if (en && alive()) { items = await searchUSDA(en); src = "usda"; } }
         if (!alive() || ilFound) return;
         fbSet = items.length > 0;
         setDbResults(items); setDbSource(src);
@@ -4063,6 +4077,8 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             </div>
             <label style={mLbl}>שם המוצר</label>
             <input value={mName} onChange={(e) => setMName(e.target.value)} placeholder="לדוגמה: חטיף חלבון" style={mInput} />
+            {!mWhole && (<><label style={{ ...mLbl, marginTop: 12 }}>יצרן (לא חובה)</label>
+            <input value={mBrand} onChange={(e) => setMBrand(e.target.value)} placeholder="לדוגמה: תנובה" style={mInput} data-brand="1" /></>)}
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               <div style={{ flex: 1 }}><label style={mLbl}>{mWhole ? "כמות (לא חובה)" : "כמות שאכלת"}</label><input value={mAmount} onChange={(e) => setMAmount(e.target.value.replace(/[^0-9.]/g, ""))} onFocus={(e) => e.target.select()} inputMode="decimal" placeholder="0" style={mInput} /></div>
               <div style={{ width: 120 }}><label style={mLbl}>יחידה</label><div style={{ display: "flex", border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>{["g", "ml"].map((u) => (<div key={u} onClick={() => setMUnit(u)} style={{ flex: 1, textAlign: "center", padding: "10px 0", fontSize: 15, cursor: "pointer", background: mUnit === u ? C.brand : "transparent", color: mUnit === u ? "#fff" : C.sub }}>{u === "g" ? "ג׳" : "מ\"ל"}</div>))}</div></div>
@@ -4485,6 +4501,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
                     // ארוך. היא לא אמורה לראות 1.4000000000000001 בשדה.
                     const r1 = (n) => { const v = Math.round((Number(n) || 0) * 10) / 10; return v ? String(v) : ""; };
                     setMName(food.name || "");
+                    setMBrand("");
                     setMAmount(String(grams || 100));
                     setMUnit(food.unit === "ml" ? "ml" : "g");
                     setMKcal(r1(food.per100.kcal));

@@ -69,6 +69,11 @@ export function accessEnd(startSunday, extraMonths, solo) {
     exp.setUTCMonth(exp.getUTCMonth() + solo);
     return exp;
   }
+  // סולו 10 שבועות, עמודה `SOLO10WEEK`: 70 ימי התוכנית בלבד. v7.47.
+  if (solo === 10) {
+    exp.setUTCDate(exp.getUTCDate() + 70);
+    return exp;
+  }
   const months = (Number.isFinite(extraMonths) && extraMonths > 0) ? Math.floor(extraMonths) : 3;
   exp.setUTCDate(exp.getUTCDate() + 70);
   exp.setUTCMonth(exp.getUTCMonth() + months);
@@ -82,6 +87,8 @@ const isTrue = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
 function soloOf(cells, col) {
   if (col.solo12 !== -1 && isTrue(cells[col.solo12])) return 12;
   if (col.solo6 !== -1 && isTrue(cells[col.solo6])) return 6;
+  // הקצר מכולם ולכן אחרון: כשמסומנות כמה עמודות, הארוכה מנצחת.
+  if (col.solo10w !== -1 && isTrue(cells[col.solo10w])) return 10;
   return 0;
 }
 
@@ -234,6 +241,8 @@ export async function loadSheet(csvUrl, RU, RT) {
     // SOLO6 ו-SOLO12 לעולם לא יתבלבלו ביניהן.
     solo6: findCol(header, ["SOLO6"]),
     solo12: findCol(header, ["SOLO12"]),
+    // 10 שבועות ולא חודשים. v7.47.
+    solo10w: findCol(header, ["SOLO10WEEK"]),
   };
 
   const women = [];

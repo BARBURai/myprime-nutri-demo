@@ -430,7 +430,7 @@
 // store: a change made here never touches that file, because ManyChat and the access gate
 // both depend on it. The screen therefore always shows the sheet's value next to a manual
 // change rather than replacing it.
-var PROG = "";   // סינון לפי תוכנית: "" הכל, "360", "6" או "12"
+var PROG = "";   // סינון לפי תוכנית: "" הכל, "360", "6", "12" או "10w"
 var UNTILING = "";   // הכרטיס שבו שדה "גישה עד" פתוח לעריכה
 var KEY = "", WHO = "", DATA = null, APP = "new", YEAR = null, MONTH = null, COHORT = "", GROUP = "", SHOWCANCELLED = false, MISSING = false, EDITING = "";
 var HEB_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -1037,6 +1037,8 @@ function teamBlock(){
 // החלטת רון: תג לא יורד, כי צריך לדעת באיזו תוכנית היא הייתה. הביטול הוא תג
 // נוסף לצידו ולא במקומו.
 function progPill(w){
+  // הערך 10 הוא עשרה שבועות ולא חודשים, עמודה SOLO10WEEK. v7.47.
+  if(w.solo===10) return '<span class="grp solopill">סולו 10 שבועות</span>';
   if(w.solo) return '<span class="grp solopill">סולו '+w.solo+'</span>';
   return '<span class="grp p360pill">360</span>';
 }
@@ -1072,7 +1074,7 @@ function render(){
   // A group is a cohort AND a letter together. Every cohort runs א..ה (two to five of them),
   // so "קבוצה ב" of the January intake and "קבוצה ב" of the April intake are different
   // groups of different women. Merging them by letter alone is what produced "ב (522)".
-  var pool = [], nNew = 0, nOld = 0, n360 = 0, nS6 = 0, nS12 = 0;
+  var pool = [], nNew = 0, nOld = 0, n360 = 0, nS6 = 0, nS12 = 0, nS10w = 0;
   DATA.women.forEach(function(w){
     if(w.cancelled && !SHOWCANCELLED) return;
     if(!w.start) return;
@@ -1081,10 +1083,11 @@ function render(){
     if(APP==="old" && w.newApp) return;
     // הספירה לפני הסינון עצמו, בדיוק כמו אפליקציה חדשה מול קג'אבי, כדי שהמספר
     // שליד כל אפשרות יגיד כמה יש בה ולא כמה נשארו אחרי שכבר בחרו אותה.
-    if(w.solo===6) nS6++; else if(w.solo===12) nS12++; else n360++;
+    if(w.solo===6) nS6++; else if(w.solo===12) nS12++; else if(w.solo===10) nS10w++; else n360++;
     if(PROG==="360" && w.solo) return;
     if(PROG==="6" && w.solo!==6) return;
     if(PROG==="12" && w.solo!==12) return;
+    if(PROG==="10w" && w.solo!==10) return;
     pool.push(w);
   });
 
@@ -1266,10 +1269,11 @@ function render(){
           '<option value="-"'+(GROUP==="-"?" selected":"")+'>ללא קבוצה ('+noGroup+')</option>'+
         '</select></span>'+
         (MISSING ? '' : '<span class="sel"><select id="fProg" aria-label="תוכנית">'+
-          '<option value=""'+(PROG?"":" selected")+'>כל התוכניות ('+(n360+nS6+nS12)+')</option>'+
+          '<option value=""'+(PROG?"":" selected")+'>כל התוכניות ('+(n360+nS6+nS12+nS10w)+')</option>'+
           '<option value="360"'+(PROG==="360"?" selected":"")+'>360 ('+n360+')</option>'+
           '<option value="6"'+(PROG==="6"?" selected":"")+'>סולו 6 ('+nS6+')</option>'+
           '<option value="12"'+(PROG==="12"?" selected":"")+'>סולו 12 ('+nS12+')</option>'+
+          '<option value="10w"'+(PROG==="10w"?" selected":"")+'>סולו 10 שבועות ('+nS10w+')</option>'+
         '</select></span>')+
         // הבורר הזה מוצג גם ב"חסרות קבוצה", כי מ-v6.69 הוא מסנן אותה. בלעדיו
         // אי אפשר היה להחזיר משם את מי שאינה באפליקציה החדשה.
@@ -1507,19 +1511,10 @@ function render(){
         '</div>';
       }
       if(r) return '<div class="note-card done">'+head+'<div class="nsent">סומנה כטופלה '+esc(stamp(r.at))+(r.by?' · '+esc(r.by):'')+', בלי תשובה אליה.</div></div>';
-      var sug = bankSuggest(n.text);
+      // **התשובות המוכנות אינן מוצגות יותר, מ-v7.49.** רון: "תוריד את התשובות המוכנות
+      // מראש... תשאיר רק את המודל של נסח לי תשובה". הבנק עצמו נשאר, כי "נסחי לי
+      // תשובה" שולח ממנו לבינה את התשובות הדומות כדוגמאות (bankSuggest, nearby).
       return '<div class="note-card">'+head+
-        (BANK === null ? '<div class="nhint" style="margin-top:10px">טוען תשובות מוכנות...</div>' :
-         !sug.length ? '<div class="whybox"><b>אין ניסוח מוכן להערה הזאת</b>'+
-            (talkWhy(n.text) ? '<span>'+esc(talkWhy(n.text))+'</span>'
-                             : '<span>אפשר לכתוב תשובה כאן, או ללחוץ "העתקה לצ\'אט" כדי לדון בה איתי.</span>')+
-          '</div>' :
-         '<div class="sugbox"><div class="flabel">תשובות מוכנות שמתאימות לשאלה הזאת</div>'+
-            sug.map(function(e){
-              return '<button class="sug" data-usebank="'+esc(e.id)+'" data-note="'+esc(n.id)+'">'+
-                '<b>'+esc(e.q)+'</b><span>'+esc(e.a)+'</span>'+
-                '<i class="use">\u2190 להשתמש בתשובה הזאת</i></button>';
-            }).join("")+'</div>')+
         '<div class="flabel" style="margin-top:10px">התשובה שהיא תראה באפליקציה</div>'+
         // ניסוח טיוטה. היא נכתבת לתוך התיבה שמתחת, והפקידה עורכת ושולחת. שום דבר
         // ממנה לא מגיע למשתתפת בלי שאדם קרא אותו ולחץ "שלחי לה".
@@ -1534,7 +1529,7 @@ function render(){
           '<button class="btn ghost" data-notedone="'+esc(n.id)+'" data-for="'+esc(w.email)+'">סימון כטופל בלי תשובה</button>'+
           '<button class="btn ghost" data-toclaude="'+esc(n.id)+'" data-for="'+esc(w.email)+'">העתקה לצ\'אט</button>'+
         '</div>'+
-        '<label class="bankadd"><input type="checkbox" id="bk_'+esc(n.id)+'" checked> לשמור את השאלה והתשובה בבנק, כדי שיוצעו בפעם הבאה</label>'+
+        '<label class="bankadd"><input type="checkbox" id="bk_'+esc(n.id)+'" checked> לשמור את השאלה והתשובה, כדי שהניסוח הבא ילמד ממנה</label>'+
       '</div>';
     }).join("");
   }
@@ -1753,7 +1748,7 @@ function render(){
         '<span class="nhint" id="out_why" style="margin:0">'+(OUT.why||"")+'</span></div>'+
       (OUT.ans !== "" || OUT.busy
         ? '<textarea class="field" rows="4" id="out_a" style="margin-top:10px" placeholder="התשובה. אפשר לערוך אותה לפני שליחה.">'+esc(OUT.ans||"")+'</textarea>'+
-          '<label class="bankadd"><input type="checkbox" id="out_k"'+(OUT.keep?' checked':'')+'> לשמור את השאלה והתשובה בבנק</label>'+
+          '<label class="bankadd"><input type="checkbox" id="out_k"'+(OUT.keep?' checked':'')+'> לשמור את השאלה והתשובה, כדי שהניסוח הבא ילמד ממנה</label>'+
           '<div class="outacts">'+
             '<button class="btn" data-outcopy="1">העתקה</button>'+
             (picked
