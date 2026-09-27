@@ -125,6 +125,9 @@ export function decideAccess(f) {
   // היא עוברת שבועיים בלי לדעת שהוא קיים.
   // **ולא להטבת סולו**, כי השורה אומרת "במתנה" והיא שילמה עליה. v7.54.
   const glowSoon = hasGlow && preStart && !glowFullOpen && !soloBenefit;
+  // **ולהטבת סולו שורה משלה, בלי "במתנה" ובלי "תוכנית הליווי".** נוסח של רון,
+  // 27 בספטמבר 2026. v7.55.
+  const glowSoonSolo = hasGlow && preStart && !glowFullOpen && soloBenefit;
 
   // אישה רשומה שעדיין לא שובצה למחזור: אין לה 360 ואין לה מה לפוג, והיא נכנסת
   // כמו תמיד ומקבלת את מסכי ההרשמה וההמתנה. **זה המצב היחיד שבו אין מוצר פתוח
@@ -142,7 +145,7 @@ export function decideAccess(f) {
   return {
     has360, open360, stopped360, frozenNow, expired360, waiting360,
     glowOwned, glowStopped, glowStandalone, glowPast, glowOnly, glowOpen,
-    preStart, glowFullOpen, glowSoon,
+    preStart, glowFullOpen, glowSoon, glowSoonSolo,
     // מתנה מול קנייה, כפי שהמשרד צריך לראות את זה.
     glowSource: !hasGlow ? "" : soloBenefit ? "benefit" : (!has360 ? "solo" : (f.glowPaid ? "paid" : "gift")),
     hasGlow,

@@ -89,11 +89,11 @@ const DEVICES = [
 ];
 
 /* ---------- canned API answers: nothing leaves this machine ---------- */
-async function stubApi(context, { startDate, glow = false, glowFull = false, product = "360", replies = null, aiAnswer = null, catalog = null, ilFood = null }) {
+async function stubApi(context, { startDate, glow = false, glowFull = false, product = "360", replies = null, aiAnswer = null, catalog = null, ilFood = null, accessExtra = null }) {
   await context.route("**/api/**", async (route) => {
     const url = route.request().url();
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
-    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, glowFull, product, ...(replies ? { replies } : {}) });
+    if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate, glow, glowFull, product, ...(replies ? { replies } : {}), ...(accessExtra || {}) });
     // ברירת המחדל היא תשובה שלא סיימה, כדי ששום תרחיש אחר לא יקבל בטעות כרטיס
     // תוצאות. תרחיש שצריך שיחה גמורה מוסר aiAnswer משלו.
     if (url.includes("/api/ai")) return json({ content: [{ type: "text", text: JSON.stringify(aiAnswer || { reply: "רשמתי לך", done: false, items: [] }) }] });
@@ -118,12 +118,12 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null, ilFood = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null, ilFood = null, accessExtra = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
   const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
-  await stubApi(context, { startDate, glow, glowFull, product, replies, aiAnswer, catalog, ilFood });
+  await stubApi(context, { startDate, glow, glowFull, product, replies, aiAnswer, catalog, ilFood, accessExtra });
   // שעון נעוץ, לתרחיש שתלוי ביום בשבוע. בלעדיו הוא היה עובר בימים מסוימים
   // ונופל באחרים, וזו בדיוק המלכודת מסעיף 20.
   if (clock) {
@@ -550,6 +550,29 @@ const CHECKS = [
         ok: card > 0 && bonus >= 3 && weeks === 0 && dayRows === 0 && bad.length === 0,
         detail: `כרטיס ${card} · שיעורי בונוס ${bonus} · שבועות ${weeks} · ימים ${dayRows}`,
       };
+    },
+  },
+  {
+    // הטבת סולו לפני יום 1: השורה שלה, בלי "במתנה" ובלי "תוכנית הליווי". v7.55.
+    // שני הצדדים באותה הרצה, כי שורה שמוצגת תמיד נראית בדיוק כמו שורה שמסוננת נכון:
+    // מתנת הוובינר ממשיכה לקבל את השורה הישנה ולא את החדשה.
+    name: "לפני תחילת התוכנית: הטבת סולו מקבלת את השורה שלה, ומתנה את שלה",
+    async run(browser, device) {
+      const future = new Date(Date.parse(TODAY + "T00:00:00Z") + 2 * 86400000).toISOString().slice(0, 10);
+      const SOLO = "💄 קורס הביוטי Glow המלא יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים שלך.";
+      const GIFT = "💄 קורס הביוטי Glow המלא במתנה יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים של תוכנית הליווי.";
+      const bad = [];
+      for (const [label, extra, want, notWant] of [["סולו", { glowSoonSolo: true }, SOLO, GIFT], ["מתנה", { glowSoon: true }, GIFT, SOLO]]) {
+        const { context, page, errors } = await openApp(browser, device, { startDate: future, accessExtra: extra });
+        await page.waitForTimeout(600);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("התוכנית שלך מתחילה ביום")) bad.push(label + ": אין מסך המתנה");
+        if (!t.includes(want)) bad.push(label + ": השורה שלה חסרה");
+        if (t.includes(notWant)) bad.push(label + ": הוצגה השורה של האחרת");
+        if (errors.length) bad.push(label + ": שגיאה " + errors[0].slice(0, 40));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "כל אחת רואה את השורה שלה" };
     },
   },
   {

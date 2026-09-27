@@ -181,7 +181,7 @@ check("שיעור 12 הוא הארות ולא האדרות", glow.includes("שי
 check("ו-4MUST צמוד, כדי שהספרה לא תתהפך", (glow.match(/שיטת 4MUST/g) || []).length === 4 && !/4 MUST/.test(glow));
 
 console.log("\nמסך ההמתנה, לפני שהתוכנית מתחילה\n");
-check("מסך ההמתנה מקבל את הסימון", /function PreStartScreen\(\{ name, startDate, glow = false, glowSoon = false, onOpenGlow \}\)/.test(app));
+check("מסך ההמתנה מקבל את הסימון", /function PreStartScreen\(\{ name, startDate, glow = false, glowSoon = false, glowSoonSolo = false, onOpenGlow \}\)/.test(app));
 check("והכרטיס מוצג רק למי שמגיע לה", /\{glow && hasGlow\(\) && \(/.test(app));
 check("הקופי של הכרטיס בדיוק כפי שאושר",
   app.includes("💄 בונוס שמחכה לך כבר עכשיו") &&

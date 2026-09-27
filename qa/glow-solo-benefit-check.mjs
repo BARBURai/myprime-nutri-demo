@@ -48,6 +48,7 @@ const W = {
   gift:        row({ email: "gift@t.co", start: now3, full: "TRUE", solo10: "" }),
   giftDone:    row({ email: "giftdone@t.co", start: past20, full: "TRUE", solo10: "" }),
   buyer:       row({ email: "buyer@t.co", full: "TRUE", solo10: "" }),
+  giftSoon:    row({ email: "giftsoon@t.co", start: future, full: "TRUE", solo10: "" }),
 };
 let CSV = [HDR, ...Object.values(W)].join("\n");
 
@@ -117,7 +118,22 @@ console.log("\nלפני יום 1");
 g = await gate("soon@t.co");
 ok("**הקורס מחכה ליום 1, כמו המתנה**", g.allowed && g.glowFull === false);
 ok("**ואין לה את השורה 'במתנה', כי היא שילמה עליו**", g.glowSoon === false);
+ok("**ויש לה את השורה של הטבת הסולו**. v7.55", g.glowSoonSolo === true, JSON.stringify(g));
 ok("במסך: 'הטבת סולו · נפתח ב-' ותאריך ההתחלה", glowLine(A("soon@t.co")) === "הטבת סולו · נפתח ב-" + il(future), glowLine(A("soon@t.co")));
+
+console.log("\nשורת ההמתנה של הטבת הסולו. v7.55");
+g = await gate("benefit@t.co");
+ok("**מרגע שהתוכנית התחילה השורה יורדת**", g.glowSoonSolo === false);
+g = await gate("giftsoon@t.co");
+ok("**מתנת הוובינר לפני יום 1: 'במתנה' ולא שורת הסולו**", g.glowSoon === true && g.glowSoonSolo === false, JSON.stringify(g));
+g = await gate("plain@t.co");
+ok("סולו בלי ההטבה אינה מקבלת שום שורה", !g.glowSoon && !g.glowSoonSolo);
+const APP = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+const SOLO_LINE = "💄 קורס הביוטי Glow המלא יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים שלך.";
+ok("**הנוסח שרון אישר, מילה במילה**", APP.includes(SOLO_LINE));
+ok("**והוא מוצג רק תחת glowSoonSolo**", /\{glowSoonSolo && \([\s\S]{0,400}?יחד עם כל התכנים שלך\./.test(APP));
+ok("ושורת המתנה לא נגעה", APP.includes("💄 קורס הביוטי Glow המלא במתנה יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים של תוכנית הליווי."));
+ok("המסך מקבל את הסימון מהשער", /setGlowSoonSolo\(!!d\.glowSoonSolo\)/.test(APP) && /glowSoonSolo=\{glowSoonSolo\}/.test(APP));
 
 console.log("\nאחרי שבוע 10");
 db.kv["glowfull:done@t.co"] = "1";

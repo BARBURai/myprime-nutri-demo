@@ -735,7 +735,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.54";
+const VERSION = "7.55";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1756,7 +1756,7 @@ function Onboarding({ onFinish, name, email, fixedStart, onRestore }) {
 }
 // Shown when a participant has finished signing up but her programme starts on a
 // later Sunday. Day 1 (and everything with it) unlocks at midnight on that date.
-function PreStartScreen({ name, startDate, glow = false, glowSoon = false, onOpenGlow }) {
+function PreStartScreen({ name, startDate, glow = false, glowSoon = false, glowSoonSolo = false, onOpenGlow }) {
   // Phone only: on a desktop there is no home screen to put the icon on.
   const isPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
   const start = new Date(startDate);
@@ -1790,6 +1790,13 @@ function PreStartScreen({ name, startDate, glow = false, glowSoon = false, onOpe
       {glowSoon && (
         <div style={{ background: C.panel, border: `1px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
           <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>💄 קורס הביוטי Glow המלא במתנה יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים של תוכנית הליווי.</div>
+        </div>
+      )}
+      {/* **הטבת סולו: היא שילמה על הקורס, ובסולו אין ליווי**, ולכן בלי "במתנה" ובלי
+          "תוכנית הליווי". נוסח של רון, 27 בספטמבר 2026. v7.55. */}
+      {glowSoonSolo && (
+        <div style={{ background: C.panel, border: `1px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
+          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>💄 קורס הביוטי Glow המלא יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים שלך.</div>
         </div>
       )}
       {isPhone && (
@@ -7056,6 +7063,7 @@ export default function App() {
   // יש לה את הקורס המלא במתנה, והוא ייפתח ביום הראשון של התוכנית. **זה קיים רק
   // בתקופת ההמתנה ולמתנה בלבד**, כי קורס שנקנה בכסף פתוח לה מיד.
   const [glowSoon, setGlowSoon] = useState(() => { try { return localStorage.getItem("myprime_glow_soon") === "1"; } catch (e) { return false; } });
+  const [glowSoonSolo, setGlowSoonSolo] = useState(() => { try { return localStorage.getItem("myprime_glow_soon_solo") === "1"; } catch (e) { return false; } });
   // "glow" = קנתה את קורס האיפור לבדה. ראה את ההערה בתשובת השער למטה.
   const [product, setProduct] = useState(() => { try { return localStorage.getItem("myprime_product") === "glow" ? "glow" : "360"; } catch (e) { return "360"; } });
   // "התחילה לצפות בבונוס". נשמר על המכשיר שלה, ומוחזק כאן גם כמצב כדי שהשליחה
@@ -7227,6 +7235,8 @@ export default function App() {
         try { localStorage.setItem("myprime_glow_full", d.glowFull ? "1" : "0"); } catch (e) {}
         setGlowSoon(!!d.glowSoon);
         try { localStorage.setItem("myprime_glow_soon", d.glowSoon ? "1" : "0"); } catch (e) {}
+        setGlowSoonSolo(!!d.glowSoonSolo);
+        try { localStorage.setItem("myprime_glow_soon_solo", d.glowSoonSolo ? "1" : "0"); } catch (e) {}
         setGlow(!!d.glow);
         // איזה מוצר היא קנתה. "glow" הוא קורס האיפור שנמכר לבדו, בלי 360, והשער
         // מזהה אותו בכך שיש לה GLOW-FULL ואין לה תאריך התחלה. נכתב מחדש בכל
@@ -8091,7 +8101,7 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} glowSoon={glowSoon} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow && !glowFull} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} glowSoon={glowSoon} glowSoonSolo={glowSoonSolo} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow && !glowFull} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={profile.weightKg} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
