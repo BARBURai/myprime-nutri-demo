@@ -21,6 +21,7 @@
 import { decideAccess } from "./_product.js";
 import { loadSheet, israelDay, accessEnd, ymd } from "./_sheet.js";
 import { KB } from "./_kb.js";
+import { oldAppEmails, APPOLD_KEY } from "./_appemails.js";
 import { DAILY_LIMIT, PHOTO_LIMIT } from "./ai.js";
 
 async function redis(base, token, ...args) {
@@ -37,7 +38,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.55";
+const ADMIN_VERSION = "7.57";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -310,6 +311,15 @@ async function moveRecords(RU, RT, from, to) {
       moved.push(pre);
     } catch (e) {}
   }
+  // **רשימת מי שפתחה את האפליקציה לפני v4.87 עוברת גם היא.** v7.53. בלי זה אישה שנכנסה
+  // רק אז, והמשרד החליף לה כתובת, הייתה נספרת כקג'אבי תחת הכתובת החדשה.
+  try {
+    if (Number(await redis(RU, RT, "SISMEMBER", APPOLD_KEY, from)) === 1) {
+      await redis(RU, RT, "SADD", APPOLD_KEY, to);
+      await redis(RU, RT, "SREM", APPOLD_KEY, from);
+      moved.push(APPOLD_KEY);
+    }
+  } catch (e) {}
   // Her registered devices for notifications carry the address inside each record, so they
   // are rewritten rather than moved. Without this the evening reminder keeps going out
   // under an address that no longer exists.
@@ -418,6 +428,21 @@ export default async function handler(req, res) {
       const replies = rawReplies ? JSON.parse(rawReplies) : [];
       return res.status(200).json({ ok: true, notes, replies });
     } catch (e) { return res.status(200).json({ ok: false, error: "notes_failed" }); }
+  }
+
+  // **נתוני השימוש של אישה אחת, כשהכרטיס שלה נפתח. v7.53.** עד כאן הרשימה משכה את
+  // כולן בבת אחת בכל טעינה: 927 אלף בתים ל-466 נשים, ו-Upstash אינו מחזיר יותר מ-10
+  // מיליון בבקשה, כלומר המסך היה נשבר בסביבות 5,300 נשים. **הרשימה עצמה מעולם לא
+  // השתמשה בהם**, רק הכרטיס.
+  if (req.method === "GET" && req.query.usage) {
+    const em = String(req.query.usage).trim().toLowerCase();
+    if (!RU || !RT) return res.status(200).json({ ok: false, error: "no_store" });
+    try {
+      const raw = await redis(RU, RT, "HGET", "admin:usage", em);
+      let usage = null;
+      if (raw) { try { usage = JSON.parse(raw); } catch (e) {} }
+      return res.status(200).json({ ok: true, usage });
+    } catch (e) { return res.status(200).json({ ok: false, error: "usage_failed" }); }
   }
 
   // One woman's live state in ManyChat, read when the clerk opens her card. It is per-woman
@@ -1019,12 +1044,18 @@ JSON בלבד, בלי שום טקסט אחר:
   if (!csvUrl) return res.status(500).json({ ok: false, error: "no_sheet" });
 
   let sheet;
-  try { sheet = await loadSheet(csvUrl); }
+  // **מהעותק המשותף של הגיליון, שמתעדכן כל דקה. v7.53.** עד כאן המסך משך מגוגל בכל
+  // טעינה, **וכל שמירה טוענת את הרשימה מחדש**, כלומר כל פעולה של הפקידה חיכתה לגוגל,
+  // וברבע מהפעמים זה 14 עד 19 שניות (נמדד ב-22.09.2026). **ומה שהפקידה שומרת אינו
+  // עובר דרך הגיליון** אלא דרך admin:overrides, ולכן הוא נראה מיד גם עכשיו. מה שמגיע
+  // ממניצ'ט דרך הגיליון מתעכב אצל גוגל ממילא דקות, ודקה נוספת אינה מורגשת.
+  // **ובכל תקלה במטמון זה נופל לגוגל, בדיוק כמו קודם.** ראה fetchSheetText.
+  try { sheet = await loadSheet(csvUrl, RU, RT); }
   catch (e) { return res.status(502).json({ ok: false, error: "sheet_failed" }); }
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
-  let overrides = {}, seen = {}, usage = {}, emailMap = {}, emailOld = {}, manual = {}, glowStart = {};
+  let overrides = {}, seen = {}, emailMap = {}, emailOld = {}, manual = {}, glowStart = {};
   const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
@@ -1042,7 +1073,7 @@ JSON בלבד, בלי שום טקסט אחר:
     // היום הראשון שבו נכנסה לקורס. **זה אינו תאריך הקנייה**, שאינו קיים אצלנו
     // בשום מקום, אלא הרגע שבו הקורס נפתח לה בפועל. נתפס ב-HSETNX בשער.
     try { glowStart = flat(await redis(RU, RT, "HGETALL", "glow:start")); } catch (e) {}
-    try { usage = flat(await redis(RU, RT, "HGETALL", "admin:usage")); } catch (e) {}
+    // admin:usage אינו נקרא כאן יותר. הכרטיס מושך אישה אחת ב-?usage=. v7.53.
 
     // Who is on the new app. admin:seen only starts at v4.87, so it alone would report far
     // fewer women than really moved over. Every other durable trace a woman leaves by
@@ -1050,17 +1081,8 @@ JSON בלבד, בלי שום טקסט אחר:
     // her device list, and her notification registration. None of these can be forgotten or
     // mistyped the way a manual tag can.
     Object.keys(seen).forEach((e) => appEmails.add(e.toLowerCase()));
-    const scan = async (pattern, prefixLen) => {
-      try {
-        const keys = (await redis(RU, RT, "KEYS", pattern)) || [];
-        keys.forEach((k) => {
-          const e = String(k).slice(prefixLen).toLowerCase();
-          if (e.includes("@")) appEmails.add(e);
-        });
-      } catch (e) { /* one missing source must not empty the whole list */ }
-    };
-    await scan("bk:*", 3);
-    await scan("devices:*", 8);
+    // **בלי סריקה של כל המסד בכל טעינה. v7.53.** ראה api/_appemails.js.
+    (await oldAppEmails((arr) => redis(RU, RT, ...arr), israelDay(0))).forEach((e) => appEmails.add(e));
     try {
       const subs = flat(await redis(RU, RT, "HGETALL", "push:subs"));
       Object.values(subs).forEach((v) => {
@@ -1185,8 +1207,6 @@ JSON בלבד, בלי שום טקסט אחר:
       glowStart: glowStartAt,
       today,
     });
-    let use = null;
-    if (usage[w.email]) { try { use = JSON.parse(usage[w.email]); } catch (e) {} }
     return {
       ...w,
       first,
@@ -1214,7 +1234,6 @@ JSON בלבד, בלי שום טקסט אחר:
       // from the day admin:seen started being written, so the list fills in over a few days
       // as each woman next opens the app.
       newApp: !!w.sheetNewApp || appEmails.has(w.email),
-      usage: use,
       group,
       sheetGroup: w.group || "",
       groupOverride: (ovr && ovr.group) ? { group: ovr.group, by: ovr.by || "" } : null,

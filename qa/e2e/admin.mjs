@@ -104,6 +104,7 @@ async function open(browser, device, patch) {
   const DATA0 = patch ? patch(JSON.parse(JSON.stringify(DATA))) : DATA;
   const ctx = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
   const posts = [];
+  const usageCalls = [];
   await ctx.route("**/api/**", (route) => {
     const url = route.request().url();
     const json = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
@@ -122,6 +123,13 @@ async function open(browser, device, patch) {
     if (url.includes("notes=")) return json({ ok: true, notes: [], replies: [] });
     if (url.includes("bank=1")) return json({ ok: true, bank: [] });
     if (url.includes("mc=")) return json({ ok: true, found: false });
+    // נתוני השימוש של אישה אחת, v7.53. `__usage` הוא מה שהשרת מחזיר, ו-`__usageFail`
+    // מדמה תקלה. כל בקשה נספרת, כדי לבדוק שטעינה מחדש של הרשימה אינה מושכת שוב.
+    if (url.includes("usage=")) {
+      usageCalls.push(decodeURIComponent(url.split("usage=")[1].split("&")[0]));
+      if (DATA0.__usageFail) return json({ ok: false, error: "usage_failed" });
+      return json({ ok: true, usage: (DATA0.__usage || {})[usageCalls[usageCalls.length - 1]] || null });
+    }
     if (url.includes("codes=1")) return json({ ok: true, codes: [] });
     return json(DATA0);
   });
@@ -138,7 +146,7 @@ async function open(browser, device, patch) {
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(700);
   await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
-  return { ctx, page, errors, posts };
+  return { ctx, page, errors, posts, usageCalls };
 }
 
 // שבע האפשרויות בתפריט, ולאיזה שדה כל אחת אמורה לקפוץ.
@@ -193,6 +201,37 @@ const CHECKS = [
       const okA = a.includes("שימוש בבינה") && a.includes("70 מתוך 70 · הגיעה למכסה") && a.includes("4 מתוך 30");
       const okB = b.includes("שימוש בבינה") && (b.match(/לא ידוע/g) || []).length >= 2;
       return { ok: okA && okB && errors.length === 0, detail: `עם מונים ${okA ? "מוצג" : a.slice(0, 160)} · בלי מונים ${okB ? "לא ידוע" : b.slice(0, 160)} · שגיאות ${errors[0] || "אין"}` };
+    },
+  },
+  {
+    // v7.53: נתוני השימוש כבר לא מגיעים עם הרשימה אלא נטענים כשהכרטיס נפתח. שני הצדדים
+    // באותה הרצה: נטענו, ונכשלו. תקלה שמוצגת כ"אין נתונים" נראית בדיוק כמו אישה בלי שימוש.
+    name: "נתוני השימוש נטענים כשהכרטיס נפתח, ותקלה נאמרת כתקלה",
+    async run(browser, device) {
+      const U = { standalone: 1, trackerDays: 23, videosDone: 41, days: { "1-1": [2, 3] } };
+      const { ctx, page, errors, usageCalls } = await open(browser, device, (d) => { d.__usage = { "lior5066@gmail.com": U }; return d; });
+      await page.locator('[data-open="lior5066@gmail.com"]').first().click();
+      await page.waitForTimeout(500);
+      const box = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+      await page.locator('[data-tab="usage"]').first().click();
+      await page.waitForTimeout(300);
+      const tab = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+      await page.locator('[data-tab="info"]').first().click();
+      await page.waitForTimeout(300);
+      const calls = usageCalls.length;
+      await ctx.close();
+      const two = await open(browser, device, (d) => { d.__usageFail = true; return d; });
+      await two.page.locator('[data-open="lior5066@gmail.com"]').first().click();
+      await two.page.waitForTimeout(500);
+      const fb = (await two.page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+      await two.page.locator('[data-tab="usage"]').first().click();
+      await two.page.waitForTimeout(300);
+      const ft = (await two.page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+      errors.push(...two.errors);
+      await two.ctx.close();
+      const okA = box.includes("אפליקציה מותקנת") && tab.includes("23") && tab.includes("ימי יומן מעקב") && calls === 1;
+      const okB = fb.includes("לא ידוע עדיין") && ft.includes("נתוני השימוש לא נטענו") && !ft.includes("אין עדיין נתוני שימוש");
+      return { ok: okA && okB && errors.length === 0, detail: `נטען ${okA ? "כן" : box.slice(0, 120) + " | " + tab.slice(0, 120)} · בקשות ${calls} · תקלה ${okB ? "נאמרת" : ft.slice(0, 120)} · שגיאות ${errors[0] || "אין"}` };
     },
   },
   {

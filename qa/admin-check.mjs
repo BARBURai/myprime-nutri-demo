@@ -315,12 +315,16 @@ console.log("\nנתוני שימוש");
     days: { "1-1": [2, 3], "1-2": [3, 3], "2-1": [0, 2], "bad-key!": [1, 1], "3-1": [9, 2] },
     videosDone: 41, videosTotal: 88, views: 53, trackerDays: 23,
   });
-  const u = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "yafit@test.com").usage;
+  // **מ-v7.53 הכרטיס מושך אישה אחת, והרשימה אינה נושאת נתוני שימוש כלל.**
+  const u = (await callAdmin({ key: KEY, usage: "yafit@test.com" })).body.usage;
   check("הנתונים נשמרו והוחזרו", !!u && u.trackerDays === 23 && u.videosDone === 41);
+  check("**הרשימה אינה נושאת נתוני שימוש**", (await callAdmin({ key: KEY })).body.women.every((w) => !("usage" in w)));
+  check("**וגם כתובת גדולה נקראת באותיות קטנות**", ((await callAdmin({ key: KEY, usage: " YAFIT@test.com " })).body.usage || {}).trackerDays === 23);
   check("יום תקין נשמר כמו שהוא", u.days["1-1"][0] === 2 && u.days["1-1"][1] === 3);
   check("מפתח לא תקין נזרק", u.days["bad-key!"] === undefined);
   check("הושלמו לא יכול לעבור את הסך הכל", u.days["3-1"][0] === 2);
-  check("אישה בלי נתונים מחזירה null", (await callAdmin({ key: KEY })).body.women.find((w) => w.email === "ruti@test.com").usage === null);
+  check("אישה בלי נתונים מחזירה null", (await callAdmin({ key: KEY, usage: "ruti@test.com" })).body.usage === null);
+  check("**ובלי מפתח נכון אין נתונים**", (await callAdmin({ key: "wrong", usage: "yafit@test.com" })).code === 401);
 
   // The evening reminder reads this flag to skip a woman who already finished today.
   const day = new Date().toISOString().slice(0, 10);
@@ -678,7 +682,7 @@ console.log("\nהערות ותשובות");
   // counters in it, and a blind write would blank her usage row until the next app load.
   await callUsage({ email: EM, days: { "1-1": [2, 3] }, trackerDays: 5 });
   await callUsage({ email: EM, note: { screen: "יומן", text: "איפה מזינים מים?" } });
-  const kept = (await callAdmin({ key: KEY })).body.women.find((w) => w.email === EM);
+  const kept = (await callAdmin({ key: KEY, usage: EM })).body;
   check("הערה אינה מוחקת את נתוני השימוש שלה", kept.usage && kept.usage.trackerDays === 5, JSON.stringify(kept.usage));
   const list = (await callAdmin({ key: KEY, notes: EM })).body;
   check("הערה שנכתבה באפליקציה נשמרת אצלנו", list.ok && list.notes.length === 1 && list.notes[0].text === "איפה מזינים מים?");

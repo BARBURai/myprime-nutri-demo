@@ -16,6 +16,7 @@
 // 3 עד 70 בערב, לא ביטלה, לא חסומה ולא בהקפאה, ואף אחת ביום שקט.
 
 import { isQuietDay } from "./_hebcal.js";
+import { oldAppEmails } from "./_appemails.js";
 
 export const WHO_TTL = 345600; // ארבעה ימים. הדוח קורא אותם למחרת בבוקר
 export const whoKey = (date, kind, status) => `push:who:${date}:${kind}:${status}`;
@@ -116,12 +117,8 @@ export async function loadAuditInputs({ redisCmd, base, token, loadSheet, csvUrl
   const emailMap = await hget("admin:emailmap");
   const seenApp = await hget("admin:seen");
   const appEmails = new Set(Object.keys(seenApp).map(low));
-  for (const [pattern, cut] of [["bk:*", 3], ["devices:*", 8]]) {
-    try {
-      const keys = (await redisCmd(base, token, ["KEYS", pattern])) || [];
-      keys.forEach((k) => { const e = low(String(k).slice(cut)); if (e.includes("@")) appEmails.add(e); });
-    } catch (e) {}
-  }
+  // אותה רשימה שמסך הניהול קורא, בלי סריקה של כל המסד. v7.53, api/_appemails.js.
+  (await oldAppEmails((arr) => redisCmd(base, token, arr))).forEach((e) => appEmails.add(low(e)));
   const subEmails = new Set();
   Object.values(await hget("push:subs")).forEach((v) => {
     try { const j = JSON.parse(v); if (j && j.email) subEmails.add(low(j.email)); } catch (e) {}
