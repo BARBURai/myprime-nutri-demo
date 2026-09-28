@@ -1129,5 +1129,32 @@ console.log("\nחיפוש, תגי תוכנית ותאריך במסך הניהו�
   check("31 בפברואר אינו קיים ברשימה", mk.dateBox("a@b.com", "2027-02-10").split('id="dm_')[0].indexOf('value="31"') === -1);
 }
 
+// העברת מחזור: גם מחזורים שכבר התחילו, והמחזור שלה תמיד ברשימה. v7.59.
+// נמשך מ-admin.html ומורץ, ולא מועתק.
+{
+  const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  const g = (name) => (html.match(new RegExp("function " + name + "\\([^)]*\\)\\{[\\s\\S]*?\\n\\}")) || [""])[0];
+  const src = g("il") + g("sundays") + g("cohortSundays") + g("weekIfStart") + g("cohortOptLabel");
+  check("פונקציות רשימת המחזורים קיימות ב-admin.html", /function cohortSundays/.test(src) && /function cohortOptLabel/.test(src));
+  const mk = new Function("DATA", src + "; return { cohortSundays: cohortSundays, cohortLabel: cohortOptLabel };");
+  const f = mk({ today: "2026-09-30" });   // יום רביעי. המחזור הנוכחי 27.09
+  const L = f.cohortSundays("2026-09-13");
+  check("עשרה ימי ראשון שעברו לפני המחזור הנוכחי", L[0] === "2026-07-19" && L.filter((d) => d < "2026-09-27").length === 10, L[0]);
+  check("והמחזור הנוכחי ושבעה אחריו", L.includes("2026-09-27") && L[L.length - 1] === "2026-11-15", L[L.length - 1]);
+  check("שמונה עשר תאריכים", L.length === 18, String(L.length));
+  check("כל התאריכים ימי ראשון", L.every((d) => new Date(d + "T12:00:00Z").getUTCDay() === 0));
+  check("**מחזור לפני שבועיים: 'היום בשבוע 3 · המחזור שלה עכשיו'**",
+    f.cohortLabel("2026-09-13", "2026-09-13") === "13.09.2026 · היום בשבוע 3 · המחזור שלה עכשיו", f.cohortLabel("2026-09-13", "2026-09-13"));
+  check("מחזור לפני חמישה שבועות: 'היום בשבוע 6'", f.cohortLabel("2026-08-23", "2026-09-13") === "23.08.2026 · היום בשבוע 6");
+  check("המחזור הנוכחי: בלי מספר שבוע", f.cohortLabel("2026-09-27", "2026-09-13") === "27.09.2026 · המחזור הנוכחי");
+  check("המחזור הבא", f.cohortLabel("2026-10-04", "") === "04.10.2026 · המחזור הבא");
+  const old = f.cohortSundays("2026-01-04");
+  check("**מחזור ישן מאוד שלה עדיין מופיע, ולכן הרשימה לא נפתחת על תאריך אחר**", old.includes("2026-01-04") && old[0] === "2026-01-04");
+  check("בלי תאריך התחלה: אין שורה ריקה", f.cohortSundays("").length === 18);
+  check("**שם אחד לכל פונקציה במסך**: לא נדרס cohortLabel הקיים", (html.match(/function cohortLabel\(/g) || []).length === 1 && (html.match(/function cohortOptLabel\(/g) || []).length === 1);
+  check("התפריט משתמש ברשימה החדשה ובכיתוב שלה", /cohortSundays\(w\.start\)\.map/.test(html) && /cohortOptLabel\(d, w\.start\)/.test(html));
+  check("והשרת עדיין דוחה יום שאינו ראשון", readFileSync(new URL("../api/admin.js", import.meta.url), "utf8").includes('error: "not_sunday"'));
+}
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
