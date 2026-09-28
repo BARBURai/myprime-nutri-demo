@@ -907,6 +907,32 @@ function freezeSundays(){
   return out;
 }
 
+// **רשימת המחזורים בהעברת מחזור. v7.59.** רון: "יש נשים שעוברות למחזורים קודמים
+// והדרך היחידה לעשות את זה זה רק אם אני מכניס אותם להקפאה." עד כאן הרשימה הציעה
+// רק את המחזור הנוכחי ושבעה עתידיים, **והשרת תמיד קיבל כל יום ראשון.**
+// עשרה שבועות אחורה, כי מעבר לזה התוכנית שלה כבר נגמרה. **והמחזור שלה עצמו תמיד
+// ברשימה**, אחרת הרשימה נפתחה על "המחזור הנוכחי" ושמירה בלי לשים לב העבירה אותה.
+function cohortSundays(own){
+  var cur = sundays(), out = [], base = new Date(cur[0]+"T00:00:00Z");
+  for(var i=10;i>=1;i--){ var d=new Date(base.getTime()); d.setUTCDate(d.getUTCDate()-i*7); out.push(d.toISOString().slice(0,10)); }
+  out = out.concat(cur);
+  if(own && /^\d{4}-\d{2}-\d{2}$/.test(own) && out.indexOf(own)<0){ out.push(own); out.sort(); }
+  return out;
+}
+// באיזה שבוע היא תהיה היום אם תועבר למחזור שכבר התחיל.
+function weekIfStart(d){
+  var days = Math.round((new Date(DATA.today+"T00:00:00Z") - new Date(d+"T00:00:00Z"))/86400000);
+  return Math.floor(days/7)+1;
+}
+function cohortOptLabel(d, own){
+  var cur = sundays(), parts = [il(d)];
+  if(d < cur[0]) parts.push("היום בשבוע "+weekIfStart(d));
+  if(d===own) parts.push("המחזור שלה עכשיו");
+  if(d===cur[0]) parts.push("המחזור הנוכחי");
+  else if(d===cur[1]) parts.push("המחזור הבא");
+  return parts.join(" · ");
+}
+
 function sundays(){
   var out=[], base=new Date(DATA.today+"T00:00:00Z");
   base.setUTCDate(base.getUTCDate()-base.getUTCDay());
@@ -1469,7 +1495,7 @@ function render(){
   function tabCohort(w){
     return '<div class="edit" id="fld-coh"><span>תאריך תחילת המחזור'+(w.startOverride?" ✎":"")+'</span>'+
       '<select class="field sm" style="width:230px" id="s_'+esc(w.email)+'">'+
-        sundays().map(function(d,i){ return '<option value="'+d+'"'+(w.start===d?" selected":"")+'>'+il(d)+(i===0?" · המחזור הנוכחי":i===1?" · המחזור הבא":"")+'</option>'; }).join("")+
+        cohortSundays(w.start).map(function(d){ return '<option value="'+d+'"'+(w.start===d?" selected":"")+'>'+cohortOptLabel(d, w.start)+'</option>'; }).join("")+
       '</select>'+
       '<button class="btn p" data-savestart="'+esc(w.email)+'">שמירה</button>'+
       (w.startOverride?'<button class="btn ghost" data-clearstart="'+esc(w.email)+'">חזרה לגיליון</button>':'')+

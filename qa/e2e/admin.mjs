@@ -257,6 +257,30 @@ const CHECKS = [
     },
   },
   {
+    // v7.59: העברת מחזור מציעה גם מחזורים שכבר התחילו, והרשימה נפתחת על המחזור שלה.
+    // עד כאן היא נפתחה על "המחזור הנוכחי", ושמירה בלי לשים לב העבירה אותה בטעות.
+    name: "העברת מחזור: מחזורים קודמים ברשימה, והיא נפתחת על המחזור שלה",
+    async run(browser, device) {
+      const { ctx, page, errors } = await open(browser, device);
+      await page.locator('[data-open="lior5066@gmail.com"]').first().click();
+      await page.waitForTimeout(400);
+      await page.locator("select[data-qa]").first().selectOption("fld-coh");
+      await page.waitForTimeout(350);
+      const sel = page.locator("#fld-coh select").first();
+      const opts = await sel.locator("option").allInnerTexts();
+      const chosen = await sel.inputValue();
+      await ctx.close();
+      const bad = [];
+      if (opts.length !== 18) bad.push("מספר אפשרויות " + opts.length);
+      if (chosen !== "2026-08-16") bad.push("נבחר " + chosen);
+      if (!opts.includes("16.08.2026 · היום בשבוע 2 · המחזור שלה עכשיו")) bad.push("אין שורת המחזור שלה");
+      if (!opts.includes("23.08.2026 · המחזור הנוכחי")) bad.push("אין המחזור הנוכחי");
+      if (!opts.some((o) => o.startsWith("14.06.2026 · היום בשבוע 11"))) bad.push("אין עשרה שבועות אחורה");
+      if (errors.length) bad.push("שגיאה " + errors[0]);
+      return { ok: bad.length === 0, detail: bad.join(" · ") || `${opts.length} אפשרויות · נבחר המחזור שלה` };
+    },
+  },
+  {
     name: "כל שש הלשוניות נפתחות בלי שגיאה",
     async run(browser, device) {
       const { ctx, page, errors } = await open(browser, device);
