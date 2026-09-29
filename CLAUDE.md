@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v7.67** · עודכן: 29 בספטמבר 2026
+**גרסה נוכחית: v7.68** · עודכן: 29 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -492,7 +492,7 @@ pageImages: []
 
 **0. הענף. זה הדבר הראשון, לפני כל קריאה אחרת.** ענף ברירת המחדל בריפו הוא `main`, **ולכן סשן חדש נפתח על הקוד והקובץ הזה של הייצור, שאינם העדכניים.** מיד בפתיחה: `git fetch origin Dev && git checkout Dev`, ולקרוא את הקובץ הזה מחדש מהענף `Dev`. **ל-`main` ול-`Dev` היסטוריות נפרדות** (ראה v7.32), **ועבודה נעשית על `Dev` בלבד.**
 
-**עדכון, 29 בספטמבר 2026: בדב v7.67, בייצור v7.63.** ההבדלים בין דב למיין: תרגול הנשימה, והעדכון הישיר ממניצ'ט בשלב ההרצה במקביל (v7.65 עד v7.67, עדיפות 2). **הרישום הקודם: בדב v7.66, בייצור v7.63.** **הרישום הקודם: בדב v7.65, בייצור v7.63.** **הרישום הקודם: בדב v7.64, בייצור v7.63.** **הרישום הקודם: בדב v7.63, בייצור v7.61.** **הרישום הקודם: בדב v7.62, בייצור v7.61.** **הרישום הקודם: בדב v7.61, בייצור v7.59.** **הרישום הקודם: בדב v7.60, בייצור v7.59.** **הרישום הקודם: בדב v7.59, בייצור v7.57.** **הצעד הבא בסקייל: להקטין את תשובת הרשימה של מסך הניהול (2.4 מגה), ואז זמן שליחת ההתראות ומספר הפקודות בכל פתיחה.** **הרישום הקודם: בדב v7.56, בייצור v7.55**, כלומר GLOW-SOLO בייצור למבצע. **הרישום הקודם: בדב v7.54, בייצור v7.51.** v7.54 היא GLOW-SOLO ו-v7.53 מהירות מסך הניהול (סעיף 17), שתיהן בדב וממתינות לבדיקה של רון. **ההבדלים בין דב למיין: תרגול הנשימה, מהירות מסך הניהול, ו-GLOW-SOLO.** **רון דיווח שהטעינה הראשונה של מסך הניהול בדב על v7.53 לקחה "הרבה הרבה מאוד זמן". לא נמדד ולא אובחן.** **והצעד הבא בסקייל שנמצא בדרך: תשובת הרשימה של מסך הניהול עצמה**, כ-930 בתים לאישה (נמדד בסימולציה), כלומר 9.3 מיליון ב-10,000. **אם לוורסל יש תקרה של 4.5MB לתשובה, והיא לא אומתה**, זה נשבר בסביבות 4,800 שורות בגיליון.
+**עדכון, 29 בספטמבר 2026: בדב v7.68, בייצור v7.63.** ההבדלים בין דב למיין: תרגול הנשימה, העדכון הישיר ממניצ'ט בשלב ההרצה במקביל (v7.65 עד v7.67, עדיפות 2), ותקרת ההמתנה בשליחת ההתראות (v7.68). **`MC_SYNC_SECRET` הוגדר בוורסל ב-29.09**, ל-Production ול-Preview, ולכן ההשוואה תתחיל לרוץ ברגע ש-v7.65 ומעלה יעלו למיין. **רון בונה במניצ'ט אוטומציה אחת עם טריגר לכל שדה ותגית.** **הרישום הקודם: בדב v7.67, בייצור v7.63.** **הרישום הקודם: בדב v7.66, בייצור v7.63.** **הרישום הקודם: בדב v7.65, בייצור v7.63.** **הרישום הקודם: בדב v7.64, בייצור v7.63.** **הרישום הקודם: בדב v7.63, בייצור v7.61.** **הרישום הקודם: בדב v7.62, בייצור v7.61.** **הרישום הקודם: בדב v7.61, בייצור v7.59.** **הרישום הקודם: בדב v7.60, בייצור v7.59.** **הרישום הקודם: בדב v7.59, בייצור v7.57.** **הצעד הבא בסקייל: להקטין את תשובת הרשימה של מסך הניהול (2.4 מגה), ואז זמן שליחת ההתראות ומספר הפקודות בכל פתיחה.** **הרישום הקודם: בדב v7.56, בייצור v7.55**, כלומר GLOW-SOLO בייצור למבצע. **הרישום הקודם: בדב v7.54, בייצור v7.51.** v7.54 היא GLOW-SOLO ו-v7.53 מהירות מסך הניהול (סעיף 17), שתיהן בדב וממתינות לבדיקה של רון. **ההבדלים בין דב למיין: תרגול הנשימה, מהירות מסך הניהול, ו-GLOW-SOLO.** **רון דיווח שהטעינה הראשונה של מסך הניהול בדב על v7.53 לקחה "הרבה הרבה מאוד זמן". לא נמדד ולא אובחן.** **והצעד הבא בסקייל שנמצא בדרך: תשובת הרשימה של מסך הניהול עצמה**, כ-930 בתים לאישה (נמדד בסימולציה), כלומר 9.3 מיליון ב-10,000. **אם לוורסל יש תקרה של 4.5MB לתשובה, והיא לא אומתה**, זה נשבר בסביבות 4,800 שורות בגיליון.
 
 **הרישום הקודם, 27 בספטמבר 2026: בדב v7.52, בייצור v7.51.** v7.51 עלתה לייצור באישור מפורש של רון, "מאשר להעלות את v7.51 למיין בלי הנשימה", ולכן **ההבדל היחיד בין דב למיין בקוד הוא תרגול הנשימה.** רון הוסיף לגיליון את העמודה `SOLO10WEEK`.
 
@@ -621,7 +621,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs && node qa/glow-solo-benefit-check.mjs && node qa/ai-chat-rules-check.mjs && node qa/mc-sync-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs && node qa/glow-solo-benefit-check.mjs && node qa/ai-chat-rules-check.mjs && node qa/mc-sync-check.mjs && node qa/push-timeout-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1245,6 +1245,21 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v7.68** - **התראה אחת שנתקעת כבר לא עוצרת את כל השליחה.** בדב בלבד. אישור רון: "מאשר, תבנה בדב".
+
+**29.09.2026, תזכורת הערב של 19:00:** cron-job.org שלח לרון "Cronjob failed", Timeout אחרי 30 שניות. **ההתראות עצמן יצאו כולן**, 351 בלי תקלה, לפי `push:log`. **מההיסטוריה של cron-job.org:** שליחה רגילה לוקחת 5.5 עד 7 שניות (411, 286 ו-414 התראות), **והערב, עם 356, עבר את 30.** כלומר לא מספר הנשים אלא שליחה אחת שנתקעה. **לא הייתה שום תקרת המתנה לשרתים של גוגל (308 מכשירים) ושל אפל (180)**, והשליחה הלכה בקבוצות של 25 שכל אחת חיכתה לאיטית שבה.
+
+| מה | עד v7.67 | מ-v7.68 |
+|---|---|---|
+| **תקרה לכל התראה** | אין | **10 שניות**, בספרייה (`timeout`) וגם בטיימר משלנו, כי זו של הספרייה חלה רק על חיבור שותק |
+| **המקביליות** | קבוצות של 25, כל אחת מחכה לאיטית | **25 במקביל, וכל אחת יוצאת ברגע שמתפנה מקום** |
+| **שנתקעה או שהחיבור נפל** | תקלה | **ניסיון שני אחד** אחרי שכל השאר יצאו. תשובה מפורשת (404, 410 ושאר הקודים) אינה מנוסה שוב |
+| **ברישום היומי** | כמה נשלחו | **ועוד `ms`, `slowMs` ו-`retried`**: משך השליחה, האיטית ביותר, וכמה נוסו שוב |
+
+**ה-10 שניות נגזרות משלוש המדידות**, שבהן שליחה של כל הנשים לקחה פחות מ-7. **התראה בודדת לא נמדדה**, והרישום החדש הוא מה שימדוד אותה. **מה שלא השתנה:** מי מקבלת, מה כתוב, ומתי.
+
+**`qa/push-timeout-check.mjs`, 15 בדיקות בלי רשת**, מריצה את `api/notify.js` האמיתי מול שירות התראות שנתקע, מאט ונופל בפעם הראשונה, **עם תקרה של 300 מילישניות דרך `PUSH_TIMEOUT_MS`**, שקיים לבדיקות בלבד ואינו מוגדר בוורסל. ובהן: 99 מתוך 100 מקבלות כשאחת לעולם אינה עונה, והמנוי שלה לא נמחק · ניסיון שני מציל חיבור שנפל · מי שהסירה אינה מנוסה שוב · וחמש איטיות אינן מעכבות את השאר. **על v7.67 הבדיקה לעולם אינה מסתיימת**, כי ההתראה התקועה מחזיקה את הכל, וזו בדיוק התקלה. **ו-`qa/push-batch-check.mjs` ושאר בדיקות ההתראות עוברות בלי שינוי.**
 
 **v7.67** - **ההשוואה מול מניצ'ט בשער מוסיפה פנייה אחת בלבד לכל פתיחה.** בדב בלבד. אישור רון: "מאשר, תבנה בדב".
 
