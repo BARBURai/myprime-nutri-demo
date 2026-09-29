@@ -26,7 +26,7 @@ let SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספ
 `;
 
 // ---------- Redis בזיכרון ----------
-let H = {}, L = {}, S = {}, log = [], redisDown = false, sheetCalls = [];
+let H = {}, L = {}, S = {}, log = [], redisDown = false, sheetCalls = [], trips = [];
 const hash = (k) => (H[k] = H[k] || {});
 function run(cmd) {
   const [c, ...a] = cmd.map(String);
@@ -56,6 +56,8 @@ globalThis.fetch = async (url, opt) => {
   const u = String(url);
   if (u.indexOf("redis://") === 0) {
     if (redisDown) throw new Error("Redis נפל");
+    trips.push(u.endsWith("/pipeline") ? "pipe:" + opt.body : (opt && opt.body ? opt.body : decodeURIComponent(u)));
+    if (u.endsWith("/pipeline")) { const cmds = JSON.parse(opt.body); return { ok: true, json: async () => cmds.map((c) => ({ result: run(c) })) }; }
     const cmd = opt && opt.body ? JSON.parse(opt.body) : u.slice("redis://r/".length).split("/").map(decodeURIComponent);
     return { ok: true, json: async () => ({ result: run(cmd) }) };
   }
@@ -147,6 +149,24 @@ const cancelled = await login("ronit@test.com");
 ck("**ביטול במניצ'ט בלבד אינו נועל אותה בשלב הזה**", cancelled.allowed === true && strip(cancelled) === strip(base["ronit@test.com"]), strip(cancelled));
 ck("אבל נרשם כפער בשדה הביטול", JSON.parse(L["mc:diffs"][0]).fields.cancelled, L["mc:diffs"][0]);
 await push({ ID: "972501111111", "ביטלה": "" });
+
+console.log("\nכמה פניות ההשוואה מוסיפה. v7.67\n");
+const keepShadow = JSON.stringify(H["mc:shadow:" + today] || {}), keepDiffs = JSON.stringify(L["mc:diffs"] || []);
+await push({ ID: "972501111111", [START]: older + " 12:00:00" });
+trips = [];
+await login("ronit@test.com");
+const mcTrips = trips.filter((t) => /mc:/.test(t));
+ck("**פער: קריאה אחת ורישום אחד, ולא ארבע פניות**", mcTrips.length === 2 && mcTrips.filter((t) => t.startsWith("pipe:")).length === 1, strip(mcTrips));
+ck("והרישום בפנייה האחת כולל את הספירה ואת הפער", /HINCRBY/.test(mcTrips.find((t) => t.startsWith("pipe:")) || "") && /LPUSH/.test(mcTrips.find((t) => t.startsWith("pipe:")) || ""));
+await push({ ID: "972501111111", [START]: sunday + " 12:00:00" });
+trips = [];
+await login("ronit@test.com");
+ck("זהה: גם כן שתיים בלבד", trips.filter((t) => /mc:/.test(t)).length === 2, strip(trips.filter((t) => /mc:/.test(t))));
+{
+  const i1 = trips.findIndex((t) => /mc:byemail/.test(t)), i2 = trips.findIndex((t) => /sheet:csv/.test(t));
+  ck("**והקריאה יוצאת לפני הגיליון, כלומר במקביל לו**", i1 !== -1 && i2 !== -1 && i1 < i2, i1 + " " + i2);
+}
+H["mc:shadow:" + today] = JSON.parse(keepShadow); L["mc:diffs"] = JSON.parse(keepDiffs);
 
 console.log("\nחסרה באחד מהם\n");
 const onlySheet = await login("michal@test.com");

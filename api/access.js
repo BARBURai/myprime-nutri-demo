@@ -53,6 +53,25 @@ function redisForLogin() {
       clearTimeout(timer);
     }
   };
+  // כמה פקודות בבקשה אחת (pipeline של Upstash), באותה תקרת המתנה. v7.67: הרישום של
+  // ההשוואה מול מניצ'ט יוצא בפנייה אחת במקום שלוש.
+  redis.pipe = async (base, token, cmds) => {
+    if (stalled) throw new Error("redis stalled earlier in this login");
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), REDIS_WAIT_MS);
+    try {
+      const r = await fetch(`${base}/pipeline`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify(cmds.map((c) => c.map(String))), signal: ctl.signal,
+      });
+      return await r.json();
+    } catch (e) {
+      if (ctl.signal.aborted) stalled = true;
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   redis.stalled = () => stalled;
   return redis;
 }
@@ -135,10 +154,12 @@ function summarize(hits) {
   };
 }
 
-// ההשוואה עצמה: פנייה אחת לקריאה, ואחת או שלוש לרישום. **כולן דרך אותה תקרת המתנה של
-// השער**, ולכן Upstash תקוע אינו מעכב אותה יותר מ-3 שניות, ומשם השער מוותר עליו.
-async function mcShadow(redis, RU, RT, email, header, sheetHits, hitFromCells) {
-  const raw = await redis(RU, RT, "HGET", MC_BYEMAIL, email);
+// ההשוואה עצמה. **v7.67: הקריאה יוצאת במקביל למשיכת הגיליון** (`rawP`), ולכן כמעט אינה
+// מוסיפה זמן, **והרישום יוצא בפנייה אחת.** כולן דרך אותה תקרת המתנה של השער, ולכן Upstash
+// תקוע אינו מעכב אותה יותר מ-3 שניות, ומשם השער מוותר עליו.
+async function mcShadow(redis, RU, RT, email, header, sheetHits, hitFromCells, rawP) {
+  const raw = await rawP;
+  if (raw === undefined) return; // הקריאה נכשלה: אין מה להשוות, ואין מה לרשום
   let map = {};
   try { map = raw ? JSON.parse(raw) || {} : {}; } catch (e) { map = {}; }
   const hn = header.map((h) => normHeader(h));
@@ -154,11 +175,12 @@ async function mcShadow(redis, RU, RT, email, header, sheetHits, hitFromCells) {
   else if (a) cat = "onlySheet";
   else if (b) cat = "onlyMc";
   else return;
-  await redis(RU, RT, "HINCRBY", mcShadowKey(israelDay(0)), cat, 1);
+  const cmds = [["HINCRBY", mcShadowKey(israelDay(0)), cat, 1]];
   if (cat === "diff" || cat === "onlyMc") {
-    await redis(RU, RT, "LPUSH", MC_DIFFS, JSON.stringify({ t: Date.now(), email, cat, fields: a && b ? diffFields(a, b) : null }));
-    await redis(RU, RT, "LTRIM", MC_DIFFS, 0, 199);
+    cmds.push(["LPUSH", MC_DIFFS, JSON.stringify({ t: Date.now(), email, cat, fields: a && b ? diffFields(a, b) : null })]);
+    cmds.push(["LTRIM", MC_DIFFS, 0, 199]);
   }
+  await redis.pipe(RU, RT, cmds);
 }
 
 // Max concurrent devices per email: a phone and a computer. 0 (or less) = no limit.
@@ -218,6 +240,9 @@ export default async function handler(req, res) {
     // "תקלה טכנית זמנית" ואינו נספר כניסיון כושל, במקום להיקרא כאישה שאינה רשומה.
     // **ואם Upstash כבר נתקע בכניסה הזאת, הולכים ישר לגוגל** בלי לנסות את המטמון,
     // אחרת היא ממתינה עוד 2.5 שניות לקריאה ועוד 4 לכתיבה. v7.45.
+    // הקריאה של ההשוואה מול מניצ'ט יוצאת כאן, במקביל לגיליון. v7.67. תקלה בה נבלעת.
+    const mcOn = !!(process.env.MC_SYNC_SECRET && RU && RT && !redis.stalled());
+    const mcRawP = mcOn ? redis(RU, RT, "HGET", MC_BYEMAIL, lookFor).catch(() => undefined) : null;
     const text = await fetchSheetText(sheetUrl, redis.stalled() ? null : RU, RT);
     const lines = text.split(/\r?\n/);
 
@@ -334,8 +359,8 @@ export default async function handler(req, res) {
 
     // **ההשוואה מול מניצ'ט. v7.65.** רק כשהעדכון הישיר מוגדר (`MC_SYNC_SECRET`), ורק כרישום:
     // **שום דבר כאן אינו משנה את התשובה לאישה**, וכל תקלה נבלעת. ראה `api/_mcsync.js`.
-    if (process.env.MC_SYNC_SECRET && RU && RT && !redis.stalled() && lines.length) {
-      try { await mcShadow(redis, RU, RT, lookFor, parseCsvLine(lines[0]), hits, hitFromCells); } catch (e) {}
+    if (mcOn && !redis.stalled() && lines.length) {
+      try { await mcShadow(redis, RU, RT, lookFor, parseCsvLine(lines[0]), hits, hitFromCells, mcRawP); } catch (e) {}
     }
 
     if (hits.length) {
