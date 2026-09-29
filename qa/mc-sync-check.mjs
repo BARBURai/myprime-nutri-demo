@@ -18,7 +18,7 @@ delete process.env.MC_SYNC_SECRET;
 const sunday = (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() - 14); while (d.getUTCDay() !== 0) d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
 const older = (() => { const d = new Date(sunday + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - 7); return d.toISOString().slice(0, 10); })();
 const START = "360 - FINAL  PERSONAL START";
-const SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,GLOW-FULL
+let SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,GLOW-FULL
 972501111111,רונית,ronit@test.com,${sunday} 12:00:00,,,
 972502222222,דנה,dana@test.com,${sunday} 12:00:00,,,TRUE
 972503333333,מיכל,michal@test.com,${older} 12:00:00,,,
@@ -26,7 +26,7 @@ const SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוס
 `;
 
 // ---------- Redis בזיכרון ----------
-let H = {}, L = {}, S = {}, log = [], redisDown = false;
+let H = {}, L = {}, S = {}, log = [], redisDown = false, sheetCalls = [];
 const hash = (k) => (H[k] = H[k] || {});
 function run(cmd) {
   const [c, ...a] = cmd.map(String);
@@ -35,9 +35,12 @@ function run(cmd) {
     case "GET": return S[a[0]] ?? null;
     case "SET": S[a[0]] = a[1]; return "OK";
     case "HGET": return (H[a[0]] || {})[a[1]] ?? null;
-    case "HSET": hash(a[0])[a[1]] = a[2]; return 1;
+    case "HSET": { const h = hash(a[0]); for (let i = 1; i + 1 < a.length; i += 2) h[a[i]] = a[i + 1]; return 1; }
     case "HDEL": if (H[a[0]]) delete H[a[0]][a[1]]; return 1;
     case "HLEN": return Object.keys(H[a[0]] || {}).length;
+    case "HSET_MULTI": return 1;
+    case "DEL": delete H[a[0]]; delete S[a[0]]; delete L[a[0]]; return 1;
+    case "RENAME": H[a[1]] = H[a[0]]; delete H[a[0]]; return "OK";
     case "HGETALL": return Object.entries(H[a[0]] || {}).flat();
     case "HINCRBY": { const h = hash(a[0]); h[a[1]] = String((Number(h[a[1]]) || 0) + Number(a[2])); return Number(h[a[1]]); }
     case "LPUSH": (L[a[0]] = L[a[0]] || []).unshift(a[1]); return L[a[0]].length;
@@ -56,6 +59,7 @@ globalThis.fetch = async (url, opt) => {
     const cmd = opt && opt.body ? JSON.parse(opt.body) : u.slice("redis://r/".length).split("/").map(decodeURIComponent);
     return { ok: true, json: async () => ({ result: run(cmd) }) };
   }
+  sheetCalls.push((opt && opt.method) || "GET");
   return { ok: true, status: 200, text: async () => SHEET };
 };
 
@@ -183,6 +187,50 @@ ck("ואת הפערים האחרונים", Array.isArray(st.diffs) && st.diffs.l
 const [uo, ures] = resOf();
 await admin({ method: "GET", query: { key: "wrong", mcstatus: "" }, headers: {} }, ures);
 ck("ובלי מפתח המשרד אינו נפתח", uo.code === 401);
+
+// ============================================================
+console.log("\n\"Add Full Contact Data\": אותה בקשה בכל אוטומציה\n");
+const fullBody = {
+  id: "123456789", first_name: "אורית", last_name: "לוי", whatsapp_phone: "+972507777777",
+  custom_fields: { CF_EMAIL: "orit@test.com", [START]: sunday + " 12:00:00", "360-WEEK": "3" },
+  tags: [{ id: 1, name: "ביטלה 360 ❌❌❌" }, { id: 2, name: "360 התקינה" }],
+};
+const f1 = await push(fullBody);
+ck("נקלטת, והטלפון מהוואטסאפ ולא ממספר המנוי", f1.code === 200 && f1.body.phone === "972507777777" && !H["mc:rows"]["123456789"], strip(f1));
+const fc = JSON.parse(H["mc:rows"]["972507777777"]).cells;
+ck("שדות לפי השם, והשם הפרטי", fc.CF_EMAIL === "orit@test.com" && fc.F_NAME === "אורית" && fc[START].startsWith(sunday), strip(fc));
+ck("**תגית עם שם אחר בגיליון נכנסת לעמודה של הגיליון**", fc["ביטלה"] === "TRUE" && fc["הורידה אפליקציה"] === "TRUE" && fc["שבוע בתוכנית"] === "3", strip(fc));
+ck("עמודת כן או לא בלי תגית נרשמת ריקה", fc["GLOW-FULL"] === "" && fc["צמיד"] === "", strip(fc));
+await push(Object.assign({}, fullBody, { tags: [{ name: "360 התקינה" }] }));
+ck("**תגית שהוסרה במניצ'ט מתרוקנת**", JSON.parse(H["mc:rows"]["972507777777"]).cells["ביטלה"] === "", H["mc:rows"]["972507777777"]);
+await push({ full_contact: JSON.stringify(Object.assign({}, fullBody, { whatsapp_phone: "972506666666" })) });
+ck("גם כשהנתונים עטופים בתוך full_contact", !!H["mc:rows"]["972506666666"]);
+ck("והבקשות נשמרות כדוגמה, עד חמש", Array.isArray(L["mc:samples"]) && L["mc:samples"].length === 5 && JSON.parse(L["mc:samples"][0]).full === true);
+
+console.log("\nייבוא הגיליון לשרת\n");
+delete S["sheet:csv:v1"];
+SHEET = SHEET + "972505555555,נועה,noa@test.com," + sunday + " 12:00:00,,,\n";
+const mcBefore = H["mc:rows"]["972501111111"];
+const nonMcImp = () => JSON.stringify(Object.entries(H).filter(([k]) => !/^mc:/.test(k)));
+const nonMcImpBefore = nonMcImp();
+sheetCalls = [];
+const [io, ires] = resOf();
+await admin({ method: "POST", query: { key: "owner-key-123" }, headers: {}, body: { mcImport: true } }, ires);
+ck("הייבוא עובד למנהל", io.code === 200 && io.body.ok && io.body.imported === 1 && io.body.keptMc === 4, strip(io.body));
+ck("**שורה שהגיעה ממניצ'ט לא השתנתה**", H["mc:rows"]["972501111111"] === mcBefore);
+ck("השורה החדשה נכנסה, מסומנת כייבוא", JSON.parse(H["mc:rows"]["972505555555"]).src === "import");
+ck("ונמצאת לפי המייל, וגם מי שהגיעה ממניצ'ט", !!H["mc:byemail"]["noa@test.com"] && !!H["mc:byemail"]["ronit@test.com"] && !!H["mc:byemail"]["orit@test.com"]);
+ck("**הגיליון רק נקרא, ושום דבר לא נכתב אליו**", sheetCalls.length >= 1 && sheetCalls.every((m) => m === "GET"), strip(sheetCalls));
+ck("**ושום דבר מחוץ ל-mc: לא השתנה**", nonMcImp() === nonMcImpBefore, "השתנה משהו מחוץ ל-mc:");
+hash("admin:codes")["CLERK1"] = JSON.stringify({ name: "טלי" });
+const [co, cres] = resOf();
+await admin({ method: "POST", query: { key: "CLERK1" }, headers: {}, body: { mcImport: true } }, cres);
+ck("**ופקידה שאינה מנהל אינה יכולה להריץ אותו**", co.code === 403, co.code);
+const [s2, s2res] = resOf();
+await admin({ method: "GET", query: { key: "owner-key-123", mcstatus: "" }, headers: {}, body: null }, s2res);
+ck("מסך הניהול: כמה נשים הגיעו ממניצ'ט, וכמה יובאו", s2.body.fromMc >= 6 && s2.body.imported === 1, strip({ f: s2.body.fromMc, i: s2.body.imported }));
+const noa = await login("noa@test.com");
+ck("והשער עדיין עונה לפי הגיליון", noa.allowed === true, strip(noa));
 
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);

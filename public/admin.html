@@ -826,7 +826,10 @@ function load(){
   return fetch("/api/admin?key="+encodeURIComponent(KEY)).then(function(r){
     if(r.status===401) throw new Error("unauthorized");
     return r.json();
-  }).then(function(d){ if(!d.ok) throw new Error(d.error||"failed"); DATA=d; });
+  }).then(function(d){ if(!d.ok) throw new Error(d.error||"failed"); DATA=d;
+    // שורת המצב של מניצ'ט נטענת פעם אחת, ברקע, ואינה מעכבת את הרשימה.
+    if(MCST===null){ MCST = {}; loadMc().then(function(){ if(typeof render==="function") render(); }); }
+  });
 }
 
 function askKey(msg){
@@ -1061,6 +1064,33 @@ function loadCodes(){
 }
 // One code per person, handed out here. The point is not only access: with a code of her own
 // the name beside every change comes from the code and cannot be typed by hand.
+// ===== עדכון ישיר ממניצ'ט: שורת מצב, וייבוא הגיליון לשרת. v7.66 =====
+// הקופי אושר על ידי רון, 29.09.2026. **השורה לכולן, הכפתור למנהל בלבד.**
+// הייבוא קורא את הגיליון בלבד ולעולם אינו כותב אליו.
+var MCST = null, MCIMP = null, MCBUSY = false;
+function loadMc(){
+  return fetch("/api/admin?mcstatus=1&key="+encodeURIComponent(KEY))
+    .then(function(r){ return r.json(); })
+    .then(function(d){ MCST = d || {}; })
+    .catch(function(){ MCST = { ok:false }; });
+}
+function nf(n){ return Number(n||0).toLocaleString("en-US"); }
+function hhmm(t){ return new Date(t).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Jerusalem"}); }
+function mcSyncBlock(){
+  if(!MCST || !MCST.ok) return "";
+  var d = (MCST.days && MCST.days[0]) || {};
+  var h = '<div class="card"><div class="note"><b>עדכון ישיר ממניצ\'ט</b> · התקבלו '+nf(MCST.fromMc)+' נשים'+
+    (MCST.last ? ' · עדכון אחרון '+hhmm(MCST.last) : '')+'</div>'+
+    '<div class="note"><b>היום:</b> '+nf(d.same)+' זהות · '+nf(d.diff)+' פערים · '+nf(d.onlySheet)+' חסרות במניצ\'ט · '+nf(d.onlyMc)+' רק במניצ\'ט</div>';
+  if(DATA.owner){
+    h += '<div class="edit"><button class="btn" data-mcimport="1"'+(MCBUSY?' disabled':'')+'>ייבוא הגיליון לשרת</button></div>'+
+      '<div class="note">מעתיק את כל השורות מהגיליון לשרת. שורות שכבר הגיעו ממניצ\'ט לא ישתנו.</div>';
+    if(MCBUSY) h += '<div class="note">מייבא...</div>';
+    else if(MCIMP && MCIMP.ok) h += '<div class="note">יובאו '+nf(MCIMP.imported)+' שורות · '+nf(MCIMP.keptMc)+' שורות ממניצ\'ט נשארו כמו שהיו</div>';
+    else if(MCIMP) h += '<div class="note">הייבוא לא הצליח. אפשר לנסות שוב בעוד רגע.</div>';
+  }
+  return h+'</div>';
+}
 function teamBlock(){
   if(!DATA.owner) return "";
   if(!CODESOPEN) return '<div class="chips"><span class="chip" data-team="1">👥 צוות המשרד</span></div>';
@@ -1261,6 +1291,7 @@ function render(){
       '<span class="cnt">'+list.length+' משתתפות'+(DATA.version?' · v'+esc(DATA.version):'')+'</span>'+
       '<span class="who">'+esc(DATA.me||WHO||"?")+(DATA.owner?" · מנהל":"")+'</span>'+
     '</div>'+
+    mcSyncBlock()+
     teamBlock()+
     '<div class="toolbar'+(SEL?" picked":"")+'">'+
     '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(qRaw)+'">'+
@@ -2373,6 +2404,17 @@ function render(){
     CODESOPEN = el.getAttribute("data-team")==="1";
     if(CODESOPEN && CODES === null){ render(); loadCodes().then(render); return; }
     render();
+  }; });
+  app.querySelectorAll("[data-mcimport]").forEach(function(el){ el.onclick=function(){
+    if(MCBUSY) return;
+    MCBUSY = true; MCIMP = null; render();
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({mcImport:true})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ MCIMP = d || {ok:false}; })
+      .catch(function(){ MCIMP = {ok:false}; })
+      .then(function(){ MCBUSY = false; return loadMc(); })
+      .then(render);
   }; });
   app.querySelectorAll("[data-newcode]").forEach(function(el){ el.onclick=function(){
     var nameEl = document.getElementById("newname"), name = (nameEl?nameEl.value:"").trim();

@@ -114,6 +114,7 @@ async function open(browser, device, patch) {
       posts.push(b);
       // בקשת ניסוח מקבלת תשובה כמו מהשרת. בלי זה אי אפשר לבדוק את המסך שמציג אותה,
       // והבדיקה הייתה נעצרת על תיבה ריקה בלי לדעת אם זה המסך או ה-mock.
+      if (b && b.mcImport) return json({ ok: true, imported: 2485, keptMc: 0, total: 2485 });
       if (b && b.draftFor) return json({ ok: true, answer: "תשובה מנוסחת לבדיקה", based: "kb", why: "לפי הבריף" });
       return json({ ok: true });
     }
@@ -131,6 +132,8 @@ async function open(browser, device, patch) {
       return json({ ok: true, usage: (DATA0.__usage || {})[usageCalls[usageCalls.length - 1]] || null });
     }
     if (url.includes("codes=1")) return json({ ok: true, codes: [] });
+    // שורת המצב של מניצ'ט, v7.66.
+    if (url.includes("mcstatus=")) return json(DATA0.__mc || { ok: false });
     return json(DATA0);
   });
   await ctx.addInitScript(() => {
@@ -595,6 +598,32 @@ CHECKS.push({
       ok: val === "אורלי לוי" && rows === 1 && caps === "Lior" && errors.length === 0,
       detail: `בשדה "${val}" · תוצאות ${rows} · אותיות גדולות "${caps}" · שגיאות ${errors[0] || "אין"}`,
     };
+  },
+});
+
+// v7.66: שורת המצב של מניצ'ט לכולן, וכפתור הייבוא למנהל בלבד. **שני הצדדים באותה הרצה.**
+CHECKS.push({
+  name: "מניצ'ט: שורת מצב, וייבוא למנהל בלבד",
+  async run(browser, device) {
+    const MC = { ok: true, fromMc: 1240, last: Date.now(), days: [{ same: 830, diff: 3, onlySheet: 12, onlyMc: 0 }] };
+    const o = await open(browser, device, (d) => Object.assign(d, { __mc: MC }));
+    await o.page.waitForTimeout(500);
+    const txt = await o.page.locator("body").innerText();
+    const line = txt.includes("עדכון ישיר ממניצ'ט · התקבלו 1,240 נשים") && txt.includes("היום: 830 זהות · 3 פערים · 12 חסרות במניצ'ט · 0 רק במניצ'ט");
+    const btn = o.page.locator("[data-mcimport]");
+    const hasBtn = await btn.count() === 1;
+    if (hasBtn) { await btn.click(); await o.page.waitForTimeout(600); }
+    const after = await o.page.locator("body").innerText();
+    const result = after.includes("יובאו 2,485 שורות · 0 שורות ממניצ'ט נשארו כמו שהיו") && o.posts.some((p) => p.mcImport === true);
+    await o.ctx.close();
+    const c = await open(browser, device, (d) => Object.assign(d, { owner: false, __mc: MC }));
+    await c.page.waitForTimeout(500);
+    const clerkLine = (await c.page.locator("body").innerText()).includes("התקבלו 1,240 נשים");
+    const clerkBtn = await c.page.locator("[data-mcimport]").count();
+    await c.ctx.close();
+    const errs = o.errors.concat(c.errors);
+    return { ok: line && hasBtn && result && clerkLine && clerkBtn === 0 && !errs.length,
+      detail: `שורה ${line} · כפתור ${hasBtn} · תוצאה ${result} · פקידה רואה שורה ${clerkLine} וכפתורים ${clerkBtn} · שגיאות ${errs[0] || "אין"}` };
   },
 });
 
