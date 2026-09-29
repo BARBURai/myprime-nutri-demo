@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v7.64** · עודכן: 29 בספטמבר 2026
+**גרסה נוכחית: v7.65** · עודכן: 29 בספטמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -492,7 +492,7 @@ pageImages: []
 
 **0. הענף. זה הדבר הראשון, לפני כל קריאה אחרת.** ענף ברירת המחדל בריפו הוא `main`, **ולכן סשן חדש נפתח על הקוד והקובץ הזה של הייצור, שאינם העדכניים.** מיד בפתיחה: `git fetch origin Dev && git checkout Dev`, ולקרוא את הקובץ הזה מחדש מהענף `Dev`. **ל-`main` ול-`Dev` היסטוריות נפרדות** (ראה v7.32), **ועבודה נעשית על `Dev` בלבד.**
 
-**עדכון, 29 בספטמבר 2026: בדב v7.64, בייצור v7.63.** ההבדל היחיד בין דב למיין בקוד: תרגול הנשימה. **הרישום הקודם: בדב v7.63, בייצור v7.61.** **הרישום הקודם: בדב v7.62, בייצור v7.61.** **הרישום הקודם: בדב v7.61, בייצור v7.59.** **הרישום הקודם: בדב v7.60, בייצור v7.59.** **הרישום הקודם: בדב v7.59, בייצור v7.57.** **הצעד הבא בסקייל: להקטין את תשובת הרשימה של מסך הניהול (2.4 מגה), ואז זמן שליחת ההתראות ומספר הפקודות בכל פתיחה.** **הרישום הקודם: בדב v7.56, בייצור v7.55**, כלומר GLOW-SOLO בייצור למבצע. **הרישום הקודם: בדב v7.54, בייצור v7.51.** v7.54 היא GLOW-SOLO ו-v7.53 מהירות מסך הניהול (סעיף 17), שתיהן בדב וממתינות לבדיקה של רון. **ההבדלים בין דב למיין: תרגול הנשימה, מהירות מסך הניהול, ו-GLOW-SOLO.** **רון דיווח שהטעינה הראשונה של מסך הניהול בדב על v7.53 לקחה "הרבה הרבה מאוד זמן". לא נמדד ולא אובחן.** **והצעד הבא בסקייל שנמצא בדרך: תשובת הרשימה של מסך הניהול עצמה**, כ-930 בתים לאישה (נמדד בסימולציה), כלומר 9.3 מיליון ב-10,000. **אם לוורסל יש תקרה של 4.5MB לתשובה, והיא לא אומתה**, זה נשבר בסביבות 4,800 שורות בגיליון.
+**עדכון, 29 בספטמבר 2026: בדב v7.65, בייצור v7.63.** ההבדלים בין דב למיין: תרגול הנשימה, והעדכון הישיר ממניצ'ט בשלב ההרצה במקביל (v7.65, עדיפות 2). **הרישום הקודם: בדב v7.64, בייצור v7.63.** **הרישום הקודם: בדב v7.63, בייצור v7.61.** **הרישום הקודם: בדב v7.62, בייצור v7.61.** **הרישום הקודם: בדב v7.61, בייצור v7.59.** **הרישום הקודם: בדב v7.60, בייצור v7.59.** **הרישום הקודם: בדב v7.59, בייצור v7.57.** **הצעד הבא בסקייל: להקטין את תשובת הרשימה של מסך הניהול (2.4 מגה), ואז זמן שליחת ההתראות ומספר הפקודות בכל פתיחה.** **הרישום הקודם: בדב v7.56, בייצור v7.55**, כלומר GLOW-SOLO בייצור למבצע. **הרישום הקודם: בדב v7.54, בייצור v7.51.** v7.54 היא GLOW-SOLO ו-v7.53 מהירות מסך הניהול (סעיף 17), שתיהן בדב וממתינות לבדיקה של רון. **ההבדלים בין דב למיין: תרגול הנשימה, מהירות מסך הניהול, ו-GLOW-SOLO.** **רון דיווח שהטעינה הראשונה של מסך הניהול בדב על v7.53 לקחה "הרבה הרבה מאוד זמן". לא נמדד ולא אובחן.** **והצעד הבא בסקייל שנמצא בדרך: תשובת הרשימה של מסך הניהול עצמה**, כ-930 בתים לאישה (נמדד בסימולציה), כלומר 9.3 מיליון ב-10,000. **אם לוורסל יש תקרה של 4.5MB לתשובה, והיא לא אומתה**, זה נשבר בסביבות 4,800 שורות בגיליון.
 
 **הרישום הקודם, 27 בספטמבר 2026: בדב v7.52, בייצור v7.51.** v7.51 עלתה לייצור באישור מפורש של רון, "מאשר להעלות את v7.51 למיין בלי הנשימה", ולכן **ההבדל היחיד בין דב למיין בקוד הוא תרגול הנשימה.** רון הוסיף לגיליון את העמודה `SOLO10WEEK`.
 
@@ -621,7 +621,7 @@ pageImages: []
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs && node qa/glow-solo-benefit-check.mjs && node qa/ai-chat-rules-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs && node qa/glow-solo-benefit-check.mjs && node qa/ai-chat-rules-check.mjs && node qa/mc-sync-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1245,6 +1245,22 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v7.65** - **עדכון ישיר ממניצ'ט, שלב ההרצה במקביל. עדיפות 2.** בדב בלבד. רון: "לוקח זמן לעדכון של המערכת מהקובץ. אי אפשר לקבל עדכון ישר ממניצ'ט?", ואישר את התוכנית: "מאשר, תבנה בדב". **רון אישר שיש לו External Request במניצ'ט, ושכל עמודות הגיליון מגיעות ממניצ'ט.** האוטומציות הן שלו, ואני אינני נוגע בהן.
+
+| חלק | מה |
+|---|---|
+| **הכתובת** | `POST /api/admin?mcsync`, בתוך `api/admin.js` ולא בפונקציה חדשה. **נבדקת בסיסמה `MC_SYNC_SECRET`** בכותרת `x-mc-secret`, **ובלי המשתנה בוורסל היא סגורה לגמרי** |
+| **הגוף** | אובייקט שטוח, **באותם שמות עמודות כמו בגיליון**. `ID` חובה. **רק מה שנשלח מתעדכן**, כלומר שורה שלמה או שדה בודד עובדים שניהם |
+| **השמירה** | `mc:rows` לפי טלפון, `mc:byemail` לפי מייל. **מייל שהשתנה מעביר את השורה לכתובת החדשה.** שום דבר לא נכתב לסימוני המשרד או לגישה |
+| **השער** | **ממשיך לקבוע לפי הגיליון בלבד.** כשהמשתנה מוגדר, הוא משווה ורושם ב-`mc:shadow:<תאריך>`: זהה · פער · חסרה במניצ'ט · רק במניצ'ט, ו-200 הפערים האחרונים ב-`mc:diffs` |
+| **מסך הניהול** | `GET ?mcstatus` מחזיר את הספירה. **השורה במסך עצמו טרם נבנתה, כי הקופי שלה ממתין לאישור** |
+
+**ההשוואה עוברת בדיוק באותו כלל של השער ולא בעותק שלו:** קריאת השורה יצאה לפונקציה `hitFromCells` בתוך `api/access.js`, והגוף שלה לא השתנה באות. **שורה ממניצ'ט מסודרת לפי כותרות הגיליון ועוברת בה.**
+
+**מה נבדק:** **2,485 הנשים האמיתיות**, עם הגיליון מהייצור, בשער הישן ובחדש: **אפס הבדלים בתשובה**, בלי המשתנה ועם המשתנה. בלי המשתנה ההבדל היחיד בפקודות הוא חותמת הזמן. **`qa/mc-sync-check.mjs`, 36 בדיקות בלי רשת**, מריצה את `api/admin.js` ואת `api/access.js` האמיתיים, ובהן: **התשובה לאישה זהה בכל מצב**, זהה, תאריך אחר, ביטול במניצ'ט בלבד, חסרה, רק במניצ'ט, ו-Redis שנופל · עדכון חלקי · מייל שהשתנה · וסיסמה. **על v7.64 היא אינה רצה כלל.**
+
+**ומה שחייב להיאמר:** **הדב מוגן בכניסה לוורסל ולכן מניצ'ט אינו יכול לשלוח אליו.** החיבור האמיתי אפשרי רק בייצור, **וזה בטוח כי השער אינו משנה שם אף תשובה.** **ומניצ'ט שולח רק כשמשהו משתנה**, ולכן נשים שלא השתנה אצלן דבר יופיעו כחסרות במניצ'ט עד שרון ישלח את כולן פעם אחת.
 
 **v7.64** - **מספור בלבד, אחרי ש-v7.63 עלתה לייצור**, באישור רון: "בדקתי, עובד. מאשר להעלות את v7.63 למיין".
 

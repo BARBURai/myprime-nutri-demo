@@ -23,6 +23,7 @@ import { loadSheet, israelDay, accessEnd, ymd } from "./_sheet.js";
 import { KB } from "./_kb.js";
 import { oldAppEmails, APPOLD_KEY } from "./_appemails.js";
 import { DAILY_LIMIT, PHOTO_LIMIT } from "./ai.js";
+import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus } from "./_mcsync.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -38,7 +39,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.64";
+const ADMIN_VERSION = "7.65";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -344,8 +345,30 @@ export default async function handler(req, res) {
   const key = String(req.query.key || "");
   const RU = process.env.UPSTASH_REDIS_REST_URL;
   const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // **עדכון ישיר ממניצ'ט. v7.65.** מניצ'ט אינו מחזיק מפתח של המשרד, ולכן הכתובת הזאת
+  // נבדקת בסיסמה משלה, `MC_SYNC_SECRET`, לפני בדיקת המפתח. **בלי המשתנה היא סגורה לגמרי.**
+  // היא יושבת כאן ולא בקובץ חדש, כדי לא להוסיף פונקציה לוורסל.
+  if (req.query.mcsync !== undefined) {
+    if (req.method !== "POST") return res.status(405).json({ ok: false });
+    if (!mcSecretOk(req)) return res.status(401).json({ ok: false, error: "unauthorized" });
+    if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
+    try {
+      const out = await mcIngest(req.body, RU, RT);
+      return res.status(out.status).json(out.json);
+    } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+  }
   const me = await whoIs(key, RU, RT);
   if (!me.ok) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+  // ההשוואה בין מניצ'ט לגיליון, לשבעת הימים האחרונים.
+  if (req.method === "GET" && req.query.mcstatus !== undefined) {
+    if (!RU || !RT) return res.status(200).json({ ok: true, configured: false });
+    try {
+      const days = [0, 1, 2, 3, 4, 5, 6].map((o) => israelDay(o));
+      const st = await mcStatus(RU, RT, days);
+      return res.status(200).json({ ok: true, configured: !!process.env.MC_SYNC_SECRET, ...st });
+    } catch (e) { return res.status(200).json({ ok: false, error: "read_failed" }); }
+  }
 
   // The office codes. Only the owner key may see them or touch them, so a clerk cannot make
   // herself another code or take away someone else's.

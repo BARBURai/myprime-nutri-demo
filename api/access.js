@@ -17,6 +17,7 @@
 
 import { decideAccess } from "./_product.js";
 import { fetchSheetText } from "./_sheet.js";
+import { MC_BYEMAIL, MC_DIFFS, mcShadowKey, diffFields } from "./_mcsync.js";
 // ===== תקרת המתנה ל-Upstash, 3 שניות לפנייה. v7.45 =====
 //
 // **כל פנייה כאן כבר עטופה ב-try/catch שנכשל לצד הפתוח**, ולכן תקלה אינה נועלת אישה.
@@ -116,6 +117,49 @@ function isTrue(v) { return /^\s*true\s*$/i.test(String(v || "")); }
 // **שני חישובי החלון עברו ל-`api/_product.js`**, יחד עם ההכרעה עצמה, כדי שהשער
 // ומסך הניהול יקראו בדיוק את אותו כלל. עותק שני כאן היה בדיוק הדרך שבה ב-v6.77
 // השניים התחילו לחלוק בשקט.
+
+// **מה שורות אומרות יחד**, באותו כלל שהשער מכריע לפיו: הביטול והקנייה מכל השורות, וכל השאר
+// מהשורה עם תאריך ההתחלה המאוחר. משמש את ההשוואה מול מניצ'ט בלבד. v7.65.
+function summarize(hits) {
+  if (!hits.length) return null;
+  let win = hits[0];
+  for (let k = 1; k < hits.length; k++) {
+    const h = hits[k];
+    if (!h.sun) continue;
+    if (!win.sun || h.sun.getTime() > win.sun.getTime()) win = h;
+  }
+  return {
+    start: win.sun ? ymd(win.sun) : null, cancelled: hits.some((h) => h.cancelled),
+    months: win.months, solo: win.solo, glow: win.glow, glowFull: win.glowFull,
+    glowPaid: hits.some((h) => h.glowPaid), glowSolo: hits.some((h) => h.glowSolo), glowM: win.glowM,
+  };
+}
+
+// ההשוואה עצמה: פנייה אחת לקריאה, ואחת או שלוש לרישום. **כולן דרך אותה תקרת המתנה של
+// השער**, ולכן Upstash תקוע אינו מעכב אותה יותר מ-3 שניות, ומשם השער מוותר עליו.
+async function mcShadow(redis, RU, RT, email, header, sheetHits, hitFromCells) {
+  const raw = await redis(RU, RT, "HGET", MC_BYEMAIL, email);
+  let map = {};
+  try { map = raw ? JSON.parse(raw) || {} : {}; } catch (e) { map = {}; }
+  const hn = header.map((h) => normHeader(h));
+  const mcHits = Object.values(map).map((row) => {
+    const byNorm = {};
+    for (const [k, v] of Object.entries(row || {})) byNorm[normHeader(k)] = v;
+    const cells = hn.map((h) => (byNorm[h] == null ? "" : String(byNorm[h])));
+    return hitFromCells(cells, cells.join(","));
+  });
+  const a = summarize(sheetHits), b = summarize(mcHits);
+  let cat;
+  if (a && b) cat = Object.keys(diffFields(a, b)).length ? "diff" : "same";
+  else if (a) cat = "onlySheet";
+  else if (b) cat = "onlyMc";
+  else return;
+  await redis(RU, RT, "HINCRBY", mcShadowKey(israelDay(0)), cat, 1);
+  if (cat === "diff" || cat === "onlyMc") {
+    await redis(RU, RT, "LPUSH", MC_DIFFS, JSON.stringify({ t: Date.now(), email, cat, fields: a && b ? diffFields(a, b) : null }));
+    await redis(RU, RT, "LTRIM", MC_DIFFS, 0, 199);
+  }
+}
 
 // Max concurrent devices per email: a phone and a computer. 0 (or less) = no limit.
 // The cap EVICTS rather than blocks - see the device section below for why.
@@ -226,20 +270,9 @@ export default async function handler(req, res) {
     // ניצחה כאן, בעוד מסך הניהול לקח את הראשונה.** לכן המסך הציג מחזור אחד
     // והאפליקציה נתנה לה אחר, ואף מסך לא אמר שיש שתי שורות. **החוק עכשיו זהה
     // בשני הקבצים: תאריך ההתחלה המאוחר ביותר**, וזה `pickRow` ב-`api/_sheet.js`.
-    const hits = [];
-    lines.forEach((line, idx) => {
-      if (idx === 0 && headerFound) return; // skip header row
-      // Her address is the CF_EMAIL column, and only if that cell holds nothing usable do we
-      // fall back to scanning the row. Scanning first is what made this a real hazard: any
-      // other address sitting anywhere in her row would win, and she would be refused entry
-      // with her own address while nothing on any screen said why.
-      const cellsE = parseCsvLine(line);
-      const EMAIL_IN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
-      const em = ((emailCol !== -1 && cellsE[emailCol] ? String(cellsE[emailCol]).match(EMAIL_IN) : null) ||
-        line.match(EMAIL_IN) || [])[0];
-      if (!em || em.toLowerCase() !== lookFor) return;
-      found = true;
-      const cells = parseCsvLine(line);
+    // **מה ששורה אחת אומרת על האישה.** v7.65: יצא לפונקציה כדי ששורה שהגיעה ממניצ'ט
+    // תעבור בדיוק באותו כלל כמו שורה מהגיליון, ולא בעותק שלו. הגוף לא השתנה באות.
+    const hitFromCells = (cells, line) => {
       const isYes = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
 
       const hit = { phone: "", glow: false, glowFull: false, glowPaid: false, glowSolo: false, solo: 0, months: null, glowM: null, cancelled: false, start: null };
@@ -280,8 +313,30 @@ export default async function handler(req, res) {
         const n = parseInt(String(cells[monthsCol]).replace(/[^\d]/g, ""), 10);
         if (Number.isFinite(n) && n > 0) hit.months = n;
       }
-      hits.push(hit);
+      return hit;
+    };
+
+    const hits = [];
+    lines.forEach((line, idx) => {
+      if (idx === 0 && headerFound) return; // skip header row
+      // Her address is the CF_EMAIL column, and only if that cell holds nothing usable do we
+      // fall back to scanning the row. Scanning first is what made this a real hazard: any
+      // other address sitting anywhere in her row would win, and she would be refused entry
+      // with her own address while nothing on any screen said why.
+      const cellsE = parseCsvLine(line);
+      const EMAIL_IN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+      const em = ((emailCol !== -1 && cellsE[emailCol] ? String(cellsE[emailCol]).match(EMAIL_IN) : null) ||
+        line.match(EMAIL_IN) || [])[0];
+      if (!em || em.toLowerCase() !== lookFor) return;
+      found = true;
+      hits.push(hitFromCells(parseCsvLine(line), line));
     });
+
+    // **ההשוואה מול מניצ'ט. v7.65.** רק כשהעדכון הישיר מוגדר (`MC_SYNC_SECRET`), ורק כרישום:
+    // **שום דבר כאן אינו משנה את התשובה לאישה**, וכל תקלה נבלעת. ראה `api/_mcsync.js`.
+    if (process.env.MC_SYNC_SECRET && RU && RT && !redis.stalled() && lines.length) {
+      try { await mcShadow(redis, RU, RT, lookFor, parseCsvLine(lines[0]), hits, hitFromCells); } catch (e) {}
+    }
 
     if (hits.length) {
       // **הביטול נספר מכל השורות ולא מהמנצחת בלבד.** החלטת רון, 4 בספטמבר 2026:
