@@ -142,7 +142,7 @@ webpush.sendNotification = async (sub) => {
 };
 
 // Redis מדומה, בזיכרון
-const db = { hash: {}, str: {}, sets: {} };
+const db = { hash: {}, str: {}, sets: {}, z: {} };
 let saddFails = false, saddCalls = 0;
 const redisExec = (cmd) => {
   const [op, key, ...a] = cmd;
@@ -154,8 +154,8 @@ const redisExec = (cmd) => {
     case "MGET": return [key, ...a].map((k) => db.str[k] ?? null);
     case "SET": { if (a.includes("NX") && db.str[key] != null) return null; db.str[key] = a[0]; return "OK"; }
     case "EXPIRE": return 1;
-    case "KEYS": { const re = new RegExp("^" + key.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$"); return [...Object.keys(db.str), ...Object.keys(db.hash)].filter((k) => re.test(k)); }
-    case "ZCOUNT": return 0;
+    case "KEYS": { const re = new RegExp("^" + key.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$"); return [...Object.keys(db.str), ...Object.keys(db.hash), ...Object.keys(db.z)].filter((k) => re.test(k)); }
+    case "ZCOUNT": return db.z[key] || 0;
     case "SADD": { saddCalls++; if (saddFails) throw new Error("redis down"); db.sets[key] = db.sets[key] || new Set(); a.forEach((x) => db.sets[key].add(x)); return a.length; }
     case "SMEMBERS": return [...(db.sets[key] || [])];
     default: return null;
@@ -283,6 +283,15 @@ ok("ומציג את השורה הישנה עם 'לא נמדד', ולא מספר 
 resetDb(); mails.length = 0;
 await call(report, { force: "1", day: D });
 ok("בלי שום הרצה: 'לא נרשמה' באדום, כמו קודם", mails[0] && mails[0].html.includes("לא נרשמה"));
+
+// שורת שני המכשירים, v7.69. ZCOUNT מדומה מחזיר את מספר המכשירים הפעילים ביממה.
+resetDb(); mails.length = 0;
+db.z = { "devices:a@x.co": 1, "devices:b@x.co": 2, "devices:c@x.co": 2, "devices:d@x.co": 3, "devices:f@x.co": 0 };
+const r3 = await call(report, { force: "1", day: D });
+ok("שני מכשירים: נספרות רק מי שבדיוק שניים", r3.body.twoDeviceEmails === 2, JSON.stringify(r3.body.twoDeviceEmails));
+ok("שלושה ומעלה נשארים בשורה שלהם, ולא נספרים פעמיים", r3.body.sharedEmails === 1 && r3.body.trackedEmails === 5);
+ok("המייל: השורה 'נשים עם שני מכשירים ביממה' עם המספר", mails[0] && /נשים עם שני מכשירים ביממה<\/td>[\s\S]{0,120}>2 <span[^>]*>מתוך 5/.test(mails[0].html));
+db.z = {};
 
 globalThis.Date = RealDate;
 done();

@@ -99,7 +99,11 @@ export default async function handler(req, res) {
   // decides whether the device cap and the OTP login are worth building at all.
   // Counted by score so only devices seen in the last 24h are included; ZCARD would also
   // count stale members that have not been pruned yet.
-  let sharedEmails = 0, trackedEmails = 0;
+  // twoDeviceEmails: exactly two devices in the last 24h, usually a phone and a computer.
+  // Those are the women the missing device-to-device sync hurts (each device keeps its own
+  // data and the single backup is overwritten by whichever uploaded last), so this line
+  // measures how many that is, day after day, before anyone builds the sync.
+  let sharedEmails = 0, trackedEmails = 0, twoDeviceEmails = 0;
   try {
     const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const keys = (await redisCmd(base, token, ["KEYS", "devices:*"])) || [];
@@ -107,6 +111,7 @@ export default async function handler(req, res) {
     for (const k of keys.slice(0, 2000)) {
       const n = toInt(await redisCmd(base, token, ["ZCOUNT", k, String(dayAgo), "+inf"]));
       if (n >= 3) sharedEmails++;
+      else if (n === 2) twoDeviceEmails++;
     }
   } catch (e) { /* a Redis hiccup must not cost Ron the whole report */ }
 
@@ -226,6 +231,7 @@ export default async function handler(req, res) {
       ${row("נחסך מההנחיות השמורות", `₪${f2(cacheNis)}`)}
       ${row("נחסך מתשובות חוזרות (קריאות)", `${cacheHits.toLocaleString()} ≈ ₪${f2(savedNis)}`)}
       <tr><td colspan="2" style="border-top:1px solid #eee;padding-top:6px"></td></tr>
+      ${row("נשים עם שני מכשירים ביממה", `${twoDeviceEmails.toLocaleString()} <span style="color:#8a8a90;font-weight:400">מתוך ${trackedEmails.toLocaleString()}</span>`)}
       ${row("מיילים עם 3 מכשירים או יותר", `${sharedEmails.toLocaleString()} <span style="color:#8a8a90;font-weight:400">מתוך ${trackedEmails.toLocaleString()}</span>`)}
       <tr><td colspan="2" style="border-top:1px solid #eee;padding-top:6px"></td></tr>
       <tr><td colspan="2" style="padding:4px 0 2px;color:#1f1f24;font-size:15px;font-weight:700">התראות</td></tr>
@@ -237,7 +243,7 @@ export default async function handler(req, res) {
   </div>`;
 
   const RESEND = process.env.RESEND_API_KEY;
-  const summary = { ok: true, day, pushAudit: { morning: morningAudit, evening: eveningAudit }, push: { morning: readStamp(todayLog.morning), evening: eveningKeys.map((k) => ({ hours: k.replace("evening:", ""), ...(readStamp(nightLog[k]) || {}) })) }, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, cReadTok, cWriteTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis), cacheNis: f2(cacheNis), sharedEmails, trackedEmails };
+  const summary = { ok: true, day, pushAudit: { morning: morningAudit, evening: eveningAudit }, push: { morning: readStamp(todayLog.morning), evening: eveningKeys.map((k) => ({ hours: k.replace("evening:", ""), ...(readStamp(nightLog[k]) || {}) })) }, calls, photos, cacheHits, activeUsers, avg: f1(avg), maxU, hitLimit, inTok, outTok, cReadTok, cWriteTok, usd: f2(usd), nis: f2(nis), savedNis: f2(savedNis), cacheNis: f2(cacheNis), sharedEmails, twoDeviceEmails, trackedEmails };
   if (!RESEND) return res.status(200).json({ ...summary, emailed: false, reason: "no RESEND_API_KEY (preview only)" });
 
   const to = process.env.REPORT_TO || "Ron@myprime.co.il";
