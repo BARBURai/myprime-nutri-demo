@@ -115,12 +115,16 @@ const MC_ALIASES = {
   "צמיד - קארדקום 🎁": "צמיד",
   "מועד הרשמה לתוכנית 2": "מועד הרשמה לתוכנית",
   "WhatsApp ID": "ID",
+  // **מצילום של פעולת הגיליון, 30.09.2026.** התגית נקראת אחרת מהעמודה שהיא ממלאת.
+  "GLOW- DEMO 💄": "בונוס איפור",
+  // **ומה שהתגיות האמיתיות הראו, 30.09.2026:** "אפליקציה" ולא "אפליקציית".
+  "אפליקציה תזונה": "אפליקציית תזונה",
 };
 export const aliasKey = (s) => String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(/\s+/).filter(Boolean).sort().join(" ");
 const ALIAS = Object.fromEntries(Object.entries(MC_ALIASES).map(([k, v]) => [aliasKey(k), v]));
 const sheetName = (name) => ALIAS[aliasKey(name)] || String(name).trim();
-// עמודות של כן או לא. **בנתונים המלאים כל התגיות מגיעות**, ולכן עמודה כזאת שאין לה
-// תגית ואין לה שדה פירושה שהתגית אינה עליה.
+// עמודות של כן או לא. **כשרשימת התגיות ידועה**, עמודה כזאת שאין לה תגית ואין לה שדה
+// פירושה שהתגית אינה עליה.
 const FLAG_COLS = ["ביטלה", "הורידה אפליקציה", "אישור תאריך התחלה", "צמיד", "בונוס איפור", "אפליקציית תזונה",
   "SOLO6", "SOLO12", "SOLO10WEEK", "GLOW-FULL", "GLOW-PAID", "GLOW-SOLO"];
 const flatVal = (v) => (v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)).slice(0, 500);
@@ -129,12 +133,19 @@ export function fromFullContact(b) {
   const cf = b.custom_fields;
   if (Array.isArray(cf)) { for (const f of cf) if (f && f.name) cells[sheetName(f.name)] = flatVal(f.value); }
   else if (cf && typeof cf === "object") { for (const [k, v] of Object.entries(cf)) cells[sheetName(k)] = flatVal(v); }
+  // **"Add Full Contact Data" אינו כולל תגיות בכלל.** נמדד על שתי בקשות אמיתיות,
+  // 30.09.2026. לכן בלי רשימה לא נוגעים בעמודות של כן או לא, ומה שהיה שם נשאר,
+  // ולעולם לא נקרא "לא הגיעה תגית" כ"התגית הוסרה".
+  if (!Array.isArray(b.tags)) return finishCells(cells, b, null);
   const tags = [];
-  for (const t of Array.isArray(b.tags) ? b.tags : []) {
+  for (const t of b.tags) {
     const name = String(t && typeof t === "object" ? t.name || "" : t || "").trim();
     if (name && name.length <= 80) { const col = sheetName(name); tags.push(col); cells[col] = "TRUE"; }
   }
   for (const c of FLAG_COLS) if (cells[c] === undefined) cells[c] = "";
+  return finishCells(cells, b, tags);
+}
+function finishCells(cells, b, tags) {
   if (!cells.F_NAME && b.first_name) cells.F_NAME = flatVal(b.first_name);
   if (!cells.L_NAME && b.last_name) cells.L_NAME = flatVal(b.last_name);
   // הטלפון: WA_PHONE, שהוא בדיוק עמודת ID בגיליון, ואחריו הטלפון של הוואטסאפ.
@@ -144,6 +155,37 @@ export function fromFullContact(b) {
   if (phone) cells.ID = phone;
   if (!emailOf(cells) && b.email) cells.CF_EMAIL = flatVal(b.email);
   return { cells, tags };
+}
+
+// ===== התגיות, ישירות ממניצ'ט. v7.72 =====
+//
+// הבקשה של מניצ'ט אומרת **מתי** משהו השתנה אצלה, ולא מביאה את התגיות. לכן שואלים את
+// מניצ'ט עצמו, **בקריאה בלבד**, לפי מספר המנוי שהגיע בבקשה. **כל תקלה מחזירה null**,
+// ואז העמודות של כן או לא נשארות כמו שהיו.
+//
+// **4 שניות:** נמדד 30.09.2026 חמש פעמים, 0.98 בפעם הראשונה ואז 0.21 עד 0.23.
+// `MC_TAGS_TIMEOUT_MS` קיים לבדיקות בלבד.
+const MC_API = "https://api.manychat.com";
+export async function fetchTags(id) {
+  const token = process.env.MANYCHAT_TOKEN;
+  const sid = String(id || "").replace(/[^\d]/g, "");
+  if (!token || !sid) return null;
+  const ms = Number(process.env.MC_TAGS_TIMEOUT_MS) || 4000;
+  let timer;
+  try {
+    const call = fetch(`${MC_API}/fb/subscriber/getInfo?subscriber_id=${sid}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(async (r) => {
+      if (!r.ok) return null;
+      const j = await r.json();
+      if (!j || j.status !== "success" || !j.data || !Array.isArray(j.data.tags)) return null;
+      return j.data.tags.map((t) => String(t && typeof t === "object" ? t.name || "" : t || ""));
+    });
+    const stop = new Promise((res) => { timer = setTimeout(() => res(null), ms); });
+    return await Promise.race([call, stop]);
+  } catch (e) { return null; }
+  finally { clearTimeout(timer); }
 }
 
 // קליטת שורה אחת ממניצ'ט.
@@ -157,6 +199,10 @@ export async function ingest(body, RU, RT, now = Date.now()) {
     await rpost(RU, RT, ["LTRIM", MC_SAMPLES, "0", "4"]);
   } catch (e) { /* הדוגמאות הן ללמידה בלבד */ }
   let inc, tags = null;
+  if (full && !Array.isArray(raw.tags) && raw.id) {
+    const got = await fetchTags(raw.id);
+    if (got) raw = Object.assign({}, raw, { tags: got });
+  }
   if (full) ({ cells: inc, tags } = fromFullContact(raw));
   else inc = cleanBody(raw);
   if (!inc) return { status: 400, json: { ok: false, error: "bad_body" } };
@@ -170,6 +216,7 @@ export async function ingest(body, RU, RT, now = Date.now()) {
   const email = emailOf(cells);
   const rec = { cells, t: now, src: "mc" };
   if (tags) rec.tags = tags;
+  else if (prev && Array.isArray(prev.tags)) rec.tags = prev.tags;
   await rpost(RU, RT, ["HSET", MC_ROWS, phone, JSON.stringify(rec)]);
   if (!prev || prev.src !== "mc") { try { await rpost(RU, RT, ["HINCRBY", MC_STATS, "fromMc", 1]); } catch (e) {} }
   // אם המייל שלה השתנה, השורה עוברת מהכתובת הישנה לחדשה, **כדי שכתובת שכבר אינה שלה לא

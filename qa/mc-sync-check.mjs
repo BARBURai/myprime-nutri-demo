@@ -26,7 +26,8 @@ let SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספ
 `;
 
 // ---------- Redis בזיכרון ----------
-let H = {}, L = {}, S = {}, log = [], redisDown = false, sheetCalls = [], trips = [];
+let H = {}, L = {}, S = {}, log = [], redisDown = false, sheetCalls = [], trips = [], mcCalls = [];
+const MCAPI = { mode: "ok", tags: {} };
 const hash = (k) => (H[k] = H[k] || {});
 function run(cmd) {
   const [c, ...a] = cmd.map(String);
@@ -60,6 +61,15 @@ globalThis.fetch = async (url, opt) => {
     if (u.endsWith("/pipeline")) { const cmds = JSON.parse(opt.body); return { ok: true, json: async () => cmds.map((c) => ({ result: run(c) })) }; }
     const cmd = opt && opt.body ? JSON.parse(opt.body) : u.slice("redis://r/".length).split("/").map(decodeURIComponent);
     return { ok: true, json: async () => ({ result: run(cmd) }) };
+  }
+  if (u.indexOf("https://api.manychat.com/") === 0) {
+    mcCalls.push({ url: u, method: (opt && opt.method) || "GET" });
+    if (MCAPI.mode === "throw") throw new Error("מניצ'ט נפל");
+    if (MCAPI.mode === "hang") return new Promise(() => {});
+    if (MCAPI.mode === "500") return { ok: false, status: 500, json: async () => ({}) };
+    if (MCAPI.mode === "error") return { ok: true, status: 200, json: async () => ({ status: "error", message: "x" }) };
+    const id = new URL(u).searchParams.get("subscriber_id");
+    return { ok: true, status: 200, json: async () => ({ status: "success", data: { id, tags: (MCAPI.tags[id] || []).map((name, i) => ({ id: i, name })) } }) };
   }
   sheetCalls.push((opt && opt.method) || "GET");
   return { ok: true, status: 200, text: async () => SHEET };
@@ -251,6 +261,60 @@ await admin({ method: "GET", query: { key: "owner-key-123", mcstatus: "" }, head
 ck("מסך הניהול: כמה נשים הגיעו ממניצ'ט, וכמה יובאו", s2.body.fromMc >= 6 && s2.body.imported === 1, strip({ f: s2.body.fromMc, i: s2.body.imported }));
 const noa = await login("noa@test.com");
 ck("והשער עדיין עונה לפי הגיליון", noa.allowed === true, strip(noa));
+
+// ============================================================
+console.log("\nהתגיות ממניצ'ט עצמו, כי \"Add Full Contact Data\" אינו כולל אותן. v7.72\n");
+// **הצורה האמיתית, מבקשה שנשמרה בייצור 30.09.2026:** יש id ו-custom_fields, ואין tags בכלל.
+process.env.MANYCHAT_TOKEN = "mc-token";
+process.env.MC_TAGS_TIMEOUT_MS = "300";
+const realBody = (o) => Object.assign({
+  key: "user:555", id: "555", first_name: "שירה", last_name: "כהן", whatsapp_phone: "+972508888888", email: null,
+  custom_fields: { WA_PHONE: "972508888888", CF_EMAIL: "shira@test.com", [START]: sunday + " 12:00:00" },
+}, o);
+const cellsOf = (p) => JSON.parse(H["mc:rows"][p]).cells;
+MCAPI.mode = "ok"; MCAPI.tags["555"] = ["360 ביטלה ❌❌❌", "GLOW- DEMO 💄", "אפליקציה תזונה", "GLOW-FULL", "RTEMP8"];
+mcCalls = [];
+const t1 = await push(realBody({}));
+const c1 = cellsOf("972508888888");
+ck("נקלטת, והשרת שואל את מניצ'ט על התגיות", t1.code === 200 && mcCalls.length === 1, strip(t1) + " " + mcCalls.length);
+ck("**לפי מספר המנוי, ובקריאה בלבד**", mcCalls.length === 1 && mcCalls[0].method === "GET" && /getInfo\?subscriber_id=555$/.test(mcCalls[0].url), strip(mcCalls));
+ck("ביטול מהתגית נכנס לעמודה ביטלה", c1["ביטלה"] === "TRUE", strip(c1));
+ck("**\"GLOW- DEMO 💄\" נכנס ל\"בונוס איפור\"**", c1["בונוס איפור"] === "TRUE", strip(c1));
+ck("**\"אפליקציה תזונה\" נכנס ל\"אפליקציית תזונה\"**", c1["אפליקציית תזונה"] === "TRUE", strip(c1));
+ck("ועמודת כן או לא בלי תגית נרשמת ריקה", c1["צמיד"] === "" && c1["SOLO6"] === "", strip(c1));
+MCAPI.tags["555"] = ["GLOW- DEMO 💄", "אפליקציה תזונה", "GLOW-FULL"];
+await push(realBody({}));
+ck("**תגית שהוסרה במניצ'ט מתרוקנת**", cellsOf("972508888888")["ביטלה"] === "", strip(cellsOf("972508888888")));
+MCAPI.tags["555"] = ["360 ביטלה ❌❌❌", "GLOW-FULL"];
+await push(realBody({}));
+const beforeFail = cellsOf("972508888888");
+for (const mode of ["throw", "500", "error", "hang"]) {
+  MCAPI.mode = mode;
+  const t0 = Date.now();
+  const r = await push(realBody({ custom_fields: { WA_PHONE: "972508888888", CF_EMAIL: "shira@test.com", [START]: older + " 12:00:00" } }));
+  const c = cellsOf("972508888888");
+  ck(`מניצ'ט ${mode}: הבקשה נקלטת, השדות מתעדכנים, **והתגיות נשארות כמו שהיו**`,
+     r.code === 200 && c[START].startsWith(older) && c["ביטלה"] === "TRUE" && c["GLOW-FULL"] === "TRUE" && c["בונוס איפור"] === beforeFail["בונוס איפור"] && (Date.now() - t0) < 3000,
+     mode + " " + strip(c));
+}
+MCAPI.mode = "ok";
+delete process.env.MANYCHAT_TOKEN;
+mcCalls = [];
+await push(realBody({}));
+ck("בלי מפתח למניצ'ט: אין פנייה, והתגיות נשארות", mcCalls.length === 0 && cellsOf("972508888888")["ביטלה"] === "TRUE", strip(cellsOf("972508888888")));
+process.env.MANYCHAT_TOKEN = "mc-token";
+mcCalls = [];
+await push(Object.assign({}, fullBody, { id: "777", tags: [{ name: "360 התקינה" }] }));
+ck("**כשהתגיות כבר בבקשה, אין פנייה נוספת**", mcCalls.length === 0, mcCalls.length);
+// שורה שיובאה מהגיליון עם ביטול, ואחריה בקשה ממניצ'ט כשהוא אינו עונה
+hash("mc:rows")["972509999999"] = JSON.stringify({ cells: { ID: "972509999999", CF_EMAIL: "yael@test.com", [START]: sunday + " 12:00:00", "ביטלה": "TRUE", "GLOW-FULL": "TRUE" }, t: 1, src: "import" });
+MCAPI.mode = "500";
+await push(realBody({ id: "999", whatsapp_phone: "+972509999999", custom_fields: { WA_PHONE: "972509999999", CF_EMAIL: "yael@test.com", [START]: sunday + " 12:00:00" } }));
+const yc = cellsOf("972509999999");
+ck("**שורה מהייבוא עם ביטול אינה מאבדת אותו כשמניצ'ט לא עונה**", yc["ביטלה"] === "TRUE" && yc["GLOW-FULL"] === "TRUE", strip(yc));
+MCAPI.mode = "ok";
+const shira = await login("shira@test.com");
+ck("והשער עדיין עונה לפי הגיליון בלבד", shira.allowed === false, strip(shira));
 
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);
