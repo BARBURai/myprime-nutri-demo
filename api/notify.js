@@ -296,28 +296,68 @@ export default async function handler(req, res) {
     outbox.push({ endpoint, sub, payload, email: rec.email });
   }
 
-  // Batches rather than all at once. A thousand simultaneous requests is its own way to fail,
-  // and twenty five at a time already turns half a minute into a couple of seconds while
-  // staying well inside what the push services expect.
-  const BATCH = 25;
-  let sent = 0, failed = 0;
+  // ===== שליחה עם תקרת המתנה, בלי לחכות לקבוצה שלמה. v7.68 =====
+  //
+  // **נמדד ב-29.09.2026, מההיסטוריה של cron-job.org:** שליחה רגילה של כל הנשים לוקחת 5.5 עד 7
+  // שניות (411, 286 ו-414 התראות), **והערב של אותו יום, עם 356, עבר את 30 השניות** ו-cron-job.org
+  // הפסיק לחכות. כלומר לא מספר הנשים אלא שליחה אחת שנתקעה: **לא הייתה שום תקרת המתנה לשרתים של
+  // גוגל ושל אפל**, והשליחה הלכה בקבוצות של 25 שכל אחת חיכתה לאיטית שבה.
+  //
+  // **שלושה שינויים, ושום דבר על מי מקבלת ומה כתוב:**
+  // 1. תקרה של 10 שניות לכל התראה, **גם בספרייה וגם בטיימר משלנו**, כי זו של הספרייה חלה רק על
+  //    חיבור שותק ולא על תשובה שמטפטפת.
+  // 2. 25 במקביל כמו קודם, **אבל כל אחת יוצאת ברגע שמתפנה מקום**, ולכן איטית מעכבת רק את עצמה.
+  // 3. **מי שנתקעה או שהחיבור שלה נפל מקבלת ניסיון שני אחד**, אחרי שכל השאר יצאו. תשובה מפורשת
+  //    של השרת (404, 410 ושאר הקודים) אינה מנוסה שוב, כי היא אינה עיכוב.
+  // המשתנה קיים לבדיקות בלבד, כדי שבדיקה של התראה תקועה לא תימשך 20 שניות. בוורסל הוא אינו מוגדר.
+  const PUSH_TIMEOUT_MS = Number(process.env.PUSH_TIMEOUT_MS) || 10000;
+  const CONCURRENCY = 25;
+  const runStart = Date.now();
+  let slowMs = 0;
+  const pushOne = (x) => {
+    const t0 = Date.now();
+    let timer;
+    const guard = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("push timeout")), PUSH_TIMEOUT_MS); });
+    return Promise.race([webpush.sendNotification(x.sub, x.payload, { timeout: PUSH_TIMEOUT_MS }), guard])
+      .finally(() => { clearTimeout(timer); const d = Date.now() - t0; if (d > slowMs) slowMs = d; });
+  };
+  const sendAll = async (items) => {
+    const results = new Array(items.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < items.length) {
+        const i = next++;
+        try { results[i] = { status: "fulfilled", value: await pushOne(items[i]) }; }
+        catch (e) { results[i] = { status: "rejected", reason: e }; }
+      }
+    };
+    // allSettled, not all: one refused subscription must not abandon the others.
+    await Promise.allSettled(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
+    return results;
+  };
+  let sent = 0, failed = 0, retried = 0;
   const dead = [];
   const who = { sent: [], failed: [], pruned: [] };
-  for (let i = 0; i < outbox.length; i += BATCH) {
-    const slice = outbox.slice(i, i + BATCH);
-    // allSettled, not all: one refused subscription must not abandon the other twenty four.
-    const results = await Promise.allSettled(slice.map((x) => webpush.sendNotification(x.sub, x.payload)));
-    results.forEach((r, j) => {
-      if (r.status === "fulfilled") { sent++; who.sent.push(slice[j].email); return; }
-      const code = r.reason && r.reason.statusCode;
-      who[code === 404 || code === 410 ? "pruned" : "failed"].push(slice[j].email);
-      // 404 and 410 mean the browser threw the subscription away: the app was uninstalled, or
-      // notifications were turned off. Anything else is this run's problem, not hers, so the
-      // subscription stays and is tried again tomorrow.
-      if (code === 404 || code === 410) dead.push(slice[j].endpoint);
-      else failed++;
-    });
+  const first = await sendAll(outbox);
+  const again = [];
+  first.forEach((r, j) => { if (r.status === "rejected" && !(r.reason && r.reason.statusCode)) again.push(j); });
+  const final = first.slice();
+  if (again.length) {
+    retried = again.length;
+    const second = await sendAll(again.map((j) => outbox[j]));
+    again.forEach((j, k) => { final[j] = second[k]; });
   }
+  final.forEach((r, j) => {
+    if (r.status === "fulfilled") { sent++; who.sent.push(outbox[j].email); return; }
+    const code = r.reason && r.reason.statusCode;
+    who[code === 404 || code === 410 ? "pruned" : "failed"].push(outbox[j].email);
+    // 404 and 410 mean the browser threw the subscription away: the app was uninstalled, or
+    // notifications were turned off. Anything else is this run's problem, not hers, so the
+    // subscription stays and is tried again tomorrow.
+    if (code === 404 || code === 410) dead.push(outbox[j].endpoint);
+    else failed++;
+  });
+  const sendMs = Date.now() - runStart;
 
   // One Redis call per hundred dead subscriptions instead of one per phone. This used to sit
   // inside the send loop, so a morning with many uninstalls paid for a round trip each time.
@@ -339,7 +379,7 @@ export default async function handler(req, res) {
   // **נכשל לצד הפתוח:** רישום שלא נכתב אינו משנה דבר לאף אישה, וההתראות כבר יצאו.
   // **והכתיבה מחכה לתשובה ואינה נשארת ברקע**, כי בוורסל עבודה שנשארת ברקע נקטעת,
   // וזה בדיוק הבאג של v6.17.
-  const stamp = { sent, failed, pruned, quiet, total: entries.length, outbox: outbox.length, at: israelClock() };
+  const stamp = { sent, failed, pruned, quiet, total: entries.length, outbox: outbox.length, at: israelClock(), ms: sendMs, slowMs, retried };
   try {
     await redisCmd(RU, RT, ["HSET", `push:log:${israelDay(0)}`, morning ? "morning" : `evening:${serve.join("-")}`, JSON.stringify(stamp)]);
     await redisCmd(RU, RT, ["EXPIRE", `push:log:${israelDay(0)}`, 1209600]); // שבועיים
