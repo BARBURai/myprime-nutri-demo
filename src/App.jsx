@@ -38,6 +38,9 @@ function newReqId() {
 // בכוונה, כי ניתוח שהצליח ונחתך הוא הדבר היקר כאן ולא ההמתנה.
 const AI_TIMEOUT_MS = 45000;
 const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
+// הבדיקה החוזרת בחזרה לאפליקציה, v7.74: לכל היותר פעם ב-5 דקות, וחוסמת רק על אלה.
+const ACCESS_RECHECK_MS = 5 * 60 * 1000;
+const ACCESS_RECHECK_BLOCK = ["cancelled", "frozen", "expired"];
 // ערך תזונתי ל-100 מעוגל לעשירית ולא למספר שלם. אריזה שכתוב עליה 8.4 גרם חלבון הפכה
 // ל-8, וגביע של 500 מ״ל נרשם כ-40 גרם במקום 42. הטעות גדלה עם המנה והיא הגרועה ביותר
 // בערכים קטנים: 1.4 שהפך ל-1 הוא פער של 29 אחוז. נמצא על ידי רון, 17 בספטמבר 2026.
@@ -730,7 +733,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.73";
+const VERSION = "7.74";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -7212,8 +7215,10 @@ export default function App() {
   // with nothing open there is no entry left, the press reaches Android, and it closes the
   // app exactly as it does in every other app. No dialog, and nothing that pretends to work.
 
+  const lastAccessRef = useRef(Date.now());
   const checkAccess = async (em, nm, isLogin) => {
     setGate("checking"); setGateMsg("");
+    lastAccessRef.current = Date.now();
     try {
       const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}${isLogin ? "&login=1" : ""}`);
       const d = await r.json();
@@ -7275,6 +7280,39 @@ export default function App() {
     if (nm) setGateName(nm);
     if (em) { setGateEmail(em); checkAccess(em, nm); } else { setGate("form"); }
   }, []);
+  // **חסימה מיידית, v7.74.** רון: "אי אפשר לחסום לה מיידי בלי לחכות שהאפליקציה תיסגר
+  // ותיפתח?" עד כאן הגישה נבדקה רק בטעינה, ולכן מבוטלת שהשאירה את האפליקציה פתוחה
+  // המשיכה לעבוד ימים. עכשיו היא נבדקת שוב בכל חזרה לאפליקציה, **לכל היותר פעם ב-5
+  // דקות**, החלטת רון.
+  //
+  // **חוסמים רק על סירוב מפורש של השער:** ביטול, הקפאה או חלון שנגמר. תקלת רשת, תקלה
+  // בשער, או "נכנסת ממכשיר אחר" לעולם אינם מוציאים אותה באמצע, **ובלי ניתוק מכשיר**,
+  // החלטת רון. והבדיקה שקטה: בלי "טוען" ובלי שום שינוי במסך כשהתשובה היא שהיא בפנים.
+  useEffect(() => {
+    if (gate !== "ok") return;
+    let busy = false;
+    const recheck = async () => {
+      if (busy || document.visibilityState === "hidden") return;
+      if (Date.now() - lastAccessRef.current < ACCESS_RECHECK_MS) return;
+      let em = "";
+      try { em = localStorage.getItem("myprime_access_email") || ""; } catch (e) {}
+      if (!em) return;
+      busy = true; lastAccessRef.current = Date.now();
+      try {
+        const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
+        const d = await r.json();
+        if (d && d.allowed === false && ACCESS_RECHECK_BLOCK.includes(d.reason)) {
+          setGateBack(d.reason === "frozen" ? (d.back || "") : "");
+          setGateReason(d.reason); setGate("denied");
+        }
+      } catch (e) { /* תקלה לעולם אינה מוציאה אותה */ }
+      finally { busy = false; }
+    };
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("focus", recheck);
+    window.addEventListener("pageshow", recheck);
+    return () => { document.removeEventListener("visibilitychange", recheck); window.removeEventListener("focus", recheck); window.removeEventListener("pageshow", recheck); };
+  }, [gate]);
   // Keep the program start date aligned with the registration sheet for returning users.
   useEffect(() => {
     if (DEV) return; // in DEV the start date is simulated for testing - never cap it to the sheet date

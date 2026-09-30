@@ -496,6 +496,61 @@ const CHECKS = [
     },
   },
   {
+    // v7.74: חסימה מיידית. בחזרה לאפליקציה, לכל היותר פעם ב-5 דקות, השער נשאל שוב. **שני
+    // הצדדים באותה הרצה:** תקלה, "נכנסת ממכשיר אחר" ו"לא רשומה" אינם מוציאים אותה, וביטול
+    // והקפאה כן. ולפני 5 דקות לא יוצאת שום פנייה בכלל.
+    name: "חסימה מיידית: חזרה לאפליקציה אחרי 5 דקות, ביטול מוציא ותקלה לא",
+    async run(browser, device) {
+      const bad = [];
+      const { context, page, errors } = await openApp(browser, device, { clock: new Date().toISOString() });
+      let mode = "ok", calls = 0;
+      await context.route("**/api/access**", async (route) => {
+        calls++;
+        const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+        if (mode === "abort") return route.abort();
+        if (mode === "500") return route.fulfill({ status: 500, body: "oops" });
+        if (mode === "ok") return json({ allowed: true, name: "בדיקה", startDate: startForDay(10) });
+        if (mode === "frozen") return json({ allowed: false, reason: "frozen", back: "" });
+        return json({ allowed: false, reason: mode });
+      });
+      const back = async (ms) => {
+        await page.evaluate((m) => { window.__qaShift(m); document.dispatchEvent(new Event("visibilitychange")); }, ms);
+        await page.waitForTimeout(700);
+      };
+      const inApp = async () => (await page.locator('[aria-label="הוספה"]').count()) > 0;
+      mode = "cancelled";
+      await back(60 * 1000);
+      if (calls !== 0) bad.push("פנייה יצאה לפני 5 דקות");
+      if (!(await inApp())) bad.push("יצאה מהאפליקציה לפני 5 דקות");
+      for (const m of ["abort", "500", "signed_out", "not_registered", "fetch_failed", "ok"]) {
+        mode = m; const before = calls;
+        await back(6 * 60 * 1000);
+        if (calls !== before + 1) bad.push(`${m}: לא יצאה בדיוק פנייה אחת (${calls - before})`);
+        if (!(await inApp())) { bad.push(`${m}: הוציא אותה מהאפליקציה`); break; }
+      }
+      const txt0 = await page.evaluate(() => document.body.innerText);
+      if (txt0.includes("נכנסת לאפליקציה ממכשיר אחר")) bad.push("הודעת מכשיר אחר הוצגה");
+      mode = "cancelled";
+      await back(6 * 60 * 1000);
+      const txt = await page.evaluate(() => document.body.innerText);
+      if (!txt.includes("המנוי שלך בתוכנית אינו פעיל")) bad.push("ביטול לא הוציא אותה");
+      if (await inApp()) bad.push("הכפתור נשאר אחרי ביטול");
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+      await context.close();
+      // הקפאה, בהרצה נפרדת
+      {
+        const o = await openApp(browser, device, { clock: new Date().toISOString() });
+        await o.context.route("**/api/access**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ allowed: false, reason: "frozen", back: "" }) }));
+        await o.page.evaluate(() => { window.__qaShift(6 * 60 * 1000); document.dispatchEvent(new Event("visibilitychange")); });
+        await o.page.waitForTimeout(700);
+        const t = await o.page.evaluate(() => document.body.innerText);
+        if (!t.includes("התוכנית שלך בהקפאה")) bad.push("הקפאה לא הוציאה אותה");
+        await o.context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "5 דקות נאכפות, שש תקלות לא מוציאות, ביטול והקפאה כן" };
+    },
+  },
+  {
     // The tracker opens on program day 3. Checked against the two most recent real cohorts
     // rather than against a made-up "three days ago", so what the card is expected to do is
     // derived from the same rule the app uses instead of being hard-coded to a day number

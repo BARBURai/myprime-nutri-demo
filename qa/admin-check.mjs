@@ -518,6 +518,18 @@ console.log("\nסימון ביטול בתהליך");
   check("הסרת הסימון מחזירה לה את הגישה", (await callAccess("yafit@test.com")).body.allowed === true);
   check("והכרטיס כבר לא מציג אותה כחסומה", (await callAdmin({ key: KEY })).body.women.find((x) => x.email === "yafit@test.com").blocked === false);
 
+  // v7.74: הסימון לוקח גם את היתר הצפייה בסרטונים מיד, ולא בכניסה הבאה שלה. והסרתו אינה
+  // נוגעת בהם, כי השער כותב אותם מחדש בכניסה הבאה.
+  store.kv["glow:yafit@test.com"] = "1"; store.kv["glowfull:yafit@test.com"] = "1"; store.kv["glowonly:yafit@test.com"] = "1";
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: true, phone: "972501111111", by: "רון" });
+  check("**ביטול בתהליך מוחק מיד את היתרי הצפייה של גלו**", store.kv["glow:yafit@test.com"] === undefined && store.kv["glowfull:yafit@test.com"] === undefined);
+  check("ו-glowonly נשאר, כי הוא זה שחוסם את סרטוני התוכנית", store.kv["glowonly:yafit@test.com"] === "1");
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: false, phone: "972501111111", by: "רון" });
+  store.kv["glow:yafit@test.com"] = "1";
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", group: "ג", by: "רון" });
+  check("שמירה אחרת אינה נוגעת בהיתרים", store.kv["glow:yafit@test.com"] === "1");
+  delete store.kv["glow:yafit@test.com"]; delete store.kv["glowonly:yafit@test.com"];
+
   // A change to any other field must not quietly clear the block.
   await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: true, phone: "972501111111", by: "רון" });
   await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", group: "ג", by: "רון" });
