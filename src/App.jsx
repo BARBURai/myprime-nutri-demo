@@ -733,7 +733,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.74";
+const VERSION = "7.75";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -818,6 +818,35 @@ async function bkUpload(email, code, plaintext, notify = false) {
   if (!r.ok) return false;
   const d = await r.json().catch(() => ({}));
   return !!d.ok;
+}
+// v7.75: סימוני הסרטונים (וי, מועדפים, מונה צפיות) נשמרים במפתחות נפרדים של
+// מודול התוכן, ולכן עד כאן לא נסעו בגיבוי, ושחזור החזיר יומן בלי הווים. איריס.
+// הם נארזים לתוך אותו טקסט מוצפן תחת `_content`. גיבוי ישן בלי השדה הזה משוחזר
+// בדיוק כמו קודם. `mp_glow_key_v2` נוסע איתם, אחרת שחזור היה מריץ שוב את ההמרה
+// של v7.06 על מפתחות שכבר הומרו.
+const BK_CONTENT_KEYS = ["mp_content_done_v1", "mp_content_fav_v1", "mp_content_views_v1", "mp_glow_key_v2"];
+function bkPack() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  try {
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== "object" || Array.isArray(o)) return raw;
+    const c = {};
+    for (const k of BK_CONTENT_KEYS) { const v = localStorage.getItem(k); if (v != null) c[k] = v; }
+    if (Object.keys(c).length) o._content = c;
+    return JSON.stringify(o);
+  } catch (e) { return raw; }
+}
+function bkUnpack(plaintext) {
+  try {
+    const o = JSON.parse(plaintext);
+    if (!o || typeof o !== "object" || Array.isArray(o) || !o._content) return plaintext;
+    const c = o._content;
+    delete o._content;
+    if (c && typeof c === "object") {
+      for (const k of BK_CONTENT_KEYS) { if (typeof c[k] === "string") { try { localStorage.setItem(k, c[k]); } catch (e) {} } }
+    }
+    return JSON.stringify(o);
+  } catch (e) { return plaintext; }
 }
 // `timeoutMs` קיים בשביל שני המסלולים שחוסמים אישה על המסך בזמן שהם מחכים
 // לתשובה: הבדיקה שרצה מאחורי מסך הפתיחה, וזו שעוצרת בסיום ההרשמה. **בלי תפוגה,
@@ -7557,6 +7586,20 @@ export default function App() {
     (async () => { const r = await bkFetch(email, BK_WAIT_MS); setBkRestore(r && r.exists ? "offer" : r && r.failed ? "unknown" : "none"); })();
   }, [gate, onboarded, saved, gateEmail, bkRestore]);
 
+  // v7.75: מבקשים מהדפדפן אחסון קבוע, כדי שכרום לא ימחק את הנתונים של האפליקציה
+  // כשהמכשיר דחוק במקום. באנדרואיד זה מוענק בשקט לאפליקציה מותקנת, בלי שום חלונית.
+  // בפיירפוקס זו חלונית הרשאה, ולכן שם לא מבקשים. כל תקלה נבלעת, ואין קופי.
+  useEffect(() => {
+    try {
+      if (/Firefox|FxiOS/i.test(navigator.userAgent || "")) return;
+      const st = navigator.storage;
+      if (!st || typeof st.persist !== "function") return;
+      Promise.resolve(typeof st.persisted === "function" ? st.persisted() : false)
+        .then((on) => (on ? on : st.persist()))
+        .catch(() => {});
+    } catch (e) {}
+  }, []);
+
   // Auto-backup: debounced after EVERY change, plus a flush when the app is
   // hidden/closed. (Was once-a-day and early, so anything logged later in the
   // day was never backed up - if storage was then evicted/restored, it was lost.)
@@ -7570,7 +7613,7 @@ export default function App() {
     if (!code || !email || !bkSubtle) return;
     const flush = async () => {
       try {
-        const plaintext = localStorage.getItem(STORAGE_KEY);
+        const plaintext = bkPack();
         if (!plaintext || plaintext === bkSentRef.current) return;
         // המייל יוצא כאן רק כשקוד חדש נקבע ברישום וטרם נשלח עליו כלום. בכל
         // גיבוי אחר, וזה הרוב המוחלט, נשלח טקסט מוצפן בלבד ושום מפתח.
@@ -7605,7 +7648,7 @@ export default function App() {
       const had = bkGetCode();
       const code = had || bkMakeCode();
       try {
-        const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "", !had);
+        const ok = await bkUpload(email, code, bkPack() || "", !had);
         if (!ok) { bkAutoRef.current = false; return; } // silent: retries on the next load
         bkSetCode(code);
         setProfile((p) => ({ ...p, backup: { enabled: true, email, auto: true } }));
@@ -7623,7 +7666,7 @@ export default function App() {
       if (!r || !r.exists) { setBkBusy(false); return { ok: false, msg: "לא נמצא גיבוי לאימייל הזה." }; }
       const plaintext = await bkDecrypt(code, r.blob);
       JSON.parse(plaintext); // sanity
-      localStorage.setItem(STORAGE_KEY, plaintext);
+      localStorage.setItem(STORAGE_KEY, bkUnpack(plaintext));
       bkSetCode(code);
       try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {}
       window.location.reload();
@@ -7636,7 +7679,7 @@ export default function App() {
     if (!code || !email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
     setBkBusy(true);
     try {
-      const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "");
+      const ok = await bkUpload(email, code, bkPack() || "");
       setBkBusy(false);
       if (ok) { try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} return { ok: true, msg: "גובה בהצלחה." }; }
       return { ok: false, msg: "הגיבוי נכשל, נסי שוב." };
@@ -7654,7 +7697,7 @@ export default function App() {
       // בעצמה, ברישום או ממסך הגיבוי, והוא נשכח בפעם הראשונה. **הכלל הוא שהמייל
       // יוצא בכל רגע שבו נקבע קוד חדש, ואין לזה שלושה מסלולים אלא שלוש נקודות
       // של אותו רגע אחד.**
-      const ok = await bkUpload(em, code, localStorage.getItem(STORAGE_KEY) || "", true);
+      const ok = await bkUpload(em, code, bkPack() || "", true);
       setBkBusy(false);
       if (!ok) { bkSetCode(""); return { ok: false, msg: "ההפעלה נכשלה, נסי שוב." }; }
       setProfile((p) => ({ ...p, backup: { enabled: true, email: em } }));
@@ -7668,7 +7711,7 @@ export default function App() {
     if (!email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
     setBkBusy(true);
     try {
-      const ok = await bkUpload(email, newCode, localStorage.getItem(STORAGE_KEY) || "", true);
+      const ok = await bkUpload(email, newCode, bkPack() || "", true);
       setBkBusy(false);
       if (!ok) return { ok: false, msg: "האיפוס נכשל, נסי שוב." };
       bkSetCode(newCode);
