@@ -733,7 +733,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.76";
+const VERSION = "7.77";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -7330,7 +7330,10 @@ export default function App() {
       try {
         const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
         const d = await r.json();
-        if (d && d.allowed === false && ACCESS_RECHECK_BLOCK.includes(d.reason)) {
+        // **v7.77: לא על תשובה שניתנה בלי סימוני המשרד** (`degraded`). בתקלה ב-Upstash
+        // השער מחליט לפי הגיליון לבד, ואישה שהמשרד האריך לה הייתה יוצאת באמצע. בטעינה
+        // הבאה, כשהתקלה עברה, היא נבדקת שוב כרגיל.
+        if (d && d.allowed === false && !d.degraded && ACCESS_RECHECK_BLOCK.includes(d.reason)) {
           setGateBack(d.reason === "frozen" ? (d.back || "") : "");
           setGateReason(d.reason); setGate("denied");
         }

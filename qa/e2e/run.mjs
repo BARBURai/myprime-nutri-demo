@@ -511,6 +511,8 @@ const CHECKS = [
         if (mode === "500") return route.fulfill({ status: 500, body: "oops" });
         if (mode === "ok") return json({ allowed: true, name: "בדיקה", startDate: startForDay(10) });
         if (mode === "frozen") return json({ allowed: false, reason: "frozen", back: "" });
+        // v7.77: אותה חסימה, כשהשער ענה בלי סימוני המשרד
+        if (mode.endsWith("-degraded")) return json({ allowed: false, reason: mode.replace("-degraded", ""), back: "", degraded: true });
         return json({ allowed: false, reason: mode });
       });
       const back = async (ms) => {
@@ -522,7 +524,7 @@ const CHECKS = [
       await back(60 * 1000);
       if (calls !== 0) bad.push("פנייה יצאה לפני 5 דקות");
       if (!(await inApp())) bad.push("יצאה מהאפליקציה לפני 5 דקות");
-      for (const m of ["abort", "500", "signed_out", "not_registered", "fetch_failed", "ok"]) {
+      for (const m of ["abort", "500", "signed_out", "not_registered", "fetch_failed", "expired-degraded", "cancelled-degraded", "frozen-degraded", "ok"]) {
         mode = m; const before = calls;
         await back(6 * 60 * 1000);
         if (calls !== before + 1) bad.push(`${m}: לא יצאה בדיוק פנייה אחת (${calls - before})`);
@@ -547,7 +549,7 @@ const CHECKS = [
         if (!t.includes("התוכנית שלך בהקפאה")) bad.push("הקפאה לא הוציאה אותה");
         await o.context.close();
       }
-      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "5 דקות נאכפות, שש תקלות לא מוציאות, ביטול והקפאה כן" };
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "5 דקות נאכפות, תשע תשובות שאינן סירוב ודאי לא מוציאות, ביטול והקפאה כן" };
     },
   },
   {

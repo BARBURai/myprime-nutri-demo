@@ -431,8 +431,15 @@ export default async function handler(req, res) {
   let clerkStart = "";
   let clerkBlocked = false;
   let freeze = null;
+  // v7.77: האם סימוני המשרד נקראו באמת. **בלעדיהם התשובה נגזרת מהגיליון לבד**, ואישה
+  // שהמשרד האריך לה מקבלת "הגישה הסתיימה". נמדד על הגיליון האמיתי: אחת מתוך 155. התשובה
+  // נושאת `degraded`, והבדיקה החוזרת באפליקציה (v7.74) לעולם אינה מוציאה אישה על תשובה
+  // כזאת. **`null` הוא "אין לה סימון" ונחשב קריאה**, ו-`undefined` הוא תקלה או תשובת
+  // שגיאה של Upstash, שמגיעה בלי `result`. הטעינה עצמה לא משתנה.
+  let overridesRead = false;
   try {
     const raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", email);
+    overridesRead = raw !== undefined;
     if (raw) {
       const ovr = JSON.parse(raw) || {};
       clerkUntil = ovr.until || "";
@@ -523,9 +530,10 @@ export default async function handler(req, res) {
         await redis(RUx, RTx, "DEL", `glowfull:${email}`);
       } catch (e) { /* ניקוי שנכשל לעולם אינו משנה את התשובה לאישה */ }
     }
-    if (decision.reason === "frozen") return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: (freeze && freeze.back) || "" });
-    if (decision.reason === "cancelled") return res.status(200).json({ allowed: false, reason: "cancelled", configured: true });
-    return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate });
+    const degraded = !overridesRead;
+    if (decision.reason === "frozen") return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: (freeze && freeze.back) || "", degraded });
+    if (decision.reason === "cancelled") return res.status(200).json({ allowed: false, reason: "cancelled", configured: true, degraded });
+    return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate, degraded });
   }
 
   // 3) optional max-2-concurrent-devices check
