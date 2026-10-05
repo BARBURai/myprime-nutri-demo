@@ -39,7 +39,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.72";
+const ADMIN_VERSION = "7.77";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1060,6 +1060,15 @@ JSON בלבד, בלי שום טקסט אחר:
         by, at, log: log.slice(0, 20),
       });
       await redis(RU, RT, "HSET", "admin:overrides", email, rec);
+      // **v7.74: "ביטול בתהליך" לוקח גם את היתר הצפייה בסרטונים מיד**, ולא בכניסה הבאה שלה.
+      // אלה הסימונים ש-`api/bunny-token.js` קורא, ובדיוק מה שהשער מוחק כשהוא חוסם. **ניקוי
+      // שנכשל אינו מכשיל את השמירה**, והשער ימחק אותם ממילא בבדיקה הבאה.
+      if (tag === "cancelproc" && on) {
+        try {
+          await redis(RU, RT, "DEL", `glow:${email}`);
+          await redis(RU, RT, "DEL", `glowfull:${email}`);
+        } catch (e) {}
+      }
       // Only after the local write, and never allowed to undo it. The local store is what
       // the app reads within seconds; ManyChat is what makes the change permanent and
       // carries it to WhatsApp and to the sheet.

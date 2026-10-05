@@ -123,6 +123,40 @@ function loadPlayerJs() {
 const WATCH_THRESHOLD = 0.8; // mark complete after 80% real watch time
 const SEEK_GAP = 3;          // seconds: a jump larger than this between timeupdates is a seek, not playback
 
+// v7.76: המסך נשאר דלוק כל עוד הסרטון רץ. הנגן של באני יושב בחלון נפרד, ולכן
+// הטלפון לא תמיד יודע שצופים בו וכבה לפי זמן הנעילה הרגיל, וזה בדיוק המצב באימון
+// כשהטלפון מונח בצד. רון: "מאשר, לכל הסרטונים". בעצירה, בסוף ובעזיבת השיעור
+// הבקשה משתחררת, והטלפון חוזר להתנהג כרגיל. הטלפון עצמו מבטל אותה כשיוצאים
+// מהאפליקציה, ולכן בחזרה היא מתחדשת אם הסרטון עדיין רץ. בלי תמיכה בדפדפן, כלומר
+// אייפון לפני 16.4 או אפליקציה מותקנת באייפון לפני 18.4, שום דבר לא משתנה.
+function makeWakeKeeper(nav, doc) {
+  let sentinel = null, pending = false, want = false;
+  const grab = () => {
+    if (!want || sentinel || pending) return;
+    try {
+      if (!nav || !nav.wakeLock || typeof nav.wakeLock.request !== "function") return;
+      if (!doc || doc.visibilityState !== "visible") return;
+      pending = true;
+      Promise.resolve(nav.wakeLock.request("screen")).then((s) => {
+        pending = false;
+        if (!s) return;
+        if (!want) { try { Promise.resolve(s.release()).catch(() => {}); } catch (e) {} return; }
+        sentinel = s;
+        try { s.addEventListener("release", () => { if (sentinel === s) sentinel = null; }); } catch (e) {}
+      }, () => { pending = false; });
+    } catch (e) { pending = false; }
+  };
+  const drop = () => { const s = sentinel; sentinel = null; if (s) { try { Promise.resolve(s.release()).catch(() => {}); } catch (e) {} } };
+  const onVis = () => { if (doc.visibilityState === "visible") grab(); };
+  try { doc.addEventListener("visibilitychange", onVis); } catch (e) {}
+  return {
+    play() { want = true; grab(); },
+    stop() { want = false; drop(); },
+    dispose() { want = false; drop(); try { doc.removeEventListener("visibilitychange", onVis); } catch (e) {} },
+    held: () => !!sentinel,
+  };
+}
+
 function BunnyPlayer({ videoId, C, font, onReach80, onStart }) {
   const [url, setUrl] = useState(null);
   const [err, setErr] = useState(false);
@@ -164,6 +198,8 @@ function BunnyPlayer({ videoId, C, font, onReach80, onStart }) {
   useEffect(() => {
     if (!url || !iframeRef.current) return;
     let player = null; let cancelled = false;
+    const wake = makeWakeKeeper(typeof navigator !== "undefined" ? navigator : null, typeof document !== "undefined" ? document : null);
+    let sawPlay = false;
     loadPlayerJs().then((playerjs) => {
       if (cancelled || !iframeRef.current) return;
       try {
@@ -172,9 +208,14 @@ function BunnyPlayer({ videoId, C, font, onReach80, onStart }) {
         player.on("ready", () => {
           try { player.getDuration((dur) => { if (dur && dur > 0) durationRef.current = dur; }); } catch (e) {}
         });
+        player.on("play", () => { sawPlay = true; wake.play(); });
+        player.on("pause", () => wake.stop());
+        player.on("ended", () => wake.stop());
         player.on("timeupdate", (data) => {
           const t = data && typeof data.seconds === "number" ? data.seconds : (typeof data === "number" ? data : null);
           if (t == null) return;
+          // גיבוי לנגן שאינו שולח "play": ההתקדמות עצמה אומרת שהוא רץ.
+          if (!sawPlay) wake.play();
           // A second of playback is enough to count as "she has seen it". Used only to stop
           // the bonus line nagging her on the diary card.
           if (!startedRef.current && t > 0) { startedRef.current = true; if (startCbRef.current) startCbRef.current(); }
@@ -194,7 +235,7 @@ function BunnyPlayer({ videoId, C, font, onReach80, onStart }) {
         });
       } catch (e) {}
     }).catch(() => {});
-    return () => { cancelled = true; try { if (player && player.off) { player.off("timeupdate"); player.off("ready"); } } catch (e) {} };
+    return () => { cancelled = true; wake.dispose(); try { if (player && player.off) { player.off("timeupdate"); player.off("ready"); player.off("play"); player.off("pause"); player.off("ended"); } } catch (e) {} };
   }, [url]);
 
   const box = { position: "relative", width: "100%", paddingTop: "56.25%", borderRadius: 14, overflow: "hidden", background: "#000", marginBottom: 16 };

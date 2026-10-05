@@ -38,6 +38,9 @@ function newReqId() {
 // בכוונה, כי ניתוח שהצליח ונחתך הוא הדבר היקר כאן ולא ההמתנה.
 const AI_TIMEOUT_MS = 45000;
 const ACCESS_ENDPOINT = import.meta.env.VITE_ACCESS_ENDPOINT || "/api/access";
+// הבדיקה החוזרת בחזרה לאפליקציה, v7.74: לכל היותר פעם ב-5 דקות, וחוסמת רק על אלה.
+const ACCESS_RECHECK_MS = 5 * 60 * 1000;
+const ACCESS_RECHECK_BLOCK = ["cancelled", "frozen", "expired"];
 // ערך תזונתי ל-100 מעוגל לעשירית ולא למספר שלם. אריזה שכתוב עליה 8.4 גרם חלבון הפכה
 // ל-8, וגביע של 500 מ״ל נרשם כ-40 גרם במקום 42. הטעות גדלה עם המנה והיא הגרועה ביותר
 // בערכים קטנים: 1.4 שהפך ל-1 הוא פער של 29 אחוז. נמצא על ידי רון, 17 בספטמבר 2026.
@@ -730,7 +733,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.72";
+const VERSION = "7.77";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -815,6 +818,35 @@ async function bkUpload(email, code, plaintext, notify = false) {
   if (!r.ok) return false;
   const d = await r.json().catch(() => ({}));
   return !!d.ok;
+}
+// v7.75: סימוני הסרטונים (וי, מועדפים, מונה צפיות) נשמרים במפתחות נפרדים של
+// מודול התוכן, ולכן עד כאן לא נסעו בגיבוי, ושחזור החזיר יומן בלי הווים. איריס.
+// הם נארזים לתוך אותו טקסט מוצפן תחת `_content`. גיבוי ישן בלי השדה הזה משוחזר
+// בדיוק כמו קודם. `mp_glow_key_v2` נוסע איתם, אחרת שחזור היה מריץ שוב את ההמרה
+// של v7.06 על מפתחות שכבר הומרו.
+const BK_CONTENT_KEYS = ["mp_content_done_v1", "mp_content_fav_v1", "mp_content_views_v1", "mp_glow_key_v2"];
+function bkPack() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  try {
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== "object" || Array.isArray(o)) return raw;
+    const c = {};
+    for (const k of BK_CONTENT_KEYS) { const v = localStorage.getItem(k); if (v != null) c[k] = v; }
+    if (Object.keys(c).length) o._content = c;
+    return JSON.stringify(o);
+  } catch (e) { return raw; }
+}
+function bkUnpack(plaintext) {
+  try {
+    const o = JSON.parse(plaintext);
+    if (!o || typeof o !== "object" || Array.isArray(o) || !o._content) return plaintext;
+    const c = o._content;
+    delete o._content;
+    if (c && typeof c === "object") {
+      for (const k of BK_CONTENT_KEYS) { if (typeof c[k] === "string") { try { localStorage.setItem(k, c[k]); } catch (e) {} } }
+    }
+    return JSON.stringify(o);
+  } catch (e) { return plaintext; }
 }
 // `timeoutMs` קיים בשביל שני המסלולים שחוסמים אישה על המסך בזמן שהם מחכים
 // לתשובה: הבדיקה שרצה מאחורי מסך הפתיחה, וזו שעוצרת בסיום ההרשמה. **בלי תפוגה,
@@ -7212,8 +7244,10 @@ export default function App() {
   // with nothing open there is no entry left, the press reaches Android, and it closes the
   // app exactly as it does in every other app. No dialog, and nothing that pretends to work.
 
+  const lastAccessRef = useRef(Date.now());
   const checkAccess = async (em, nm, isLogin) => {
     setGate("checking"); setGateMsg("");
+    lastAccessRef.current = Date.now();
     try {
       const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}${isLogin ? "&login=1" : ""}`);
       const d = await r.json();
@@ -7275,6 +7309,42 @@ export default function App() {
     if (nm) setGateName(nm);
     if (em) { setGateEmail(em); checkAccess(em, nm); } else { setGate("form"); }
   }, []);
+  // **חסימה מיידית, v7.74.** רון: "אי אפשר לחסום לה מיידי בלי לחכות שהאפליקציה תיסגר
+  // ותיפתח?" עד כאן הגישה נבדקה רק בטעינה, ולכן מבוטלת שהשאירה את האפליקציה פתוחה
+  // המשיכה לעבוד ימים. עכשיו היא נבדקת שוב בכל חזרה לאפליקציה, **לכל היותר פעם ב-5
+  // דקות**, החלטת רון.
+  //
+  // **חוסמים רק על סירוב מפורש של השער:** ביטול, הקפאה או חלון שנגמר. תקלת רשת, תקלה
+  // בשער, או "נכנסת ממכשיר אחר" לעולם אינם מוציאים אותה באמצע, **ובלי ניתוק מכשיר**,
+  // החלטת רון. והבדיקה שקטה: בלי "טוען" ובלי שום שינוי במסך כשהתשובה היא שהיא בפנים.
+  useEffect(() => {
+    if (gate !== "ok") return;
+    let busy = false;
+    const recheck = async () => {
+      if (busy || document.visibilityState === "hidden") return;
+      if (Date.now() - lastAccessRef.current < ACCESS_RECHECK_MS) return;
+      let em = "";
+      try { em = localStorage.getItem("myprime_access_email") || ""; } catch (e) {}
+      if (!em) return;
+      busy = true; lastAccessRef.current = Date.now();
+      try {
+        const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
+        const d = await r.json();
+        // **v7.77: לא על תשובה שניתנה בלי סימוני המשרד** (`degraded`). בתקלה ב-Upstash
+        // השער מחליט לפי הגיליון לבד, ואישה שהמשרד האריך לה הייתה יוצאת באמצע. בטעינה
+        // הבאה, כשהתקלה עברה, היא נבדקת שוב כרגיל.
+        if (d && d.allowed === false && !d.degraded && ACCESS_RECHECK_BLOCK.includes(d.reason)) {
+          setGateBack(d.reason === "frozen" ? (d.back || "") : "");
+          setGateReason(d.reason); setGate("denied");
+        }
+      } catch (e) { /* תקלה לעולם אינה מוציאה אותה */ }
+      finally { busy = false; }
+    };
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("focus", recheck);
+    window.addEventListener("pageshow", recheck);
+    return () => { document.removeEventListener("visibilitychange", recheck); window.removeEventListener("focus", recheck); window.removeEventListener("pageshow", recheck); };
+  }, [gate]);
   // Keep the program start date aligned with the registration sheet for returning users.
   useEffect(() => {
     if (DEV) return; // in DEV the start date is simulated for testing - never cap it to the sheet date
@@ -7519,6 +7589,20 @@ export default function App() {
     (async () => { const r = await bkFetch(email, BK_WAIT_MS); setBkRestore(r && r.exists ? "offer" : r && r.failed ? "unknown" : "none"); })();
   }, [gate, onboarded, saved, gateEmail, bkRestore]);
 
+  // v7.75: מבקשים מהדפדפן אחסון קבוע, כדי שכרום לא ימחק את הנתונים של האפליקציה
+  // כשהמכשיר דחוק במקום. באנדרואיד זה מוענק בשקט לאפליקציה מותקנת, בלי שום חלונית.
+  // בפיירפוקס זו חלונית הרשאה, ולכן שם לא מבקשים. כל תקלה נבלעת, ואין קופי.
+  useEffect(() => {
+    try {
+      if (/Firefox|FxiOS/i.test(navigator.userAgent || "")) return;
+      const st = navigator.storage;
+      if (!st || typeof st.persist !== "function") return;
+      Promise.resolve(typeof st.persisted === "function" ? st.persisted() : false)
+        .then((on) => (on ? on : st.persist()))
+        .catch(() => {});
+    } catch (e) {}
+  }, []);
+
   // Auto-backup: debounced after EVERY change, plus a flush when the app is
   // hidden/closed. (Was once-a-day and early, so anything logged later in the
   // day was never backed up - if storage was then evicted/restored, it was lost.)
@@ -7532,7 +7616,7 @@ export default function App() {
     if (!code || !email || !bkSubtle) return;
     const flush = async () => {
       try {
-        const plaintext = localStorage.getItem(STORAGE_KEY);
+        const plaintext = bkPack();
         if (!plaintext || plaintext === bkSentRef.current) return;
         // המייל יוצא כאן רק כשקוד חדש נקבע ברישום וטרם נשלח עליו כלום. בכל
         // גיבוי אחר, וזה הרוב המוחלט, נשלח טקסט מוצפן בלבד ושום מפתח.
@@ -7567,7 +7651,7 @@ export default function App() {
       const had = bkGetCode();
       const code = had || bkMakeCode();
       try {
-        const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "", !had);
+        const ok = await bkUpload(email, code, bkPack() || "", !had);
         if (!ok) { bkAutoRef.current = false; return; } // silent: retries on the next load
         bkSetCode(code);
         setProfile((p) => ({ ...p, backup: { enabled: true, email, auto: true } }));
@@ -7585,7 +7669,7 @@ export default function App() {
       if (!r || !r.exists) { setBkBusy(false); return { ok: false, msg: "לא נמצא גיבוי לאימייל הזה." }; }
       const plaintext = await bkDecrypt(code, r.blob);
       JSON.parse(plaintext); // sanity
-      localStorage.setItem(STORAGE_KEY, plaintext);
+      localStorage.setItem(STORAGE_KEY, bkUnpack(plaintext));
       bkSetCode(code);
       try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {}
       window.location.reload();
@@ -7598,7 +7682,7 @@ export default function App() {
     if (!code || !email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
     setBkBusy(true);
     try {
-      const ok = await bkUpload(email, code, localStorage.getItem(STORAGE_KEY) || "");
+      const ok = await bkUpload(email, code, bkPack() || "");
       setBkBusy(false);
       if (ok) { try { localStorage.setItem(BK_LAST_KEY, today); } catch (e) {} return { ok: true, msg: "גובה בהצלחה." }; }
       return { ok: false, msg: "הגיבוי נכשל, נסי שוב." };
@@ -7616,7 +7700,7 @@ export default function App() {
       // בעצמה, ברישום או ממסך הגיבוי, והוא נשכח בפעם הראשונה. **הכלל הוא שהמייל
       // יוצא בכל רגע שבו נקבע קוד חדש, ואין לזה שלושה מסלולים אלא שלוש נקודות
       // של אותו רגע אחד.**
-      const ok = await bkUpload(em, code, localStorage.getItem(STORAGE_KEY) || "", true);
+      const ok = await bkUpload(em, code, bkPack() || "", true);
       setBkBusy(false);
       if (!ok) { bkSetCode(""); return { ok: false, msg: "ההפעלה נכשלה, נסי שוב." }; }
       setProfile((p) => ({ ...p, backup: { enabled: true, email: em } }));
@@ -7630,7 +7714,7 @@ export default function App() {
     if (!email || !bkSubtle) return { ok: false, msg: "הגיבוי אינו פעיל." };
     setBkBusy(true);
     try {
-      const ok = await bkUpload(email, newCode, localStorage.getItem(STORAGE_KEY) || "", true);
+      const ok = await bkUpload(email, newCode, bkPack() || "", true);
       setBkBusy(false);
       if (!ok) return { ok: false, msg: "האיפוס נכשל, נסי שוב." };
       bkSetCode(newCode);

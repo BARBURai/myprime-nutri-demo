@@ -340,6 +340,8 @@ console.log("\nהקפאה");
   process.env.MANYCHAT_TOKEN = "test-token";
   MC.email = ""; MC.stored = ""; MC.accept = null;
   const EM = "sigal@test.com";
+  // v7.75: התאריכים כאן היו 2026, והבדיקה נפלה ביום שתאריך החזרה הגיע, 04.10.2026.
+  // הוזזו ב-52 שבועות בדיוק, כך שכל יום בשבוע נשאר במקומו.
   // A woman mid-programme. She freezes and comes back on a Sunday, to a week the office
   // chooses - not necessarily the one she left.
   CSV2 = [
@@ -348,20 +350,20 @@ console.log("\nהקפאה");
   ].join("\n");
 
   check("תאריך חזרה שאינו יום ראשון נדחה",
-    (await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-05", week: 3 } })).code === 400);
+    (await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2027-10-04", week: 3 } })).code === 400);
   check("שבוע מחוץ לטווח נדחה",
-    (await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-04", week: 11 } })).code === 400);
+    (await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2027-10-03", week: 11 } })).code === 400);
 
   MC.tags = [];
-  const r = await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-04", week: 3 }, phone: "9731", by: "רון" });
+  const r = await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2027-10-03", week: 3 }, phone: "9731", by: "רון" });
   check("ההקפאה נשמרת", r.code === 200 && r.body.ok === true, JSON.stringify(r.body));
-  // Week 3 on 04.10 means she started two weeks earlier. This one number is both what the
+  // Week 3 on 03.10.2027 means she started two weeks earlier. This one number is both what the
   // app reads and the cohort the clerk has to put her in.
   check("תאריך ההתחלה מחושב שבועיים אחורה לשבוע 3",
-    JSON.parse(store.hash["admin:overrides"][EM]).start === "2026-09-20",
+    JSON.parse(store.hash["admin:overrides"][EM]).start === "2027-09-19",
     JSON.parse(store.hash["admin:overrides"][EM]).start);
   check("ואותו תאריך הוא שנכתב למניצ'ט, ולא תאריך החזרה",
-    String(MC.stored).startsWith("2026-09-20"), String(MC.stored));
+    String(MC.stored).startsWith("2027-09-19"), String(MC.stored));
   check("תאריך ההתחלה המקורי נשמר, כדי שההיסטוריה שלה לא תיעלם",
     JSON.parse(store.hash["admin:overrides"][EM]).freeze.origStart === "2026-06-14");
   // Ron asked for the tag in both directions: freezing tags her, ending the freeze untags
@@ -370,11 +372,11 @@ console.log("\nהקפאה");
 
   const w = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
   check("הכרטיס מסמן אותה כמוקפאת", w.frozen === true);
-  check("והמחזור שטלי צריכה הוא אותו תאריך מחושב", w.backCohort === "2026-09-20", w.backCohort);
+  check("והמחזור שטלי צריכה הוא אותו תאריך מחושב", w.backCohort === "2027-09-19", w.backCohort);
 
   const acc = await callAccess(EM);
   check("בזמן ההקפאה היא לא נכנסת", acc.body.allowed === false && acc.body.reason === "frozen", JSON.stringify(acc.body));
-  check("והתאריך שהיא תראה על המסך מוחזר אליה", acc.body.back === "2026-10-04", acc.body.back);
+  check("והתאריך שהיא תראה על המסך מוחזר אליה", acc.body.back === "2027-10-03", acc.body.back);
 
   // "עוד לא יודעת" is a real answer for either half, and she has to stay visible until both
   // are filled in. A freeze that cannot resolve must never quietly let her in.
@@ -385,7 +387,7 @@ console.log("\nהקפאה");
   check("וגם בלי תאריך היא לא נכנסת", (await callAccess(EM)).body.reason === "frozen");
 
   // Date known, week not decided yet: still cannot resolve, so she waits.
-  await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2026-10-04", week: "" }, phone: "9731", by: "רון" });
+  await callAdmin({ key: KEY }, "POST", { email: EM, freeze: { back: "2027-10-03", week: "" }, phone: "9731", by: "רון" });
   const w2b = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
   check("תאריך בלי שבוע עדיין מוקפאת", w2b.frozen === true && w2b.freezeTodo === "חסר שבוע חזרה", w2b.freezeTodo);
   check("ואינה נספרת כחוזרת השבוע, כי אין לאיזה מחזור לשייך אותה", w2b.backSoon === false && !w2b.backCohort);
@@ -396,7 +398,7 @@ console.log("\nהקפאה");
   check("וסיום ההקפאה מסיר אותה", MC.tags.includes("-הקפאה"), JSON.stringify(MC.tags));
   const w3 = (await callAdmin({ key: KEY })).body.women.find((x) => x.email === EM);
   check("סיום ההקפאה מחזיר אותה פנימה", !w3.frozen && (await callAccess(EM)).body.allowed === true);
-  check("ותאריך ההתחלה שנקבע לה נשאר", JSON.parse(store.hash["admin:overrides"][EM]).start === "2026-09-20");
+  check("ותאריך ההתחלה שנקבע לה נשאר", JSON.parse(store.hash["admin:overrides"][EM]).start === "2027-09-19");
   check("שתי הפעולות נרשמו ביומן", (w3.log || []).filter((L) => L.field === "freeze").length >= 2);
 
   // **חזרה לשבוע הנוכחי ולשבועות שכבר עברו.** רון: "אני רוצה להכניס מישהי מהקפאה
@@ -517,6 +519,18 @@ console.log("\nסימון ביטול בתהליך");
   await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: false, phone: "972501111111", by: "רון" });
   check("הסרת הסימון מחזירה לה את הגישה", (await callAccess("yafit@test.com")).body.allowed === true);
   check("והכרטיס כבר לא מציג אותה כחסומה", (await callAdmin({ key: KEY })).body.women.find((x) => x.email === "yafit@test.com").blocked === false);
+
+  // v7.74: הסימון לוקח גם את היתר הצפייה בסרטונים מיד, ולא בכניסה הבאה שלה. והסרתו אינה
+  // נוגעת בהם, כי השער כותב אותם מחדש בכניסה הבאה.
+  store.kv["glow:yafit@test.com"] = "1"; store.kv["glowfull:yafit@test.com"] = "1"; store.kv["glowonly:yafit@test.com"] = "1";
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: true, phone: "972501111111", by: "רון" });
+  check("**ביטול בתהליך מוחק מיד את היתרי הצפייה של גלו**", store.kv["glow:yafit@test.com"] === undefined && store.kv["glowfull:yafit@test.com"] === undefined);
+  check("ו-glowonly נשאר, כי הוא זה שחוסם את סרטוני התוכנית", store.kv["glowonly:yafit@test.com"] === "1");
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: false, phone: "972501111111", by: "רון" });
+  store.kv["glow:yafit@test.com"] = "1";
+  await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", group: "ג", by: "רון" });
+  check("שמירה אחרת אינה נוגעת בהיתרים", store.kv["glow:yafit@test.com"] === "1");
+  delete store.kv["glow:yafit@test.com"]; delete store.kv["glowonly:yafit@test.com"];
 
   // A change to any other field must not quietly clear the block.
   await callAdmin({ key: KEY }, "POST", { email: "yafit@test.com", tag: "cancelproc", on: true, phone: "972501111111", by: "רון" });
