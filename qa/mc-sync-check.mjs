@@ -328,5 +328,43 @@ MCAPI.mode = "ok";
 const shira = await login("shira@test.com");
 ck("והשער עדיין עונה לפי הגיליון בלבד", shira.allowed === false, strip(shira));
 
+// ============================================================
+console.log("\nאותו טלפון פעמיים בגיליון: הייבוא בוחר כמו השער. v7.80\n");
+// **מהשוואה אמיתית, 04.10.2026:** שש נשים על שתי שורות עם אותו טלפון ואותו מייל. הייבוא
+// שמר את התחתונה, והשער בוחר את תאריך ההתחלה המאוחר, ובתיקו את הראשונה.
+const newer = sunday, old2 = older;
+SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,GLOW-FULL,בונוס איפור,GLOW-PAID
+972507000001,א,dupa@test.com,${newer} 12:00:00,FALSE,,TRUE,,
+972507000001,א,dupa@test.com,${old2} 12:00:00,FALSE,,,,
+972507000002,ב,dupb@test.com,${newer} 12:00:00,FALSE,,,TRUE,
+972507000002,ב,dupb@test.com,${newer} 12:00:00,FALSE,,,,
+972507000003,ג,dupc@test.com,${newer} 12:00:00,FALSE,,,,
+972507000003,ג,dupc@test.com,${old2} 12:00:00,TRUE,,,,
+972507000004,ד,dupd@test.com,${newer} 12:00:00,FALSE,,,,
+972507000004,ד,dupd@test.com,,FALSE,,TRUE,,
+972507000005,ה,dupe@test.com,${old2} 12:00:00,FALSE,,,,
+972507000005,ה,dupe@test.com,${newer} 12:00:00,FALSE,,TRUE,,
+972507000006,ו,dupf@test.com,${newer} 12:00:00,FALSE,,TRUE,,
+972507000006,ו,dupf@test.com,${old2} 12:00:00,FALSE,,TRUE,,TRUE
+`;
+delete S["sheet:csv:v1"];
+const [dio, dires] = resOf();
+await admin({ method: "POST", query: { key: "owner-key-123" }, headers: {}, body: { mcImport: true } }, dires);
+ck("הייבוא רץ", dio.code === 200 && dio.body.ok, strip(dio.body));
+const dc = (n) => JSON.parse(H["mc:rows"]["97250700000" + n]).cells;
+ck("**התאריך המאוחר מנצח, עם GLOW-FULL שלו**, גם כשהוא השורה העליונה", dc(1)[START].startsWith(newer) && dc(1)["GLOW-FULL"] === "TRUE", strip(dc(1)));
+ck("**בתיקו הראשונה מנצחת**, ואיתה הבונוס", dc(2)["בונוס איפור"] === "TRUE", strip(dc(2)));
+ck("**ביטול נספר מכל השורות**, גם מהשורה שהפסידה", dc(3)[START].startsWith(newer) && dc(3)["ביטלה"] === "TRUE", strip(dc(3)));
+ck("שורה בלי תאריך לעולם אינה מנצחת", dc(4)[START].startsWith(newer) && dc(4)["GLOW-FULL"] === "", strip(dc(4)));
+ck("כשהמאוחרת היא התחתונה, היא מנצחת", dc(5)[START].startsWith(newer) && dc(5)["GLOW-FULL"] === "TRUE", strip(dc(5)));
+ck("GLOW-PAID נספר מכל השורות, כמו בשער", dc(6)["GLOW-PAID"] === "TRUE" && dc(6)[START].startsWith(newer), strip(dc(6)));
+for (const n of [1, 2, 3, 4, 5, 6]) {
+  const e = "dup" + "abcdef"[n - 1] + "@test.com";
+  const sh0 = Object.assign({}, shadow()), d0 = (L["mc:diffs"] || []).length;
+  const r = await login(e);
+  const sh1 = shadow();
+  ck(`**${e}: השער רושם זהות מול השרת, ובלי פער**`, Number(sh1.same || 0) === Number(sh0.same || 0) + 1 && (L["mc:diffs"] || []).length === d0, strip({ r: r && r.allowed, sh0, sh1, last: (L["mc:diffs"] || [])[0] }));
+}
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);
