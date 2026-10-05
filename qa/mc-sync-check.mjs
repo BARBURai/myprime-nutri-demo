@@ -285,6 +285,18 @@ ck("ועמודת כן או לא בלי תגית נרשמת ריקה", c1["צמי
 MCAPI.tags["555"] = ["GLOW- DEMO 💄", "אפליקציה תזונה", "GLOW-FULL"];
 await push(realBody({}));
 ck("**תגית שהוסרה במניצ'ט מתרוקנת**", cellsOf("972508888888")["ביטלה"] === "", strip(cellsOf("972508888888")));
+// v7.79: התגית האמיתית במניצ'ט היא "GLOW-FULL💄💄💄", ונמצאה בהשוואה של 04.10.2026
+MCAPI.tags["555"] = ["GLOW-FULL💄💄💄"];
+await push(realBody({}));
+const gf = cellsOf("972508888888");
+ck("**\"GLOW-FULL💄💄💄\" נכנסת לעמודה GLOW-FULL**", gf["GLOW-FULL"] === "TRUE", strip(gf));
+ck("ואינה יוצרת עמודה משלה", !Object.keys(gf).some((k) => k !== "GLOW-FULL" && k.startsWith("GLOW-FULL")), strip(gf));
+MCAPI.tags["555"] = ["GLOW-FULL-M"];
+await push(realBody({}));
+ck("**\"GLOW-FULL-M\" נשארת נפרדת ואינה נקראת כ-GLOW-FULL**", cellsOf("972508888888")["GLOW-FULL"] === "", strip(cellsOf("972508888888")));
+MCAPI.tags["555"] = ["SOLO10WEEK ⭐", "glow-solo"];
+await push(realBody({}));
+ck("קישוט ואותיות קטנות בתגית של עמודת כן או לא", cellsOf("972508888888")["SOLO10WEEK"] === "TRUE" && cellsOf("972508888888")["GLOW-SOLO"] === "TRUE", strip(cellsOf("972508888888")));
 MCAPI.tags["555"] = ["360 ביטלה ❌❌❌", "GLOW-FULL"];
 await push(realBody({}));
 const beforeFail = cellsOf("972508888888");

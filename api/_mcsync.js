@@ -127,6 +127,11 @@ const sheetName = (name) => ALIAS[aliasKey(name)] || String(name).trim();
 // פירושה שהתגית אינה עליה.
 const FLAG_COLS = ["ביטלה", "הורידה אפליקציה", "אישור תאריך התחלה", "צמיד", "בונוס איפור", "אפליקציית תזונה",
   "SOLO6", "SOLO12", "SOLO10WEEK", "GLOW-FULL", "GLOW-PAID", "GLOW-SOLO"];
+// **תגית ששמה הוא שם העמודה עם קישוט**, למשל "GLOW-FULL💄💄💄", נכנסת לעמודה עצמה. v7.79.
+// נמצא בהשוואה של 04.10.2026: 46 פערים של GLOW-FULL, כולם מהתגית הזאת. **לתגיות בלבד**,
+// ו-"GLOW-FULL-M" נשארת נפרדת כי יש בה אות נוספת.
+const FLAG_ALIAS = Object.fromEntries(FLAG_COLS.map((c) => [aliasKey(c), c]));
+const tagCol = (name) => ALIAS[aliasKey(name)] || FLAG_ALIAS[aliasKey(name)] || String(name).trim();
 const flatVal = (v) => (v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)).slice(0, 500);
 export function fromFullContact(b) {
   const cells = {};
@@ -140,7 +145,7 @@ export function fromFullContact(b) {
   const tags = [];
   for (const t of b.tags) {
     const name = String(t && typeof t === "object" ? t.name || "" : t || "").trim();
-    if (name && name.length <= 80) { const col = sheetName(name); tags.push(col); cells[col] = "TRUE"; }
+    if (name && name.length <= 80) { const col = tagCol(name); tags.push(col); cells[col] = "TRUE"; }
   }
   for (const c of FLAG_COLS) if (cells[c] === undefined) cells[c] = "";
   return finishCells(cells, b, tags);
