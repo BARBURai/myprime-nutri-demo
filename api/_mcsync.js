@@ -15,6 +15,8 @@
 //   mc:shadow:<תאריך>  same · diff · onlySheet · onlyMc
 //   mc:diffs     200 הפערים האחרונים, לבדיקה
 
+import { findCol, parseDateToSunday } from "./_sheet.js";
+
 export const MC_ROWS = "mc:rows";
 export const MC_BYEMAIL = "mc:byemail";
 export const MC_STATS = "mc:stats";
@@ -127,6 +129,11 @@ const sheetName = (name) => ALIAS[aliasKey(name)] || String(name).trim();
 // פירושה שהתגית אינה עליה.
 const FLAG_COLS = ["ביטלה", "הורידה אפליקציה", "אישור תאריך התחלה", "צמיד", "בונוס איפור", "אפליקציית תזונה",
   "SOLO6", "SOLO12", "SOLO10WEEK", "GLOW-FULL", "GLOW-PAID", "GLOW-SOLO"];
+// **תגית ששמה הוא שם העמודה עם קישוט**, למשל "GLOW-FULL💄💄💄", נכנסת לעמודה עצמה. v7.79.
+// נמצא בהשוואה של 04.10.2026: 46 פערים של GLOW-FULL, כולם מהתגית הזאת. **לתגיות בלבד**,
+// ו-"GLOW-FULL-M" נשארת נפרדת כי יש בה אות נוספת.
+const FLAG_ALIAS = Object.fromEntries(FLAG_COLS.map((c) => [aliasKey(c), c]));
+const tagCol = (name) => ALIAS[aliasKey(name)] || FLAG_ALIAS[aliasKey(name)] || String(name).trim();
 const flatVal = (v) => (v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)).slice(0, 500);
 export function fromFullContact(b) {
   const cells = {};
@@ -140,7 +147,7 @@ export function fromFullContact(b) {
   const tags = [];
   for (const t of b.tags) {
     const name = String(t && typeof t === "object" ? t.name || "" : t || "").trim();
-    if (name && name.length <= 80) { const col = sheetName(name); tags.push(col); cells[col] = "TRUE"; }
+    if (name && name.length <= 80) { const col = tagCol(name); tags.push(col); cells[col] = "TRUE"; }
   }
   for (const c of FLAG_COLS) if (cells[c] === undefined) cells[c] = "";
   return finishCells(cells, b, tags);
@@ -287,6 +294,9 @@ export async function status(RU, RT, days) {
 export function rowsFromSheet(text, parseCsvLine) {
   const lines = String(text || "").split(/\r?\n/);
   const header = parseCsvLine(lines[0] || "").map((h) => String(h).trim());
+  const col = (names) => { const i = findCol(header, names); return i === -1 ? "" : header[i]; };
+  const startCol = col(["360 - FINAL PERSONAL START", "FINAL PERSONAL START", "PERSONAL START"]);
+  const ANY_COLS = [col(["ביטלה"]), col(["GLOW-PAID"]), col(["GLOW-SOLO"])];
   const out = {};
   for (let i = 1; i < lines.length; i++) {
     if (!lines[i].trim()) continue;
@@ -294,9 +304,32 @@ export function rowsFromSheet(text, parseCsvLine) {
     const cells = {};
     header.forEach((h, j) => { if (h) cells[h] = vals[j] == null ? "" : String(vals[j]); });
     const phone = phoneOf(cells);
-    if (phone) out[phone] = cells; // אותו טלפון פעמיים: המאוחרת, כמו בגיליון
+    if (!phone) continue;
+    const prev = out[phone];
+    if (!prev) { out[phone] = cells; continue; }
+    // **אותו טלפון פעמיים: אותו כלל של השער** (`summarize` ב-`api/access.js`). v7.80.
+    // עד כאן נשמרה השורה התחתונה בקובץ, ובהשוואה של 04.10.2026 שש נשים נראו בשרת
+    // עם השורה הישנה. **המנצחת היא תאריך ההתחלה המאוחר, ובתיקו הראשונה**, וביטול,
+    // GLOW-PAID ו-GLOW-SOLO נספרים מכל השורות, כמו בשער.
+    const win = laterStart(sunOf(cells, startCol), sunOf(prev, startCol)) ? Object.assign({}, cells) : prev;
+    const lose = win === prev ? cells : prev;
+    for (const c of ANY_COLS) if (c && isTrueCell(lose[c]) && !isTrueCell(win[c])) win[c] = lose[c];
+    out[phone] = win;
   }
   return out;
+}
+const isTrueCell = (v) => /^\s*true\s*$/i.test(String(v || ""));
+// התאריך נשלף כמו בשער: מתוך התא, ואם הוא ריק, מתוך שאר השורה.
+const DATE_IN = /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/;
+function sunOf(cells, startCol) {
+  let raw = startCol && cells[startCol] ? (String(cells[startCol]).match(DATE_IN) || [])[0] : null;
+  if (!raw) raw = (Object.values(cells).join(",").match(DATE_IN) || [])[0];
+  return raw ? parseDateToSunday(raw) : null;
+}
+// המאוחרת מנצחת רק כשהיא מאוחרת ממש, ושורה בלי תאריך לעולם אינה מנצחת. בדיוק `summarize`.
+function laterStart(sa, sb) {
+  if (!sa) return false;
+  return !sb || sa.getTime() > sb.getTime();
 }
 export async function importSheet(text, parseCsvLine, RU, RT, now = Date.now()) {
   const sheetRows = rowsFromSheet(text, parseCsvLine);
