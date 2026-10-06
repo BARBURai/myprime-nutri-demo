@@ -18,6 +18,7 @@
 // GET  /api/admin?key=<ADMIN_KEY>              -> { ok, women[], headers, today }
 // POST /api/admin?key=<ADMIN_KEY>              -> { email, until, by }   ("" clears it)
 
+import { gzipSync } from "node:zlib";
 import { decideAccess } from "./_product.js";
 import { loadSheet, israelDay, accessEnd, ymd, fetchSheetText, parseCsvLine } from "./_sheet.js";
 import { KB } from "./_kb.js";
@@ -39,7 +40,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.81";
+const ADMIN_VERSION = "7.82";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1426,5 +1427,35 @@ JSON בלבד, בלי שום טקסט אחר:
   women.forEach((w) => { if (w.dupRows > 1 || (w.dupPhone && w.dupPhone.length)) markIgnore("dup", w.email, w); });
   noEmail.forEach((r) => markIgnore("mail", r.phone, r));
 
-  return res.status(200).json({ ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, aiLimits: { photos: PHOTO_LIMIT, day: DAILY_LIMIT }, women, notesTotal, notesOff, noEmail });
+  const listBody = { ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, aiLimits: { photos: PHOTO_LIMIT, day: DAILY_LIMIT }, women, notesTotal, notesOff, noEmail };
+  return sendList(req, res, listBody);
+}
+
+// ===== הרשימה יוצאת דחוסה. v7.82 =====
+//
+// **התשובה הזאת נושאת כל אישה בגיליון**, כולל קג'אבי. נמדד על הגיליון והנתונים האמיתיים,
+// שלוש פעמים, 06.10.2026: **2,570,514 בתים ל-2,553 נשים**, כ-1,000 לאישה. **ולוורסל יש
+// תקרה של 4.5MB לתשובה של פונקציה** (אומת בתיעוד שלהם, FUNCTION_PAYLOAD_TOO_LARGE), כלומר
+// המסך היה מפסיק להיטען בסביבות 4,400 נשים.
+//
+// **דחוסה היא 132,863 בתים, פי 19 פחות, ב-20 עד 30 אלפיות שנייה.** הדפדפן פותח אותה לבד,
+// כמו כל אתר, ולכן המסך עצמו לא השתנה. **דפדפן שלא ביקש דחיסה מקבל אותה כמו קודם**, וכל
+// תקלה בדחיסה נופלת לתשובה הרגילה.
+//
+// **מה שלא נמדד:** שוורסל סופרת את הגודל אחרי הדחיסה. זו הערכה, כי התקרה היא על מה
+// שהפונקציה שולחת. **ומה שזה אינו פותר:** הרשימה עדיין גדלה עם כל אישה. הפתרון לטווח ארוך
+// הוא שהמסך יבקש רק את מה שהוא מציג.
+function sendList(req, res, body) {
+  const accept = String((req.headers && (req.headers["accept-encoding"] || req.headers["Accept-Encoding"])) || "");
+  if (/\bgzip\b/i.test(accept) && typeof res.setHeader === "function" && typeof res.end === "function") {
+    try {
+      const buf = gzipSync(JSON.stringify(body));
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Encoding", "gzip");
+      res.setHeader("Vary", "Accept-Encoding");
+      res.statusCode = 200;
+      return res.end(buf);
+    } catch (e) { /* נופל לתשובה הרגילה */ }
+  }
+  return res.status(200).json(body);
 }

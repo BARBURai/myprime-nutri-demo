@@ -16,7 +16,7 @@
 //     UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Vercel env -> Redeploy.
 
 import { decideAccess } from "./_product.js";
-import { fetchSheetText } from "./_sheet.js";
+import { fetchSheetText, findCols, SMART_COLS } from "./_sheet.js";
 import { MC_BYEMAIL, MC_DIFFS, mcShadowKey, diffFields } from "./_mcsync.js";
 // ===== תקרת המתנה ל-Upstash, 3 שניות לפנייה. v7.45 =====
 //
@@ -166,6 +166,10 @@ async function mcShadow(redis, RU, RT, email, header, sheetHits, hitFromCells, r
   const mcHits = Object.values(map).map((row) => {
     const byNorm = {};
     for (const [k, v] of Object.entries(row || {})) byNorm[normHeader(k)] = v;
+    // **SMART ו-SOLO10WEEK הם אותה עמודה בזמן המעבר. v7.82.** תגית ששמה SMART חייבת להיספר
+    // גם כשכותרת הגיליון עדיין SOLO10WEEK, ולהפך, אחרת כל אחת מהן תירשם כפער.
+    const smart = SMART_COLS.map(normHeader).find((h) => /^\s*true\s*$/i.test(String(byNorm[h] || "")));
+    if (smart) SMART_COLS.forEach((c) => { byNorm[normHeader(c)] = byNorm[smart]; });
     const cells = hn.map((h) => (byNorm[h] == null ? "" : String(byNorm[h])));
     return hitFromCells(cells, cells.join(","));
   });
@@ -250,7 +254,7 @@ export default async function handler(req, res) {
     // If headers are found, we read those exact columns; otherwise we fall back
     // to the old permissive scan so the gate keeps working on an unexpected sheet.
     let cancelCol = -1, startCol = -1, monthsCol = -1, phoneCol = -1, glowCol = -1, glowFullCol = -1, emailCol = -1, headerFound = false;
-    let solo6Col = -1, solo12Col = -1, solo10wCol = -1, glowFullMCol = -1, glowPaidCol = -1, glowSoloCol = -1;
+    let solo6Col = -1, solo12Col = -1, solo10wCols = [], glowFullMCol = -1, glowPaidCol = -1, glowSoloCol = -1;
     if (lines.length) {
       const header = parseCsvLine(lines[0]);
       cancelCol = findCol(header, ["ביטלה"]);
@@ -281,7 +285,8 @@ export default async function handler(req, res) {
       solo6Col = findCol(header, ["SOLO6"]);
       solo12Col = findCol(header, ["SOLO12"]);
       // 10 שבועות ולא חודשים, ולכן הערך שלה הוא 10 והחלון נסגר ביום 70. v7.47.
-      solo10wCol = findCol(header, ["SOLO10WEEK"]);
+      // **SMART או SOLO10WEEK, אחת מהן מספיקה. v7.82.** ראה SMART_COLS ב-_sheet.js.
+      solo10wCols = findCols(header, SMART_COLS);
       // Read the same column the office screen reads, so the two can never disagree about
       // who a row belongs to.
       emailCol = findCol(header, ["CF_EMAIL", "מייל", "email", "אימייל"]);
@@ -312,7 +317,7 @@ export default async function handler(req, res) {
       }
       if (solo12Col !== -1 && isYes(cells[solo12Col])) hit.solo = 12;
       else if (solo6Col !== -1 && isYes(cells[solo6Col])) hit.solo = 6;
-      else if (solo10wCol !== -1 && isYes(cells[solo10wCol])) hit.solo = 10;
+      else if (solo10wCols.some((i) => isYes(cells[i]))) hit.solo = 10;
 
       // Start date: prefer the exact column; else first date-looking token in the row.
       let raw = null;

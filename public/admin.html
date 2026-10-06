@@ -1116,8 +1116,9 @@ function teamBlock(){
 // החלטת רון: תג לא יורד, כי צריך לדעת באיזו תוכנית היא הייתה. הביטול הוא תג
 // נוסף לצידו ולא במקומו.
 function progPill(w){
-  // הערך 10 הוא עשרה שבועות ולא חודשים, עמודה SOLO10WEEK. v7.47.
-  if(w.solo===10) return '<span class="grp solopill">סולו 10 שבועות</span>';
+  // הערך 10 הוא עשרה שבועות ולא חודשים, עמודה SMART או SOLO10WEEK. v7.47.
+  // **נקרא SMART מ-v7.82**, החלטת רון: באנגלית, כמו התג במניצ'ט.
+  if(w.solo===10) return '<span class="grp solopill">SMART</span>';
   if(w.solo) return '<span class="grp solopill">סולו '+w.solo+'</span>';
   return '<span class="grp p360pill">360</span>';
 }
@@ -1353,7 +1354,7 @@ function render(){
           '<option value="360"'+(PROG==="360"?" selected":"")+'>360 ('+n360+')</option>'+
           '<option value="6"'+(PROG==="6"?" selected":"")+'>סולו 6 ('+nS6+')</option>'+
           '<option value="12"'+(PROG==="12"?" selected":"")+'>סולו 12 ('+nS12+')</option>'+
-          '<option value="10w"'+(PROG==="10w"?" selected":"")+'>סולו 10 שבועות ('+nS10w+')</option>'+
+          '<option value="10w"'+(PROG==="10w"?" selected":"")+'>SMART ('+nS10w+')</option>'+
         '</select></span>')+
         // הבורר הזה מוצג גם ב"חסרות קבוצה", כי מ-v6.69 הוא מסנן אותה. בלעדיו
         // אי אפשר היה להחזיר משם את מי שאינה באפליקציה החדשה.
