@@ -16,7 +16,7 @@
 //     UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Vercel env -> Redeploy.
 
 import { decideAccess } from "./_product.js";
-import { fetchSheetText, findCols, SMART_COLS } from "./_sheet.js";
+import { fetchSheetText, findCols, SMART_COLS, accessEnd } from "./_sheet.js";
 import { MC_BYEMAIL, MC_DIFFS, mcShadowKey, diffFields } from "./_mcsync.js";
 // ===== תקרת המתנה ל-Upstash, 3 שניות לפנייה. v7.45 =====
 //
@@ -175,16 +175,52 @@ async function mcShadow(redis, RU, RT, email, header, sheetHits, hitFromCells, r
   });
   const a = summarize(sheetHits), b = summarize(mcHits);
   let cat;
+  const out = mcHits;
   if (a && b) cat = Object.keys(diffFields(a, b)).length ? "diff" : "same";
   else if (a) cat = "onlySheet";
   else if (b) cat = "onlyMc";
-  else return;
+  else return out;
   const cmds = [["HINCRBY", mcShadowKey(israelDay(0)), cat, 1]];
   if (cat === "diff" || cat === "onlyMc") {
     cmds.push(["LPUSH", MC_DIFFS, JSON.stringify({ t: Date.now(), email, cat, fields: a && b ? diffFields(a, b) : null })]);
     cmds.push(["LTRIM", MC_DIFFS, 0, 199]);
   }
-  await redis.pipe(RU, RT, cmds);
+  try { await redis.pipe(RU, RT, cmds); } catch (e) { /* רישום שנכשל אינו מבטל את מה שנקרא */ }
+  return out;
+}
+
+// ============================================================================
+// **שלב א של המעבר לשרת. v7.84.** אישור רון: "מאשר את שניהם, תתקן ותבנה בדב".
+//
+// מה שהשרת יודע עליה (`mc:byemail`, שמניצ'ט מזין ישירות) נכנס להכרעה, **אבל בשלב
+// הזה הוא יכול רק להוסיף ולעולם לא לקחת:**
+//
+// | מה | הכלל |
+// |---|---|
+// | **אינה בגיליון ונמצאת בשרת** | **לא נכנסת, כמו היום.** נמדד ב-06.10.2026: 935 כתובות בשרת שאינן בגיליון, 928 מהן בלי תאריך התחלה (משתתפות וובינר ולידים), ובלי תאריך השער רואה "רשומה שממתינה למחזור". 777 היו נכנסות. ואחת שהמשרד הוסיף ביד הייתה ננעלת, כי מהשורה שלה בשרת נשלף תאריך אחר |
+// | **ביטול** | של הגיליון, בדיוק כמו היום. ביטול בשרת בלבד אינו נועל, ושרת אינו מבטל ביטול |
+// | **בונוס, קורס מלא, קנייה, הטבת סולו** | מספיק שאחד מהם אומר כן |
+// | **חודשים נוספים וחודשי קורס** | הגבוה מבין השניים |
+// | **מסלול סולו** | זה שנותן חלון ארוך יותר |
+// | **תאריך התחלה** | **של הגיליון בלבד** |
+//
+// **למה המקלה:** שורה ישנה בשרת לא יכולה לנעול אישה או לקחת לה קורס. נמדד ב-06.10.2026:
+// ארבע שורות ישנות היו לוקחות את הקורס המלא. **המחיר:** ביטול שנעשה במניצ'ט ועוד לא
+// הגיע לגיליון חל רק כשהוא מגיע לגיליון, וזה בדיוק המצב היום. **תקלה בשרת, או שאין בו
+// אותה, משאירה את הגיליון לבד**, כלומר את ההתנהגות של היום.
+// ============================================================================
+export function mergeServer(sheet, server, endOf) {
+  if (!server || !sheet) return sheet;
+  const m = { ...sheet };
+  // **ביטול בגיליון נשאר ביטול.** שורה ישנה בשרת, שנשמרה לפני שבוטלה, לא תכניס אותה. v7.84.
+  m.cancelled = !!sheet.cancelled;
+  for (const k of ["glow", "glowFull", "glowPaid", "glowSolo"]) m[k] = !!(sheet[k] || server[k]);
+  for (const k of ["months", "glowM"]) { const a = sheet[k] || 0, b = server[k] || 0; m[k] = Math.max(a, b) || null; }
+  if (sheet.solo !== server.solo && m.start) {
+    const ea = endOf(m.start, m.months, sheet.solo), eb = endOf(m.start, m.months, server.solo);
+    m.solo = eb > ea ? server.solo : sheet.solo;
+  }
+  return m;
 }
 
 // Max concurrent devices per email: a phone and a computer. 0 (or less) = no limit.
@@ -364,8 +400,9 @@ export default async function handler(req, res) {
 
     // **ההשוואה מול מניצ'ט. v7.65.** רק כשהעדכון הישיר מוגדר (`MC_SYNC_SECRET`), ורק כרישום:
     // **שום דבר כאן אינו משנה את התשובה לאישה**, וכל תקלה נבלעת. ראה `api/_mcsync.js`.
+    let serverHits = null;
     if (mcOn && !redis.stalled() && lines.length) {
-      try { await mcShadow(redis, RU, RT, lookFor, parseCsvLine(lines[0]), hits, hitFromCells, mcRawP); } catch (e) {}
+      try { serverHits = await mcShadow(redis, RU, RT, lookFor, parseCsvLine(lines[0]), hits, hitFromCells, mcRawP); } catch (e) { serverHits = null; }
     }
 
     if (hits.length) {
@@ -391,6 +428,17 @@ export default async function handler(req, res) {
       solo = win.solo;
       extraMonths = win.months;
       glowMonths = win.glowM;
+    }
+    // שלב א: השרת מוסיף ולעולם אינו לוקח. ראה `mergeServer`.
+    if (serverHits && serverHits.length && hits.length) {
+      const sv = summarize(serverHits);
+      const sh = hits.length ? { start: (startStr && parseDateToSunday(startStr)) ? ymd(parseDateToSunday(startStr)) : null, cancelled, months: extraMonths, solo, glow, glowFull, glowPaid, glowSolo, glowM: glowMonths } : null;
+      const endOf = (st, mo, so) => { const d = parseDateToSunday(st); return d ? accessEnd(d, mo, so).getTime() : 0; };
+      const m = mergeServer(sh, sv, endOf);
+      if (m) {
+        cancelled = m.cancelled; extraMonths = m.months; solo = m.solo;
+        glow = m.glow; glowFull = m.glowFull; glowPaid = m.glowPaid; glowSolo = m.glowSolo; glowMonths = m.glowM;
+      }
     }
   } catch (e) {
     return res.status(200).json({ allowed: false, reason: "fetch_failed", configured: true });

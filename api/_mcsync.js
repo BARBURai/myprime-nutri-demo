@@ -67,6 +67,29 @@ export function diffFields(a, b) {
   return out;
 }
 
+// **כל השורות בשרת, בעמודים ולא בבקשה אחת. v7.84.** ב-06.10.2026 `mc:rows` עבר את 10MB
+// (11,206,739 בתים, 3,495 שורות), ו-Upstash ענה על HGETALL ב-200 עם שגיאה בפנים. `rpost` קרא
+// את זה כ"אין שורות", **והייבוא היה דורס את כל 964 השורות שהגיעו ממניצ'ט.** כאן כל תשובה
+// שאינה תקינה זורקת, והייבוא נכשל לפני שהוא כותב משהו.
+export async function scanHash(RU, RT, key) {
+  const out = {};
+  let cursor = "0", guard = 0;
+  do {
+    const r = await fetch(RU, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RT}`, "content-type": "application/json" },
+      body: JSON.stringify(["HSCAN", key, cursor, "COUNT", "500"]),
+    });
+    if (!r.ok) throw new Error("redis " + r.status);
+    const d = await r.json();
+    if (!d || d.error || !Array.isArray(d.result) || !Array.isArray(d.result[1])) throw new Error("redis scan " + ((d && d.error) || "bad"));
+    cursor = String(d.result[0]);
+    const a = d.result[1];
+    for (let i = 0; i < a.length; i += 2) out[a[i]] = a[i + 1];
+    if (++guard > 10000) throw new Error("redis scan loop");
+  } while (cursor !== "0");
+  return out;
+}
 async function rpost(RU, RT, cmd) {
   const r = await fetch(RU, {
     method: "POST",
@@ -134,6 +157,19 @@ const FLAG_COLS = ["ביטלה", "הורידה אפליקציה", "אישור ת
 // ו-"GLOW-FULL-M" נשארת נפרדת כי יש בה אות נוספת.
 const FLAG_ALIAS = Object.fromEntries(FLAG_COLS.map((c) => [aliasKey(c), c]));
 const tagCol = (name) => ALIAS[aliasKey(name)] || FLAG_ALIAS[aliasKey(name)] || String(name).trim();
+// תגית שנשמרה בשם של עמודת כן או לא עם קישוט עוברת לעמודה עצמה. TRUE גובר, ושום עמודה אחרת
+// אינה נוגעת. מחזיר null כשאין מה לסדר, כדי שהייבוא לא יכתוב שורה שלא השתנתה. v7.84.
+export function normalizeFlagKeys(cells) {
+  let out = null;
+  for (const k of Object.keys(cells)) {
+    const col = FLAG_ALIAS[aliasKey(k)];
+    if (!col || col === k) continue;
+    out = out || { ...cells };
+    if (isTrueCell(out[k]) || !(col in out)) out[col] = isTrueCell(out[k]) ? "TRUE" : (out[col] || "");
+    delete out[k];
+  }
+  return out;
+}
 const flatVal = (v) => (v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)).slice(0, 500);
 export function fromFullContact(b) {
   const cells = {};
@@ -195,6 +231,23 @@ export async function fetchTags(id) {
   finally { clearTimeout(timer); }
 }
 
+// ===== מי נשמרת בשרת. v7.85 =====
+//
+// **06.10.2026: כ-930 לידים נכנסו לשרת**, דרך טריגר על שינוי מייל שירה גם על מי שנרשמה
+// לוובינר. רון הסיר אותו, וזו רשת הביטחון: **נשמרת רק מי שיש לה תאריך התחלה של 360, או
+// סימן של קנייה בלי 360**, כדי שקונת Glow לבדו לא תיפול. בגיליון 2,633 מתוך 2,635 נשים עם
+// מייל נושאות תאריך התחלה. **השדה המדויק בלבד**: בשורה ממניצ'ט יש עשרה שדות תאריך
+// אחרים (EAT, אתגר פיט, Next Start), וליד נושא אותם.
+const START_KEY = "360 - final personal start";
+const PRODUCT_COLS = ["GLOW-FULL", "GLOW-SOLO", "GLOW-PAID", "SMART", "SOLO10WEEK", "SOLO6", "SOLO12"];
+export function isMember(cells) {
+  if (!cells) return false;
+  const sk = Object.keys(cells).find((k) => norm(k) === START_KEY);
+  if (sk && DATE_IN.test(String(cells[sk] || ""))) return true;
+  return PRODUCT_COLS.some((c) => isTrueCell(cells[c]));
+}
+export const MC_PRUNED = "mc:pruned";
+
 // קליטת שורה אחת ממניצ'ט.
 export async function ingest(body, RU, RT, now = Date.now()) {
   let raw = body;
@@ -217,6 +270,11 @@ export async function ingest(body, RU, RT, now = Date.now()) {
   if (!phone) return { status: 400, json: { ok: false, error: "no_phone" } };
   const prev = parseJson(await rpost(RU, RT, ["HGET", MC_ROWS, phone]), null);
   const cells = Object.assign({}, prev && prev.cells, inc);
+  // ליד אינו נשמר, ומה שכבר שמור עליה לא נוגע. v7.85.
+  if (!isMember(cells)) {
+    try { await rpost(RU, RT, ["HINCRBY", MC_STATS, "skipped", 1]); } catch (e) {}
+    return { status: 200, json: { ok: true, skipped: "not_member", phone } };
+  }
   // בנתונים המלאים כל התגיות מגיעות, ולכן תגית שהייתה ואינה עכשיו הוסרה במניצ'ט.
   if (tags && prev && Array.isArray(prev.tags)) for (const t of prev.tags) if (!tags.includes(t)) cells[t] = "";
   const oldEmail = prev ? emailOf(prev.cells) : "";
@@ -333,11 +391,41 @@ function laterStart(sa, sb) {
 }
 export async function importSheet(text, parseCsvLine, RU, RT, now = Date.now()) {
   const sheetRows = rowsFromSheet(text, parseCsvLine);
-  const cur = await rpost(RU, RT, ["HGETALL", MC_ROWS]);
+  const cur = await scanHash(RU, RT, MC_ROWS);
   const rows = {};
-  if (Array.isArray(cur)) for (let i = 0; i < cur.length; i += 2) rows[cur[i]] = parseJson(cur[i + 1], null);
+  for (const [phone, raw] of Object.entries(cur)) rows[phone] = parseJson(raw, null);
   let imported = 0, keptMc = 0;
   const writes = [];
+  // **שורה ממניצ'ט שנשמרה לפני v7.79 נושאת תגית בשם הישן**, למשל "GLOW-FULL💄💄💄" במקום
+  // GLOW-FULL, ואינה מתעדכנת עד שמניצ'ט שולח עליה שוב. v7.84: הייבוא מסדר אותה, בלי לדרוס
+  // דבר ממה שהגיע ממניצ'ט. נמצא ב-06.10.2026: 17 שורות, וארבע מהן היו מאבדות את הקורס.
+  let renamed = 0;
+  for (const [phone, rec] of Object.entries(rows)) {
+    if (!rec || rec.src !== "mc" || !rec.cells) continue;
+    const fixed = normalizeFlagKeys(rec.cells);
+    if (!fixed) continue;
+    rows[phone] = { ...rec, cells: fixed };
+    writes.push(phone, JSON.stringify(rows[phone]));
+    renamed++;
+  }
+  // **לידים שנכנסו לפני v7.85 יוצאים מהשרת, לבקשת רון.** רק מי שאינה קונה (`isMember`) ואינה
+  // בגיליון, לפי טלפון וגם לפי מייל. **קודם עותק ל-mc:pruned ורק אז הסרה**, וגיליון ריק אינו מסיר כלום.
+  const sheetEmails = new Set(Object.values(sheetRows).map((c) => emailOf(c)).filter(Boolean));
+  const prune = [];
+  if (Object.keys(sheetRows).length) {
+    for (const [phone, rec] of Object.entries(rows)) {
+      if (!rec || !rec.cells || sheetRows[phone] || isMember(rec.cells)) continue;
+      const e = emailOf(rec.cells);
+      if (e && sheetEmails.has(e)) continue;
+      prune.push(phone);
+    }
+  }
+  for (let i = 0; i < prune.length; i += 100) {
+    const part = prune.slice(i, i + 100);
+    await rpost(RU, RT, ["HSET", MC_PRUNED, ...part.flatMap((p) => [p, cur[p]])]);
+  }
+  for (let i = 0; i < prune.length; i += 400) await rpost(RU, RT, ["HDEL", MC_ROWS, ...prune.slice(i, i + 400)]);
+  for (const p of prune) delete rows[p];
   for (const [phone, cells] of Object.entries(sheetRows)) {
     const prev = rows[phone];
     if (prev && prev.src === "mc") { keptMc++; continue; }
@@ -358,7 +446,9 @@ export async function importSheet(text, parseCsvLine, RU, RT, now = Date.now()) 
   for (let i = 0; i < flat.length; i += 400) await rpost(RU, RT, ["HSET", tmp, ...flat.slice(i, i + 400)]);
   if (flat.length) await rpost(RU, RT, ["RENAME", tmp, MC_BYEMAIL]);
   try {
-    await rpost(RU, RT, ["HSET", MC_STATS, "imported", String(imported), "importedAt", String(now)]);
+    // "התקבלו X נשים" במסך הניהול סופר שורות ממניצ'ט, ואחרי ההוצאה הוא נספר מחדש. v7.85.
+    const fromMc = Object.values(rows).filter((r) => r && r.src === "mc").length;
+    await rpost(RU, RT, ["HSET", MC_STATS, "imported", String(imported), "importedAt", String(now), "fromMc", String(fromMc)]);
   } catch (e) {}
-  return { imported, keptMc, total: Object.keys(sheetRows).length };
+  return { imported, keptMc, renamed, pruned: prune.length, total: Object.keys(sheetRows).length };
 }
