@@ -37,6 +37,18 @@ export function findCol(headerCells, names) {
   return -1;
 }
 
+// **מסלול 10 השבועות נקרא SMART מ-v7.82**, ולפני כן SOLO10WEEK. בזמן המעבר הקוד מכיר את
+// שני השמות כאילו היו עמודה אחת, **כדי שלא משנה מה מתעדכן ראשון, הגיליון או מניצ'ט,
+// אף אישה לא תקבל בטעות 70 יום ועוד 3 חודשים.** והשער והמסך קוראים את אותה רשימה.
+export const SMART_COLS = ["SMART", "SOLO10WEEK"];
+// כל העמודות שנושאות אחד מהשמות, ולא רק הראשונה. גיליון יכול להחזיק את שתיהן.
+export function findCols(headerCells, names) {
+  const want = names.map(normHeader);
+  const out = [];
+  (headerCells || []).forEach((h, i) => { if (want.indexOf(normHeader(h)) !== -1) out.push(i); });
+  return out;
+}
+
 export function parseDateToSunday(s) {
   if (!s) return null;
   const t = String(s).trim().replace(/^["']|["']$/g, "");
@@ -69,7 +81,7 @@ export function accessEnd(startSunday, extraMonths, solo) {
     exp.setUTCMonth(exp.getUTCMonth() + solo);
     return exp;
   }
-  // סולו 10 שבועות, עמודה `SOLO10WEEK`: 70 ימי התוכנית בלבד. v7.47.
+  // סמארט, עמודה `SMART` או `SOLO10WEEK`: 70 ימי התוכנית בלבד. v7.47, v7.82.
   if (solo === 10) {
     exp.setUTCDate(exp.getUTCDate() + 70);
     return exp;
@@ -88,7 +100,7 @@ function soloOf(cells, col) {
   if (col.solo12 !== -1 && isTrue(cells[col.solo12])) return 12;
   if (col.solo6 !== -1 && isTrue(cells[col.solo6])) return 6;
   // הקצר מכולם ולכן אחרון: כשמסומנות כמה עמודות, הארוכה מנצחת.
-  if (col.solo10w !== -1 && isTrue(cells[col.solo10w])) return 10;
+  if (col.solo10w.some((i) => isTrue(cells[i]))) return 10;
   return 0;
 }
 
@@ -243,8 +255,8 @@ export async function loadSheet(csvUrl, RU, RT) {
     // SOLO6 ו-SOLO12 לעולם לא יתבלבלו ביניהן.
     solo6: findCol(header, ["SOLO6"]),
     solo12: findCol(header, ["SOLO12"]),
-    // 10 שבועות ולא חודשים. v7.47.
-    solo10w: findCol(header, ["SOLO10WEEK"]),
+    // 10 שבועות ולא חודשים. v7.47. SMART או SOLO10WEEK, ראה SMART_COLS. v7.82.
+    solo10w: findCols(header, SMART_COLS),
   };
 
   const women = [];

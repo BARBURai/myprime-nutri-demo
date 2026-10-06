@@ -959,8 +959,42 @@ console.log("\nבנק התשובות");
   const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
   const pp = html.match(/function progPill\(w\)\{[\s\S]*?\n\}/);
   const progPill = pp ? new Function(pp[0] + "; return progPill;")() : () => "";
-  check("התג אומר 10 שבועות ולא 10 חודשים", progPill({ solo: 10 }).indexOf("סולו 10 שבועות") !== -1);
-  check("ויש לה אפשרות משלה בסינון", /PROG==="10w" && w\.solo!==10/.test(html) && /value="10w"/.test(html));
+  // **מ-v7.82 התג נקרא SMART**, באנגלית, החלטת רון.
+  check("התג אומר SMART", progPill({ solo: 10 }).indexOf("SMART") !== -1 && progPill({ solo: 10 }).indexOf("סולו") === -1);
+  check("ויש לה אפשרות משלה בסינון, בשם SMART", /PROG==="10w" && w\.solo!==10/.test(html) && /value="10w"[^\n]*>SMART \(/.test(html));
+  CSV2 = null;
+}
+
+// **SMART ו-SOLO10WEEK הם אותה עמודה בזמן המעבר. v7.82.** אותה אישה עם השם הישן, עם החדש,
+// ועם שניהם, חייבת לקבל תשובה זהה בשער ובמסך. **ואישה רגילה ליד שתי העמודות לא נגעה.**
+{
+  console.log("\nSMART ו-SOLO10WEEK\n");
+  const sunAgo = (weeks) => { const d = new Date(); d.setUTCDate(d.getUTCDate() - d.getUTCDay() - weeks * 7); return d.toISOString().slice(0, 10); };
+  const plusDays = (start, n) => { const d = new Date(start + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const shapes = [
+    ["רק SOLO10WEEK", "SOLO10WEEK", (v) => v],
+    ["רק SMART", "SMART", (v) => v],
+    ["שתיהן, הסימון ב-SMART", "SOLO10WEEK,SMART", (v) => "," + v],
+    ["שתיהן, הסימון ב-SOLO10WEEK", "SOLO10WEEK,SMART", (v) => v + ","],
+  ];
+  const answers = [];
+  for (const [label, cols, cell] of shapes) {
+    CSV2 = [
+      `ID,F_NAME,L_NAME,CF_EMAIL,360 - FINAL  PERSONAL START,ביטלה,קבוצה,חודשי גישה נוספים,${cols}`,
+      `972510000021,סמארט,פעילה,sm@test.com,${sunAgo(3)} 12:00:00,FALSE,,,${cell("TRUE")}`,
+      `972510000022,סמארט,נגמרה,smold@test.com,${sunAgo(11)} 12:00:00,FALSE,,,${cell("TRUE")}`,
+      `972510000023,רגילה,ליד,smplain@test.com,${sunAgo(3)} 12:00:00,FALSE,,,${cell("")}`,
+    ].join("\n");
+    const all = (await callAdmin({ key: KEY })).body.women;
+    const at = (em) => all.find((w) => w.email === em);
+    const a1 = await callAccess("sm@test.com"), a2 = await callAccess("smold@test.com"), a3 = await callAccess("smplain@test.com");
+    check(label + ": מסומנת SMART במסך", at("sm@test.com").solo === 10 && at("smold@test.com").solo === 10);
+    check(label + ": החלון הוא 70 יום בדיוק", at("sm@test.com").until === plusDays(at("sm@test.com").start, 70));
+    check(label + ": השער פותח אותה בשבוע 4 וסוגר אחרי 11 שבועות", a1.body.allowed === true && a2.body.reason === "expired");
+    check(label + ": אישה רגילה לידה נשארה 360", at("smplain@test.com").solo === 0 && a3.body.allowed === true);
+    answers.push(JSON.stringify([a1.body.allowed, a2.body.reason, a3.body.allowed, at("sm@test.com").until, at("smold@test.com").until, at("smplain@test.com").until]));
+  }
+  check("ארבע הצורות נותנות תשובה זהה", new Set(answers).size === 1, answers.join(" | "));
   CSV2 = null;
 }
 

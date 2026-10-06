@@ -366,5 +366,31 @@ for (const n of [1, 2, 3, 4, 5, 6]) {
   ck(`**${e}: השער רושם זהות מול השרת, ובלי פער**`, Number(sh1.same || 0) === Number(sh0.same || 0) + 1 && (L["mc:diffs"] || []).length === d0, strip({ r: r && r.allowed, sh0, sh1, last: (L["mc:diffs"] || [])[0] }));
 }
 
+// ============================================================
+console.log("\nSMART ו-SOLO10WEEK בהשוואה מול מניצ'ט. v7.82\n");
+// **תגית ששמה SMART חייבת להיחשב זהה לעמודה SOLO10WEEK בגיליון, ולהפך**, אחרת כל אחת
+// מ-40 הנשים תירשם כפער ביום שרון משנה את שם התגית. **וביקורת: SMART במניצ'ט בלי סימון
+// בגיליון עדיין פער**, כדי שההשוואה לא תיבלע.
+for (const [label, col, mcCol, sheetVal, want] of [
+  ["תגית SMART מול כותרת SOLO10WEEK", "SOLO10WEEK", "SMART", "TRUE", "same"],
+  ["תגית SOLO10WEEK מול כותרת SMART", "SMART", "SOLO10WEEK", "TRUE", "same"],
+  ["SMART במניצ'ט ובגיליון ריק: פער", "SOLO10WEEK", "SMART", "", "diff"],
+]) {
+  SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,${col}
+972506600001,ס,smart@test.com,${sunday} 12:00:00,FALSE,,${sheetVal}
+`;
+  delete S["sheet:csv:v1"];
+  const cells = { ID: "972506600001", F_NAME: "ס", CF_EMAIL: "smart@test.com", [START]: sunday + " 12:00:00", "ביטלה": "", [mcCol]: "TRUE" };
+  H["mc:rows"] = H["mc:rows"] || {}; H["mc:byemail"] = H["mc:byemail"] || {};
+  H["mc:rows"]["972506600001"] = JSON.stringify({ cells, t: Date.now(), src: "mc" });
+  H["mc:byemail"]["smart@test.com"] = JSON.stringify({ "972506600001": cells });
+  const sh0 = Object.assign({}, shadow());
+  await login("smart@test.com");
+  const sh1 = shadow();
+  ck(label, Number(sh1[want] || 0) === Number(sh0[want] || 0) + 1, strip({ sh0, sh1, last: (L["mc:diffs"] || [])[0] }));
+}
+const { fromFullContact } = await import(new URL("../api/_mcsync.js", import.meta.url));
+ck("תגית SMART נכנסת לעמודה SMART ולא לשם אחר", (() => { const c = fromFullContact({ id: "1", whatsapp_phone: "972506600002", custom_fields: [], tags: [{ name: "SMART" }] }); return c && JSON.stringify(c).indexOf('"SMART":"TRUE"') !== -1; })());
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);
