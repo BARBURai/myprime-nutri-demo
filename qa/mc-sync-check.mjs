@@ -28,6 +28,7 @@ let SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספ
 // ---------- Redis בזיכרון ----------
 let H = {}, L = {}, S = {}, log = [], redisDown = false, sheetCalls = [], trips = [], mcCalls = [];
 const MCAPI = { mode: "ok", tags: {} };
+const OVERSIZE = new Set(); let SCANFAIL = false;
 const hash = (k) => (H[k] = H[k] || {});
 function run(cmd) {
   const [c, ...a] = cmd.map(String);
@@ -42,7 +43,12 @@ function run(cmd) {
     case "HSET_MULTI": return 1;
     case "DEL": delete H[a[0]]; delete S[a[0]]; delete L[a[0]]; return 1;
     case "RENAME": H[a[1]] = H[a[0]]; delete H[a[0]]; return "OK";
-    case "HGETALL": return Object.entries(H[a[0]] || {}).flat();
+    case "HGETALL": if (OVERSIZE.has(a[0])) return { __error: "ERR max request size exceeded" }; return Object.entries(H[a[0]] || {}).flat();
+    case "HSCAN": {
+      if (SCANFAIL) return { __error: "ERR scan" };
+      const keys = Object.keys(H[a[0]] || {}), at = Number(a[1]) || 0, page = keys.slice(at, at + 2);
+      return [at + 2 >= keys.length ? "0" : String(at + 2), page.flatMap((k) => [k, H[a[0]][k]])];
+    }
     case "HINCRBY": { const h = hash(a[0]); h[a[1]] = String((Number(h[a[1]]) || 0) + Number(a[2])); return Number(h[a[1]]); }
     case "LPUSH": (L[a[0]] = L[a[0]] || []).unshift(a[1]); return L[a[0]].length;
     case "LTRIM": L[a[0]] = (L[a[0]] || []).slice(Number(a[1]), Number(a[2]) + 1); return "OK";
@@ -60,7 +66,8 @@ globalThis.fetch = async (url, opt) => {
     trips.push(u.endsWith("/pipeline") ? "pipe:" + opt.body : (opt && opt.body ? opt.body : decodeURIComponent(u)));
     if (u.endsWith("/pipeline")) { const cmds = JSON.parse(opt.body); return { ok: true, json: async () => cmds.map((c) => ({ result: run(c) })) }; }
     const cmd = opt && opt.body ? JSON.parse(opt.body) : u.slice("redis://r/".length).split("/").map(decodeURIComponent);
-    return { ok: true, json: async () => ({ result: run(cmd) }) };
+    const res = run(cmd);
+    return { ok: true, json: async () => (res && res.__error ? { error: res.__error } : { result: res }) };
   }
   if (u.indexOf("https://api.manychat.com/") === 0) {
     mcCalls.push({ url: u, method: (opt && opt.method) || "GET" });
@@ -184,6 +191,7 @@ ck("בגיליון ולא במניצ'ט: תשובה זהה", strip(onlySheet) ==
 ck("ונרשמה כחסרה במניצ'ט", shadow().onlySheet === "1", strip(shadow()));
 await push({ ID: "972508888888", CF_EMAIL: "nobody@test.com", [START]: sunday });
 const onlyMc = await login("nobody@test.com");
+// **גם בשלב א של v7.84 היא אינה נכנסת.** נמדד: 935 כתובות בשרת שאינן בגיליון, ורובן לידים.
 ck("**במניצ'ט ולא בגיליון: עדיין לא נכנסת**", onlyMc.allowed === false && strip(onlyMc) === strip(base["nobody@test.com"]), strip(onlyMc));
 ck("ונרשמה כקיימת רק במניצ'ט", shadow().onlyMc === "1", strip(shadow()));
 
@@ -391,6 +399,116 @@ for (const [label, col, mcCol, sheetVal, want] of [
 }
 const { fromFullContact } = await import(new URL("../api/_mcsync.js", import.meta.url));
 ck("תגית SMART נכנסת לעמודה SMART ולא לשם אחר", (() => { const c = fromFullContact({ id: "1", whatsapp_phone: "972506600002", custom_fields: [], tags: [{ name: "SMART" }] }); return c && JSON.stringify(c).indexOf('"SMART":"TRUE"') !== -1; })());
+
+// ============================================================
+console.log("\nשלב א: השרת מוסיף ולעולם אינו לוקח. v7.84\n");
+// כל מצב נבנה משורה בגיליון ושורה בשרת לאותה אישה, ונבדק מול השער האמיתי.
+async function stageA(sheetCells, serverCells, opts = {}) {
+  const cols = ["ID", "F_NAME", "CF_EMAIL", START, "ביטלה", "חודשי גישה נוספים", "GLOW-FULL", "SOLO10WEEK"];
+  const em = "stagea@test.com", ph = "972506700001";
+  const row = (c) => cols.map((k) => (c[k] == null ? "" : c[k])).join(",");
+  SHEET = cols.join(",") + "\n" + (sheetCells ? row({ ID: ph, F_NAME: "א", CF_EMAIL: em, [START]: sunday + " 12:00:00", ...sheetCells }) + "\n" : "");
+  delete S["sheet:csv:v1"];
+  H["mc:rows"] = H["mc:rows"] || {}; H["mc:byemail"] = H["mc:byemail"] || {};
+  if (serverCells) {
+    const cells = { ID: ph, F_NAME: "א", CF_EMAIL: em, [START]: sunday + " 12:00:00", ...serverCells };
+    H["mc:rows"][ph] = JSON.stringify({ cells, t: Date.now(), src: "mc" });
+    H["mc:byemail"][em] = JSON.stringify({ [ph]: cells });
+  } else { delete H["mc:rows"][ph]; delete H["mc:byemail"][em]; }
+  redisDown = !!opts.down;
+  const out = await login(em);
+  redisDown = false;
+  return out;
+}
+{
+  const ker = await stageA({ "GLOW-FULL": "TRUE" }, { "GLOW-FULL💄💄💄": "TRUE" });
+  ck("**שורה ישנה בשרת (המקרה של ker) אינה לוקחת את הקורס**", ker.allowed === true && ker.glowFull === true, strip(ker));
+  const add = await stageA({}, { "GLOW-FULL": "TRUE" });
+  ck("**קורס שקיים רק בשרת נפתח מיד**", add.allowed === true && add.glowFull === true, strip(add));
+  const mcCancel = await stageA({}, { "ביטלה": "TRUE" });
+  ck("**ביטול בשרת בלבד אינו נועל אותה**", mcCancel.allowed === true, strip(mcCancel));
+  const shCancel = await stageA({ "ביטלה": "TRUE" }, {});
+  ck("**ביטול בגיליון עדיין נועל**, כמו היום", shCancel.allowed === false && shCancel.reason === "cancelled", strip(shCancel));
+  const both = await stageA({ "ביטלה": "TRUE" }, { "ביטלה": "TRUE" });
+  ck("ביטול בשניהם נועל", both.allowed === false && both.reason === "cancelled", strip(both));
+  const months = await stageA({ "חודשי גישה נוספים": "3" }, { "חודשי גישה נוספים": "6" });
+  const months0 = await stageA({ "חודשי גישה נוספים": "3" }, null);
+  ck("חודשים נוספים: הגבוה מבין השניים", months.allowed === true && strip(months) === strip(months0), strip(months));
+  const smartSheet = await stageA({ SOLO10WEEK: "TRUE" }, {});
+  ck("**SMART בגיליון בלבד: החלון הארוך**, כלומר כמו בלי SMART, עד שהשרת יידע", smartSheet.allowed === true, strip(smartSheet));
+  const noServer = await stageA({ "GLOW-FULL": "TRUE" }, null);
+  const withSame = await stageA({ "GLOW-FULL": "TRUE" }, { "GLOW-FULL": "TRUE" });
+  ck("**שורה זהה בשרת: תשובה זהה לתשובה בלי שרת**", strip(noServer) === strip(withSame), strip(withSame));
+  const lead = await stageA(null, { [START]: "" });
+  ck("**ליד שקיים רק בשרת, בלי תאריך, אינו נכנס**", lead.allowed === false && lead.reason === "not_registered", strip(lead));
+  const datedOnly = await stageA(null, { "GLOW-FULL": "TRUE" });
+  ck("**וגם אישה עם תאריך שקיימת רק בשרת אינה נכנסת בשלב א**", datedOnly.allowed === false, strip(datedOnly));
+  const startDiff = await stageA({}, { [START]: older + " 12:00:00" });
+  ck("**תאריך ההתחלה הוא של הגיליון**", startDiff.startDate === sunday, strip(startDiff));
+  delete process.env.MC_SYNC_SECRET;
+  const off = await stageA({}, { "GLOW-FULL": "TRUE" });
+  ck("**בלי MC_SYNC_SECRET השרת אינו נקרא בכלל**, כלומר בדיוק כמו קודם", off.allowed === true && off.glowFull === false, strip(off));
+  const offOnly = await stageA(null, { "GLOW-FULL": "TRUE" });
+  ck("ובלי MC_SYNC_SECRET מי שרק בשרת עדיין אינה רשומה", offOnly.allowed === false && offOnly.reason === "not_registered", strip(offOnly));
+  process.env.MC_SYNC_SECRET = "s3cret-mc";
+  const down = await stageA({ "GLOW-FULL": "TRUE" }, { "ביטלה": "TRUE" }, { down: true });
+  ck("**Upstash נופל: הגיליון לבד**, והיא נכנסת", down.allowed === true && down.glowFull === true, strip(down));
+}
+{
+  const { mergeServer } = await import(new URL("../api/access.js", import.meta.url));
+  const endOf = (st, mo, so) => so === 10 ? 1 : so === 12 ? 3 : 2;
+  const base0 = { start: sunday, cancelled: false, months: null, solo: 0, glow: false, glowFull: false, glowPaid: false, glowSolo: false, glowM: null };
+  ck("mergeServer: בלי שרת מחזיר את הגיליון כמו שהוא", mergeServer(base0, null, endOf) === base0);
+  ck("mergeServer: סולו 12 בשרת גובר על 10 בגיליון", mergeServer({ ...base0, solo: 10 }, { ...base0, solo: 12 }, endOf).solo === 12);
+  ck("mergeServer: 0 גובר על 10, כי החלון ארוך יותר", mergeServer({ ...base0, solo: 10 }, { ...base0, solo: 0 }, endOf).solo === 0);
+  ck("mergeServer: תאריך ההתחלה של הגיליון נשאר", mergeServer(base0, { ...base0, start: older }, endOf).start === sunday);
+  ck("mergeServer: בלי גיליון אין כלום, גם כשבשרת יש", mergeServer(null, base0, endOf) === null);
+}
+{
+  const { normalizeFlagKeys } = await import(new URL("../api/_mcsync.js", import.meta.url));
+  const n1 = normalizeFlagKeys({ ID: "1", "GLOW-FULL💄💄💄": "TRUE" });
+  ck("ייבוא: תגית בשם הישן עוברת ל-GLOW-FULL", n1 && n1["GLOW-FULL"] === "TRUE" && !("GLOW-FULL💄💄💄" in n1), strip(n1));
+  ck("ייבוא: שורה בלי שם ישן אינה נכתבת", normalizeFlagKeys({ ID: "1", "GLOW-FULL": "TRUE" }) === null);
+  const n3 = normalizeFlagKeys({ ID: "1", "GLOW-FULL": "TRUE", "GLOW-FULL💄💄💄": "" });
+  ck("ייבוא: שם ישן ריק אינו מוחק TRUE קיים", n3 && n3["GLOW-FULL"] === "TRUE", strip(n3));
+  ck("ייבוא: GLOW-FULL-M אינה נוגעת", normalizeFlagKeys({ ID: "1", "GLOW-FULL-M": "6" }) === null);
+  // ייבוא אמיתי על שורה ישנה ממניצ'ט
+  SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,GLOW-FULL\n972506700002,ב,old@test.com,${sunday} 12:00:00,,,TRUE\n`;
+  delete S["sheet:csv:v1"];
+  H["mc:rows"]["972506700002"] = JSON.stringify({ cells: { ID: "972506700002", CF_EMAIL: "old@test.com", [START]: sunday, "GLOW-FULL💄💄💄": "TRUE" }, t: 1, src: "mc" });
+  const [io, ires] = resOf();
+  await admin({ method: "POST", query: { key: "owner-key-123" }, headers: {}, body: { mcImport: true } }, ires);
+  const fixed = JSON.parse(H["mc:rows"]["972506700002"]);
+  ck("**ייבוא אמיתי מסדר את השורה הישנה, והיא נשארת ממניצ'ט**", fixed.src === "mc" && fixed.cells["GLOW-FULL"] === "TRUE" && !("GLOW-FULL💄💄💄" in fixed.cells) && io.body.renamed >= 1, strip({ fixed, body: io.body }));
+  const after = JSON.parse(H["mc:byemail"]["old@test.com"] || "{}");
+  ck("ואינדקס המיילים נבנה מהשורה המסודרת", after["972506700002"] && after["972506700002"]["GLOW-FULL"] === "TRUE", strip(after));
+}
+
+// ============================================================
+console.log("\nייבוא כשהשרת גדול מ-10MB. v7.84\n");
+// **06.10.2026: HGETALL על mc:rows החזיר מ-Upstash 200 עם שגיאה, והייבוא היה קורא את זה כ"אין
+// שורות" ודורס את כל השורות שהגיעו ממניצ'ט.** כאן HGETALL "גדול מדי", והסריקה בעמודים של שתיים.
+{
+  OVERSIZE.add("mc:rows"); OVERSIZE.add("mc:byemail");
+  SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,GLOW-FULL\n972506900001,א,big1@test.com,${sunday} 12:00:00,,,\n972506900002,ב,big2@test.com,${sunday} 12:00:00,,,\n`;
+  delete S["sheet:csv:v1"];
+  H["mc:rows"]["972506900002"] = JSON.stringify({ cells: { ID: "972506900002", CF_EMAIL: "big2@test.com", [START]: sunday, "GLOW-FULL": "TRUE" }, t: 5, src: "mc" });
+  const before = Object.keys(H["mc:rows"]).length;
+  const [o1, r1] = resOf();
+  await admin({ method: "POST", query: { key: "owner-key-123" }, headers: {}, body: { mcImport: true } }, r1);
+  const kept = JSON.parse(H["mc:rows"]["972506900002"]);
+  ck("**הייבוא עובד גם כש-HGETALL גדול מדי**", o1.code === 200 && o1.body.ok === true, strip(o1.body));
+  ck("**ושורה ממניצ'ט לא נדרסה**", kept.src === "mc" && kept.cells["GLOW-FULL"] === "TRUE", strip(kept));
+  ck("והחדשה מהגיליון נכנסה", !!H["mc:rows"]["972506900001"]);
+  ck("ושום שורה לא נעלמה", Object.keys(H["mc:rows"]).length >= before);
+  SCANFAIL = true;
+  const snap = JSON.stringify(H["mc:rows"]);
+  const [o2, r2] = resOf();
+  await admin({ method: "POST", query: { key: "owner-key-123" }, headers: {}, body: { mcImport: true } }, r2);
+  ck("**סריקה שנכשלה: הייבוא נכשל**", !(o2.body && o2.body.ok === true), strip(o2.body));
+  ck("**ושום שורה לא נכתבה**", JSON.stringify(H["mc:rows"]) === snap);
+  SCANFAIL = false; OVERSIZE.clear();
+}
 
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);

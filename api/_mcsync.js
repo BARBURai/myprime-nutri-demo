@@ -67,6 +67,29 @@ export function diffFields(a, b) {
   return out;
 }
 
+// **כל השורות בשרת, בעמודים ולא בבקשה אחת. v7.84.** ב-06.10.2026 `mc:rows` עבר את 10MB
+// (11,206,739 בתים, 3,495 שורות), ו-Upstash ענה על HGETALL ב-200 עם שגיאה בפנים. `rpost` קרא
+// את זה כ"אין שורות", **והייבוא היה דורס את כל 964 השורות שהגיעו ממניצ'ט.** כאן כל תשובה
+// שאינה תקינה זורקת, והייבוא נכשל לפני שהוא כותב משהו.
+export async function scanHash(RU, RT, key) {
+  const out = {};
+  let cursor = "0", guard = 0;
+  do {
+    const r = await fetch(RU, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RT}`, "content-type": "application/json" },
+      body: JSON.stringify(["HSCAN", key, cursor, "COUNT", "500"]),
+    });
+    if (!r.ok) throw new Error("redis " + r.status);
+    const d = await r.json();
+    if (!d || d.error || !Array.isArray(d.result) || !Array.isArray(d.result[1])) throw new Error("redis scan " + ((d && d.error) || "bad"));
+    cursor = String(d.result[0]);
+    const a = d.result[1];
+    for (let i = 0; i < a.length; i += 2) out[a[i]] = a[i + 1];
+    if (++guard > 10000) throw new Error("redis scan loop");
+  } while (cursor !== "0");
+  return out;
+}
 async function rpost(RU, RT, cmd) {
   const r = await fetch(RU, {
     method: "POST",
@@ -134,6 +157,19 @@ const FLAG_COLS = ["ביטלה", "הורידה אפליקציה", "אישור ת
 // ו-"GLOW-FULL-M" נשארת נפרדת כי יש בה אות נוספת.
 const FLAG_ALIAS = Object.fromEntries(FLAG_COLS.map((c) => [aliasKey(c), c]));
 const tagCol = (name) => ALIAS[aliasKey(name)] || FLAG_ALIAS[aliasKey(name)] || String(name).trim();
+// תגית שנשמרה בשם של עמודת כן או לא עם קישוט עוברת לעמודה עצמה. TRUE גובר, ושום עמודה אחרת
+// אינה נוגעת. מחזיר null כשאין מה לסדר, כדי שהייבוא לא יכתוב שורה שלא השתנתה. v7.84.
+export function normalizeFlagKeys(cells) {
+  let out = null;
+  for (const k of Object.keys(cells)) {
+    const col = FLAG_ALIAS[aliasKey(k)];
+    if (!col || col === k) continue;
+    out = out || { ...cells };
+    if (isTrueCell(out[k]) || !(col in out)) out[col] = isTrueCell(out[k]) ? "TRUE" : (out[col] || "");
+    delete out[k];
+  }
+  return out;
+}
 const flatVal = (v) => (v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)).slice(0, 500);
 export function fromFullContact(b) {
   const cells = {};
@@ -333,11 +369,23 @@ function laterStart(sa, sb) {
 }
 export async function importSheet(text, parseCsvLine, RU, RT, now = Date.now()) {
   const sheetRows = rowsFromSheet(text, parseCsvLine);
-  const cur = await rpost(RU, RT, ["HGETALL", MC_ROWS]);
+  const cur = await scanHash(RU, RT, MC_ROWS);
   const rows = {};
-  if (Array.isArray(cur)) for (let i = 0; i < cur.length; i += 2) rows[cur[i]] = parseJson(cur[i + 1], null);
+  for (const [phone, raw] of Object.entries(cur)) rows[phone] = parseJson(raw, null);
   let imported = 0, keptMc = 0;
   const writes = [];
+  // **שורה ממניצ'ט שנשמרה לפני v7.79 נושאת תגית בשם הישן**, למשל "GLOW-FULL💄💄💄" במקום
+  // GLOW-FULL, ואינה מתעדכנת עד שמניצ'ט שולח עליה שוב. v7.84: הייבוא מסדר אותה, בלי לדרוס
+  // דבר ממה שהגיע ממניצ'ט. נמצא ב-06.10.2026: 17 שורות, וארבע מהן היו מאבדות את הקורס.
+  let renamed = 0;
+  for (const [phone, rec] of Object.entries(rows)) {
+    if (!rec || rec.src !== "mc" || !rec.cells) continue;
+    const fixed = normalizeFlagKeys(rec.cells);
+    if (!fixed) continue;
+    rows[phone] = { ...rec, cells: fixed };
+    writes.push(phone, JSON.stringify(rows[phone]));
+    renamed++;
+  }
   for (const [phone, cells] of Object.entries(sheetRows)) {
     const prev = rows[phone];
     if (prev && prev.src === "mc") { keptMc++; continue; }
@@ -360,5 +408,5 @@ export async function importSheet(text, parseCsvLine, RU, RT, now = Date.now()) 
   try {
     await rpost(RU, RT, ["HSET", MC_STATS, "imported", String(imported), "importedAt", String(now)]);
   } catch (e) {}
-  return { imported, keptMc, total: Object.keys(sheetRows).length };
+  return { imported, keptMc, renamed, total: Object.keys(sheetRows).length };
 }
