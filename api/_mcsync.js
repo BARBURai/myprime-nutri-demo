@@ -231,6 +231,22 @@ export async function fetchTags(id) {
   finally { clearTimeout(timer); }
 }
 
+// ===== מי נשמרת בשרת. v7.85 =====
+//
+// **06.10.2026: כ-930 לידים נכנסו לשרת**, דרך טריגר על שינוי מייל שירה גם על מי שנרשמה
+// לוובינר. רון הסיר אותו, וזו רשת הביטחון: **נשמרת רק מי שיש לה תאריך התחלה של 360, או
+// סימן של קנייה בלי 360**, כדי שקונת Glow לבדו לא תיפול. בגיליון 2,633 מתוך 2,635 נשים עם
+// מייל נושאות תאריך התחלה. **השדה המדויק בלבד**: בשורה ממניצ'ט יש עשרה שדות תאריך
+// אחרים (EAT, אתגר פיט, Next Start), וליד נושא אותם.
+const START_KEY = "360 - final personal start";
+const PRODUCT_COLS = ["GLOW-FULL", "GLOW-SOLO", "GLOW-PAID", "SMART", "SOLO10WEEK", "SOLO6", "SOLO12"];
+export function isMember(cells) {
+  if (!cells) return false;
+  const sk = Object.keys(cells).find((k) => norm(k) === START_KEY);
+  if (sk && DATE_IN.test(String(cells[sk] || ""))) return true;
+  return PRODUCT_COLS.some((c) => isTrueCell(cells[c]));
+}
+
 // קליטת שורה אחת ממניצ'ט.
 export async function ingest(body, RU, RT, now = Date.now()) {
   let raw = body;
@@ -253,6 +269,11 @@ export async function ingest(body, RU, RT, now = Date.now()) {
   if (!phone) return { status: 400, json: { ok: false, error: "no_phone" } };
   const prev = parseJson(await rpost(RU, RT, ["HGET", MC_ROWS, phone]), null);
   const cells = Object.assign({}, prev && prev.cells, inc);
+  // ליד אינו נשמר, ומה שכבר שמור עליה לא נוגע. v7.85.
+  if (!isMember(cells)) {
+    try { await rpost(RU, RT, ["HINCRBY", MC_STATS, "skipped", 1]); } catch (e) {}
+    return { status: 200, json: { ok: true, skipped: "not_member", phone } };
+  }
   // בנתונים המלאים כל התגיות מגיעות, ולכן תגית שהייתה ואינה עכשיו הוסרה במניצ'ט.
   if (tags && prev && Array.isArray(prev.tags)) for (const t of prev.tags) if (!tags.includes(t)) cells[t] = "";
   const oldEmail = prev ? emailOf(prev.cells) : "";

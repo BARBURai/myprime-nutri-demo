@@ -510,5 +510,37 @@ console.log("\nייבוא כשהשרת גדול מ-10MB. v7.84\n");
   SCANFAIL = false; OVERSIZE.clear();
 }
 
+// ============================================================
+console.log("\nליד אינו נשמר בשרת. v7.85\n");
+// **06.10.2026: כ-930 לידים נכנסו דרך טריגר שינוי המייל.** נשמרת רק מי שיש לה תאריך התחלה
+// של 360, או סימן קנייה בלי 360.
+{
+  const n0 = Object.keys(H["mc:rows"]).length;
+  const lead = await push({ ID: "972506100001", F_NAME: "ליד", CF_EMAIL: "lead@test.com" });
+  ck("**ליד בלי תאריך התחלה: 200, ואינו נשמר**", lead.code === 200 && lead.body.skipped === "not_member" && !H["mc:rows"]["972506100001"], strip(lead.body));
+  ck("ואינו נכנס לאינדקס המיילים", !(H["mc:byemail"] || {})["lead@test.com"]);
+  const lead2 = await push({ ID: "972506100002", CF_EMAIL: "lead2@test.com", "EAT - Personal Start": sunday, "360 - Next Start +1": sunday, "אתגר פיט - FINAL  PERSONAL START": sunday });
+  ck("**ליד עם שדות תאריך אחרים אינו נשמר**", !H["mc:rows"]["972506100002"], strip(lead2.body));
+  const emptyStart = await push({ ID: "972506100003", CF_EMAIL: "lead3@test.com", [START]: "" });
+  ck("תאריך התחלה ריק אינו נחשב", !H["mc:rows"]["972506100003"], strip(emptyStart.body));
+  ck("ושום שורה לא נוספה", Object.keys(H["mc:rows"]).length === n0);
+  const glow = await push({ ID: "972506100004", CF_EMAIL: "glowonly@test.com", "GLOW-FULL": "TRUE" });
+  ck("**קונת Glow בלי תאריך נשמרת**", glow.body.ok === true && !glow.body.skipped && !!H["mc:rows"]["972506100004"], strip(glow.body));
+  for (const col of ["GLOW-SOLO", "SMART", "SOLO10WEEK", "SOLO6", "SOLO12", "GLOW-PAID"]) {
+    const ph = "97250620" + String(col.length).padStart(2, "0") + col.charCodeAt(5);
+    const r = await push({ ID: ph, CF_EMAIL: col.toLowerCase() + "@test.com", [col]: "TRUE" });
+    ck(col + " בלי תאריך נשמרת", !r.body.skipped && !!H["mc:rows"][r.body.phone], strip(r.body));
+  }
+  const member = await push({ ID: "972506100005", CF_EMAIL: "member@test.com", [START]: sunday + " 12:00:00" });
+  ck("**מי שיש לה תאריך התחלה נשמרת**", !member.body.skipped && !!H["mc:rows"]["972506100005"], strip(member.body));
+  const kept = H["mc:rows"]["972506100005"];
+  const wipe = await push({ ID: "972506100005", [START]: "" });
+  ck("**בקשה שמרוקנת את התאריך אינה נוגעת בשורה הקיימת**", wipe.body.skipped === "not_member" && H["mc:rows"]["972506100005"] === kept, strip(wipe.body));
+  const upd = await push({ ID: "972506100005", "קבוצה": "ב" });
+  ck("ועדכון קבוצה של מי שכבר שמורה עובר, כי התאריך שלה שמור", !upd.body.skipped && JSON.parse(H["mc:rows"]["972506100005"]).cells["קבוצה"] === "ב", strip(upd.body));
+  const lg = await login("lead@test.com");
+  ck("והשער עונה על הליד כמו קודם", lg && lg.allowed === false, strip(lg));
+}
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);
