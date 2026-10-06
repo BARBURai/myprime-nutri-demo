@@ -246,6 +246,7 @@ export function isMember(cells) {
   if (sk && DATE_IN.test(String(cells[sk] || ""))) return true;
   return PRODUCT_COLS.some((c) => isTrueCell(cells[c]));
 }
+export const MC_PRUNED = "mc:pruned";
 
 // קליטת שורה אחת ממניצ'ט.
 export async function ingest(body, RU, RT, now = Date.now()) {
@@ -407,6 +408,24 @@ export async function importSheet(text, parseCsvLine, RU, RT, now = Date.now()) 
     writes.push(phone, JSON.stringify(rows[phone]));
     renamed++;
   }
+  // **לידים שנכנסו לפני v7.85 יוצאים מהשרת, לבקשת רון.** רק מי שאינה קונה (`isMember`) ואינה
+  // בגיליון, לפי טלפון וגם לפי מייל. **קודם עותק ל-mc:pruned ורק אז הסרה**, וגיליון ריק אינו מסיר כלום.
+  const sheetEmails = new Set(Object.values(sheetRows).map((c) => emailOf(c)).filter(Boolean));
+  const prune = [];
+  if (Object.keys(sheetRows).length) {
+    for (const [phone, rec] of Object.entries(rows)) {
+      if (!rec || !rec.cells || sheetRows[phone] || isMember(rec.cells)) continue;
+      const e = emailOf(rec.cells);
+      if (e && sheetEmails.has(e)) continue;
+      prune.push(phone);
+    }
+  }
+  for (let i = 0; i < prune.length; i += 100) {
+    const part = prune.slice(i, i + 100);
+    await rpost(RU, RT, ["HSET", MC_PRUNED, ...part.flatMap((p) => [p, cur[p]])]);
+  }
+  for (let i = 0; i < prune.length; i += 400) await rpost(RU, RT, ["HDEL", MC_ROWS, ...prune.slice(i, i + 400)]);
+  for (const p of prune) delete rows[p];
   for (const [phone, cells] of Object.entries(sheetRows)) {
     const prev = rows[phone];
     if (prev && prev.src === "mc") { keptMc++; continue; }
@@ -427,7 +446,9 @@ export async function importSheet(text, parseCsvLine, RU, RT, now = Date.now()) 
   for (let i = 0; i < flat.length; i += 400) await rpost(RU, RT, ["HSET", tmp, ...flat.slice(i, i + 400)]);
   if (flat.length) await rpost(RU, RT, ["RENAME", tmp, MC_BYEMAIL]);
   try {
-    await rpost(RU, RT, ["HSET", MC_STATS, "imported", String(imported), "importedAt", String(now)]);
+    // "התקבלו X נשים" במסך הניהול סופר שורות ממניצ'ט, ואחרי ההוצאה הוא נספר מחדש. v7.85.
+    const fromMc = Object.values(rows).filter((r) => r && r.src === "mc").length;
+    await rpost(RU, RT, ["HSET", MC_STATS, "imported", String(imported), "importedAt", String(now), "fromMc", String(fromMc)]);
   } catch (e) {}
-  return { imported, keptMc, renamed, total: Object.keys(sheetRows).length };
+  return { imported, keptMc, renamed, pruned: prune.length, total: Object.keys(sheetRows).length };
 }

@@ -38,7 +38,7 @@ function run(cmd) {
     case "SET": S[a[0]] = a[1]; return "OK";
     case "HGET": return (H[a[0]] || {})[a[1]] ?? null;
     case "HSET": { const h = hash(a[0]); for (let i = 1; i + 1 < a.length; i += 2) h[a[i]] = a[i + 1]; return 1; }
-    case "HDEL": if (H[a[0]]) delete H[a[0]][a[1]]; return 1;
+    case "HDEL": if (H[a[0]]) for (const f of a.slice(1)) delete H[a[0]][f]; return 1;
     case "HLEN": return Object.keys(H[a[0]] || {}).length;
     case "HSET_MULTI": return 1;
     case "DEL": delete H[a[0]]; delete S[a[0]]; delete L[a[0]]; return 1;
@@ -540,6 +540,41 @@ console.log("\nליד אינו נשמר בשרת. v7.85\n");
   ck("ועדכון קבוצה של מי שכבר שמורה עובר, כי התאריך שלה שמור", !upd.body.skipped && JSON.parse(H["mc:rows"]["972506100005"]).cells["קבוצה"] === "ב", strip(upd.body));
   const lg = await login("lead@test.com");
   ck("והשער עונה על הליד כמו קודם", lg && lg.allowed === false, strip(lg));
+}
+
+// ============================================================
+console.log("\nהייבוא מוציא מהשרת לידים שאינם בגיליון. v7.85\n");
+{
+  SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,GLOW-FULL\n972506300001,א,keep@test.com,${sunday} 12:00:00,,,\n972506300009,ב,nodate@test.com,,,,\n`;
+  delete S["sheet:csv:v1"];
+  const put = (p, cells, src = "mc") => { H["mc:rows"][p] = JSON.stringify({ cells: Object.assign({ ID: p }, cells), t: 1, src }); };
+  put("972506300002", { CF_EMAIL: "lead1@test.com", "השתתפה בוובינר": "TRUE" });
+  put("972506300003", { CF_EMAIL: "lead2@test.com", "EAT - Personal Start": sunday }, "import");
+  put("972506300004", { CF_EMAIL: "member@test.com", [START]: sunday });
+  put("972506300005", { CF_EMAIL: "glow@test.com", "GLOW-FULL": "TRUE" });
+  put("972506300006", { CF_EMAIL: "keep@test.com" });
+  put("972506300009", { CF_EMAIL: "nodate@test.com" });
+  const raw2 = H["mc:rows"]["972506300002"];
+  delete H["mc:pruned"];
+  const [io, ires] = resOf();
+  await admin({ method: "POST", query: { key: "owner-key-123" }, headers: {}, body: { mcImport: true } }, ires);
+  ck("הייבוא הצליח", io.body && io.body.ok === true, strip(io.body));
+  ck("**ליד שאינו בגיליון יצא מהשרת**", !H["mc:rows"]["972506300002"] && !H["mc:rows"]["972506300003"]);
+  ck("**ועותק שלו נשמר ב-mc:pruned, בית-בית**", (H["mc:pruned"] || {})["972506300002"] === raw2 && !!(H["mc:pruned"] || {})["972506300003"]);
+  ck("והתשובה סופרת אותם", io.body.pruned === 2, strip(io.body));
+  ck("**מי שיש לה תאריך התחלה נשארת**, גם כשאינה בגיליון", !!H["mc:rows"]["972506300004"]);
+  ck("**קונת Glow בלי תאריך נשארת**", !!H["mc:rows"]["972506300005"]);
+  ck("**מי שהמייל שלה בגיליון נשארת**, גם בטלפון אחר", !!H["mc:rows"]["972506300006"]);
+  ck("**שורה מהגיליון בלי תאריך נשארת**", !!H["mc:rows"]["972506300009"]);
+  ck("ואינדקס המיילים אינו מחזיק את מי שיצאה", !(H["mc:byemail"] || {})["lead1@test.com"]);
+  const mcLeft = Object.values(H["mc:rows"]).filter((r) => JSON.parse(r).src === "mc").length;
+  ck("ומונה \"התקבלו ממניצ'ט\" נספר מחדש", Number(H["mc:stats"].fromMc) === mcLeft, H["mc:stats"].fromMc + " / " + mcLeft);
+  put("972506300007", { CF_EMAIL: "lead3@test.com" });
+  SHEET = `ID,F_NAME,CF_EMAIL,${START}\n`;
+  delete S["sheet:csv:v1"];
+  const [eo, eres] = resOf();
+  await admin({ method: "POST", query: { key: "owner-key-123" }, headers: {}, body: { mcImport: true } }, eres);
+  ck("**גיליון בלי שורות אינו מוציא אף אחת**", !!H["mc:rows"]["972506300007"] && !(eo.body && eo.body.pruned), strip(eo.body));
 }
 
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
