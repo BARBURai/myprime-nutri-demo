@@ -156,15 +156,16 @@ ck("גם כשיש לה את הקורס המלא", strip(dana) === strip(base["da
 
 await push({ ID: "972501111111", [START]: older + " 12:00:00" });
 const diffStart = await login("ronit@test.com");
-ck("**תאריך אחר במניצ'ט: התשובה עדיין לפי הגיליון**", strip(diffStart) === strip(base["ronit@test.com"]), strip(diffStart));
+ck("**תאריך אחר במניצ'ט: התאריך של השרת. שלב ב, v7.88**", diffStart.allowed === true && diffStart.startDate === older, strip(diffStart));
 ck("ונרשם כפער", shadow().diff === "1", strip(shadow()));
 const d0 = JSON.parse(L["mc:diffs"][0]);
 ck("והפער נוקב בשדה ובשני הערכים", d0.email === "ronit@test.com" && d0.fields.start && d0.fields.start[0] === sunday && d0.fields.start[1] === older, strip(d0));
 
 await push({ ID: "972501111111", [START]: sunday + " 12:00:00", "ביטלה": "TRUE" });
 const cancelled = await login("ronit@test.com");
-ck("**ביטול במניצ'ט בלבד אינו נועל אותה בשלב הזה**", cancelled.allowed === true && strip(cancelled) === strip(base["ronit@test.com"]), strip(cancelled));
-ck("אבל נרשם כפער בשדה הביטול", JSON.parse(L["mc:diffs"][0]).fields.cancelled, L["mc:diffs"][0]);
+ck("**ביטול במניצ'ט בלבד אינו נועל אותה: אי הסכמה, היא נכנסת**", cancelled.allowed === true && strip(cancelled) === strip(base["ronit@test.com"]), strip(cancelled));
+ck("אבל נרשם כפער בשדה הביטול", ((L["mc:diffs"] || []).map((x) => JSON.parse(x)).find((x) => x.cat === "diff") || { fields: {} }).fields.cancelled, L["mc:diffs"][0]);
+ck("**וגם כאי הסכמה על הכניסה. v7.88**", (L["mc:diffs"] || []).some((x) => JSON.parse(x).cat === "gate"), L["mc:diffs"][0]);
 await push({ ID: "972501111111", "ביטלה": "" });
 
 console.log("\nכמה פניות ההשוואה מוסיפה. v7.67\n");
@@ -191,8 +192,8 @@ ck("בגיליון ולא במניצ'ט: תשובה זהה", strip(onlySheet) ==
 ck("ונרשמה כחסרה במניצ'ט", shadow().onlySheet === "1", strip(shadow()));
 await push({ ID: "972508888888", CF_EMAIL: "nobody@test.com", [START]: sunday });
 const onlyMc = await login("nobody@test.com");
-// **גם בשלב א של v7.84 היא אינה נכנסת.** נמדד: 935 כתובות בשרת שאינן בגיליון, ורובן לידים.
-ck("**במניצ'ט ולא בגיליון: עדיין לא נכנסת**", onlyMc.allowed === false && strip(onlyMc) === strip(base["nobody@test.com"]), strip(onlyMc));
+// **משלב ב, v7.88, היא נכנסת, כי יש לה תאריך התחלה בשדה עצמו.** הלידים כבר אינם נשמרים בשרת (v7.85).
+ck("**במניצ'ט עם תאריך ולא בגיליון: נכנסת. v7.88**", onlyMc.allowed === true && onlyMc.startDate === sunday, strip(onlyMc));
 ck("ונרשמה כקיימת רק במניצ'ט", shadow().onlyMc === "1", strip(shadow()));
 
 console.log("\nשתי שורות לאותה אישה\n");
@@ -401,7 +402,7 @@ const { fromFullContact } = await import(new URL("../api/_mcsync.js", import.met
 ck("תגית SMART נכנסת לעמודה SMART ולא לשם אחר", (() => { const c = fromFullContact({ id: "1", whatsapp_phone: "972506600002", custom_fields: [], tags: [{ name: "SMART" }] }); return c && JSON.stringify(c).indexOf('"SMART":"TRUE"') !== -1; })());
 
 // ============================================================
-console.log("\nשלב א: השרת מוסיף ולעולם אינו לוקח. v7.84\n");
+console.log("\nשלב ב: השרת קובע, והגיליון בדיקה כפולה. v7.88\n");
 // כל מצב נבנה משורה בגיליון ושורה בשרת לאותה אישה, ונבדק מול השער האמיתי.
 async function stageA(sheetCells, serverCells, opts = {}) {
   const cols = ["ID", "F_NAME", "CF_EMAIL", START, "ביטלה", "חודשי גישה נוספים", "GLOW-FULL", "SOLO10WEEK"];
@@ -428,29 +429,63 @@ async function stageA(sheetCells, serverCells, opts = {}) {
   const mcCancel = await stageA({}, { "ביטלה": "TRUE" });
   ck("**ביטול בשרת בלבד אינו נועל אותה**", mcCancel.allowed === true, strip(mcCancel));
   const shCancel = await stageA({ "ביטלה": "TRUE" }, {});
-  ck("**ביטול בגיליון עדיין נועל**, כמו היום", shCancel.allowed === false && shCancel.reason === "cancelled", strip(shCancel));
+  ck("**ביטול בגיליון בלבד: אי הסכמה, היא נכנסת**", shCancel.allowed === true, strip(shCancel));
+  const shCancelNo = await stageA({ "ביטלה": "TRUE" }, null);
+  ck("**ובלי שורה בשרת, ביטול בגיליון נועל כמו היום**", shCancelNo.allowed === false && shCancelNo.reason === "cancelled", strip(shCancelNo));
   const both = await stageA({ "ביטלה": "TRUE" }, { "ביטלה": "TRUE" });
   ck("ביטול בשניהם נועל", both.allowed === false && both.reason === "cancelled", strip(both));
   const months = await stageA({ "חודשי גישה נוספים": "3" }, { "חודשי גישה נוספים": "6" });
   const months0 = await stageA({ "חודשי גישה נוספים": "3" }, null);
   ck("חודשים נוספים: הגבוה מבין השניים", months.allowed === true && strip(months) === strip(months0), strip(months));
   const smartSheet = await stageA({ SOLO10WEEK: "TRUE" }, {});
-  ck("**SMART בגיליון בלבד: החלון הארוך**, כלומר כמו בלי SMART, עד שהשרת יידע", smartSheet.allowed === true, strip(smartSheet));
+  ck("SMART בגיליון בלבד, בשבוע 3: נכנסת", smartSheet.allowed === true, strip(smartSheet));
   const noServer = await stageA({ "GLOW-FULL": "TRUE" }, null);
   const withSame = await stageA({ "GLOW-FULL": "TRUE" }, { "GLOW-FULL": "TRUE" });
   ck("**שורה זהה בשרת: תשובה זהה לתשובה בלי שרת**", strip(noServer) === strip(withSame), strip(withSame));
   const lead = await stageA(null, { [START]: "" });
   ck("**ליד שקיים רק בשרת, בלי תאריך, אינו נכנס**", lead.allowed === false && lead.reason === "not_registered", strip(lead));
   const datedOnly = await stageA(null, { "GLOW-FULL": "TRUE" });
-  ck("**וגם אישה עם תאריך שקיימת רק בשרת אינה נכנסת בשלב א**", datedOnly.allowed === false, strip(datedOnly));
+  ck("**אישה עם תאריך שקיימת רק בשרת נכנסת. v7.88**", datedOnly.allowed === true && datedOnly.glowFull === true && datedOnly.startDate === sunday, strip(datedOnly));
+  {
+    // **מייל שהשתנה במניצ'ט: הטלפון בגיליון עם הכתובת החדשה, והשרת עדיין תחת הישנה.**
+    const cols = ["ID", "F_NAME", "CF_EMAIL", START, "ביטלה"];
+    SHEET = cols.join(",") + "\n" + ["972506700001", "א", "newaddr@test.com", sunday + " 12:00:00", ""].join(",") + "\n";
+    delete S["sheet:csv:v1"];
+    const cells = { ID: "972506700001", CF_EMAIL: "oldaddr@test.com", [START]: sunday + " 12:00:00" };
+    H["mc:rows"]["972506700001"] = JSON.stringify({ cells, t: Date.now(), src: "mc" });
+    H["mc:byemail"]["oldaddr@test.com"] = JSON.stringify({ "972506700001": cells });
+    const oldA = await login("oldaddr@test.com");
+    ck("**הכתובת הישנה אינה נכנסת כשהטלפון שלה בגיליון תחת כתובת אחרת**", oldA.allowed === false && oldA.reason === "not_registered", strip(oldA));
+    const newA = await login("newaddr@test.com");
+    ck("והחדשה נכנסת", newA.allowed === true, strip(newA));
+    delete H["mc:byemail"]["oldaddr@test.com"];
+  }
+  const strictOnly = await stageA(null, { [START]: "", "PERSONAL WEBINAR DATE AND TIME": sunday + " 20:00:00", "GLOW-FULL": "TRUE" });
+  ck("**ושורה בשרת בלי תאריך התחלה אינה שולפת תאריך משדה אחר**", strictOnly.allowed === false && strictOnly.reason === "not_registered", strip(strictOnly));
   const startDiff = await stageA({}, { [START]: older + " 12:00:00" });
-  ck("**תאריך ההתחלה הוא של הגיליון**", startDiff.startDate === sunday, strip(startDiff));
+  ck("**תאריך ההתחלה הוא של השרת**", startDiff.startDate === older, strip(startDiff));
+  const noStart = await stageA({}, { [START]: "", "PERSONAL WEBINAR DATE AND TIME": older + " 20:00:00" });
+  ck("**שורה בשרת בלי תאריך (המקרה של ora): התאריך של הגיליון**, ולא תאריך משדה אחר", noStart.allowed === true && noStart.startDate === sunday, strip(noStart));
   delete process.env.MC_SYNC_SECRET;
   const off = await stageA({}, { "GLOW-FULL": "TRUE" });
   ck("**בלי MC_SYNC_SECRET השרת אינו נקרא בכלל**, כלומר בדיוק כמו קודם", off.allowed === true && off.glowFull === false, strip(off));
   const offOnly = await stageA(null, { "GLOW-FULL": "TRUE" });
   ck("ובלי MC_SYNC_SECRET מי שרק בשרת עדיין אינה רשומה", offOnly.allowed === false && offOnly.reason === "not_registered", strip(offOnly));
   process.env.MC_SYNC_SECRET = "s3cret-mc";
+  {
+    // **חלון שנגמר לפי השרת ופתוח לפי הגיליון: היא נכנסת, ונרשם.** סמארט בשרת, התחלה לפני 12 שבועות.
+    const d = new Date(sunday + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - 70); const old12 = d.toISOString().slice(0, 10);
+    L["mc:diffs"] = [];
+    const late = await stageA({ [START]: old12 + " 12:00:00" }, { [START]: old12 + " 12:00:00", SMART: "TRUE" });
+    ck("**אחרי יום 70: השרת אומר סמארט שנגמר, הגיליון פתוח. היא נכנסת**", late.allowed === true, strip(late));
+    const g = (L["mc:diffs"] || []).map((x) => JSON.parse(x)).find((x) => x.cat === "gate");
+    ck("**והמקרה נרשם ב-mc:diffs כאי הסכמה**", !!g && g.email === "stagea@test.com", strip(L["mc:diffs"]));
+    const lateBoth = await stageA({ [START]: old12 + " 12:00:00", SOLO10WEEK: "TRUE" }, { [START]: old12 + " 12:00:00", SMART: "TRUE" });
+    ck("**ושניהם אומרים סמארט שנגמר: הגישה הסתיימה**", lateBoth.allowed === false && lateBoth.reason === "expired", strip(lateBoth));
+    L["mc:diffs"] = [];
+    await stageA({}, { "GLOW-FULL": "TRUE" });
+    ck("הסכמה על הכניסה אינה נרשמת כאי הסכמה", !(L["mc:diffs"] || []).some((x) => JSON.parse(x).cat === "gate"), strip(L["mc:diffs"]));
+  }
   const down = await stageA({ "GLOW-FULL": "TRUE" }, { "ביטלה": "TRUE" }, { down: true });
   ck("**Upstash נופל: הגיליון לבד**, והיא נכנסת", down.allowed === true && down.glowFull === true, strip(down));
 }
@@ -459,9 +494,11 @@ async function stageA(sheetCells, serverCells, opts = {}) {
   const endOf = (st, mo, so) => so === 10 ? 1 : so === 12 ? 3 : 2;
   const base0 = { start: sunday, cancelled: false, months: null, solo: 0, glow: false, glowFull: false, glowPaid: false, glowSolo: false, glowM: null };
   ck("mergeServer: בלי שרת מחזיר את הגיליון כמו שהוא", mergeServer(base0, null, endOf) === base0);
-  ck("mergeServer: סולו 12 בשרת גובר על 10 בגיליון", mergeServer({ ...base0, solo: 10 }, { ...base0, solo: 12 }, endOf).solo === 12);
-  ck("mergeServer: 0 גובר על 10, כי החלון ארוך יותר", mergeServer({ ...base0, solo: 10 }, { ...base0, solo: 0 }, endOf).solo === 0);
-  ck("mergeServer: תאריך ההתחלה של הגיליון נשאר", mergeServer(base0, { ...base0, start: older }, endOf).start === sunday);
+  ck("mergeServer: המסלול של השרת", mergeServer({ ...base0, solo: 0 }, { ...base0, solo: 10 }, endOf, 0).solo === 10);
+  ck("mergeServer: תאריך ההתחלה של השרת", mergeServer(base0, { ...base0, start: older }, endOf, 0).start === older);
+  ck("mergeServer: שרת בלי תאריך משאיר את של הגיליון", mergeServer(base0, { ...base0, start: null }, endOf, 0).start === sunday);
+  ck("mergeServer: ביטול רק בשניהם", mergeServer({ ...base0, cancelled: true }, base0, endOf, 0).cancelled === false && mergeServer({ ...base0, cancelled: true }, { ...base0, cancelled: true }, endOf, 0).cancelled === true);
+  ck("mergeServer: חלון שנגמר רק לפי השרת חוזר לגיליון", (() => { const m = mergeServer({ ...base0, solo: 0 }, { ...base0, solo: 10 }, endOf, 1.5); return m.solo === 0 && m.disagree === true; })());
   ck("mergeServer: בלי גיליון אין כלום, גם כשבשרת יש", mergeServer(null, base0, endOf) === null);
 }
 {
