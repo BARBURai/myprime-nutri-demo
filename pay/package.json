@@ -1,6 +1,0 @@
-{
-  "name": "myprime-pay",
-  "private": true,
-  "type": "module",
-  "engines": { "node": ">=18" }
-}
