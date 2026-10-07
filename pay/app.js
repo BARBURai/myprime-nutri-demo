@@ -20,6 +20,12 @@ function render(p) {
   $("introBold").textContent = p.introBold || "";
   $("signoff").textContent = p.signoff || "";
   $("termsLink").href = p.termsUrl;
+  const np = $("np");
+  np.innerHTML = "";
+  for (let n = 1; n <= (p.maxPayments || 1); n++) {
+    const o = document.createElement("option"); o.value = n; o.textContent = n; np.appendChild(o);
+  }
+  updSum();
   const ul = $("bullets");
   ul.innerHTML = "";
   (p.bullets || []).forEach((b) => {
@@ -44,17 +50,29 @@ async function load() {
   }
 }
 
+// כמו בדף 17: 2 תשלומים ללא ריבית, ומ-3 ומעלה תשלומי קרדיט.
+const money = (v) => `${Math.round(v * 100) / 100} ₪`;
+function updSum() {
+  const n = Number($("np").value) || 1;
+  $("sumTotal").textContent = money(product.price);
+  $("cnt").textContent = n;
+  $("per").textContent = money(product.price / n);
+  $("kind").textContent = n >= 3 ? "(תשלומי קרדיט)" : "";
+}
+$("np").addEventListener("change", updSum);
+
 function collect() {
   const biz = $("bizOn").checked ? { name: $("bn").value, id: $("bid").value } : null;
   return {
     p: slug,
     firstName: $("fn").value, lastName: $("ln").value, phone: $("phone").value,
     email: $("email").value, tz: $("tz").value,
+    payments: Number($("np").value) || 1,
     mkt: $("mkt").checked, terms: $("terms").checked, biz,
   };
 }
 
-const FORM_IDS = ["fn", "ln", "phone", "email", "tz", "mkt", "terms", "bizOn", "bn", "bid"];
+const FORM_IDS = ["fn", "ln", "phone", "email", "tz", "np", "mkt", "terms", "bizOn", "bn", "bid"];
 function lockForm(on) {
   FORM_IDS.forEach((id) => { $(id).disabled = on; });
   $("go").hidden = on;
@@ -91,7 +109,7 @@ $("bizOn").addEventListener("change", () => { $("biz").hidden = !$("bizOn").chec
 
 $("f").addEventListener("submit", (e) => {
   e.preventDefault();
-  const parsed = parseBuyer(collect());
+  const parsed = parseBuyer(collect(), product.maxPayments || 1);
   if (parsed.missing) { showErr($("err"), "כדי להמשיך חסר: " + parsed.missing.join(", ")); return; }
   showErr($("err"), "");
   openPayment();

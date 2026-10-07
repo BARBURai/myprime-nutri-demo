@@ -60,8 +60,12 @@ export function buildCreate({ c, product, order, buyer, origin }) {
       IsHideCardOwnerPhone: true,
       IsHideCardOwnerEmail: true,
     },
+    // מספר התשלומים נבחר בדף שלנו, כדי שהיא תראה כמה תשלם בכל חודש לפני
+    // שהיא מקלידה כרטיס. הטופס של קארדקום נפתח נעול על המספר הזה.
     AdvancedDefinition: {
-      MaxNumOfPayments: product.maxPayments || 1,
+      MinNumOfPayments: buyer.payments,
+      MaxNumOfPayments: buyer.payments,
+      SelectedNumOfPayments: buyer.payments,
     },
     Document: {
       DocumentTypeToCreate: "Auto",

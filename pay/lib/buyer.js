@@ -26,7 +26,8 @@ export function emailOk(raw) {
 }
 
 // מחזיר { buyer } או { missing: [...] } בשמות שמופיעים בהודעה "כדי להמשיך חסר:".
-export function parseBuyer(b) {
+// maxPayments מגיע מהמוצר. בלעדיו (בדפדפן לפני שהמוצר נטען) התקרה היא 12.
+export function parseBuyer(b, maxPayments = 12) {
   b = b || {};
   const buyer = {
     firstName: clip(b.firstName, 40),
@@ -36,6 +37,7 @@ export function parseBuyer(b) {
     tz: clip(b.tz, 12).replace(/\D/g, ""),
     mkt: b.mkt === true,
     terms: b.terms === true,
+    payments: Number(b.payments) || 1,
     biz: b.biz ? { name: clip(b.biz.name, 80), id: clip(b.biz.id, 12).replace(/\D/g, "") } : null,
   };
   const missing = [];
@@ -44,6 +46,7 @@ export function parseBuyer(b) {
   if (!phoneOk(buyer.phone)) missing.push("טלפון נייד");
   if (!emailOk(buyer.email)) missing.push("אימייל");
   if (!idOk(buyer.tz)) missing.push("תעודת זהות");
+  if (!Number.isInteger(buyer.payments) || buyer.payments < 1 || buyer.payments > maxPayments) missing.push("מספר תשלומים");
   if (!buyer.mkt) missing.push("אישור הדיוור");
   if (!buyer.terms) missing.push("אישור התקנון");
   if (buyer.biz && (!buyer.biz.name || !idOk(buyer.biz.id))) missing.push("שם העסק ומספר ח.פ");

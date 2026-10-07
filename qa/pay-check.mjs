@@ -107,7 +107,7 @@ ok(sent.Document.TaxId === "000000018" && sent.Document.Name === "רונית כ�
 ok(sent.UIDefinition.CardOwnerIdValue === "000000018", "הת\"ז ממולאת מראש בטופס התשלום");
 ok(sent.SuccessRedirectUrl === "https://pay.example/done?p=smart", "דף ההצלחה הוא שלנו, שמעביר לדף התודה");
 ok(sent.WebHookUrl === "https://pay.example/api/webhook", "כתובת הדיווח");
-ok(sent.AdvancedDefinition.MaxNumOfPayments === 12, "עד 12 תשלומים");
+ok(sent.AdvancedDefinition.MinNumOfPayments === 1 && sent.AdvancedDefinition.MaxNumOfPayments === 1, "בלי בחירה: תשלום אחד, נעול");
 ok(!sent.UIDefinition.CustomFields, "בלי מספר שדה הדיוור לא נשלח שדה מותאם");
 const order1 = sent.ReturnValue;
 ok(/^smart-[a-z0-9]+-[a-z0-9]+$/.test(order1), "מספר ההזמנה בנוי מהמוצר");
@@ -116,6 +116,14 @@ ok(kv.has(`pay:ord:${order1}`) && zs.get("pay:pending").has(order1), "ההזמנ
 r = await call(create, { method: "POST", body: { ...good, biz: { name: "סטודיו רונית", id: "000000018" } } });
 ok(cardcomCreate[1].Document.Name === "סטודיו רונית", "חשבונית עסקית על שם העסק");
 
+r = await call(create, { method: "POST", body: { ...good, payments: 3, email: "p3@gmail.com" } });
+const a3 = cardcomCreate.at(-1).AdvancedDefinition;
+ok(a3.MinNumOfPayments === 3 && a3.MaxNumOfPayments === 3 && a3.SelectedNumOfPayments === 3, "3 תשלומים שנבחרו בדף: הטופס של קארדקום נעול על 3");
+ok(cardcomCreate.at(-1).Amount === 590, "מספר התשלומים לא משנה את הסכום הכולל");
+r = await call(create, { method: "POST", body: { ...good, payments: 13 } });
+ok(r.code === 400 && r.body.missing.includes("מספר תשלומים"), "13 תשלומים: נעצר בשרת");
+r = await call(create, { method: "POST", body: { ...good, payments: 2.5 } });
+ok(r.code === 400 && r.body.missing.includes("מספר תשלומים"), "מספר תשלומים שאינו שלם: נעצר");
 r = await call(create, { method: "POST", body: { ...good, tz: "123" } });
 ok(r.code === 400 && r.body.missing.includes("תעודת זהות"), "ת\"ז שגויה נעצרת בשרת");
 r = await call(create, { method: "GET" });
@@ -158,7 +166,8 @@ ok(r.body === "already" && responderAdds.length === 1, "דיווח כפול: ל�
 ok(!zs.get("pay:pending").has(order1), "שולמה: יוצאת מרשימת הממתינות");
 
 // ---- מי שלא השלימה ----
-const order2 = cardcomCreate[1].ReturnValue; // הזמנה עסקית של אותה אישה, לא שולמה
+const order2 = cardcomCreate[1].ReturnValue;
+zs.get("pay:pending").delete(cardcomCreate[2].ReturnValue); // ההזמנה של 3 התשלומים לא שייכת לתרחיש הזה // הזמנה עסקית של אותה אישה, לא שולמה
 zs.get("pay:pending").set(order2, Date.now() - 31 * 60 * 1000);
 r = await call(sweep, { query: { secret: "sweep" } });
 ok(r.body.paid >= 1 && !responderAdds.some((a) => a.list === "1884"), "שילמה בניסיון אחר: לא נכנסת ל\"רכישה נכשלה\"");

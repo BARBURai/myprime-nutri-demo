@@ -54,9 +54,13 @@ h1{font-family:var(--display);font-size:22px;line-height:1.25;margin:0;text-wrap
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .field label{font-weight:600;font-size:14px}
 .req{color:var(--brand2)}
-.field input{font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;width:100%}
-.field input:focus{outline:none;border-color:var(--brand)}
-.field input:disabled{opacity:.7}
+.field input,.field select{font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;width:100%}
+.field input:focus,.field select:focus{outline:none;border-color:var(--brand)}
+.field input:disabled,.field select:disabled{opacity:.7}
+.sum{margin:0;display:flex;flex-direction:column;gap:6px;background:var(--brandSoft);border-radius:12px;padding:12px 14px;font-size:15px}
+.sum div{display:flex;justify-content:space-between;gap:10px}
+.sum dt span{color:var(--muted);font-size:13px}
+.sum dd{margin:0;font-weight:700;font-variant-numeric:tabular-nums}
 .ltr{direction:ltr;text-align:right}
 .hint{font-size:13px;color:var(--muted)}
 .checks{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:14px}
@@ -116,6 +120,13 @@ h1{font-family:var(--display);font-size:22px;line-height:1.25;margin:0;text-wrap
           </div>
           <div class="field"><label for="tz">תעודת זהות <span class="req">*</span></label><input id="tz" class="ltr" inputmode="numeric" maxlength="12">
             <span class="hint">תמולא אוטומטית גם בטופס התשלום, ולא צריך להקליד אותה שוב</span></div>
+
+          <div class="field"><label for="np">מספר תשלומים</label><select id="np"></select></div>
+          <dl class="sum" aria-live="polite">
+            <div><dt>סה"כ</dt><dd id="sumTotal"></dd></div>
+            <div><dt>מספר תשלומים <span id="kind"></span></dt><dd id="cnt">1</dd></div>
+            <div><dt>סכום כל תשלום</dt><dd id="per"></dd></div>
+          </dl>
 
           <div class="checks">
             <label class="check"><input type="checkbox" id="mkt"><span>אני מאשרת קבלת דיוור ממיי פריים <span class="req">*</span></span></label>

@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   const product = productOf(body.p);
   if (!product) return res.status(404).json({ error: "not_found" });
 
-  const parsed = parseBuyer(body);
+  const parsed = parseBuyer(body, product.maxPayments || 1);
   if (parsed.missing) return res.status(400).json({ error: "missing", missing: parsed.missing });
   const buyer = parsed.buyer;
 

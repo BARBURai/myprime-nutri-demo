@@ -85,6 +85,13 @@ for (const [label, vp] of [["phone", { width: 390, height: 844 }], ["desktop", {
   ok((await page.textContent("#err")).trim() === "כדי להמשיך חסר: אישור הדיוור", `${label}: בלי דיוור`);
   ok(creates.length === before, `${label}: לא נוצר דף תשלום לפני שהכל מולא`);
 
+  ok((await page.textContent("#per")).trim() === "590 ₪", `${label}: סיכום התשלומים מתחיל בתשלום אחד`);
+  await page.selectOption("#np", "3");
+  ok((await page.textContent("#per")).trim() === "196.67 ₪" && (await page.textContent("#kind")).includes("קרדיט"), `${label}: 3 תשלומים: 196.67 ₪, תשלומי קרדיט`);
+  await page.selectOption("#np", "2");
+  ok((await page.textContent("#per")).trim() === "295 ₪" && !(await page.textContent("#kind")), `${label}: 2 תשלומים: 295 ₪, בלי קרדיט`);
+  await page.selectOption("#np", "3");
+
   await page.check("#bizOn");
   ok(await page.isVisible("#bn"), `${label}: חשבונית עסקית פותחת שדות`);
   await page.uncheck("#bizOn");
@@ -97,7 +104,8 @@ for (const [label, vp] of [["phone", { width: 390, height: 844 }], ["desktop", {
   ok(await page.isVisible("#payErr") && await page.isVisible("#retry"), `${label}: תשלום שנכשל מציג "לנסות שוב"`);
   ok(await page.isHidden("#frame"), `${label}: המסגרת נסגרת אחרי כישלון`);
   ok(await page.isDisabled("#email"), `${label}: הפרטים נעולים בזמן התשלום`);
-  ok(creates.at(-1).email === "ronit@gmail.com" && creates.at(-1).mkt === true, `${label}: הפרטים נשלחו לשרת`);
+  ok(creates.at(-1).email === "ronit@gmail.com" && creates.at(-1).mkt === true && creates.at(-1).payments === 3, `${label}: הפרטים ומספר התשלומים נשלחו לשרת`);
+  ok(await page.isDisabled("#np"), `${label}: מספר התשלומים נעול בזמן התשלום`);
 
   nextOutcome = "ok";
   const n = creates.length;
