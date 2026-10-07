@@ -614,5 +614,53 @@ console.log("\nהייבוא מוציא מהשרת לידים שאינם בגיל
   ck("**גיליון בלי שורות אינו מוציא אף אחת**", !!H["mc:rows"]["972506300007"] && !(eo.body && eo.body.pruned), strip(eo.body));
 }
 
+// ============================================================
+console.log("\nv7.89: מסך הניהול רואה את קורס האיפור ואת אפליקציית תזונה מהשרת\n");
+{
+  H = {}; L = {}; S = {}; log = []; redisDown = false; OVERSIZE.clear(); SCANFAIL = false; MCAPI.mode = "ok";
+  process.env.MC_SYNC_SECRET = "s3cret-mc";
+  SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,GLOW-FULL,אפליקציית תזונה
+972507700001,עמליה,amal@test.com,${sunday} 12:00:00,,,,
+972507700002,שירה,shira@test.com,${sunday} 12:00:00,,,,
+972507700003,כרמלה,carm@test.com,${sunday} 12:00:00,,,TRUE,
+`;
+  const list = async () => { const [o, r] = resOf(); await admin({ method: "GET", query: { key: "owner-key-123" }, headers: {} }, r); const ws = (o.body && o.body.women) || []; return Object.fromEntries(ws.map((w) => [w.email, w])); };
+  const before = await list();
+  ck("לפני: המסך קורא את הגיליון לבדו", before["amal@test.com"] && before["amal@test.com"].glowFull === false && before["amal@test.com"].newApp === false, strip(before["amal@test.com"]));
+  const r1 = await push({ ID: "972507700001", F_NAME: "עמליה", CF_EMAIL: "amal@test.com", [START]: sunday + " 12:00:00", "GLOW-FULL": "TRUE", "אפליקציית תזונה": "TRUE" });
+  ck("מניצ'ט שולח, והשורה נשמרת", r1.code === 200, strip(r1.body));
+  ck("**הסימונים נשמרים לפי הטלפון**", (H["mc:flags"] || {})["972507700001"] === "ga", strip(H["mc:flags"]));
+  const after = await list();
+  ck("**קורס האיפור המלא מוצג לפי השרת**, כשהגיליון ריק", after["amal@test.com"].glowFull === true, strip(after["amal@test.com"]));
+  ck("**והיא מוצגת כאפליקציה חדשה**", after["amal@test.com"].newApp === true);
+  ck("ומה שהגיליון אומר נשאר גלוי בנפרד", after["amal@test.com"].sheetGlowFull === false);
+  ck("אישה אחרת לא נגעה", after["shira@test.com"].glowFull === false && after["shira@test.com"].newApp === false);
+  ck("**סימון בגיליון בלי שרת נשאר כמו שהוא**", after["carm@test.com"].glowFull === true);
+  await push({ ID: "972507700001", F_NAME: "עמליה", CF_EMAIL: "amal@test.com", [START]: sunday + " 12:00:00", "GLOW-FULL": "", "אפליקציית תזונה": "TRUE" });
+  ck("תגית שהוסרה במניצ'ט יורדת מהסימונים", (H["mc:flags"] || {})["972507700001"] === "a", strip(H["mc:flags"]));
+  await push({ ID: "972507700001", F_NAME: "עמליה", CF_EMAIL: "amal@test.com", [START]: sunday + " 12:00:00", "GLOW-FULL": "", "אפליקציית תזונה": "" });
+  ck("ובלי אף סימון השורה יוצאת מהרשימה", !(H["mc:flags"] || {})["972507700001"], strip(H["mc:flags"]));
+  await push({ ID: "972507700001", F_NAME: "עמליה", CF_EMAIL: "amal@test.com", [START]: sunday + " 12:00:00", "GLOW-FULL": "TRUE", "אפליקציית תזונה": "TRUE" });
+  hash("admin:overrides")["amal@test.com"] = JSON.stringify({ glowFull: "0", by: "טלי" });
+  ck("**הכרעת המשרד גוברת על השרת**", (await list())["amal@test.com"].glowFull === false);
+  delete H["admin:overrides"];
+  delete process.env.MC_SYNC_SECRET;
+  const off = await list();
+  ck("**בלי MC_SYNC_SECRET המסך מתעלם מהשרת**, כמו השער", off["amal@test.com"].glowFull === false && off["amal@test.com"].newApp === false, strip(off["amal@test.com"]));
+  process.env.MC_SYNC_SECRET = "s3cret-mc";
+  OVERSIZE.add("mc:flags");
+  const bad = await list();
+  ck("**תקלה בקריאת הסימונים משאירה את הגיליון לבדו**, והמסך נטען", bad["amal@test.com"] && bad["amal@test.com"].glowFull === false, strip(bad["amal@test.com"]));
+  OVERSIZE.delete("mc:flags");
+  delete H["mc:flags"]; delete S["sheet:csv:v1"];
+  hash("mc:rows")["972507700002"] = JSON.stringify({ cells: { ID: "972507700002", CF_EMAIL: "shira@test.com", [START]: sunday, "GLOW-FULL": "TRUE" }, t: 1, src: "mc" });
+  const [io, ires] = resOf();
+  await admin({ method: "POST", query: { key: "owner-key-123" }, headers: {}, body: { mcImport: true } }, ires);
+  ck("הייבוא הצליח", io.body && io.body.ok === true, strip(io.body));
+  ck("**הייבוא בונה את הסימונים מחדש מכל השורות**", (H["mc:flags"] || {})["972507700001"] === "ga" && (H["mc:flags"] || {})["972507700002"] === "g", strip(H["mc:flags"]));
+  ck("ושורה מהגיליון עם GLOW-FULL נכנסת גם היא", (H["mc:flags"] || {})["972507700003"] === "g", strip(H["mc:flags"]));
+  ck("ולא נשארה רשימת עבודה", !H["mc:flags:build"]);
+}
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);

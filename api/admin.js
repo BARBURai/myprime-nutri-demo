@@ -40,7 +40,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.88";
+const ADMIN_VERSION = "7.89";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1103,7 +1103,7 @@ JSON בלבד, בלי שום טקסט אחר:
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
-  let overrides = {}, seen = {}, emailMap = {}, emailOld = {}, manual = {}, glowStart = {};
+  let overrides = {}, seen = {}, emailMap = {}, emailOld = {}, manual = {}, glowStart = {}, mcFlags = {};
   const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
@@ -1121,6 +1121,9 @@ JSON בלבד, בלי שום טקסט אחר:
     // היום הראשון שבו נכנסה לקורס. **זה אינו תאריך הקנייה**, שאינו קיים אצלנו
     // בשום מקום, אלא הרגע שבו הקורס נפתח לה בפועל. נתפס ב-HSETNX בשער.
     try { glowStart = flat(await redis(RU, RT, "HGETALL", "glow:start")); } catch (e) {}
+    // **מה שמניצ'ט אומר, גם כשהגיליון מפגר.** קורס האיפור המלא ואפליקציית תזונה, לפי
+    // הטלפון. רק כשהחיבור למניצ'ט פעיל, בדיוק כמו בשער. תקלה כאן משאירה את הגיליון לבדו. v7.89.
+    if (process.env.MC_SYNC_SECRET) { try { mcFlags = flat(await redis(RU, RT, "HGETALL", "mc:flags")); } catch (e) {} }
     // admin:usage אינו נקרא כאן יותר. הכרטיס מושך אישה אחת ב-?usage=. v7.53.
 
     // Who is on the new app. admin:seen only starts at v4.87, so it alone would report far
@@ -1237,7 +1240,8 @@ JSON בלבד, בלי שום טקסט אחר:
     // **מה יש לה עכשיו, ומה המסך שהיא רואה.** מחושב מ-`api/_product.js`, שהוא אותו
     // קובץ בדיוק שהשער מריץ, ולכן המסך והאפליקציה אינם יכולים לחלוק. זה מה שנשבר
     // ב-v6.77 כששני הקבצים החזיקו כל אחד עותק משלו.
-    const glowFullNow = (ovr && ovr.glowFull) ? ovr.glowFull === "1" : !!w.glowFull;
+    const srvFlags = (w.phone && mcFlags[w.phone]) || "";
+    const glowFullNow = (ovr && ovr.glowFull) ? ovr.glowFull === "1" : (!!w.glowFull || srvFlags.includes("g"));
     const glowPaidNow = (ovr && ovr.glowPaid) ? ovr.glowPaid === "1" : !!w.glowPaid;
     const glowStartAt = glowStart[w.email] || "";
     const state = decideAccess({
@@ -1281,7 +1285,7 @@ JSON בלבד, בלי שום טקסט אחר:
       // Opening the app at least once is what puts her on the new app. This only counts
       // from the day admin:seen started being written, so the list fills in over a few days
       // as each woman next opens the app.
-      newApp: !!w.sheetNewApp || appEmails.has(w.email),
+      newApp: !!w.sheetNewApp || appEmails.has(w.email) || srvFlags.includes("a"),
       group,
       sheetGroup: w.group || "",
       groupOverride: (ovr && ovr.group) ? { group: ovr.group, by: ovr.by || "" } : null,
