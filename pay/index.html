@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>מיי פריים - הרשמה ותשלום</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700&family=Assistant:wght@400;600;700&display=swap">
+<style>
+:root{
+  --bg:#FBF6FA; --card:#FFFFFF; --fg:#2A1B33; --muted:#6B5A75; --line:#E8DCEB;
+  --brand:#8A1FB0; --brand2:#E047C6; --brandSoft:#F6EAF9; --warn:#B4541B;
+  --display:"Rubik","Assistant",system-ui,sans-serif; --body:"Assistant",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.55}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:16px;padding-block:calc(env(safe-area-inset-top,0px) + 20px) 40px;display:flex;flex-direction:column;gap:16px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.aside{min-width:0}
+@media (min-width:860px){
+  .grid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start}
+  .aside{position:sticky;top:16px;grid-column:2;grid-row:1}
+  .main{grid-column:1;grid-row:1}
+}
+.logo{display:flex;align-items:center;justify-content:center;gap:10px}
+.logo .dot{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--brand2),var(--brand))}
+.logo b{font-family:var(--display);font-size:30px;color:var(--brand);letter-spacing:.5px;direction:ltr}
+.logo small{display:block;font-size:13px;color:var(--brand2);margin-top:-6px;text-align:left}
+.order{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px}
+h1{font-family:var(--display);font-size:22px;line-height:1.25;margin:0;text-wrap:balance;text-align:center}
+.sub{color:var(--muted);margin:0;text-align:center}
+.lines{margin:0;display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:12px}
+.lines div{display:flex;justify-content:space-between;gap:10px}
+.lines dd{margin:0;font-weight:700;font-variant-numeric:tabular-nums}
+.lines .tot{border-top:1px solid var(--line);padding-top:8px;font-size:18px}
+.lines .tot dd{font-family:var(--display);color:var(--brand);font-size:22px}
+.trust{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;border-top:1px solid var(--line);padding-top:12px}
+.trust span{font-size:12px;font-weight:700;letter-spacing:.4px;border:1.5px solid var(--line);border-radius:8px;padding:5px 9px;color:var(--muted);direction:ltr}
+.trust .sec{color:var(--brand);border-color:var(--brand)}
+.intro{font-size:15px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.intro p{margin:0}
+.perks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.perks li{display:flex;gap:8px}
+.perks li::before{content:"•";color:var(--brand);font-weight:700}
+.step{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.step h2{font-family:var(--display);font-size:18px;margin:0;display:flex;align-items:center;gap:8px}
+.step h2 .n{width:26px;height:26px;border-radius:50%;background:var(--brand);color:var(--card);font-size:14px;display:grid;place-items:center}
+.step.locked{opacity:.55}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:420px){.pair.stack{grid-template-columns:minmax(0,1fr)}}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-weight:600;font-size:14px}
+.req{color:var(--brand2)}
+.field input{font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;width:100%}
+.field input:focus{outline:none;border-color:var(--brand)}
+.field input:disabled{opacity:.7}
+.ltr{direction:ltr;text-align:right}
+.hint{font-size:13px;color:var(--muted)}
+.checks{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:14px}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:15px}
+.check input{width:20px;height:20px;margin-top:3px;accent-color:var(--brand);flex:none}
+.check a{color:var(--brand);font-weight:600}
+.biz{display:flex;flex-direction:column;gap:12px;background:var(--brandSoft);border-radius:14px;padding:14px}
+.err{color:var(--warn);font-size:14px}
+.btn{font:inherit;font-family:var(--display);font-weight:700;font-size:18px;border:0;border-radius:14px;padding:15px;cursor:pointer;color:#fff;background:linear-gradient(135deg,var(--brand2),var(--brand))}
+.btn:focus-visible{outline:3px solid var(--brand2);outline-offset:2px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.link{font:inherit;font-size:14px;background:none;border:0;padding:0;color:var(--brand);text-decoration:underline;cursor:pointer;align-self:flex-start}
+.note{font-size:14px;color:var(--muted);margin:0}
+.frame{width:100%;min-height:860px;border:0;border-radius:12px;background:var(--card)}
+.center{text-align:center;padding:40px 16px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="note center" id="loading">טוען...</p>
+  <p class="center" id="nf" hidden>הדף הזה לא קיים.</p>
+
+  <div class="grid" id="page" hidden>
+    <aside class="aside">
+      <section class="order">
+        <div class="logo" aria-label="my prime"><span class="dot"></span><div><b>my prime</b><small>זה הפריים שלי</small></div></div>
+        <h1 id="title"></h1>
+        <p class="sub" id="subtitle"></p>
+        <dl class="lines">
+          <div><dt id="lineName"></dt><dd id="linePrice"></dd></div>
+          <div><dt>מע"מ</dt><dd>כלול</dd></div>
+          <div class="tot"><dt>סה"כ</dt><dd id="total"></dd></div>
+        </dl>
+        <div class="trust" aria-label="אמצעי תשלום ואבטחה">
+          <span class="sec">🔒 SECURE SSL</span><span>VISA</span><span>Mastercard</span><span>bit</span><span>PayPal</span><span>G Pay</span><span> Pay</span>
+        </div>
+        <div class="intro">
+          <p><span id="intro"></span><br><b id="introBold"></b></p>
+          <ul class="perks" id="bullets"></ul>
+          <p id="signoff"></p>
+        </div>
+      </section>
+    </aside>
+
+    <div class="main">
+      <section class="step" id="s1">
+        <h2><span class="n">1</span>הפרטים שלך</h2>
+        <form id="f" novalidate style="display:flex;flex-direction:column;gap:14px">
+          <div class="pair">
+            <div class="field"><label for="fn">שם פרטי <span class="req">*</span></label><input id="fn" autocomplete="given-name" maxlength="40"></div>
+            <div class="field"><label for="ln">שם משפחה <span class="req">*</span></label><input id="ln" autocomplete="family-name" maxlength="40"></div>
+          </div>
+          <div class="pair stack">
+            <div class="field"><label for="phone">טלפון נייד <span class="req">*</span></label><input id="phone" class="ltr" type="tel" inputmode="tel" autocomplete="tel" maxlength="20"></div>
+            <div class="field"><label for="email">אימייל <span class="req">*</span></label><input id="email" class="ltr" type="email" autocomplete="email" maxlength="120"></div>
+          </div>
+          <div class="field"><label for="tz">תעודת זהות <span class="req">*</span></label><input id="tz" class="ltr" inputmode="numeric" maxlength="12">
+            <span class="hint">תמולא אוטומטית גם בטופס התשלום, ולא צריך להקליד אותה שוב</span></div>
+
+          <div class="checks">
+            <label class="check"><input type="checkbox" id="mkt"><span>אני מאשרת קבלת דיוור ממיי פריים <span class="req">*</span></span></label>
+            <label class="check"><input type="checkbox" id="terms"><span>אני מאשרת את <a id="termsLink" target="_blank" rel="noopener">תקנון התכנית</a>, כולל הצהרת הבריאות <span class="req">*</span></span></label>
+            <label class="check"><input type="checkbox" id="bizOn"><span>אני מעוניינת להוציא חשבונית על שם העסק שלי</span></label>
+            <div class="biz" id="biz" hidden>
+              <div class="pair stack">
+                <div class="field"><label for="bn">שם העסק <span class="req">*</span></label><input id="bn" maxlength="80"></div>
+                <div class="field"><label for="bid">מספר ח.פ / עוסק <span class="req">*</span></label><input id="bid" class="ltr" inputmode="numeric" maxlength="12"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="err" id="err" role="alert" hidden></div>
+          <button class="btn" id="go" type="submit">המשך</button>
+          <button class="link" id="edit" type="button" hidden>תיקון הפרטים</button>
+        </form>
+      </section>
+
+      <section class="step locked" id="s2">
+        <h2><span class="n">2</span>תשלום</h2>
+        <p class="note" id="lockNote">ייפתח אחרי מילוי הפרטים</p>
+        <div class="err" id="payErr" role="alert" hidden></div>
+        <button class="btn" id="retry" type="button" hidden>לנסות שוב</button>
+        <iframe class="frame" id="frame" title="טופס תשלום מאובטח" hidden allow="payment"></iframe>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

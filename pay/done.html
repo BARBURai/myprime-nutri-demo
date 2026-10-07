@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>מיי פריים</title>
+<style>body{margin:0;font-family:"Assistant",system-ui,sans-serif;background:#fff;color:#2A1B33;text-align:center;padding:40px 16px}a{color:#8A1FB0;font-weight:700}</style>
+</head>
+<body>
+<!-- קארדקום מפנה לכאן בתוך המסגרת אחרי תשלום שעבר. מכאן כל הדף, ולא רק
+     המסגרת, עובר לדף התודה של המוצר. גם כשהדף שלנו משובץ באתר אחר. -->
+<p id="msg">התשלום עבר בהצלחה.</p>
+<p><a id="go" href="https://myprime.co.il" target="_top" hidden>להמשך</a></p>
+<script>
+(async () => {
+  const p = new URLSearchParams(location.search).get("p") || "";
+  let url = "https://myprime.co.il";
+  try {
+    const r = await fetch("/api/product?p=" + encodeURIComponent(p));
+    if (r.ok) url = (await r.json()).thankYouUrl || url;
+  } catch {}
+  const a = document.getElementById("go");
+  a.href = url;
+  try { window.top.location.href = url; } catch {}
+  setTimeout(() => { a.hidden = false; }, 1500);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>מיי פריים</title>
+<style>body{margin:0;font-family:"Assistant",system-ui,sans-serif;background:#fff;color:#2A1B33;text-align:center;padding:40px 16px}</style>
+</head>
+<body>
+<!-- קארדקום מפנה לכאן בתוך המסגרת אחרי תשלום שלא עבר. הדף שלנו מקבל הודעה,
+     מסתיר את המסגרת ומציע לנסות שוב. -->
+<p>התשלום לא עבר. אפשר לנסות שוב, גם עם אמצעי תשלום אחר.</p>
+<script>
+try { window.parent.postMessage({ type: "mp-pay-failed" }, location.origin); } catch {}
+</script>
+</body>
+</html>
