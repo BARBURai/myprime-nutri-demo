@@ -171,7 +171,7 @@ async function mcShadow(redis, RU, RT, email, header, sheetHits, hitFromCells, r
     const smart = SMART_COLS.map(normHeader).find((h) => /^\s*true\s*$/i.test(String(byNorm[h] || "")));
     if (smart) SMART_COLS.forEach((c) => { byNorm[normHeader(c)] = byNorm[smart]; });
     const cells = hn.map((h) => (byNorm[h] == null ? "" : String(byNorm[h])));
-    return hitFromCells(cells, cells.join(","));
+    return hitFromCells(cells, cells.join(","), true);
   });
   const a = summarize(sheetHits), b = summarize(mcHits);
   let cat;
@@ -209,17 +209,39 @@ async function mcShadow(redis, RU, RT, email, header, sheetHits, hitFromCells, r
 // הגיע לגיליון חל רק כשהוא מגיע לגיליון, וזה בדיוק המצב היום. **תקלה בשרת, או שאין בו
 // אותה, משאירה את הגיליון לבד**, כלומר את ההתנהגות של היום.
 // ============================================================================
-export function mergeServer(sheet, server, endOf) {
+//
+// ============================================================================
+// **שלב ב: השרת קובע, והגיליון בדיקה כפולה. v7.88.** אישור רון: "כן", על התוכנית
+// "השרת קובע · הגיליון כשלשרת אין תשובה · באי הסכמה על כניסה היא נכנסת".
+//
+// | מה | הכלל |
+// |---|---|
+// | **תאריך התחלה** | **של השרת**, וכשהוא ריק אצלו, של הגיליון |
+// | **מסלול סולו** | **של השרת.** זה מה שסוגר את השורה הכפולה של קנייה שנייה (טל, 06.10) |
+// | **ביטול** | **רק כששניהם אומרים ביטול.** אי הסכמה על כניסה: היא נכנסת |
+// | **בונוס, קורס מלא, קנייה, הטבת סולו** | מספיק שאחד מהם אומר כן |
+// | **חודשים נוספים וחודשי קורס** | הגבוה מבין השניים |
+// | **חלון שנגמר לפי השרת ופתוח לפי הגיליון** | **התאריך והמסלול של הגיליון**, כלומר היא נכנסת |
+//
+// **מה שלא השתנה:** חסימה, הקפאה והארכה של המשרד גוברות על שניהם, כי הן נקראות אחרי.
+// **ותקלה בשרת, או שאין בו אותה, משאירה את הגיליון לבד**, כלומר את ההתנהגות של היום.
+// `disagree` מסמן שהשניים חלקו על הכניסה, ונרשם ב-`mc:diffs` כדי שרון יראה כל מקרה.
+// ============================================================================
+export function mergeServer(sheet, server, endOf, now) {
   if (!server || !sheet) return sheet;
   const m = { ...sheet };
-  // **ביטול בגיליון נשאר ביטול.** שורה ישנה בשרת, שנשמרה לפני שבוטלה, לא תכניס אותה. v7.84.
-  m.cancelled = !!sheet.cancelled;
+  if (server.start) m.start = server.start;
+  m.solo = server.solo || 0;
+  m.cancelled = !!(sheet.cancelled && server.cancelled);
   for (const k of ["glow", "glowFull", "glowPaid", "glowSolo"]) m[k] = !!(sheet[k] || server[k]);
   for (const k of ["months", "glowM"]) { const a = sheet[k] || 0, b = server[k] || 0; m[k] = Math.max(a, b) || null; }
-  if (sheet.solo !== server.solo && m.start) {
-    const ea = endOf(m.start, m.months, sheet.solo), eb = endOf(m.start, m.months, server.solo);
-    m.solo = eb > ea ? server.solo : sheet.solo;
+  let disagree = !!sheet.cancelled !== !!server.cancelled;
+  const t = now == null ? Date.now() : now;
+  if (m.start && sheet.start) {
+    const eServer = endOf(m.start, m.months, m.solo), eSheet = endOf(sheet.start, m.months, sheet.solo);
+    if (eServer && eServer < t && eSheet >= t) { m.start = sheet.start; m.solo = sheet.solo; disagree = true; }
   }
+  if (disagree) m.disagree = true;
   return m;
 }
 
@@ -273,6 +295,7 @@ export default async function handler(req, res) {
 
   let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false, glowFull = false;
   let solo = 0, glowMonths = null, glowPaid = false, glowSolo = false;
+  let serverOnly = null; // מה שהשרת יודע עליה כשהגיליון אינו מחזיק אותה. v7.88.
   try {
     // המשיכה עצמה, וביטול המטמון שבתוכה, עברו ל-`_sheet.js` כדי שעותק אחד ישרת את כל
     // הנשים לדקה. **הקריאה נכשלת לצד הפתוח:** בלי Redis או בתקלה שלו היא מושכת מגוגל
@@ -338,7 +361,9 @@ export default async function handler(req, res) {
     // בשני הקבצים: תאריך ההתחלה המאוחר ביותר**, וזה `pickRow` ב-`api/_sheet.js`.
     // **מה ששורה אחת אומרת על האישה.** v7.65: יצא לפונקציה כדי ששורה שהגיעה ממניצ'ט
     // תעבור בדיוק באותו כלל כמו שורה מהגיליון, ולא בעותק שלו. הגוף לא השתנה באות.
-    const hitFromCells = (cells, line) => {
+    // `strict`: שורה מהשרת. **שם אין סריקה של כל השורה**, כי בשורה ממניצ'ט יש עשרה שדות
+    // תאריך ועשרות TRUE, וסריקה הייתה שולפת תאריך התחלה או ביטול שאינם שלה. v7.88.
+    const hitFromCells = (cells, line, strict) => {
       const isYes = (v) => /^(true|yes|1|כן|✓|v)$/i.test(String(v || "").trim());
 
       const hit = { phone: "", glow: false, glowFull: false, glowPaid: false, glowSolo: false, solo: 0, months: null, glowM: null, cancelled: false, start: null };
@@ -360,7 +385,7 @@ export default async function handler(req, res) {
       if (startCol !== -1 && cells[startCol]) {
         raw = (cells[startCol].match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0] || null;
       }
-      if (!raw) raw = (line.match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0] || null;
+      if (!raw && !strict) raw = (line.match(/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/) || [])[0] || null;
       // ההשוואה בין השורות היא על יום ראשון של המחזור ולא על המחרוזת עצמה, כי
       // בקובץ יושבות שתי צורות תאריך ומחרוזות כאלה אינן ניתנות להשוואה.
       hit.start = raw;
@@ -370,7 +395,7 @@ export default async function handler(req, res) {
       // a TRUE in any other boolean column (e.g. "הורידה אפליקציה") wrongly blocked a user.
       if (cancelCol !== -1) {
         if (isTrue(cells[cancelCol])) hit.cancelled = true;
-      } else if (/(^|,)\s*TRUE\s*(,|$)/i.test(line)) {
+      } else if (!strict && /(^|,)\s*TRUE\s*(,|$)/i.test(line)) {
         hit.cancelled = true; // fallback only when the header wasn't found
       }
 
@@ -429,15 +454,33 @@ export default async function handler(req, res) {
       extraMonths = win.months;
       glowMonths = win.glowM;
     }
-    // שלב א: השרת מוסיף ולעולם אינו לוקח. ראה `mergeServer`.
+    // **ורק כשהטלפון שלה אינו בגיליון.** טלפון שיושב בגיליון עם מייל אחר פירושו שהמייל
+    // השתנה במניצ'ט והשורה בשרת נשארה תחת הישן, כי אין טריגר על המייל. נמצא ב-06.10.2026
+    // על אישה אמיתית בהקפאה: הכתובת הישנה שלה הייתה נכנסת. v7.88.
+    if (serverHits && serverHits.length && !hits.length) {
+      const phones = serverHits.map((h) => h.phone).filter(Boolean);
+      const inSheet = phoneCol !== -1 && phones.length && lines.some((l, i) => {
+        if (i === 0) return false;
+        const c = parseCsvLine(l);
+        return phones.includes(String(c[phoneCol] || "").replace(/[^\d]/g, ""));
+      });
+      if (phones.length && !inSheet) serverOnly = serverHits;
+    }
+    // שלב ב: השרת קובע, והגיליון בדיקה כפולה. ראה `mergeServer`. v7.88.
     if (serverHits && serverHits.length && hits.length) {
       const sv = summarize(serverHits);
       const sh = hits.length ? { start: (startStr && parseDateToSunday(startStr)) ? ymd(parseDateToSunday(startStr)) : null, cancelled, months: extraMonths, solo, glow, glowFull, glowPaid, glowSolo, glowM: glowMonths } : null;
       const endOf = (st, mo, so) => { const d = parseDateToSunday(st); return d ? accessEnd(d, mo, so).getTime() : 0; };
       const m = mergeServer(sh, sv, endOf);
       if (m) {
+        if (m.start) startStr = m.start;
         cancelled = m.cancelled; extraMonths = m.months; solo = m.solo;
         glow = m.glow; glowFull = m.glowFull; glowPaid = m.glowPaid; glowSolo = m.glowSolo; glowMonths = m.glowM;
+        if (m.disagree) {
+          try {
+            await redis.pipe(RU, RT, [["LPUSH", MC_DIFFS, JSON.stringify({ t: Date.now(), email: lookFor, cat: "gate", sheet: sh, server: sv })], ["LTRIM", MC_DIFFS, 0, 199]]);
+          } catch (e) { /* רישום שנכשל אינו משנה את התשובה */ }
+        }
       }
     }
   } catch (e) {
@@ -469,6 +512,19 @@ export default async function handler(req, res) {
         }
       }
     } catch (e) { /* the file stays in charge */ }
+  }
+  // **שלב ב: מי שקיימת בשרת ועוד לא בגיליון נכנסת, אבל רק עם תאריך התחלה בשדה עצמו.** v7.88.
+  // קונה חדשה מגיעה לשרת לפני שמניצ'ט מייצא לגיליון. **בלי תאריך היא אינה נכנסת**, כמו
+  // ב-v7.84, כי שורה כזאת יכולה להיות שארית. והוספה ידנית של המשרד נשאלת לפני זה.
+  if (!found && serverOnly) {
+    const sv = summarize(serverOnly);
+    if (sv && sv.start) {
+      found = true;
+      startStr = sv.start; cancelled = sv.cancelled; extraMonths = sv.months; solo = sv.solo;
+      glow = sv.glow; glowFull = sv.glowFull; glowPaid = sv.glowPaid; glowSolo = sv.glowSolo; glowMonths = sv.glowM;
+      const w = serverOnly.find((h) => h.phone) || {};
+      phone = w.phone || "";
+    }
   }
   if (!found) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
   // **הביטול, ההקפאה והחלון שנגמר אינם יוצאים מכאן יותר, והם עדיין חוסמים.**

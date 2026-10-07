@@ -21,6 +21,9 @@ export const MC_ROWS = "mc:rows";
 export const MC_BYEMAIL = "mc:byemail";
 export const MC_STATS = "mc:stats";
 export const MC_DIFFS = "mc:diffs";
+// שני סימונים קטנים לכל טלפון, למסך הניהול: "g" קורס האיפור המלא, "a" אפליקציית תזונה.
+// **מסך הניהול קורא אותם במקום לקרוא את כל mc:rows**, שעובר 10MB. v7.89.
+export const MC_FLAGS = "mc:flags";
 export const mcShadowKey = (day) => "mc:shadow:" + day;
 
 const norm = (s) => String(s || "").replace(/^["']|["']$/g, "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -283,6 +286,10 @@ export async function ingest(body, RU, RT, now = Date.now()) {
   if (tags) rec.tags = tags;
   else if (prev && Array.isArray(prev.tags)) rec.tags = prev.tags;
   await rpost(RU, RT, ["HSET", MC_ROWS, phone, JSON.stringify(rec)]);
+  try {
+    const f = flagsOf(cells);
+    await rpost(RU, RT, f ? ["HSET", MC_FLAGS, phone, f] : ["HDEL", MC_FLAGS, phone]);
+  } catch (e) { /* תצוגה במסך הניהול בלבד */ }
   if (!prev || prev.src !== "mc") { try { await rpost(RU, RT, ["HINCRBY", MC_STATS, "fromMc", 1]); } catch (e) {} }
   // אם המייל שלה השתנה, השורה עוברת מהכתובת הישנה לחדשה, **כדי שכתובת שכבר אינה שלה לא
   // תמשיך להחזיק את הנתונים שלה.**
@@ -377,6 +384,10 @@ export function rowsFromSheet(text, parseCsvLine) {
   return out;
 }
 const isTrueCell = (v) => /^\s*true\s*$/i.test(String(v || ""));
+export function flagsOf(cells) {
+  if (!cells) return "";
+  return (isTrueCell(cells["GLOW-FULL"]) ? "g" : "") + (isTrueCell(cells["אפליקציית תזונה"]) ? "a" : "");
+}
 // התאריך נשלף כמו בשער: מתוך התא, ואם הוא ריק, מתוך שאר השורה.
 const DATE_IN = /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/;
 function sunOf(cells, startCol) {
@@ -445,6 +456,15 @@ export async function importSheet(text, parseCsvLine, RU, RT, now = Date.now()) 
   const flat = Object.entries(byEmail).flatMap(([e, m]) => [e, JSON.stringify(m)]);
   for (let i = 0; i < flat.length; i += 400) await rpost(RU, RT, ["HSET", tmp, ...flat.slice(i, i + 400)]);
   if (flat.length) await rpost(RU, RT, ["RENAME", tmp, MC_BYEMAIL]);
+  // הסימונים למסך הניהול נבנים מחדש מכל השורות, באותה דרך. v7.89.
+  try {
+    const ftmp = MC_FLAGS + ":build";
+    await rpost(RU, RT, ["DEL", ftmp]);
+    const fl = Object.entries(rows).flatMap(([p, r]) => { const f = r && flagsOf(r.cells); return f ? [p, f] : []; });
+    for (let i = 0; i < fl.length; i += 400) await rpost(RU, RT, ["HSET", ftmp, ...fl.slice(i, i + 400)]);
+    if (fl.length) await rpost(RU, RT, ["RENAME", ftmp, MC_FLAGS]);
+    else await rpost(RU, RT, ["DEL", MC_FLAGS]);
+  } catch (e) { /* תצוגה במסך הניהול בלבד */ }
   try {
     // "התקבלו X נשים" במסך הניהול סופר שורות ממניצ'ט, ואחרי ההוצאה הוא נספר מחדש. v7.85.
     const fromMc = Object.values(rows).filter((r) => r && r.src === "mc").length;
