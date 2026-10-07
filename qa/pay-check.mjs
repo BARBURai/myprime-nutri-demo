@@ -57,8 +57,8 @@ globalThis.fetch = async (url, init = {}) => {
 };
 
 const { PRODUCTS } = await import("../pay/lib/products.js");
-PRODUCTS.smart.rmList = "111";
-PRODUCTS.smart.rmFailedList = "1884";
+PRODUCTS["smart-p261"].rmList = "111";
+PRODUCTS["smart-p261"].rmFailedList = "1884";
 const create = (await import("../pay/api/create.js")).default;
 const webhook = (await import("../pay/api/webhook.js")).default;
 const sweep = (await import("../pay/api/sweep.js")).default;
@@ -75,7 +75,7 @@ function mkRes() {
 }
 const call = async (h, req) => { const res = mkRes(); await h({ headers: { host: "x" }, query: {}, ...req }, res); return res; };
 
-const good = { p: "smart", firstName: "רונית", lastName: "כהן", phone: "050-1234567", email: "Ronit@Gmail.com", tz: "000000018", mkt: true, terms: true };
+const good = { p: "smart-P261", firstName: "רונית", lastName: "כהן", phone: "050-1234567", email: "Ronit@Gmail.com", tz: "000000018", mkt: true, terms: true };
 
 // ---- בדיקת הפרטים ----
 ok(idOk("000000018"), "ת\"ז תקינה עוברת");
@@ -88,7 +88,7 @@ ok((parseBuyer({ ...good, biz: { name: "", id: "" } }).missing || []).includes("
 ok(parseBuyer({ ...good, mkt: "true" }).missing, "אישור שאינו true ממש אינו נחשב אישור");
 
 // ---- המוצר ----
-let r = await call(product, { query: { p: "smart" } });
+let r = await call(product, { query: { p: "smart-P261" } });
 ok(r.code === 200 && r.body.price === 590, "המוצר מוחזר עם המחיר");
 ok(r.body.rmList === undefined && r.body.rmFailedList === undefined, "מספרי הרשימות אינם נשלחים לדפדפן");
 r = await call(product, { query: { p: "nope" } });
@@ -105,12 +105,12 @@ ok(sent.Document.Products[0].UnitCost === 590, "סכום הפריטים בחשב
 ok(sent.Document.IsSendByEmail === true, "החשבונית נשלחת במייל");
 ok(sent.Document.TaxId === "000000018" && sent.Document.Name === "רונית כהן", "החשבונית על שמה ועל הת\"ז שלה");
 ok(sent.UIDefinition.CardOwnerIdValue === "000000018", "הת\"ז ממולאת מראש בטופס התשלום");
-ok(sent.SuccessRedirectUrl === "https://pay.example/done?p=smart", "דף ההצלחה הוא שלנו, שמעביר לדף התודה");
+ok(sent.SuccessRedirectUrl === "https://pay.example/done?p=smart-p261", "דף ההצלחה הוא שלנו, שמעביר לדף התודה");
 ok(sent.WebHookUrl === "https://pay.example/api/webhook", "כתובת הדיווח");
 ok(sent.AdvancedDefinition.MinNumOfPayments === 1 && sent.AdvancedDefinition.MaxNumOfPayments === 1, "בלי בחירה: תשלום אחד, נעול");
 ok(!sent.UIDefinition.CustomFields, "בלי מספר שדה הדיוור לא נשלח שדה מותאם");
 const order1 = sent.ReturnValue;
-ok(/^smart-[a-z0-9]+-[a-z0-9]+$/.test(order1), "מספר ההזמנה בנוי מהמוצר");
+ok(/^smart-p261-[a-z0-9]+-[a-z0-9]+$/.test(order1), "מספר ההזמנה בנוי מהמוצר");
 ok(kv.has(`pay:ord:${order1}`) && zs.get("pay:pending").has(order1), "ההזמנה נשמרת וממתינה");
 
 r = await call(create, { method: "POST", body: { ...good, biz: { name: "סטודיו רונית", id: "000000018" } } });

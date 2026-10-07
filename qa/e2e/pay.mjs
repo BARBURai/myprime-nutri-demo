@@ -14,10 +14,10 @@ const server = http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
   if (u.pathname === "/api/product") {
     const p = u.searchParams.get("p");
-    if (p !== "smart") { res.writeHead(404); return res.end("{}"); }
+    if (p !== "smart-p261") { res.writeHead(404); return res.end("{}"); }
     const { PRODUCTS } = cache;
     res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ slug: "smart", ...PRODUCTS.smart, thankYouUrl: `http://127.0.0.1:${port}/thanks` }));
+    return res.end(JSON.stringify({ slug: "smart-p261", ...PRODUCTS["smart-p261"], thankYouUrl: `http://127.0.0.1:${port}/thanks` }));
   }
   if (u.pathname === "/api/create") {
     let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => {
@@ -28,17 +28,17 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (u.pathname === "/fake-cardcom") {
-    const to = u.searchParams.get("o") === "ok" ? "/done?p=smart" : "/fail?p=smart";
+    const to = u.searchParams.get("o") === "ok" ? "/done?p=smart-p261" : "/fail?p=smart-p261";
     res.writeHead(200, { "Content-Type": types.html });
     return res.end(`<!doctype html><p>cardcom</p><script>setTimeout(()=>location.href=${JSON.stringify(to)},300)</script>`);
   }
   if (u.pathname === "/thanks") { res.writeHead(200, { "Content-Type": types.html }); return res.end("<h1>THANKYOU</h1>"); }
   if (u.pathname === "/host") {
     res.writeHead(200, { "Content-Type": types.html });
-    return res.end(`<!doctype html><h1>SITE</h1><iframe src="/smart" style="width:100%;height:2400px;border:0"></iframe>`);
+    return res.end(`<!doctype html><h1>SITE</h1><iframe src="/smart-P261" style="width:100%;height:2400px;border:0"></iframe>`);
   }
   let f = u.pathname === "/" ? "/index.html" : u.pathname;
-  if (/^\/[a-z0-9-]+$/.test(f)) f = existsSync(new URL("." + f + ".html", ROOT)) ? f + ".html" : "/index.html";
+  if (/^\/[A-Za-z0-9-]+$/.test(f)) f = existsSync(new URL("." + f + ".html", ROOT)) ? f + ".html" : "/index.html";
   const file = new URL("." + f, ROOT);
   if (!existsSync(file)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { "Content-Type": types[f.split(".").pop()] || "text/plain" });
@@ -67,7 +67,7 @@ for (const [label, vp] of [["phone", { width: 390, height: 844 }], ["desktop", {
   const page = await browser.newPage({ viewport: vp });
   const before = creates.length;
   page.on("pageerror", (e) => errors.push(`${label}: ${e.message}`));
-  await page.goto(`${base}/smart`);
+  await page.goto(`${base}/smart-P261`);
   await page.waitForSelector("#page:not([hidden])");
   ok((await page.textContent("#title")).includes("הרשמה לתכנית מיי פריים סמארט"), `${label}: הכותרת של רון`);
   ok((await page.textContent("#total")).trim() === "590 ₪", `${label}: המחיר`);
