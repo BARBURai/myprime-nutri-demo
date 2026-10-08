@@ -226,20 +226,27 @@ async function mcShadow(redis, RU, RT, email, header, sheetHits, hitFromCells, r
 // **מה שלא השתנה:** חסימה, הקפאה והארכה של המשרד גוברות על שניהם, כי הן נקראות אחרי.
 // **ותקלה בשרת, או שאין בו אותה, משאירה את הגיליון לבד**, כלומר את ההתנהגות של היום.
 // `disagree` מסמן שהשניים חלקו על הכניסה, ונרשם ב-`mc:diffs` כדי שרון יראה כל מקרה.
+//
+// **v7.91: מספיק שאחד חוסם.** רון: "מספיק שאחד יגיד... אני לא צריך שתי בדיקות כפולות",
+// ואישר: "מאשר, תבנה בדב". **ביטול: השרת או הגיליון. חלון: זה שנגמר קודם.** שתי השורות
+// בטבלה למעלה על ביטול ועל חלון שנגמר אינן בתוקף. מוצרים וחודשים לא השתנו, וסימוני המשרד
+// עדיין גוברים על שניהם. **מי שנחסמת בטעות כותבת לרון**, וזה המחיר שהוא קיבל.
 // ============================================================================
 export function mergeServer(sheet, server, endOf, now) {
   if (!server || !sheet) return sheet;
   const m = { ...sheet };
   if (server.start) m.start = server.start;
   m.solo = server.solo || 0;
-  m.cancelled = !!(sheet.cancelled && server.cancelled);
+  m.cancelled = !!(sheet.cancelled || server.cancelled);
   for (const k of ["glow", "glowFull", "glowPaid", "glowSolo"]) m[k] = !!(sheet[k] || server[k]);
   for (const k of ["months", "glowM"]) { const a = sheet[k] || 0, b = server[k] || 0; m[k] = Math.max(a, b) || null; }
   let disagree = !!sheet.cancelled !== !!server.cancelled;
   const t = now == null ? Date.now() : now;
   if (m.start && sheet.start) {
     const eServer = endOf(m.start, m.months, m.solo), eSheet = endOf(sheet.start, m.months, sheet.solo);
-    if (eServer && eServer < t && eSheet >= t) { m.start = sheet.start; m.solo = sheet.solo; disagree = true; }
+    // v7.91: החלון שנגמר קודם קובע, כלומר מספיק שאחד אומר שהגישה נגמרה.
+    if (eSheet && eSheet < eServer) { m.start = sheet.start; m.solo = sheet.solo; }
+    if ((eServer < t) !== (eSheet < t)) disagree = true;
   }
   if (disagree) m.disagree = true;
   return m;

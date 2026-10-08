@@ -163,7 +163,7 @@ ck("והפער נוקב בשדה ובשני הערכים", d0.email === "ronit@t
 
 await push({ ID: "972501111111", [START]: sunday + " 12:00:00", "ביטלה": "TRUE" });
 const cancelled = await login("ronit@test.com");
-ck("**ביטול במניצ'ט בלבד אינו נועל אותה: אי הסכמה, היא נכנסת**", cancelled.allowed === true && strip(cancelled) === strip(base["ronit@test.com"]), strip(cancelled));
+ck("**v7.91: ביטול במניצ'ט בלבד חוסם אותה**", cancelled.allowed === false && cancelled.reason === "cancelled", strip(cancelled));
 ck("אבל נרשם כפער בשדה הביטול", ((L["mc:diffs"] || []).map((x) => JSON.parse(x)).find((x) => x.cat === "diff") || { fields: {} }).fields.cancelled, L["mc:diffs"][0]);
 ck("**וגם כאי הסכמה על הכניסה. v7.88**", (L["mc:diffs"] || []).some((x) => JSON.parse(x).cat === "gate"), L["mc:diffs"][0]);
 await push({ ID: "972501111111", "ביטלה": "" });
@@ -427,9 +427,9 @@ async function stageA(sheetCells, serverCells, opts = {}) {
   const add = await stageA({}, { "GLOW-FULL": "TRUE" });
   ck("**קורס שקיים רק בשרת נפתח מיד**", add.allowed === true && add.glowFull === true, strip(add));
   const mcCancel = await stageA({}, { "ביטלה": "TRUE" });
-  ck("**ביטול בשרת בלבד אינו נועל אותה**", mcCancel.allowed === true, strip(mcCancel));
+  ck("**v7.91: ביטול בשרת בלבד חוסם אותה**", mcCancel.allowed === false && mcCancel.reason === "cancelled", strip(mcCancel));
   const shCancel = await stageA({ "ביטלה": "TRUE" }, {});
-  ck("**ביטול בגיליון בלבד: אי הסכמה, היא נכנסת**", shCancel.allowed === true, strip(shCancel));
+  ck("**v7.91: ביטול בגיליון בלבד חוסם אותה**", shCancel.allowed === false && shCancel.reason === "cancelled", strip(shCancel));
   const shCancelNo = await stageA({ "ביטלה": "TRUE" }, null);
   ck("**ובלי שורה בשרת, ביטול בגיליון נועל כמו היום**", shCancelNo.allowed === false && shCancelNo.reason === "cancelled", strip(shCancelNo));
   const both = await stageA({ "ביטלה": "TRUE" }, { "ביטלה": "TRUE" });
@@ -477,7 +477,7 @@ async function stageA(sheetCells, serverCells, opts = {}) {
     const d = new Date(sunday + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - 70); const old12 = d.toISOString().slice(0, 10);
     L["mc:diffs"] = [];
     const late = await stageA({ [START]: old12 + " 12:00:00" }, { [START]: old12 + " 12:00:00", SMART: "TRUE" });
-    ck("**אחרי יום 70: השרת אומר סמארט שנגמר, הגיליון פתוח. היא נכנסת**", late.allowed === true, strip(late));
+    ck("**v7.91: אחרי יום 70: השרת אומר סמארט שנגמר, הגיליון פתוח. הגישה הסתיימה**", late.allowed === false && late.reason === "expired", strip(late));
     const g = (L["mc:diffs"] || []).map((x) => JSON.parse(x)).find((x) => x.cat === "gate");
     ck("**והמקרה נרשם ב-mc:diffs כאי הסכמה**", !!g && g.email === "stagea@test.com", strip(L["mc:diffs"]));
     const lateBoth = await stageA({ [START]: old12 + " 12:00:00", SOLO10WEEK: "TRUE" }, { [START]: old12 + " 12:00:00", SMART: "TRUE" });
@@ -497,8 +497,8 @@ async function stageA(sheetCells, serverCells, opts = {}) {
   ck("mergeServer: המסלול של השרת", mergeServer({ ...base0, solo: 0 }, { ...base0, solo: 10 }, endOf, 0).solo === 10);
   ck("mergeServer: תאריך ההתחלה של השרת", mergeServer(base0, { ...base0, start: older }, endOf, 0).start === older);
   ck("mergeServer: שרת בלי תאריך משאיר את של הגיליון", mergeServer(base0, { ...base0, start: null }, endOf, 0).start === sunday);
-  ck("mergeServer: ביטול רק בשניהם", mergeServer({ ...base0, cancelled: true }, base0, endOf, 0).cancelled === false && mergeServer({ ...base0, cancelled: true }, { ...base0, cancelled: true }, endOf, 0).cancelled === true);
-  ck("mergeServer: חלון שנגמר רק לפי השרת חוזר לגיליון", (() => { const m = mergeServer({ ...base0, solo: 0 }, { ...base0, solo: 10 }, endOf, 1.5); return m.solo === 0 && m.disagree === true; })());
+  ck("mergeServer: v7.91 ביטול באחד מספיק", mergeServer({ ...base0, cancelled: true }, base0, endOf, 0).cancelled === true && mergeServer(base0, { ...base0, cancelled: true }, endOf, 0).cancelled === true && mergeServer(base0, base0, endOf, 0).cancelled === false);
+  ck("mergeServer: v7.91 החלון שנגמר קודם קובע, בשני הכיוונים", (() => { const a = mergeServer({ ...base0, solo: 0 }, { ...base0, solo: 10 }, endOf, 1.5), b = mergeServer({ ...base0, solo: 10 }, { ...base0, solo: 0 }, endOf, 1.5); return a.solo === 10 && a.disagree === true && b.solo === 10 && b.disagree === true; })());
   ck("mergeServer: בלי גיליון אין כלום, גם כשבשרת יש", mergeServer(null, base0, endOf) === null);
 }
 {
