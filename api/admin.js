@@ -40,7 +40,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.92";
+const ADMIN_VERSION = "7.93";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1211,8 +1211,13 @@ JSON בלבד, בלי שום טקסט אחר:
     // is the one that would otherwise be left behind: it is start plus 70 days plus her
     // months, so it is recomputed here rather than carried over from the sheet.
     const start = (ovr && ovr.start) || w.start || "";
-    const sheetEnd = (ovr && ovr.start && start)
-      ? ymd(accessEnd(new Date(start + "T00:00:00Z"), w.months, w.solo))
+    // **SMART מהשרת. v7.93.** השער נותן את החלון שנגמר קודם מבין השרת והגיליון (v7.91),
+    // ו-SMART הוא הקצר שבהם, ולכן מספיק שאחד מהם אומר SMART. קנייה חוזרת משאירה את
+    // הסימון בשורה הישנה בגיליון, והמסך הציג 360 בזמן שהאפליקציה נתנה 10 שבועות.
+    const srvFlags = (w.phone && mcFlags[w.phone]) || "";
+    const solo = srvFlags.includes("s") ? 10 : w.solo;
+    const sheetEnd = ((ovr && ovr.start && start) || (start && solo !== w.solo))
+      ? ymd(accessEnd(new Date(start + "T00:00:00Z"), w.months, solo))
       : (w.sheetEnd || "");
     const until = (ovr && ovr.until) || sheetEnd || "";
     const blocked = !!(ovr && ovr.blocked === "1");
@@ -1240,7 +1245,6 @@ JSON בלבד, בלי שום טקסט אחר:
     // **מה יש לה עכשיו, ומה המסך שהיא רואה.** מחושב מ-`api/_product.js`, שהוא אותו
     // קובץ בדיוק שהשער מריץ, ולכן המסך והאפליקציה אינם יכולים לחלוק. זה מה שנשבר
     // ב-v6.77 כששני הקבצים החזיקו כל אחד עותק משלו.
-    const srvFlags = (w.phone && mcFlags[w.phone]) || "";
     const glowFullNow = (ovr && ovr.glowFull) ? ovr.glowFull === "1" : (!!w.glowFull || srvFlags.includes("g"));
     const glowPaidNow = (ovr && ovr.glowPaid) ? ovr.glowPaid === "1" : !!w.glowPaid;
     const glowStartAt = glowStart[w.email] || "";
@@ -1251,7 +1255,7 @@ JSON בלבד, בלי שום טקסט אחר:
       clerkUntil: (ovr && ovr.until) || "",
       freeze,
       extraMonths: w.months,
-      solo: w.solo,
+      solo,
       glowFull: glowFullNow,
       glowPaid: glowPaidNow,
       glowSolo: !!w.glowSolo,
@@ -1261,6 +1265,7 @@ JSON בלבד, בלי שום טקסט אחר:
     });
     return {
       ...w,
+      solo,
       first,
       last,
       sheetFirst: w.first || "",
@@ -1322,7 +1327,7 @@ JSON בלבד, בלי שום טקסט אחר:
       override: (ovr && ovr.until) ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "" } : null,
       log: (ovr && Array.isArray(ovr.log)) ? ovr.log : [],
       expired: !!until && today > until,
-      needsGroup: !w.cancelled && !group && !w.solo && (start === thisWeek || start === nextWeek),
+      needsGroup: !w.cancelled && !group && !solo && (start === thisWeek || start === nextWeek),
       // כפילות בגיליון. `dupRows` הוא כמה שורות נושאות את הכתובת שלה ו-`dupStarts`
       // מה כתוב בכל אחת, ו-`dupPhone` הוא הכתובות האחרות שיושבות על אותו טלפון.
       // בלי שתי השורות האלה שתי שורות נראות בדיוק כמו שורה אחת, וזה בדיוק מה
