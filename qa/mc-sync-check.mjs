@@ -662,5 +662,39 @@ console.log("\nv7.89: מסך הניהול רואה את קורס האיפור ו
   ck("ולא נשארה רשימת עבודה", !H["mc:flags:build"]);
 }
 
+// ============================================================
+console.log("\nv7.93: מסך הניהול מציג SMART מהשרת, כמו השער\n");
+{
+  H = {}; L = {}; S = {}; log = []; redisDown = false; OVERSIZE.clear(); SCANFAIL = false; MCAPI.mode = "ok";
+  process.env.MC_SYNC_SECRET = "s3cret-mc";
+  SHEET = `ID,F_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,GLOW-FULL,אפליקציית תזונה,SOLO10WEEK
+972507800001,אפי,effi@test.com,${sunday} 12:00:00,,,,,
+972507800002,נועה,noa@test.com,${sunday} 12:00:00,,,,,
+972507800003,דנה,dana@test.com,${sunday} 12:00:00,,,,,TRUE
+`;
+  const list = async () => { const [o, r] = resOf(); await admin({ method: "GET", query: { key: "owner-key-123" }, headers: {} }, r); const ws = (o.body && o.body.women) || []; return Object.fromEntries(ws.map((w) => [w.email, w])); };
+  const before = await list();
+  ck("לפני: 360 לפי הגיליון", before["effi@test.com"] && before["effi@test.com"].solo === 0, strip(before["effi@test.com"]));
+  const r1 = await push({ ID: "972507800001", F_NAME: "אפי", CF_EMAIL: "effi@test.com", [START]: sunday + " 12:00:00", "SMART": "TRUE" });
+  ck("מניצ'ט שולח SMART", r1.code === 200, strip(r1.body));
+  ck("**הסימון s נשמר לפי הטלפון**", (H["mc:flags"] || {})["972507800001"] === "s", strip(H["mc:flags"]));
+  const after = await list();
+  ck("**המסך מציג SMART לפי השרת**", after["effi@test.com"].solo === 10, strip(after["effi@test.com"]));
+  ck("**וסוף הגישה הוא של 10 שבועות**, מוקדם מזה של 360", !!after["effi@test.com"].until && after["effi@test.com"].until < before["effi@test.com"].until, after["effi@test.com"].until + " / " + before["effi@test.com"].until);
+  ck("**וזהה לאישה שמסומנת SMART בגיליון**", after["effi@test.com"].until === after["dana@test.com"].until && after["dana@test.com"].solo === 10, after["effi@test.com"].until + " / " + after["dana@test.com"].until);
+  ck("אישה אחרת לא נגעה", after["noa@test.com"].solo === 0 && after["noa@test.com"].until === before["noa@test.com"].until);
+  ck("**ואינה נספרת בחסרות קבוצה**, כמו סמארט בגיליון", after["effi@test.com"].needsGroup === after["dana@test.com"].needsGroup);
+  await push({ ID: "972507800003", F_NAME: "דנה", CF_EMAIL: "dana@test.com", [START]: sunday + " 12:00:00", "SOLO10WEEK": "TRUE" });
+  ck("השם הישן SOLO10WEEK נותן אותו סימון", (H["mc:flags"] || {})["972507800003"] === "s", strip(H["mc:flags"]));
+  hash("admin:overrides")["effi@test.com"] = JSON.stringify({ until: "2099-01-01", by: "טלי" });
+  ck("**הארכה של המשרד גוברת**", (await list())["effi@test.com"].until === "2099-01-01");
+  delete H["admin:overrides"];
+  delete process.env.MC_SYNC_SECRET;
+  ck("**בלי MC_SYNC_SECRET המסך מתעלם מהשרת**", (await list())["effi@test.com"].solo === 0);
+  process.env.MC_SYNC_SECRET = "s3cret-mc";
+  await push({ ID: "972507800001", F_NAME: "אפי", CF_EMAIL: "effi@test.com", [START]: sunday + " 12:00:00", "SMART": "" });
+  ck("תג שהוסר במניצ'ט מחזיר את המסך לגיליון", !(H["mc:flags"] || {})["972507800001"] && (await list())["effi@test.com"].solo === 0, strip(H["mc:flags"]));
+}
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);

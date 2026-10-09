@@ -386,7 +386,9 @@ export function rowsFromSheet(text, parseCsvLine) {
 const isTrueCell = (v) => /^\s*true\s*$/i.test(String(v || ""));
 export function flagsOf(cells) {
   if (!cells) return "";
-  return (isTrueCell(cells["GLOW-FULL"]) ? "g" : "") + (isTrueCell(cells["אפליקציית תזונה"]) ? "a" : "");
+  return (isTrueCell(cells["GLOW-FULL"]) ? "g" : "") + (isTrueCell(cells["אפליקציית תזונה"]) ? "a" : "")
+    // SMART, בשני שמותיו. v7.93: מסך הניהול מציג את המסלול שהשער נותן.
+    + ((isTrueCell(cells["SMART"]) || isTrueCell(cells["SOLO10WEEK"])) ? "s" : "");
 }
 // התאריך נשלף כמו בשער: מתוך התא, ואם הוא ריק, מתוך שאר השורה.
 const DATE_IN = /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/;
