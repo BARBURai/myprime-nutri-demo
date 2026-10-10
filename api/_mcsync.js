@@ -15,7 +15,7 @@
 //   mc:shadow:<תאריך>  same · diff · onlySheet · onlyMc
 //   mc:diffs     200 הפערים האחרונים, לבדיקה
 
-import { findCol, parseDateToSunday } from "./_sheet.js";
+import { findCol, parseDateToSunday, slimCells } from "./_sheet.js";
 
 export const MC_ROWS = "mc:rows";
 export const MC_BYEMAIL = "mc:byemail";
@@ -24,6 +24,16 @@ export const MC_DIFFS = "mc:diffs";
 // שני סימונים קטנים לכל טלפון, למסך הניהול: "g" קורס האיפור המלא, "a" אפליקציית תזונה.
 // **מסך הניהול קורא אותם במקום לקרוא את כל mc:rows**, שעובר 10MB. v7.89.
 export const MC_FLAGS = "mc:flags";
+// **העותק הרזה שמסך הניהול קורא. v7.95.** שדה = הטלפון, ערך = רק העמודות שהמסך צריך
+// (`slimCells`). כ-250 בתים לאישה, ולכן קריאה אחת של כולן מהירה, בניגוד ל-mc:rows שבו
+// נשמר כל מה שמניצ'ט יודע עליה (3.2 מגה, שנייה וחצי עד שלוש, נמדד 10.10.2026).
+export const MC_SLIM = "mc:slim";
+// **מונה שינויים.** עולה בכל בקשה ממניצ'ט, בכל ייבוא ובכל שמירה במסך הניהול. המסך שואל
+// אותו כל 15 שניות ונטען מחדש רק כשהוא זז. v7.95.
+export const ADMIN_REV = "mc:rev";
+export async function bumpRev(RU, RT) {
+  try { await rpost(RU, RT, ["INCR", ADMIN_REV]); } catch (e) { /* המסך פשוט יתעדכן בשינוי הבא */ }
+}
 export const mcShadowKey = (day) => "mc:shadow:" + day;
 
 const norm = (s) => String(s || "").replace(/^["']|["']$/g, "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -290,6 +300,7 @@ export async function ingest(body, RU, RT, now = Date.now()) {
     const f = flagsOf(cells);
     await rpost(RU, RT, f ? ["HSET", MC_FLAGS, phone, f] : ["HDEL", MC_FLAGS, phone]);
   } catch (e) { /* תצוגה במסך הניהול בלבד */ }
+  try { await rpost(RU, RT, ["HSET", MC_SLIM, phone, JSON.stringify(slimCells(cells))]); } catch (e) { /* המסך נופל לגיליון */ }
   if (!prev || prev.src !== "mc") { try { await rpost(RU, RT, ["HINCRBY", MC_STATS, "fromMc", 1]); } catch (e) {} }
   // אם המייל שלה השתנה, השורה עוברת מהכתובת הישנה לחדשה, **כדי שכתובת שכבר אינה שלה לא
   // תמשיך להחזיק את הנתונים שלה.**
@@ -308,6 +319,7 @@ export async function ingest(body, RU, RT, now = Date.now()) {
     await rpost(RU, RT, ["HINCRBY", MC_STATS, "received", 1]);
     await rpost(RU, RT, ["HSET", MC_STATS, "last", String(now)]);
   } catch (e) { /* הספירה היא תצוגה בלבד */ }
+  await bumpRev(RU, RT);
   return { status: 200, json: { ok: true, phone, email } };
 }
 
@@ -467,6 +479,15 @@ export async function importSheet(text, parseCsvLine, RU, RT, now = Date.now()) 
     if (fl.length) await rpost(RU, RT, ["RENAME", ftmp, MC_FLAGS]);
     else await rpost(RU, RT, ["DEL", MC_FLAGS]);
   } catch (e) { /* תצוגה במסך הניהול בלבד */ }
+  // והעותק הרזה, באותה דרך, כולל הוצאת מי שיצאה מהשרת. v7.95.
+  try {
+    const stmp = MC_SLIM + ":build";
+    await rpost(RU, RT, ["DEL", stmp]);
+    const sl = Object.entries(rows).flatMap(([p, r]) => (r && r.cells ? [p, JSON.stringify(slimCells(r.cells))] : []));
+    for (let i = 0; i < sl.length; i += 400) await rpost(RU, RT, ["HSET", stmp, ...sl.slice(i, i + 400)]);
+    if (sl.length) await rpost(RU, RT, ["RENAME", stmp, MC_SLIM]);
+  } catch (e) { /* המסך נופל לגיליון */ }
+  await bumpRev(RU, RT);
   try {
     // "התקבלו X נשים" במסך הניהול סופר שורות ממניצ'ט, ואחרי ההוצאה הוא נספר מחדש. v7.85.
     const fromMc = Object.values(rows).filter((r) => r && r.src === "mc").length;

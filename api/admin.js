@@ -20,11 +20,11 @@
 
 import { gzipSync } from "node:zlib";
 import { decideAccess } from "./_product.js";
-import { loadSheet, israelDay, accessEnd, ymd, fetchSheetText, parseCsvLine } from "./_sheet.js";
+import { loadSheet, israelDay, accessEnd, ymd, fetchSheetText, parseCsvLine, cachedSheetText, sheetFromText, sheetFromServer } from "./_sheet.js";
 import { KB } from "./_kb.js";
 import { oldAppEmails, APPOLD_KEY } from "./_appemails.js";
 import { DAILY_LIMIT, PHOTO_LIMIT } from "./ai.js";
-import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus, importSheet as mcImportSheet } from "./_mcsync.js";
+import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus, importSheet as mcImportSheet, MC_SLIM, ADMIN_REV, bumpRev } from "./_mcsync.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -34,13 +34,79 @@ async function redis(base, token, ...args) {
   return (await r.json()).result;
 }
 
+async function redisPost(base, token, cmd) {
+  const r = await fetch(base, { method: "POST", headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(cmd) });
+  if (!r.ok) throw new Error("redis " + r.status);
+  const d = await r.json();
+  // Upstash עונה על פקודה שנכשלה ב-200 עם error בפנים. זה מה שנקרא בטעות כ"אין שורות" ב-v7.84.
+  if (d && d.error) throw new Error("redis " + d.error);
+  return d.result;
+}
+
+// ===== מסך הניהול מהשרת. v7.95 =====
+//
+// **רון, 10.10.2026: "למה לא לעבור לשרת בלי הגיליון בכלל".** אישה שמניצ'ט שלח עליה נכנסת
+// לאפליקציה תוך שניות, ובמסך היא הופיעה רק אחרי שהגיליון התעדכן. וכשהעותק המשותף של
+// הגיליון ריק, המסך חיכה לגוגל, ובספטמבר נמדדו שם 14 עד 19 שניות.
+//
+// **הרשימה נבנית מ-mc:slim**, באותה פונקציה בדיוק שבונה אותה מהגיליון (`sheetFromServer`).
+// **הגיליון נכנס רק כשהוא כבר מוכן** (`cachedSheetText`), ורק בשביל מה שקיים בו לבדו:
+// שורות בלי מייל, שורות כפולות, ומי שאין לה טלפון ולכן אינה יכולה להיות בשרת. מה שחושב
+// ממנו נשמר ב-admin:sheetsnap, כדי שדקה בלי עותק לא תעלים את זה מהמסך.
+//
+// **null פירושו "לא מהשרת", והמסך נופל לגיליון כמו קודם:** בלי MC_SYNC_SECRET, עותק רזה
+// ריק (לפני הייבוא הראשון), או כל תקלה.
+//
+// **נמדד לפני הבנייה, 10.10.2026, על כל הנשים:** 2,519 זהות, ו-102 שונות. ברובן השרת צודק
+// יותר (SMART, קורס, אפליקציה). 45 נשים בלי קבוצה בשרת, כי השיוך בימי חמישי נעשה בבחירה
+// של כמה נשים יחד במניצ'ט, וזה אינו מפעיל טריגר. רון מוסיף External Request לאוטומציה של
+// בקשת ההצטרפות לקבוצה.
+const SHEET_SNAP = "admin:sheetsnap";
+export async function serverSheet(RU, RT) {
+  if (!process.env.MC_SYNC_SECRET || !RU || !RT) return null;
+  const raw = await redisPost(RU, RT, ["HGETALL", MC_SLIM]);
+  const rows = [];
+  if (Array.isArray(raw)) for (let i = 1; i < raw.length; i += 2) { try { const c = JSON.parse(raw[i]); if (c && typeof c === "object") rows.push(c); } catch (e) {} }
+  if (!rows.length) return null;
+  const srv = sheetFromServer(rows);
+  // מי שבגיליון ואינה בשרת, לא לפי מייל ולא לפי טלפון. **טלפון שכבר בשרת תחת מייל אחר הוא
+  // אותה אישה**, שהמייל שלה השתנה במניצ'ט, ומוצגת פעם אחת בלבד, בכתובת שבשרת.
+  const emails = new Set(srv.women.map((w) => w.email));
+  const phones = new Set(srv.women.map((w) => w.phone).filter(Boolean));
+  const notInServer = (w) => !emails.has(w.email) && !(w.phone && phones.has(w.phone));
+  let snap = null;
+  const text = await cachedSheetText(RU, RT);
+  if (text) {
+    const sh = sheetFromText(text);
+    const dup = {};
+    sh.women.forEach((w) => { if (w.dupRows || (w.dupPhone && w.dupPhone.length)) dup[w.email] = { dupRows: w.dupRows, dupStarts: w.dupStarts, dupPhone: w.dupPhone }; });
+    snap = { noEmail: sh.noEmail, skipped: sh.skipped, sheetNewAppRows: sh.sheetNewAppRows, rawHeaders: sh.rawHeaders, dup, women: sh.women.filter(notInServer) };
+    try { await redisPost(RU, RT, ["SET", SHEET_SNAP, JSON.stringify(snap)]); } catch (e) {}
+  } else {
+    try { snap = JSON.parse(await redisPost(RU, RT, ["GET", SHEET_SNAP]) || "null"); } catch (e) { snap = null; }
+  }
+  // **ובכל מקרה מסונן שוב**, כי עותק שנשמר לפני דקה יכול להחזיק אישה שבינתיים הגיעה לשרת.
+  const sheetOnly = ((snap && snap.women) || []).filter(notInServer);
+  const dup = (snap && snap.dup) || {};
+  // הכפילויות הן של הגיליון. מה שהשרת היה מחשב כאן אינו כפילות בגיליון, ולכן אינו מוצג.
+  const women = srv.women.map((w) => ({ ...w, dupRows: 0, dupStarts: null, dupPhone: null, ...(dup[w.email] || {}) })).concat(sheetOnly);
+  return {
+    women,
+    noEmail: (snap && snap.noEmail) || [],
+    headers: srv.headers,
+    skipped: (snap && snap.skipped) || { noEmail: 0, duplicate: 0, newAppNoEmail: 0, newAppDuplicate: 0 },
+    sheetNewAppRows: (snap && snap.sheetNewAppRows) || 0,
+    rawHeaders: (snap && snap.rawHeaders) || srv.rawHeaders,
+  };
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // The version this screen is served from. The office screen ships with the app, so without
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.94";
+const ADMIN_VERSION = "7.95";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -361,6 +427,13 @@ export default async function handler(req, res) {
   const me = await whoIs(key, RU, RT);
   if (!me.ok) return res.status(401).json({ ok: false, error: "unauthorized" });
 
+  // **"היה שינוי?"**, כל 15 שניות מהמסך. מספר אחד, ולכן כמעט אינו עולה זמן. v7.95.
+  if (req.method === "GET" && req.query.rev !== undefined) {
+    let rev = "0";
+    try { rev = String((await redis(RU, RT, "GET", ADMIN_REV)) || "0"); } catch (e) { return res.status(200).json({ ok: false }); }
+    return res.status(200).json({ ok: true, rev });
+  }
+
   // ההשוואה בין מניצ'ט לגיליון, לשבעת הימים האחרונים.
   if (req.method === "GET" && req.query.mcstatus !== undefined) {
     if (!RU || !RT) return res.status(200).json({ ok: true, configured: false });
@@ -630,6 +703,7 @@ JSON בלבד, בלי שום טקסט אחר:
     const field = ignoreKey(kind, id);
     if (ig.on === false) {
       try { await redis(RU, RT, "HDEL", "admin:ignore", field); } catch (e) { return res.status(500).json({ ok: false, error: "write_failed" }); }
+      await bumpRev(RU, RT);
       return res.status(200).json({ ok: true });
     }
     // החתימה נלקחת מהקובץ עצמו ולא ממה שהדפדפן שלח, כי היא זו שקובעת מתי
@@ -649,6 +723,7 @@ JSON בלבד, בלי שום טקסט אחר:
     } catch (e) { return res.status(502).json({ ok: false, error: "sheet_failed" }); }
     try {
       await redis(RU, RT, "HSET", "admin:ignore", field, JSON.stringify({ sig, by, at: new Date().toISOString() }));
+      await bumpRev(RU, RT); // מסכים פתוחים אחרים יתעדכנו. v7.95.
     } catch (e) { return res.status(500).json({ ok: false, error: "write_failed" }); }
     return res.status(200).json({ ok: true });
   }
@@ -705,6 +780,7 @@ JSON בלבד, בלי שום טקסט אחר:
       log.unshift({ at: rec.at, by, field: "fixemail", from: phone, to });
       cur.log = log.slice(0, 20);
       await redis(RU, RT, "HSET", "admin:overrides", to, JSON.stringify(cur));
+      await bumpRev(RU, RT); // מסכים פתוחים אחרים יתעדכנו. v7.95.
     } catch (e) {}
     return res.status(200).json({ ok: true, mc: "ok" });
   }
@@ -742,6 +818,14 @@ JSON בלבד, בלי שום טקסט אחר:
       const already = await redis(RU, RT, "HGET", "admin:manual", email);
       if (already) return res.status(409).json({ ok: false, error: "email_taken" });
     } catch (e) {}
+    // **וגם לא אישה שכבר בשרת.** מסך הניהול קורא משם מ-v7.95, ואישה שמניצ'ט כבר שלח עליה
+    // הייתה נוצרת פעמיים: פעם מהשרת ופעם מההוספה הידנית.
+    if (process.env.MC_SYNC_SECRET) {
+      try {
+        const inServer = await redis(RU, RT, "HGET", "mc:byemail", email);
+        if (inServer) return res.status(409).json({ ok: false, error: "email_taken" });
+      } catch (e) {}
+    }
     const rec = { first, last, phone, group, start, months: null, solo: 0, glow: false, by, at: new Date().toISOString(), src: "add" };
     try { await redis(RU, RT, "HSET", "admin:manual", email, JSON.stringify(rec)); }
     catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
@@ -753,6 +837,7 @@ JSON בלבד, בלי שום טקסט אחר:
       log.unshift({ at: rec.at, by, field: "added", to: start });
       cur.log = log.slice(0, 20);
       await redis(RU, RT, "HSET", "admin:overrides", email, JSON.stringify(cur));
+      await bumpRev(RU, RT); // מסכים פתוחים אחרים יתעדכנו. v7.95.
     } catch (e) {}
     return res.status(200).json({ ok: true });
   }
@@ -793,6 +878,7 @@ JSON בלבד, בלי שום טקסט אחר:
       log.unshift({ at: new Date().toISOString(), by, field: "email", from, to });
       cur.log = log.slice(0, 20);
       await redis(RU, RT, "HSET", "admin:overrides", to, JSON.stringify(cur));
+      await bumpRev(RU, RT); // מסכים פתוחים אחרים יתעדכנו. v7.95.
     } catch (e) {}
     return res.status(200).json({ ok: true, mc: "ok", moved });
   }
@@ -849,6 +935,7 @@ JSON בלבד, בלי שום טקסט אחר:
         const list = raw ? JSON.parse(raw) : [];
         list.push({ id: "r" + Date.now().toString(36), to: one.id, text: ansText, by, at: new Date().toISOString(), read: "" });
         await redis(RU, RT, "HSET", "notes:replies", email, JSON.stringify(list.slice(-60)));
+        await bumpRev(RU, RT); // מסכים פתוחים אחרים יתעדכנו. v7.95.
         // שני דברים שבמכוון אינם נוגעים כאן. המונה `notes:pending`: ההערה נולדה כבר עם
         // תשובה ומעולם לא הייתה ממתינה, והגדלה ואז הקטנה שלו היו מציגות רגע של מספר
         // שגוי. ויומן השינויים שב-`admin:overrides`: הוא מתעד שינויים במצב שלה, וזו
@@ -881,6 +968,7 @@ JSON בלבד, בלי שום טקסט אחר:
           read: "",
         });
         await redis(RU, RT, "HSET", "notes:replies", email, JSON.stringify(list.slice(-60)));
+        await bumpRev(RU, RT); // מסכים פתוחים אחרים יתעדכנו. v7.95.
         try {
           const left = await redis(RU, RT, "HINCRBY", "notes:pending", email, "-1");
           if (Number(left) <= 0) await redis(RU, RT, "HDEL", "notes:pending", email);
@@ -1061,6 +1149,7 @@ JSON בלבד, בלי שום טקסט אחר:
         by, at, log: log.slice(0, 20),
       });
       await redis(RU, RT, "HSET", "admin:overrides", email, rec);
+      await bumpRev(RU, RT); // מסכים פתוחים אחרים יתעדכנו. v7.95.
       // **v7.74: "ביטול בתהליך" לוקח גם את היתר הצפייה בסרטונים מיד**, ולא בכניסה הבאה שלה.
       // אלה הסימונים ש-`api/bunny-token.js` קורא, ובדיוק מה שהשער מוחק כשהוא חוסם. **ניקוי
       // שנכשל אינו מכשיל את השמירה**, והשער ימחק אותם ממילא בבדיקה הבאה.
@@ -1098,8 +1187,17 @@ JSON בלבד, בלי שום טקסט אחר:
   // עובר דרך הגיליון** אלא דרך admin:overrides, ולכן הוא נראה מיד גם עכשיו. מה שמגיע
   // ממניצ'ט דרך הגיליון מתעכב אצל גוגל ממילא דקות, ודקה נוספת אינה מורגשת.
   // **ובכל תקלה במטמון זה נופל לגוגל, בדיוק כמו קודם.** ראה fetchSheetText.
-  try { sheet = await loadSheet(csvUrl, RU, RT); }
-  catch (e) { return res.status(502).json({ ok: false, error: "sheet_failed" }); }
+  // **מהשרת, ולא מהגיליון. v7.95.** רון: "למה לא לעבור לשרת בלי הגיליון בכלל". בכל תקלה,
+  // או כשהעותק הרזה עוד ריק, זה נופל לגיליון בדיוק כמו קודם. **לעולם לא מסך ריק.**
+  // המונה נקרא **לפני** הרשימה, כדי ששינוי שקורה בזמן הבנייה יטען אותה שוב.
+  let rev = "0";
+  try { rev = String((await redis(RU, RT, "GET", ADMIN_REV)) || "0"); } catch (e) {}
+  let source = "sheet";
+  try { sheet = await serverSheet(RU, RT); if (sheet) source = "server"; } catch (e) { sheet = null; }
+  if (!sheet) {
+    try { sheet = await loadSheet(csvUrl, RU, RT); }
+    catch (e) { return res.status(502).json({ ok: false, error: "sheet_failed" }); }
+  }
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
@@ -1436,7 +1534,7 @@ JSON בלבד, בלי שום טקסט אחר:
   women.forEach((w) => { if (w.dupRows > 1 || (w.dupPhone && w.dupPhone.length)) markIgnore("dup", w.email, w); });
   noEmail.forEach((r) => markIgnore("mail", r.phone, r));
 
-  const listBody = { ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, aiLimits: { photos: PHOTO_LIMIT, day: DAILY_LIMIT }, women, notesTotal, notesOff, noEmail };
+  const listBody = { ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, aiLimits: { photos: PHOTO_LIMIT, day: DAILY_LIMIT }, women, notesTotal, notesOff, noEmail, source, rev };
   return sendList(req, res, listBody);
 }
 

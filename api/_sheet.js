@@ -220,6 +220,16 @@ export async function fetchSheetText(csvUrl, RU, RT) {
   return text;
 }
 
+// **העותק המשותף בלבד, בלי ללכת לגוגל. v7.95.** מסך הניהול מהשרת אינו מחכה לגיליון בשום
+// מצב, ולכן הוא לוקח את הגיליון רק כשהוא כבר מוכן. ריק או תקלה: null.
+export async function cachedSheetText(RU, RT) {
+  if (!RU || !RT) return null;
+  try {
+    const hit = await redisPost(RU, RT, ["GET", SHEET_KEY], 2500);
+    return typeof hit === "string" && looksLikeSheet(hit) ? hit : null;
+  } catch (e) { return null; }
+}
+
 // Reads the published CSV and returns one object per registered woman.
 // `headers` reports which columns were located, so a renamed column shows up as a missing
 // field on screen instead of silently reading as blank.

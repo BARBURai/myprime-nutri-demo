@@ -165,6 +165,58 @@ const ACTIONS = [
 
 const CHECKS = [
   {
+    // **v7.95: המסך מתעדכן לבד.** שני הצדדים באותה הרצה: אישה חדשה מופיעה בלי רענון, ושינוי
+    // שלא נשמר בכרטיס עוצר את הרענון עד שהוא מתבטל. רענון שמוחק בחירה של הפקידה נראה בדיוק
+    // כמו רענון שעובד, אם בודקים רק שהאישה הופיעה.
+    name: "המסך מתעדכן לבד, ולא באמצע עריכה",
+    async run(browser, device) {
+      const { ctx, page, errors } = await open(browser, device, (d) => { d.rev = "1"; return d; });
+      const state = { rev: "1", data: JSON.parse(JSON.stringify(DATA)) };
+      state.data.rev = "1";
+      const extra = (email, first) => ({ ...JSON.parse(JSON.stringify(DATA.women[0])), email, first, last: "חדשה", phone: "97250" + Math.floor(Math.random() * 1e7), group: "", needsGroup: false });
+      let revCalls = 0;
+      await ctx.route("**/api/**", (route) => {
+        const url = route.request().url();
+        if (route.request().method() !== "GET") return route.fallback();
+        if (url.includes("rev=1")) { revCalls++; return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, rev: state.rev }) }); }
+        if (/[?&](notes|bank|mc|usage|codes|mcstatus)=/.test(url)) return route.fallback();
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(state.data) });
+      });
+      await page.evaluate(() => { window.__ADMIN_REV_MS = 250; });
+      // הטיימר כבר רץ עם 15 שניות. טעינה מחדש של הדף מפעילה אותו עם הערך הקצר.
+      await ctx.addInitScript(() => { window.__ADMIN_REV_MS = 250; });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(800);
+      const n0 = await page.locator("[data-open]").count();
+      state.data.women.push(extra("auto1@test.com", "נועה")); state.rev = "2"; state.data.rev = "2";
+      await page.waitForTimeout(1200);
+      const n1 = await page.locator("[data-open]").count();
+      const got1 = await page.locator('[data-open="auto1@test.com"]').count();
+      await page.locator('[data-open="lior5066@gmail.com"]').first().click();
+      await page.waitForTimeout(400);
+      await page.locator(".card.open .tab", { hasText: "מחזור וקבוצה" }).first().click();
+      await page.waitForTimeout(300);
+      const sel = page.locator('select[id="g_lior5066@gmail.com"]');
+      const hasSel = await sel.count();
+      if (hasSel) await sel.selectOption("ד");
+      state.data.women.push(extra("auto2@test.com", "שירה")); state.rev = "3"; state.data.rev = "3";
+      await page.waitForTimeout(1200);
+      const heldBack = await page.locator('[data-open="auto2@test.com"]').count() === 0;
+      const kept = hasSel ? await sel.inputValue() : "";
+      const stillOpen = await page.locator(".card.open").count();
+      if (hasSel) await sel.selectOption("א");
+      await page.waitForTimeout(1200);
+      const got2 = await page.locator('[data-open="auto2@test.com"]').count();
+      const openAfter = await page.locator(".card.open").count();
+      const calls = revCalls;
+      await page.waitForTimeout(800);
+      const quiet = await page.locator("[data-open]").count();
+      await ctx.close();
+      const ok = n1 === n0 + 1 && got1 >= 1 && hasSel === 1 && heldBack && kept === "ד" && stillOpen === 1 && got2 >= 1 && openAfter === 1 && calls > 3 && errors.length === 0;
+      return { ok, detail: `לפני ${n0} · אחרי ${n1} · נכנסה ${got1} · בחירה ${hasSel} · עוכב ${heldBack} · נשאר ${kept} · כרטיס ${stillOpen}/${openAfter} · אחרי ביטול ${got2} · שאלות ${calls} · שקט ${quiet} · שגיאות ${errors[0] || "אין"}` };
+    },
+  },
+  {
     name: "המסך נטען וכרטיס נפתח, בלי שגיאת JavaScript",
     async run(browser, device) {
       const { ctx, page, errors } = await open(browser, device);
