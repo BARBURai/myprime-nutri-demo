@@ -42,7 +42,8 @@ check("ומסך הניהול מציג אותם בשורה משלהם", /glowLine
 check("והם לא זולגים לשיעור הבא בתוכנית", /if \(w === 0\) return null;/.test(mod));
 
 console.log("\nמי רואה אותם\n");
-check("הגיליון נקרא לפי הכותרת בונוס איפור", sheet.includes('findCol(header, ["בונוס איפור"])'));
+// v7.95: שמות העמודות עברו לרשימה אחת, SHEET_COLS, שגם העותק הרזה שבשרת קורא.
+check("הגיליון נקרא לפי הכותרת בונוס איפור", sheet.includes('glow: ["בונוס איפור"]') && sheet.includes("findCol(header, SHEET_COLS.glow)"));
 check("העמודה אופציונלית, והיעדרה אינו שובר כלום", /col\.glow !== -1 \? isTrue/.test(sheet));
 check("השער מחזיר את הסימון", /startDate, phone, glow/.test(access));
 check("והשער קורא גם הוא לפי אותה כותרת", access.includes('findCol(header, ["בונוס איפור"])'));

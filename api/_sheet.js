@@ -224,37 +224,92 @@ export async function fetchSheetText(csvUrl, RU, RT) {
 // `headers` reports which columns were located, so a renamed column shows up as a missing
 // field on screen instead of silently reading as blank.
 export async function loadSheet(csvUrl, RU, RT) {
-  const lines = (await fetchSheetText(csvUrl, RU, RT)).split(/\r?\n/);
-  if (!lines.length) return { women: [], headers: {} };
+  return sheetFromText(await fetchSheetText(csvUrl, RU, RT));
+}
 
+// העמודות שמסך הניהול קורא, ולכל אחת השמות שבהם היא יכולה להופיע. **מקום אחד**, כי
+// גם הגיליון וגם העותק הרזה שבשרת עוברים דרכו, ושני עותקים של הרשימה היו נפרדים בשקט. v7.95.
+export const SHEET_COLS = {
+  cancel: ["ביטלה"],
+  start: ["360 - FINAL PERSONAL START", "FINAL PERSONAL START", "PERSONAL START"],
+  months: ["חודשי גישה נוספים"],
+  phone: ["ID", "טלפון", "phone"],
+  group: ["קבוצה", "group"],
+  first: ["F_NAME", "שם פרטי", "first name", "firstname"],
+  last: ["L_NAME", "שם משפחה", "last name", "lastname"],
+  email: ["CF_EMAIL", "מייל", "email", "אימייל"],
+  newapp: ["אפליקציית תזונה", "אפליקציה תזונה", "אפליקציה חדשה", "אפליקציה"],
+  glow: ["בונוס איפור"],
+  glowFull: ["GLOW-FULL"],
+  glowM: ["GLOW-FULL-M"],
+  glowPaid: ["GLOW-PAID"],
+  glowSolo: ["GLOW-SOLO"],
+  solo6: ["SOLO6"],
+  solo12: ["SOLO12"],
+};
+
+export function sheetFromText(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  if (!lines.length) return { women: [], headers: {} };
   const header = parseCsvLine(lines[0]);
+  const entries = [];
+  for (let i = 1; i < lines.length; i++) if (lines[i].trim()) entries.push({ cells: parseCsvLine(lines[i]), line: lines[i] });
+  return buildSheet(header, entries);
+}
+
+// **מסך הניהול מהשרת. v7.95.** אותה פונקציה בדיוק כמו בגיליון, ולכן אותם כללים: שורה
+// מנצחת, ביטול מכל השורות, כפילויות. **בלי סריקה של כל השורה** (`line: null`), כמו
+// בשער: בשורה ממניצ'ט יש עשרה שדות תאריך אחרים, וליד נושא אותם.
+export function sheetFromServer(rows) {
+  const header = [];
+  const seen = new Set();
+  for (const r of rows) for (const k of Object.keys(r || {})) if (!seen.has(k)) { seen.add(k); header.push(k); }
+  const entries = rows.map((r) => ({ cells: header.map((h) => (r && r[h] != null ? String(r[h]) : "")), line: null }));
+  return buildSheet(header, entries);
+}
+
+// מה שמסך הניהול צריך מתוך שורה בשרת, ולא יותר. **השם שבו היא נשמרת הוא תמיד השם
+// הראשון ברשימה**, כדי שהעותק הרזה ייקרא באותה דרך גם כשבמניצ'ט השם קצת אחר.
+export function slimCells(cells) {
+  if (!cells) return null;
+  const keys = Object.keys(cells);
+  const out = {};
+  for (const names of Object.values(SHEET_COLS)) {
+    const i = findCol(keys, names);
+    if (i !== -1 && cells[keys[i]] != null && String(cells[keys[i]]) !== "") out[names[0]] = String(cells[keys[i]]);
+  }
+  for (const i of findCols(keys, SMART_COLS)) if (cells[keys[i]] != null && String(cells[keys[i]]) !== "") out[keys[i]] = String(cells[keys[i]]);
+  return out;
+}
+
+function buildSheet(header, entries) {
   const col = {
-    cancel: findCol(header, ["ביטלה"]),
-    start: findCol(header, ["360 - FINAL PERSONAL START", "FINAL PERSONAL START", "PERSONAL START"]),
-    months: findCol(header, ["חודשי גישה נוספים"]),
-    phone: findCol(header, ["ID", "טלפון", "phone"]),
-    group: findCol(header, ["קבוצה", "group"]),
-    first: findCol(header, ["F_NAME", "שם פרטי", "first name", "firstname"]),
-    last: findCol(header, ["L_NAME", "שם משפחה", "last name", "lastname"]),
-    email: findCol(header, ["CF_EMAIL", "מייל", "email", "אימייל"]),
+    cancel: findCol(header, SHEET_COLS.cancel),
+    start: findCol(header, SHEET_COLS.start),
+    months: findCol(header, SHEET_COLS.months),
+    phone: findCol(header, SHEET_COLS.phone),
+    group: findCol(header, SHEET_COLS.group),
+    first: findCol(header, SHEET_COLS.first),
+    last: findCol(header, SHEET_COLS.last),
+    email: findCol(header, SHEET_COLS.email),
     // Optional, and Ron is filling it in. The names are matched exactly after whitespace is
     // squeezed, so every spelling he might use is listed rather than matched loosely: the
     // sheet also carries a "הורידה אפליקציה" column, and anything that merely looks for
     // "אפליקצי" would land on that one and read as TRUE for almost everybody.
-    newapp: findCol(header, ["אפליקציית תזונה", "אפליקציה תזונה", "אפליקציה חדשה", "אפליקציה"]),
-    glow: findCol(header, ["בונוס איפור"]),
+    newapp: findCol(header, SHEET_COLS.newapp),
+    glow: findCol(header, SHEET_COLS.glow),
     // קורס האיפור המלא, ושתי העמודות שנלוות אליו. כולן אופציונליות, וההשוואה היא
     // על השם המלא ולכן GLOW-FULL, GLOW-FULL-M ו-GLOW-PAID לעולם לא יתבלבלו.
-    glowFull: findCol(header, ["GLOW-FULL"]),
-    glowM: findCol(header, ["GLOW-FULL-M"]),
+    glowFull: findCol(header, SHEET_COLS.glowFull),
+    glowM: findCol(header, SHEET_COLS.glowM),
     // **הסימן שמבדיל בין קורס שנקנה בכסף לבין הקורס שניתן במתנה בוובינר.**
-    glowPaid: findCol(header, ["GLOW-PAID"]),
+    glowPaid: findCol(header, SHEET_COLS.glowPaid),
     // **הטבת Glow לקונות סולו. v7.54.** הקורס פתוח לה בדיוק כמו התוכנית שלה. ראה _product.js.
-    glowSolo: findCol(header, ["GLOW-SOLO"]),
+    glowSolo: findCol(header, SHEET_COLS.glowSolo),
     // שתי עמודות אופציונליות של תוכנית סולו. השוואה מדויקת, כמו כל השאר, ולכן
     // SOLO6 ו-SOLO12 לעולם לא יתבלבלו ביניהן.
-    solo6: findCol(header, ["SOLO6"]),
-    solo12: findCol(header, ["SOLO12"]),
+    solo6: findCol(header, SHEET_COLS.solo6),
+    solo12: findCol(header, SHEET_COLS.solo12),
     // 10 שבועות ולא חודשים. v7.47. SMART או SOLO10WEEK, ראה SMART_COLS. v7.82.
     solo10w: findCols(header, SMART_COLS),
   };
@@ -274,10 +329,7 @@ export async function loadSheet(csvUrl, RU, RT) {
   // כל השורות של אותה כתובת, לפי סדר הופעתן בקובץ. אי אפשר להכריע שורה-שורה, כי
   // אישה אחת יכולה לשבת על כמה שורות והתשובה עליה נגזרת מכולן יחד.
   const byEmail = new Map();
-  lines.forEach((line, idx) => {
-    if (idx === 0) return;
-    if (!line.trim()) return;
-    const cells = parseCsvLine(line);
+  entries.forEach(({ cells, line }) => {
     const cell = (i) => (i !== -1 && cells[i] != null ? String(cells[i]).trim() : "");
     const DATE_IN = /\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./-]\d{1,2}[./-]\d{4}/;
     const rowNewApp = col.newapp !== -1 ? isTrue(cells[col.newapp]) : false;
@@ -287,7 +339,7 @@ export async function loadSheet(csvUrl, RU, RT) {
     // rather than parsing the whole cell. Parsing it whole is what made every woman read
     // as having no start date, which in turn emptied the participants list.
     let startStr = (cell(col.start).match(DATE_IN) || [])[0] || "";
-    if (!startStr) startStr = (line.match(DATE_IN) || [])[0] || "";
+    if (!startStr && line) startStr = (line.match(DATE_IN) || [])[0] || "";
     const startSunday = parseDateToSunday(startStr);
     const monthsRaw = cell(col.months).replace(/[^\d]/g, "");
     const monthsN = monthsRaw ? parseInt(monthsRaw, 10) : null;
@@ -315,7 +367,7 @@ export async function loadSheet(csvUrl, RU, RT) {
     };
 
     const email = (cell(col.email).match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) ||
-      line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) || [])[0];
+      (line && line.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)) || [])[0];
     if (!email) {
       skipped.noEmail++;
       if (rowNewApp) skipped.newAppNoEmail++;
