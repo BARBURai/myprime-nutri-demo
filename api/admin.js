@@ -175,6 +175,7 @@ const MC_FREEZE_TAG = "הקפאה";
 // **מניצ'ט מגביל קריאות בשנייה** ועונה 429 "Api max rps reached". נמדד 11.10.2026: חמש
 // קריאות במקביל, ו-34 מתוך 60 נדחו. לכן 429 מנוסה שוב אחרי המתנה, ובתיקון השמות השבועי
 // הקריאות גם מרווחות (`mcPace`), כדי לא לחסום את מסך הניהול ואת העדכון ממניצ'ט באותו זמן.
+// **נמדד אחר כך, שלוש הרצות: שלוש במקביל ברווח של 150 אלפיות, 60 מתוך 60 עברו בכל אחת.**
 let mcPace = 0, mcLast = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function mc(path, body) {
@@ -182,7 +183,8 @@ async function mc(path, body) {
   if (!token) return { off: true };
   let r;
   for (let attempt = 1; ; attempt++) {
-    if (mcPace) { const wait = mcLast + mcPace - Date.now(); if (wait > 0) await sleep(wait); mcLast = Date.now(); }
+    // כל קריאה שומרת לעצמה תור מראש, כדי שגם כמה במקביל לא ייצאו באותו רגע.
+    if (mcPace) { const slot = Math.max(Date.now(), mcLast + mcPace); mcLast = slot; if (slot > Date.now()) await sleep(slot - Date.now()); }
     r = await fetch(MC + path, {
       method: body ? "POST" : "GET",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -439,7 +441,7 @@ async function sendReport(subject, html) {
   } catch (e) { return false; }
 }
 
-async function nameFix({ RU, RT, live, cap }) {
+async function nameFix({ RU, RT, live, cap, batch }) {
   const failHtml = (why) => `<div dir="rtl" style="font-family:Arial,sans-serif"><h2>תיקון שמות שבועי</h2><p><b>לא שונה כלום.</b> ${why}</p></div>`;
   if (!RU || !RT) return { ok: false, error: "no_store", html: failHtml("השרת לא זמין.") };
   const key = parseKey(process.env.GOOGLE_SA_KEY);
@@ -454,18 +456,22 @@ async function nameFix({ RU, RT, live, cap }) {
   // סימוני המשרד נקראים רק למי שהשם שלה משובש, ולא לכולן.
   const pre = nameTargets(slim, null);
   const overrides = {};
-  for (const t of pre) {
-    if (!t.email) continue;
-    try { const raw = await redis(RU, RT, "HGET", "admin:overrides", t.email); if (raw) overrides[t.email] = JSON.parse(raw); }
-    catch (e) { return { ok: false, error: "store_failed", html: failHtml("סימוני המשרד לא נקראו.") }; }
+  // פקודה אחת לכל 200 נשים, ולא אחת לכל אישה. עם השמות באנגלית אלה מאות.
+  const ems = [...new Set(pre.map((t) => t.email).filter(Boolean))];
+  for (let i = 0; i < ems.length; i += 200) {
+    const part = ems.slice(i, i + 200);
+    try {
+      const vals = await redisPost(RU, RT, ["HMGET", "admin:overrides", ...part]);
+      part.forEach((em, k) => { const raw = Array.isArray(vals) ? vals[k] : null; if (raw) { try { overrides[em] = JSON.parse(raw); } catch (e) {} } });
+    } catch (e) { return { ok: false, error: "store_failed", html: failHtml("סימוני המשרד לא נקראו.") }; }
   }
   const list = nameTargets(slim, overrides);
   if (!process.env.MANYCHAT_TOKEN) return { ok: false, error: "no_mc", html: failHtml("אין חיבור למניצ'ט.") };
-  mcPace = 250;
+  mcPace = 150;
   let rep;
   try {
   rep = await nameRun({
-    list, idx, live, cap,
+    list, idx, live, cap, batch,
     deps: {
       // **תקלה אינה "לא נמצאה"**: היא נזרקת, והאישה עוברת לבירור ולא לתיקון. אחרת תשובה
       // שנדחתה הייתה נקראת כאילו אין במניצ'ט שם, והשם מהאקסל היה נכתב גם כשמניצ'ט חולק.
@@ -497,7 +503,7 @@ async function nameFix({ RU, RT, live, cap }) {
   if (live && rep.fixed.length) await bumpRev(RU, RT);
   const strip = (x) => ({ email: x.email, start: x.start, cat: x.cat, to: x.to, suggest: x.suggest, mc: x.mc, error: x.error });
   return {
-    ok: true, live: rep.live, stopped: rep.stopped, excelRows: idx.rows, total: rep.total,
+    ok: true, live: rep.live, stopped: rep.stopped, more: !!rep.more, excelRows: idx.rows, total: rep.total,
     counts: rep.items.reduce((a, x) => (a[x.cat] = (a[x.cat] || 0) + 1, a), {}),
     fixed: rep.fixed.length, failed: rep.failed.map(strip),
     items: rep.items.map(strip),
@@ -536,7 +542,8 @@ export default async function handler(req, res) {
     const liveOn = process.env.NAMEFIX_LIVE === "1";
     const live = liveOn && (cron || (owner && req.query.run === "1"));
     const cap = owner && req.query.max ? Math.min(200, Math.max(1, parseInt(req.query.max, 10) || NAME_CAP)) : NAME_CAP;
-    const out = await nameFix({ RU, RT, live, cap });
+    // הריצה הידנית של המנהל היא בקבוצות, כדי שמאות שמות בשבוע הראשון ייכנסו בזמן הריצה.
+    const out = await nameFix({ RU, RT, live, cap, batch: live && !cron });
     const mail = cron || req.query.mail === "1";
     if (mail && out.html) out.emailed = await sendReport("MyPrime · תיקון שמות שבועי · " + israelDay(0), out.html);
     if (staff && req.query.format !== "json" && out.html) {

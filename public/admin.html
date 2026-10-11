@@ -2667,7 +2667,8 @@ if(m){ KEY = decodeURIComponent(m[1]); try{ localStorage.setItem("mp_admin_key",
 // **תיקון השמות השבועי, תצוגה מקדימה. v8.00.** admin.html?namefix מציג את הדוח עם המפתח
 // שכבר שמור במכשיר, כדי שלא יצטרכו להקליד אותו בכתובת. בלי מפתח שמור, המסך הרגיל.
 if(/[?&]namefix\b/.test(location.search) && KEY){
-  fetch("/api/admin?namefix&key="+encodeURIComponent(KEY)).then(function(r){ return r.text(); })
+  var nfx = (location.search.match(/[?&](run=1|max=\d+|mail=1)/g)||[]).map(function(x){ return "&"+x.slice(1); }).join("");
+  fetch("/api/admin?namefix&key="+encodeURIComponent(KEY)+nfx).then(function(r){ return r.text(); })
     .then(function(t){ document.open(); document.write(t); document.close(); })
     .catch(function(){ boot(); });
 } else boot();

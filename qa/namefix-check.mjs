@@ -79,7 +79,10 @@ ok(localPhone("972-54-400-0001") === "0544000001" && localPhone("544000001") ===
 
 // ===== הכללים =====
 ok(isBad("ה-iPhone של מיה", "") && isBad("Samsung SM-S731B", "") && isBad("", "כהן") && isBad("רונית", "0541234567"), "שם מכשיר, ריק וטלפון הם שם משובש");
-ok(isBad("אלה", ".") && !isBad("אלה", "") && !isBad("רונית", "כהן"), "שם משפחה שהוא נקודה משובש, שם תקין לא");
+ok(isBad("אלה", ".") && isBad("Sivan", ".") && !isBad("אלה", "") && !isBad("רונית", "כהן"), "שם משפחה שהוא נקודה משובש, שם תקין לא");
+ok(isBad("Eva", "Knoll") && isBad("Jasmine", "") && !isBad("Eva", "קנול") && !isBad("רונית", "Cohen"), "שם כולו באנגלית משובש, ושם עם עברית לא. רון: גם שמות באנגלית");
+ok(decide({ first: "Eva", last: "Knoll" }, [{ first: "אוה", last: "קנול" }], { first: "Eva", last: "Knoll" }).cat === "excel", "שם באנגלית במניצ'ט אינו חולק על השם בעברית מהאקסל");
+ok(!usable("Eva", "Knoll") && excelNames({ byEmail: new Map([["e@x.com", [{ first: "Eva", last: "Knoll" }]]]), byPhone: new Map() }, "e@x.com", "").length === 0, "שם באנגלית באקסל אינו נחשב שם שאפשר לכתוב");
 ok(!usable("ג", "שמולביץ") && usable("מיה", "ביטון") && !usable("Maya", ""), "שם שאפשר לכתוב: שתי אותיות בכל חלק");
 ok(sameName({ first: "נטע-לי", last: "רעיני" }, { first: "נטע לי", last: "רעיני" }) && sameName({ first: "לחינו", last: "מיכל" }, { first: "מיכל", last: "לחינו" }), "מקף וסדר הפוך הם אותו שם");
 ok(!sameName({ first: "טטיאנה", last: "לברוב" }, { first: "טניה", last: "לברוב" }), "שני שמות שונים אינם אותו שם");
@@ -129,6 +132,14 @@ rp = await run({ list: L, idx, live: true, deps: deps({ fail: "1" }) });
 ok(calls.indexOf("log:1") !== -1 && calls.indexOf("log:1") < calls.indexOf("write:1"), "השם הישן נשמר לפני הכתיבה");
 ok(rp.failed.length === 1 && rp.fixed.length === 0, "כתיבה שנכשלה מדווחת ולא נספרת כתיקון");
 
+calls.length = 0;
+const L3 = [1, 2, 3, 4].map((i) => ({ phone: "p" + i, email: "maya@test.com", first: "iPhone", last: "" }));
+rp = await run({ list: L3, idx, live: true, cap: 2, batch: true, deps: deps() });
+ok(rp.fixed.length === 2 && rp.more === true && !calls.includes("find:p4"), "ריצה ידנית בקבוצות: עוצרת אחרי התקרה ומסמנת שנשאר עוד");
+calls.length = 0;
+rp = await run({ list: L3.slice(0, 2), idx, live: true, cap: 5, batch: true, deps: deps() });
+ok(rp.fixed.length === 2 && rp.more === false, "קבוצה שמסתיימת לפני התקרה אינה מסמנת שנשאר עוד");
+
 // ===== מקצה לקצה, דרך api/admin.js =====
 const KEY = "test-admin-key";
 const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -148,9 +159,10 @@ function reset() {
   MCDB = { "972544000001": { id: 11, first_name: "Maya", last_name: "", F_NAME: "ה-iPhone של מיה", L_NAME: "" } };
   mcLog = []; driveCalls = []; driveFail = false; rps429 = 0;
 }
-const redisCmd = (cmd, a, b, c) => {
+const redisCmd = (cmd, a, b, c, ...rest) => {
   const h = (k) => (H[k] = H[k] || {});
   if (cmd === "HGET") return h(a)[b] ?? null;
+  if (cmd === "HMGET") return [b, c, ...rest].map((k) => h(a)[k] ?? null);
   if (cmd === "HSET") { h(a)[b] = c; return 1; }
   if (cmd === "HSCAN") { const o = h(a); return ["0", Object.keys(o).flatMap((k) => [k, o[k]])]; }
   if (cmd === "LPUSH") { (LISTS[a] = LISTS[a] || []).unshift(b); return 1; }

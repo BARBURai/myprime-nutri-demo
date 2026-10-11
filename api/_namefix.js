@@ -27,8 +27,11 @@ const BAD = /iphone|samsung|galaxy|android|poco|redmi|xiaomi|huawei|oppo|vivo|pi
 export const clean = (s) => String(s || "").replace(INVISIBLE, "").replace(/\s+/g, " ").trim();
 export function isBad(first, last) {
   const f = clean(first), l = clean(last);
-  // שם משפחה שהוא רק נקודה או מקף ("אלה .") הוא שם חסר, ולא שם תקין.
-  return !f || BAD.test((f + " " + l).trim()) || (!!l && !/\p{L}/u.test(l));
+  const t = (f + " " + l).trim();
+  // שם משפחה שהוא רק נקודה או מקף ("Sivan .") הוא שם חסר, ולא שם תקין.
+  // **ושם שכתוב כולו באנגלית ("Eva Knoll") מוחלף בשם בעברית מהאקסל.** רון, 11.10.2026:
+  // "ב, גם שמות באנגלית". ולכן גם שם באנגלית במניצ'ט או באקסל אינו נכתב לעולם.
+  return !f || BAD.test(t) || (!!l && !/\p{L}/u.test(l)) || (/[A-Za-z]/.test(t) && !/[\u0590-\u05FF]/.test(t));
 }
 const letters = (s) => clean(s).replace(/[^\p{L}]/gu, "");
 // שם שאפשר לכתוב: שם פרטי ושם משפחה, כל אחד שתי אותיות לפחות, ושום דבר חשוד.
@@ -143,10 +146,30 @@ async function pool(items, n, fn) {
 
 // הריצה. **בלי `live` שום דבר אינו נכתב**, וזו הדרך לראות מה היא הייתה עושה.
 // deps: { mcMain(phone), write(t, to), log(entry) }
-export async function run({ list, idx, live, cap = CAP, deps }) {
-  // אחת אחרי השנייה, כי מניצ'ט מגביל קריאות בשנייה. **תקלה בקריאה למניצ'ט מעבירה אותה
-  // לבירור ידני**, ולעולם אינה נקראת כ"אין שם במניצ'ט".
-  const items = await pool(list, 1, async (t) => {
+export async function run({ list, idx, live, cap = CAP, batch = false, deps }) {
+  // **ריצה ידנית בקבוצות, לשבוע הראשון.** מאות שמות אינם נכנסים בזמן הריצה של וורסל, ולכן
+  // כל ריצה מתקנת עד `cap` ועוצרת, והריצה הבאה ממשיכה ממי שנשארה. רק המנהל מפעיל אותה.
+  if (live && batch) {
+    const report = { live: true, batch: true, total: 0, items: [], fixed: [], failed: [], stopped: false, more: false, cap };
+    for (const t of list) {
+      if (report.fixed.length + report.failed.length >= cap) { report.more = true; break; }
+      let mc;
+      try { mc = await deps.mcMain(t.phone); } catch (e) { report.items.push({ ...t, cat: "manual", why: "mc_error" }); report.total++; continue; }
+      const x = { ...t, ...decide(t, excelNames(idx, t.email, t.phone), mc) };
+      report.items.push(x); report.total++;
+      if (!AUTO.has(x.cat)) continue;
+      try {
+        await deps.log({ at: new Date().toISOString(), phone: x.phone, email: x.email, from: { first: x.first, last: x.last }, to: x.to, cat: x.cat });
+        const r = await deps.write(x, x.to);
+        if (r === "ok") report.fixed.push(x); else report.failed.push({ ...x, error: r });
+      } catch (e) { report.failed.push({ ...x, error: "failed" }); }
+    }
+    return report;
+  }
+  // שלוש במקביל, ובמסך הניהול כל קריאה מרווחת ב-150 אלפיות, כי מניצ'ט מגביל קריאות
+  // בשנייה. נמדד: כ-700 נשים בכשתי דקות. **תקלה בקריאה למניצ'ט מעבירה אותה לבירור ידני**,
+  // ולעולם אינה נקראת כ"אין שם במניצ'ט".
+  const items = await pool(list, 3, async (t) => {
     let mc;
     try { mc = await deps.mcMain(t.phone); } catch (e) { return { ...t, cat: "manual", why: "mc_error" }; }
     const d = decide(t, excelNames(idx, t.email, t.phone), mc);
@@ -198,6 +221,7 @@ export function mailHtml(rep, excelRows) {
   lines.push(`<p>ממתינות לאישורך: ${pending.length}. לכל אחת מופיעים השם היום, השם באקסל והשם במניצ'ט.</p>`);
   lines.push(`<p>לבירור ידני: ${manual.length}.</p>`);
   if (rep.failed.length) lines.push(`<p><b>לא נשמרו: ${rep.failed.length}.</b></p>`);
+  if (rep.more) lines.push(`<p><b>נשארו עוד שמות לתיקון.</b> אפשר להריץ שוב, והריצה תמשיך מהמקום שבו עצרה.</p>`);
   lines.push(table(["היום", rep.live && !rep.stopped ? "תוקן ל" : "יהיה", "מייל"], (rep.stopped ? auto : done).map((x) => [nowName(x), full(x.to), x.email || "אין מייל"])));
   if (rep.failed.length) lines.push(table(["היום", "יהיה", "מייל"], rep.failed.map((x) => [nowName(x), full(x.to), x.email || "אין מייל"])));
   if (pending.length) lines.push(`<h3>ממתינות לאישורך</h3>` + table(["היום", "באקסל", "במניצ'ט", "מייל"],
