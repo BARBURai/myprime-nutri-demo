@@ -598,6 +598,9 @@ export default async function handler(req, res) {
         try { return res.status(200).json({ ok: true, ...JSON.parse(await redis(RU, RT, "GET", NAMEFIX_REPORT)) }); }
         catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
       }
+      // **בדב לא כותבים.** לדב יש אותו חיבור למניצ'ט כמו לייצור, ולכן לחיצה שם הייתה משנה
+      // שמות של נשים אמיתיות, בלי שהשרת של הייצור יידע. בדב בודקים רק את הפתיחה והרשימות.
+      if (process.env.VERCEL_ENV === "preview" && process.env.NAMEFIX_LIVE !== "1") return res.status(409).json({ ok: false, error: "preview" });
       // "תקני את כל ה-..." · קבוצה אחת בכל קריאה, והמסך ממשיך לבד עד הסוף.
       if (body.fixAll) {
         const skip = new Set((Array.isArray(body.skip) ? body.skip : []).map(String));

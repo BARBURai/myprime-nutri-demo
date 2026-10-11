@@ -335,6 +335,16 @@ ok(JSON.parse(LISTS["namefix:log"][0]).from.first === "ה-iPhone של מיה" &&
 reset();
 r = await post(KEY, { setName: { phone: "972544000001", first: "  ", last: "לוי" } });
 ok(r.code === 400 && mcLog.length === 0 && !(LISTS["namefix:log"] || []).length, "בלי שם פרטי לא נכתב כלום");
+reset(); process.env.VERCEL_ENV = "preview";
+r = await post(KEY, { fixAll: true });
+const r2 = await post(KEY, { setName: { phone: "972544000001", first: "מיה", last: "ביטון" } });
+const r3 = await post(KEY, { keep: "972544000001" });
+delete process.env.VERCEL_ENV;
+ok(r.code === 409 && r2.code === 409 && r3.code === 409 && mcLog.length === 0 && !H["namefix:keep"], "בדב שום כפתור אינו כותב, כי לדב אותו מניצ'ט כמו לייצור");
+reset(); process.env.VERCEL_ENV = "preview";
+r = await callScreen({ key: KEY, screen: "1" });
+delete process.env.VERCEL_ENV;
+ok(r.code === 200 && r.body.ok && mcLog.length === 0, "בדב המסך עצמו נפתח, לבדיקה");
 reset(); MCDB["972544000001"].F_NAME = "x";
 {
   const orig = globalThis.fetch;
