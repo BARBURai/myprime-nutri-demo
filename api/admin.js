@@ -526,18 +526,20 @@ export default async function handler(req, res) {
   if (req.query.namefix !== undefined) {
     const auth = req.headers.authorization || "";
     const cron = !!process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`;
-    let owner = false;
-    if (!cron) { const who = await whoIs(key, RU, RT); owner = who.ok && who.owner; }
-    if (!cron && !owner) return res.status(401).json({ ok: false, error: "unauthorized" });
+    // **תצוגה מקדימה לכל מפתח של המשרד**, כי היא קריאה בלבד ומראה את מה שהמסך כבר מראה.
+    // **ריצה אמיתית ידנית, `run=1`, למנהל בלבד.**
+    let staff = false, owner = false;
+    if (!cron) { const who = await whoIs(key, RU, RT); staff = !!who.ok; owner = staff && who.owner; }
+    if (!cron && !staff) return res.status(401).json({ ok: false, error: "unauthorized" });
     // **כתיבה רק כשרון הדליק `NAMEFIX_LIVE=1` בוורסל**, אחרי שראה תצוגה מקדימה ואישר. עד אז
     // גם ההרצה של יום חמישי היא תצוגה מקדימה בלבד.
     const liveOn = process.env.NAMEFIX_LIVE === "1";
-    const live = liveOn && (cron || req.query.run === "1");
+    const live = liveOn && (cron || (owner && req.query.run === "1"));
     const cap = owner && req.query.max ? Math.min(200, Math.max(1, parseInt(req.query.max, 10) || NAME_CAP)) : NAME_CAP;
     const out = await nameFix({ RU, RT, live, cap });
     const mail = cron || req.query.mail === "1";
     if (mail && out.html) out.emailed = await sendReport("MyPrime · תיקון שמות שבועי · " + israelDay(0), out.html);
-    if (owner && req.query.format !== "json" && out.html) {
+    if (staff && req.query.format !== "json" && out.html) {
       res.setHeader("content-type", "text/html; charset=utf-8");
       return res.status(200).send(out.html);
     }

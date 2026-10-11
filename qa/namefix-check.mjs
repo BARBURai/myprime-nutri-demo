@@ -254,6 +254,13 @@ reset(); MCDB["972544000001"].F_NAME = "x"; // הקריאה החוזרת לא ת
   ok(r.body.fixed === 0 && r.body.failed.length === 1 && JSON.parse(H["mc:slim"]["972544000001"]).F_NAME === "ה-iPhone של מיה", "כתיבה שנדחתה במניצ'ט: השרת שלנו לא משתנה, ומדווח");
 }
 
+reset(); H["admin:codes"] = { "ABCD-EFGH": JSON.stringify({ name: "טלי" }) };
+r = await call({ key: "ABCD-EFGH" });
+ok(r.code === 200 && /תצוגה מקדימה בלבד/.test(r.html || ""), "קוד של המשרד רואה את התצוגה המקדימה");
+reset(); H["admin:codes"] = { "ABCD-EFGH": JSON.stringify({ name: "טלי" }) };
+r = await call({ key: "ABCD-EFGH", run: "1", format: "json" });
+ok(r.body.live === false && mcLog.length === 0, "קוד של המשרד עם run=1 אינו כותב, רק המנהל");
+
 reset(); process.env.GOOGLE_SA_KEY = "not json";
 r = await call({}, cron);
 ok(r.body.error === "no_key" && mcLog.length === 0, "מפתח חסר: לא משתנה כלום");
