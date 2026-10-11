@@ -303,6 +303,7 @@ export default async function handler(req, res) {
   let startStr = null, found = false, cancelled = false, extraMonths = null, phone = "", glow = false, glowFull = false;
   let solo = 0, glowMonths = null, glowPaid = false, glowSolo = false;
   let serverOnly = null; // מה שהשרת יודע עליה כשהגיליון אינו מחזיק אותה. v7.88.
+  let ovrFrom = ""; // הכתובת שבגיליון, כשהשורה נמצאה לפי הטלפון. v8.03.
   try {
     // המשיכה עצמה, וביטול המטמון שבתוכה, עברו ל-`_sheet.js` כדי שעותק אחד ישרת את כל
     // הנשים לדקה. **הקריאה נכשלת לצד הפתוח:** בלי Redis או בתקלה שלו היא מושכת מגוגל
@@ -437,6 +438,30 @@ export default async function handler(req, res) {
       try { serverHits = await mcShadow(redis, RU, RT, lookFor, parseCsvLine(lines[0]), hits, hitFromCells, mcRawP); } catch (e) { serverHits = null; }
     }
 
+    // **מייל שהשתנה במניצ'ט והגיליון עוד לא התעדכן. v8.03.** בשרת היא רשומה בכתובת שהקלידה,
+    // ובגיליון הטלפון שלה יושב תחת הכתובת הישנה. נמצא ב-11.10.2026 על שלוש נשים פעילות
+    // שקיבלו "לא רשומה". **השורה בגיליון נמצאת לפי הטלפון**, ומשם הכל כרגיל.
+    // **וסימוני המשרד של הכתובת שבגיליון חלים עליה** כשלכתובת שהקלידה אין משלה. זה המקרה
+    // ההפוך של v7.88: השורה בשרת היא הישנה, והמשרד הקפיא אותה תחת הכתובת שבגיליון. אין דרך
+    // לדעת איזו משתי הכתובות חדשה יותר, ולכן ההקפאה, החסימה והתאריך של המשרד נאכפים בכל מקרה.
+    if (serverHits && serverHits.length && !hits.length && phoneCol !== -1 && emailCol !== -1 && RU && RT && !redis.stalled()) {
+      const phones = serverHits.map((h) => h.phone).filter(Boolean);
+      const byPhone = phones.length ? lines.filter((l, i) => i > 0 && phones.includes(String(parseCsvLine(l)[phoneCol] || "").replace(/[^\d]/g, ""))) : [];
+      const olds = [...new Set(byPhone.map((l) => String(parseCsvLine(l)[emailCol] || "").trim().toLowerCase()).filter(Boolean))];
+      if (olds.length === 1 && olds[0] !== lookFor) {
+        {
+          ovrFrom = olds[0];
+          lines.forEach((l, i) => {
+            if (i === 0) return;
+            const c = parseCsvLine(l);
+            if (String(c[emailCol] || "").trim().toLowerCase() !== olds[0]) return;
+            found = true;
+            hits.push(hitFromCells(c, l));
+          });
+        }
+      }
+    }
+
     if (hits.length) {
       // **הביטול נספר מכל השורות ולא מהמנצחת בלבד.** החלטת רון, 4 בספטמבר 2026:
       // "אם מישהי ביטלה ויש לה שתי שורות אז היא ביטלה, ולא צריך להיות לה שום
@@ -554,7 +579,8 @@ export default async function handler(req, res) {
   // שגיאה של Upstash, שמגיעה בלי `result`. הטעינה עצמה לא משתנה.
   let overridesRead = false;
   try {
-    const raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", email);
+    let raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", email);
+    if (raw === null && ovrFrom) raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", ovrFrom);
     overridesRead = raw !== undefined;
     if (raw) {
       const ovr = JSON.parse(raw) || {};

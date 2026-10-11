@@ -455,8 +455,14 @@ async function stageA(sheetCells, serverCells, opts = {}) {
     const cells = { ID: "972506700001", CF_EMAIL: "oldaddr@test.com", [START]: sunday + " 12:00:00" };
     H["mc:rows"]["972506700001"] = JSON.stringify({ cells, t: Date.now(), src: "mc" });
     H["mc:byemail"]["oldaddr@test.com"] = JSON.stringify({ "972506700001": cells });
+    // **v8.03: בלי סימון של המשרד על הכתובת שבגיליון היא נכנסת לפי הטלפון**, כי אין דרך
+    // לדעת איזו משתי הכתובות חדשה יותר. **ועם סימון, כמו ההקפאה שנמצאה ב-06.10.2026, לא.**
+    const oldOpen = await login("oldaddr@test.com");
+    ck("**בלי סימון של המשרד: אותה אישה, לפי השורה של הטלפון שלה. v8.03**", oldOpen.allowed === true && oldOpen.phone === "972506700001", strip(oldOpen));
+    hash("admin:overrides")["newaddr@test.com"] = JSON.stringify({ freeze: { since: sunday }, by: "טלי" });
     const oldA = await login("oldaddr@test.com");
-    ck("**הכתובת הישנה אינה נכנסת כשהטלפון שלה בגיליון תחת כתובת אחרת**", oldA.allowed === false && oldA.reason === "not_registered", strip(oldA));
+    delete H["admin:overrides"]["newaddr@test.com"];
+    ck("**הקפאה שהמשרד סימן על הכתובת שבגיליון נאכפת גם בכתובת הישנה**, המקרה של v7.88", oldA.allowed === false && oldA.reason === "frozen", strip(oldA));
     const newA = await login("newaddr@test.com");
     ck("והחדשה נכנסת", newA.allowed === true, strip(newA));
     delete H["mc:byemail"]["oldaddr@test.com"];
@@ -756,6 +762,36 @@ console.log("\nמסך הניהול מהשרת, ומתעדכן לבד. v7.95\n");
   await push({ ID: "972508800005", F_NAME: "החליפה", L_NAME: "מייל", CF_EMAIL: "new2@test.com", [START]: sunday + " 12:00:00" });
   const moved = await listFull();
   ck("**מייל שהשתנה במניצ'ט: היא מוצגת פעם אחת, בכתובת החדשה**", count(moved, "new2@test.com") === 1 && count(moved, "old@test.com") === 0, count(moved, "new2@test.com") + "/" + count(moved, "old@test.com"));
+
+  // **v8.03: המייל השתנה והגיליון עוד לא.** נמצא ב-11.10.2026 על שלוש נשים אמיתיות.
+  const nb = await login("new2@test.com");
+  ck("**בכתובת החדשה היא נכנסת, לפי השורה של הטלפון שלה בגיליון**", nb.allowed === true && nb.startDate === sunday && nb.phone === "972508800005", strip(nb));
+  ck("והכתובת הישנה עדיין נכנסת, כמו היום", (await login("old@test.com")).allowed === true);
+  hash("admin:overrides")["old@test.com"] = JSON.stringify({ freeze: { since: sunday }, by: "טלי" });
+  const nf = await login("new2@test.com");
+  ck("**הקפאה של המשרד על הכתובת שבגיליון חלה גם על החדשה**", nf.allowed === false && nf.reason === "frozen", strip(nf));
+  hash("admin:overrides")["old@test.com"] = JSON.stringify({ start: older, by: "טלי" });
+  const ns = await login("new2@test.com");
+  ck("**וגם תאריך שהמשרד קבע לכתובת שבגיליון**", ns.allowed === true && ns.startDate === older, strip(ns));
+  hash("admin:overrides")["new2@test.com"] = JSON.stringify({ start: sunday, by: "טלי" });
+  ck("ולכתובת שהקלידה יש סימון משלה: שלה גובר", (await login("new2@test.com")).startDate === sunday);
+  delete H["admin:overrides"]["new2@test.com"];
+  delete H["admin:overrides"]["old@test.com"];
+  ck("סתם כתובת שאינה בשום מקום עדיין לא רשומה", (await login("ghost@test.com")).reason === "not_registered");
+  // הגשר של החלפת מייל במסך: נשאר כל עוד הגיליון עצמו אינו מחזיק את החדשה.
+  hash("admin:emailmap")["new2@test.com"] = "old@test.com";
+  hash("admin:emailold")["old@test.com"] = "new2@test.com";
+  await listFull();
+  ck("**הגשר אינו נמחק כשרק השרת מחזיק את הכתובת החדשה**", H["admin:emailmap"]["new2@test.com"] === "old@test.com" && H["admin:emailold"]["old@test.com"] === "new2@test.com", strip([H["admin:emailmap"], H["admin:emailold"]]));
+  ck("ולכן הכתובת החדשה נכנסת דרכו", (await login("new2@test.com")).allowed === true);
+  SHEET = SHEET.replace("old@test.com", "new2@test.com");
+  delete S["sheet:csv:v1"];
+  await call({ rev: "1" });
+  await login("sara@test.com"); // ממלא את העותק המשותף של הגיליון
+  await listFull();
+  ck("**וכשהגיליון עצמו מחזיק אותה, הגשר נמחק**", !H["admin:emailmap"]["new2@test.com"] && !H["admin:emailold"]["old@test.com"], strip([H["admin:emailmap"], H["admin:emailold"]]));
+  SHEET = SHEET.replace("new2@test.com", "old@test.com");
+  delete S["sheet:csv:v1"];
 
   delete S["sheet:csv:v1"];
   const g0 = sheetCalls.length;
