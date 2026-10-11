@@ -83,7 +83,7 @@ export async function serverSheet(RU, RT) {
     const sh = sheetFromText(text);
     const dup = {};
     sh.women.forEach((w) => { if (w.dupRows || (w.dupPhone && w.dupPhone.length)) dup[w.email] = { dupRows: w.dupRows, dupStarts: w.dupStarts, dupPhone: w.dupPhone }; });
-    snap = { noEmail: sh.noEmail, skipped: sh.skipped, sheetNewAppRows: sh.sheetNewAppRows, rawHeaders: sh.rawHeaders, dup, women: sh.women.filter(notInServer) };
+    snap = { noEmail: sh.noEmail, skipped: sh.skipped, sheetNewAppRows: sh.sheetNewAppRows, rawHeaders: sh.rawHeaders, dup, women: sh.women.filter(notInServer), fileEmails: sh.women.map((w) => w.email) };
     try { await redisPost(RU, RT, ["SET", SHEET_SNAP, JSON.stringify(snap)]); } catch (e) {}
   } else {
     try { snap = JSON.parse(await redisPost(RU, RT, ["GET", SHEET_SNAP]) || "null"); } catch (e) { snap = null; }
@@ -100,6 +100,9 @@ export async function serverSheet(RU, RT) {
     skipped: (snap && snap.skipped) || { noEmail: 0, duplicate: 0, newAppNoEmail: 0, newAppDuplicate: 0 },
     sheetNewAppRows: (snap && snap.sheetNewAppRows) || 0,
     rawHeaders: (snap && snap.rawHeaders) || srv.rawHeaders,
+    // **המיילים שבגיליון עצמו, ולא ברשימה. v8.03.** הגשר של החלפת מייל נמחק רק כשהגיליון
+    // מחזיק את הכתובת החדשה, והרשימה מהשרת מחזיקה אותה מיד. null כשאין עותק של הגיליון.
+    fileEmails: (snap && Array.isArray(snap.fileEmails)) ? snap.fileEmails : null,
   };
 }
 
@@ -109,7 +112,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.02";
+const ADMIN_VERSION = "8.03";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1478,7 +1481,11 @@ JSON בלבד, בלי שום טקסט אחר:
   // A rename the export has already carried through needs no bridge, so it is dropped the
   // first time the file itself shows the new address. Nothing here waits on that: this is
   // only tidying, and a failure leaves the bridge in place, which is harmless.
-  const sheetEmails = new Set(sheet.women.map((w) => w.email));
+  // **מהגיליון עצמו ולא מהרשימה. v8.03.** מ-v7.95 הרשימה באה מהשרת, שמחזיק את הכתובת
+  // החדשה מיד, והגשר נמחק לפני שהגיליון התעדכן. השער, שקורא את הגיליון, ענה לה "לא רשומה".
+  // נמצא ב-11.10.2026 על אישה אמיתית. **בלי עותק של הגיליון לא נמחק כלום.**
+  const fileEmails = source === "server" ? sheet.fileEmails : sheet.women.map((w) => w.email);
+  const sheetEmails = new Set(fileEmails || []);
   for (const to of Object.keys(emailMap)) {
     if (!sheetEmails.has(to)) continue;
     const from = emailMap[to];
