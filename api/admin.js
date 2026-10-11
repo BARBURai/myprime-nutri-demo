@@ -112,7 +112,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.03";
+const ADMIN_VERSION = "8.06";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -430,6 +430,29 @@ async function moveRecords(RU, RT, from, to) {
 // ===== תיקון השמות השבועי. v8.00 =====
 const NAMEFIX_FILE = "1IoiVqbLXlpQ9tkPXIH6u35771gZP4d-U"; // האקסל של הפקידה, משותף לקריאה בלבד
 const NAMEFIX_LOG = "namefix:log";
+// **המסך במסך הניהול. v8.02.** רון: "זה צריך להיות צ'יק צ'יק צ'יק". הדוח האחרון נשמר כאן,
+// כדי שהמסך ייפתח מיד ולא יחכה שתי דקות לבדיקה מול מניצ'ט. ומי שרון החליט להשאיר לה את
+// השם נשמרת ב-`namefix:keep` ולא חוזרת אליו, גם לא בריצה של יום חמישי.
+const NAMEFIX_REPORT = "namefix:report";
+const NAMEFIX_KEEP = "namefix:keep";
+const NAMEFIX_REPORT_DAYS = 7;
+// כל כתיבה היא חמש קריאות למניצ'ט, ולכן 50 בקבוצה נכנסות בבטחה בחמש הדקות של וורסל.
+const NAMEFIX_SCREEN_BATCH = 50;
+const screenItem = (x) => ({
+  phone: x.phone, email: x.email, start: x.start, cur: { first: x.first, last: x.last },
+  cat: x.cat, why: x.why, to: x.to, suggest: x.suggest, options: x.options, mc: x.mc,
+});
+async function nameReportDrop(RU, RT, phones) {
+  if (!phones.length) return;
+  try {
+    const raw = await redis(RU, RT, "GET", NAMEFIX_REPORT);
+    if (!raw) return;
+    const rep = JSON.parse(raw);
+    const gone = new Set(phones.map(String));
+    rep.items = (rep.items || []).filter((x) => !gone.has(String(x.phone)));
+    await redisPost(RU, RT, ["SET", NAMEFIX_REPORT, JSON.stringify(rep)]);
+  } catch (e) { /* הדוח הוא נוחות בלבד, ובפתיחה הבאה אחרי שבוע הוא נבנה מחדש */ }
+}
 
 async function sendReport(subject, html) {
   const RESEND = process.env.RESEND_API_KEY;
@@ -444,7 +467,7 @@ async function sendReport(subject, html) {
   } catch (e) { return false; }
 }
 
-async function nameFix({ RU, RT, live, cap, batch }) {
+async function nameFix({ RU, RT, live, cap, batch, prefer, skip }) {
   const failHtml = (why) => `<div dir="rtl" style="font-family:Arial,sans-serif"><h2>תיקון שמות שבועי</h2><p><b>לא שונה כלום.</b> ${why}</p></div>`;
   if (!RU || !RT) return { ok: false, error: "no_store", html: failHtml("השרת לא זמין.") };
   const key = parseKey(process.env.GOOGLE_SA_KEY);
@@ -468,7 +491,18 @@ async function nameFix({ RU, RT, live, cap, batch }) {
       part.forEach((em, k) => { const raw = Array.isArray(vals) ? vals[k] : null; if (raw) { try { overrides[em] = JSON.parse(raw); } catch (e) {} } });
     } catch (e) { return { ok: false, error: "store_failed", html: failHtml("סימוני המשרד לא נקראו.") }; }
   }
-  const list = nameTargets(slim, overrides);
+  let list = nameTargets(slim, overrides);
+  // מי שרון החליט להשאיר לה את השם. **תקלה בקריאה עוצרת הכל**, אחרת הן היו חוזרות אליו.
+  try {
+    const kept = await redis(RU, RT, "HGETALL", NAMEFIX_KEEP);
+    const keep = new Set();
+    if (Array.isArray(kept)) { for (let i = 0; i < kept.length; i += 2) keep.add(String(kept[i])); }
+    else if (kept && typeof kept === "object") Object.keys(kept).forEach((k) => keep.add(String(k)));
+    if (keep.size) list = list.filter((t) => !keep.has(String(t.phone)));
+  } catch (e) { return { ok: false, error: "store_failed", html: failHtml("סימוני המשרד לא נקראו.") }; }
+  if (skip && skip.size) list = list.filter((t) => !skip.has(String(t.phone)));
+  // בריצה מהמסך, מי שהדוח האחרון סימן לתיקון אוטומטי באה קודם, כדי שהקבוצה לא תבזבז זמן על אחרות.
+  if (prefer && prefer.size) list = [...list.filter((t) => prefer.has(String(t.phone))), ...list.filter((t) => !prefer.has(String(t.phone)))];
   if (!process.env.MANYCHAT_TOKEN) return { ok: false, error: "no_mc", html: failHtml("אין חיבור למניצ'ט.") };
   mcPace = 150;
   let rep;
@@ -504,11 +538,18 @@ async function nameFix({ RU, RT, live, cap, batch }) {
   });
   } finally { mcPace = 0; }
   if (live && rep.fixed.length) await bumpRev(RU, RT);
+  // תצוגה מקדימה מלאה נשמרת למסך. ריצה אמיתית רק מוציאה ממנו את מי שתוקנה.
+  if (!live) {
+    try { await redisPost(RU, RT, ["SET", NAMEFIX_REPORT, JSON.stringify({ at: new Date().toISOString(), excelRows: idx.rows, items: rep.items.map(screenItem) })]); } catch (e) {}
+  } else if (rep.fixed.length) {
+    await nameReportDrop(RU, RT, rep.fixed.map((x) => x.phone));
+  }
   const strip = (x) => ({ email: x.email, start: x.start, cat: x.cat, to: x.to, suggest: x.suggest, mc: x.mc, error: x.error });
   return {
     ok: true, live: rep.live, stopped: rep.stopped, more: !!rep.more, excelRows: idx.rows, total: rep.total,
     counts: rep.items.reduce((a, x) => (a[x.cat] = (a[x.cat] || 0) + 1, a), {}),
     fixed: rep.fixed.length, failed: rep.failed.map(strip),
+    fixedPhones: rep.fixed.map((x) => String(x.phone)), failedPhones: rep.failed.map((x) => String(x.phone)),
     items: rep.items.map(strip),
     html: nameMail(rep, idx.rows),
   };
@@ -540,6 +581,71 @@ export default async function handler(req, res) {
     let staff = false, owner = false;
     if (!cron) { const who = await whoIs(key, RU, RT); staff = !!who.ok; owner = staff && who.owner; }
     if (!cron && !staff) return res.status(401).json({ ok: false, error: "unauthorized" });
+    // ===== המסך במסך הניהול, למנהל בלבד. v8.02 =====
+    // **הלחיצה של רון היא האישור**, ולכן כאן אין צורך ב-`NAMEFIX_LIVE`. המתג בוורסל נשאר רק
+    // לריצה האוטומטית של יום חמישי. רון אישר את זה, 11.10.2026.
+    if (!cron && (req.query.screen !== undefined || req.method === "POST")) {
+      if (!owner) return res.status(403).json({ ok: false, error: "owner_only" });
+      if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+      let body = req.body;
+      if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+      body = body || {};
+      if (req.method === "GET") {
+        try {
+          const raw = await redis(RU, RT, "GET", NAMEFIX_REPORT);
+          const rep = raw ? JSON.parse(raw) : null;
+          if (rep && rep.at && Date.now() - Date.parse(rep.at) < NAMEFIX_REPORT_DAYS * 86400000) return res.status(200).json({ ok: true, ...rep });
+        } catch (e) {}
+        const out = await nameFix({ RU, RT, live: false, cap: NAME_CAP, batch: false });
+        if (!out.ok) return res.status(500).json({ ok: false, error: out.error });
+        try { return res.status(200).json({ ok: true, ...JSON.parse(await redis(RU, RT, "GET", NAMEFIX_REPORT)) }); }
+        catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+      }
+      // **בדב לא כותבים.** לדב יש אותו חיבור למניצ'ט כמו לייצור, ולכן לחיצה שם הייתה משנה
+      // שמות של נשים אמיתיות, בלי שהשרת של הייצור יידע. בדב בודקים רק את הפתיחה והרשימות.
+      if (process.env.VERCEL_ENV === "preview" && process.env.NAMEFIX_LIVE !== "1") return res.status(409).json({ ok: false, error: "preview" });
+      // "תקני את כל ה-..." · קבוצה אחת בכל קריאה, והמסך ממשיך לבד עד הסוף.
+      if (body.fixAll) {
+        const skip = new Set((Array.isArray(body.skip) ? body.skip : []).map(String));
+        let prefer = new Set();
+        try {
+          const raw = await redis(RU, RT, "GET", NAMEFIX_REPORT);
+          if (raw) prefer = new Set((JSON.parse(raw).items || []).filter((x) => x.cat === "excel" || x.cat === "clean").map((x) => String(x.phone)));
+        } catch (e) {}
+        const out = await nameFix({ RU, RT, live: true, cap: NAMEFIX_SCREEN_BATCH, batch: true, prefer, skip });
+        if (!out.ok) return res.status(500).json({ ok: false, error: out.error });
+        return res.status(200).json({ ok: true, fixed: out.fixedPhones, failed: out.failedPhones, more: out.more });
+      }
+      // שם אחד שרון בחר: מהאקסל, או שהקליד בעצמו.
+      if (body.setName) {
+        const phone = String(body.setName.phone || "").replace(/[^\d]/g, "");
+        const first = String(body.setName.first || "").replace(/\s+/g, " ").trim().slice(0, 40);
+        const last = String(body.setName.last || "").replace(/\s+/g, " ").trim().slice(0, 40);
+        if (!phone || !first) return res.status(400).json({ ok: false, error: "missing_name" });
+        if (!process.env.MANYCHAT_TOKEN) return res.status(500).json({ ok: false, error: "no_mc" });
+        try {
+          // **השם הישן נשמר לפני הכתיבה**, כמו בתיקון האוטומטי.
+          await redis(RU, RT, "LPUSH", NAMEFIX_LOG, JSON.stringify({ at: new Date().toISOString(), phone, email: String(body.setName.email || ""), from: body.setName.from || null, to: { first, last }, cat: "screen", by: String(body.by || "").slice(0, 40) }));
+          await redis(RU, RT, "LTRIM", NAMEFIX_LOG, "0", "1999");
+        } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+        const r = await mcPush({ phone, hasName: true, first, last });
+        if (r !== "ok") return res.status(200).json({ ok: false, error: r });
+        try { await mcSetName(RU, RT, phone, first, last); } catch (e) {}
+        await bumpRev(RU, RT);
+        await nameReportDrop(RU, RT, [phone]);
+        return res.status(200).json({ ok: true });
+      }
+      // "להשאיר": השם שלה נשאר, והיא לא חוזרת לרשימה.
+      if (body.keep) {
+        const phone = String(body.keep).replace(/[^\d]/g, "");
+        if (!phone) return res.status(400).json({ ok: false });
+        try { await redis(RU, RT, "HSET", NAMEFIX_KEEP, phone, JSON.stringify({ at: new Date().toISOString(), by: String(body.by || "").slice(0, 40) })); }
+        catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+        await nameReportDrop(RU, RT, [phone]);
+        return res.status(200).json({ ok: true });
+      }
+      return res.status(400).json({ ok: false });
+    }
     // **כתיבה רק כשרון הדליק `NAMEFIX_LIVE=1` בוורסל**, אחרי שראה תצוגה מקדימה ואישר. עד אז
     // גם ההרצה של יום חמישי היא תצוגה מקדימה בלבד.
     const liveOn = process.env.NAMEFIX_LIVE === "1";

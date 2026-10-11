@@ -679,6 +679,158 @@ CHECKS.push({
   },
 });
 
+// v8.02: תיקון שמות מהאקסל, למנהל בלבד. "תקני את כולן" ממשיך לבד עד הסוף, בחירה מהאקסל,
+// שם שהוקלד נשמר גם כשהמסך מצויר מחדש, והפקידה אינה רואה את הכפתור. **שני הצדדים באותה הרצה.**
+CHECKS.push({
+  name: "תיקון שמות מהאקסל",
+  async run(browser, device) {
+    const o = await open(browser, device);
+    const item = (phone, cat, extra) => ({ phone, email: phone + "@t.com", start: "2026-10-04", cur: { first: "iPhone", last: "" }, cat, ...extra });
+    const REP = { ok: true, at: new Date().toISOString(), excelRows: 900, items: [
+      item("1", "excel", { to: { first: "מיה", last: "ביטון" } }),
+      item("2", "excel", { to: { first: "רוית", last: "יוסף" } }),
+      item("3", "clean", { to: { first: "טלי", last: "נוטמן" } }),
+      item("4", "conflict", { options: [{ first: "דנה", last: "כהן" }, { first: "דנה", last: "לוי" }], suggest: { first: "דנה", last: "כהן" }, mc: { first: "דני", last: "כהן" } }),
+      item("5", "mc", { suggest: { first: "שרה", last: "אבן" } }),
+    ] };
+    const posts = [];
+    let fixCalls = 0;
+    await o.ctx.route("**/api/**", (route) => {
+      const url = route.request().url();
+      if (!url.includes("namefix")) return route.fallback();
+      const json = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+      if (route.request().method() === "GET") return json(REP);
+      const b = JSON.parse(route.request().postData() || "{}");
+      posts.push(b);
+      if (b.fixAll) { fixCalls++; return json(fixCalls === 1 ? { ok: true, fixed: ["1", "2"], failed: [], more: true } : { ok: true, fixed: ["3"], failed: [], more: false }); }
+      return json({ ok: true });
+    });
+    const p = o.page;
+    await p.locator('[data-nfopen="1"]').click();
+    await p.waitForTimeout(600);
+    const txt = () => p.locator("body").innerText();
+    const counts0 = (await txt()).includes("לתיקון אוטומטי: 3 · לבחירה שלך: 1 · לבירור ידני: 1");
+    const btn0 = (await txt()).includes("תקני את כל ה-3");
+    await p.locator("[data-nfall]").click();
+    await p.waitForTimeout(800);
+    const after = await txt();
+    const allDone = after.includes("לתיקון אוטומטי: 0 · לבחירה שלך: 1 · לבירור ידני: 1") && fixCalls === 2 && !(await p.locator("[data-nfall]").count());
+    // שם שהוקלד, ואז פעולה אחרת שמציירת את המסך מחדש.
+    const pre = await p.locator('[data-nffirst="5"]').inputValue();
+    await p.locator('[data-nflast="5"]').fill("אבן-חן");
+    await p.locator('[data-nfpick="4"][data-nfi="1"]').click();
+    await p.waitForTimeout(300);
+    await p.locator('[data-nfbulk="choose"]').click();
+    await p.waitForTimeout(500);
+    const picked = posts.some((b) => b.setName && b.setName.phone === "4" && b.setName.first === "דנה" && b.setName.last === "לוי");
+    const rowGone = !(await p.locator('[data-nfrow="4"]').count());
+    const kept = await p.locator('[data-nflast="5"]').inputValue();
+    await p.locator('[data-nfsave="5"]').click();
+    await p.waitForTimeout(500);
+    const saved = posts.some((b) => b.setName && b.setName.phone === "5" && b.setName.first === "שרה" && b.setName.last === "אבן-חן");
+    await o.ctx.close();
+    const c = await open(browser, device, (d) => Object.assign(d, { owner: false }));
+    const clerk = await c.page.locator("[data-nfopen]").count();
+    await c.ctx.close();
+    const errs = o.errors.concat(c.errors);
+    return { ok: counts0 && btn0 && allDone && pre === "שרה" && picked && rowGone && kept === "אבן-חן" && saved && clerk === 0 && !errs.length,
+      detail: `מספרים ${counts0} · כפתור ${btn0} · כולן ${allDone} (${fixCalls} קריאות) · מוכן מראש "${pre}" · בחירה ${picked} · שורה ירדה ${rowGone} · נשמר בהקלדה "${kept}" · נשמר ${saved} · פקידה ${clerk} · שגיאות ${errs[0] || "אין"}` };
+  },
+});
+
+// v8.06: בחירה מרובה. **שני הצדדים**: מה שמסומן נשמר בלחיצה אחת, עם השם שנבחר, ומה שבוטל
+// אינו נשלח. ובבירור ידני, שורה בלי שם אינה מסומנת ואינה נשלחת.
+CHECKS.push({
+  name: "תיקון שמות: בחירה מרובה",
+  async run(browser, device) {
+    const o = await open(browser, device);
+    const it = (phone, cat, extra) => ({ phone, email: phone + "@t.com", start: "2026-10-04", cur: { first: "x", last: "" }, cat, ...extra });
+    const REP = { ok: true, at: new Date().toISOString(), excelRows: 9, items: [
+      it("11", "conflict", { options: [{ first: "דנה", last: "כהן" }, { first: "דנה", last: "לוי" }], suggest: { first: "דנה", last: "כהן" }, mc: { first: "ד", last: "" } }),
+      it("12", "conflict", { options: [{ first: "רות", last: "אבן" }, { first: "רותי", last: "אבן" }], suggest: { first: "רות", last: "אבן" }, mc: { first: "ר", last: "" } }),
+      it("13", "conflict", { options: [{ first: "נגה", last: "בר" }, { first: "נוגה", last: "בר" }], suggest: { first: "נגה", last: "בר" }, mc: { first: "נ", last: "" } }),
+      it("21", "mc", { suggest: { first: "שרה", last: "אבן" } }),
+      it("22", "manual", { why: "noname" }),
+      it("23", "mc", { suggest: { first: "לאה", last: "גל" } }),
+    ] };
+    const posts = [];
+    await o.ctx.route("**/api/**", (route) => {
+      const url = route.request().url();
+      if (!url.includes("namefix")) return route.fallback();
+      if (route.request().method() === "GET") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(REP) });
+      posts.push(JSON.parse(route.request().postData() || "{}"));
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    });
+    const p = o.page;
+    await p.locator('[data-nfopen="1"]').click();
+    await p.waitForTimeout(500);
+    const txt = () => p.locator("body").innerText();
+    const t0 = await txt();
+    const c0 = t0.includes("שמירת המסומנות (3)") && t0.includes("שמירת המסומנות (2)");
+    const noName = !(await p.locator('[data-nfsel="22"]').isChecked());
+    await p.locator('[data-nfpick="12"][data-nfi="1"]').click();
+    await p.waitForTimeout(200);
+    await p.locator('[data-nfsel="13"]').uncheck();
+    await p.waitForTimeout(200);
+    const c1 = (await txt()).includes("שמירת המסומנות (2)");
+    await p.locator('[data-nfbulk="choose"]').click();
+    await p.waitForTimeout(800);
+    const names = posts.filter((b) => b.setName).map((b) => b.setName.phone + ":" + b.setName.first + " " + b.setName.last);
+    const chooseOk = names.join("|") === "11:דנה כהן|12:רותי אבן";
+    const left13 = await p.locator('[data-nfrow="13"]').count() === 1 && !(await p.locator('[data-nfrow="11"]').count());
+    await p.locator('[data-nfbulk="manual"]').click();
+    await p.waitForTimeout(800);
+    const names2 = posts.filter((b) => b.setName).map((b) => b.setName.phone).slice(2).join(",");
+    const manualOk = names2 === "21,23" && await p.locator('[data-nfrow="22"]').count() === 1;
+    await p.locator('[data-nfselall="choose"][data-v="1"]').click();
+    await p.waitForTimeout(200);
+    const all = await p.locator('[data-nfsel="13"]').isChecked();
+    await o.ctx.close();
+    const ok = c0 && noName && c1 && chooseOk && left13 && manualOk && all && !o.errors.length;
+    return { ok, detail: `מונים ${c0} · בלי שם לא מסומנת ${noName} · אחרי ביטול ${c1} · נשלחו "${names.join("|")}" · נשארה ${left13} · ידני "${names2}" ${manualOk} · סימון הכל ${all} · שגיאות ${o.errors[0] || "אין"}` };
+  },
+});
+
+// v8.05: בדב הכפתורים אינם שומרים, והמסך אומר את זה ולא "לא נשמר". **שני הצדדים**: תשובת
+// "preview" מקבלת את הנוסח של הדב, ותקלה רגילה את הנוסח הקיים. בחלונית ובשורה של "תקני את כולן".
+CHECKS.push({
+  name: "תיקון שמות: ההודעה בדב",
+  async run(browser, device) {
+    const o = await open(browser, device);
+    const REP = { ok: true, at: new Date().toISOString(), excelRows: 9, items: [
+      { phone: "1", email: "1@t.com", start: "2026-10-04", cur: { first: "x", last: "" }, cat: "excel", to: { first: "מיה", last: "ביטון" } },
+      { phone: "5", email: "5@t.com", start: "2026-10-04", cur: { first: "x", last: "" }, cat: "mc", suggest: { first: "שרה", last: "אבן" } },
+    ] };
+    let mode = "preview";
+    await o.ctx.route("**/api/**", (route) => {
+      const url = route.request().url();
+      if (!url.includes("namefix")) return route.fallback();
+      if (route.request().method() === "GET") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(REP) });
+      return mode === "preview"
+        ? route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ ok: false, error: "preview" }) })
+        : route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ ok: false, error: "x" }) });
+    });
+    const alerts = [];
+    o.page.on("dialog", (d) => { alerts.push(d.message()); });
+    const p = o.page;
+    await p.locator('[data-nfopen="1"]').click();
+    await p.waitForTimeout(500);
+    await p.locator('[data-nfsave="5"]').click();
+    await p.waitForTimeout(500);
+    mode = "fail";
+    await p.locator('[data-nfsave="5"]').click();
+    await p.waitForTimeout(500);
+    mode = "preview";
+    await p.locator("[data-nfall]").click();
+    await p.waitForTimeout(500);
+    const runTxt = await p.locator("body").innerText();
+    await o.ctx.close();
+    const DEV = "בדב הכפתורים אינם שומרים. השמירה פועלת בייצור בלבד.", FAIL = "לא נשמר. אפשר לנסות שוב בעוד רגע.";
+    const ok = alerts[0] === DEV && alerts[1] === FAIL && runTxt.includes(DEV) && !o.errors.length;
+    return { ok, detail: `חלונית בדב "${alerts[0]}" · תקלה "${alerts[1]}" · שורת "כולן" ${runTxt.includes(DEV)} · שגיאות ${o.errors[0] || "אין"}` };
+  },
+});
+
 const browser = await chromium.launch({ executablePath: BROWSER });
 const ONLY = process.env.E2E_ONLY || "";
 const RUN = CHECKS.filter((c) => !ONLY || c.name.includes(ONLY));

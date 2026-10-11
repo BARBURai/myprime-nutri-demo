@@ -1112,6 +1112,146 @@ function teamBlock(){
   '</div>';
 }
 
+// ===== תיקון שמות מהאקסל, למנהל בלבד. v8.02 =====
+// רון, 11.10.2026: "איך אתה מתכוון שאני אעבור על כל האנשים האלה זה צריך להיות צ'יק צ'יק
+// צ'יק". הקופי אושר: "מאשר". **כל לחיצה היא אישה אחת**, והשם הישן נשמר בשרת לפני כל כתיבה.
+// "לבחירה שלך" הן מי שהאקסל ומניצ'ט חולקים עליהן. "לבירור ידני" הן כל השאר, ומי שיש לה
+// שם במניצ'ט ולא באקסל מגיעה לשם עם השם ממניצ'ט כבר בשדה.
+var NFOPEN = false, NFREP = null, NFERR = false, NFRUN = null, NFBUSY = {}, NFTYPE = {};
+// **בחירה מרובה. v8.06.** רון: "למה אני לא יכול לעשות בחירה מרובה". כל שורה מסומנת מראש
+// עם השם המוצע, והוא מבטל או מחליף רק איפה שצריך, ושומר את כולן בלחיצה אחת.
+// NFSEL: סימון שהוא שינה ביד. NFPICK: איזה שם מהאקסל בחר. NFBULK: הקבוצה שנשמרת עכשיו.
+var NFSEL = {}, NFPICK = {}, NFBULK = null;
+function nfOpts(x){ return (x.options && x.options.length ? x.options : (x.suggest ? [x.suggest] : [])); }
+function nfPickIdx(x){
+  if(NFPICK[x.phone] != null) return NFPICK[x.phone];
+  var o = nfOpts(x), s = x.suggest;
+  for(var i=0;i<o.length;i++) if(s && o[i].first===s.first && o[i].last===s.last) return i;
+  return 0;
+}
+function nfManualName(x){
+  var t = NFTYPE[x.phone];
+  if(t) return { first:(t.first||"").trim(), last:(t.last||"").trim() };
+  var s = x.suggest||x.mc||{};
+  return { first:(s.first||"").trim(), last:(s.last||"").trim() };
+}
+// ברירת המחדל: בבחירה תמיד מסומנת, ובבירור ידני רק מי שהגיעה עם שם.
+function nfIsSel(x, grp){
+  if(NFSEL[x.phone] != null) return NFSEL[x.phone];
+  if(grp === "choose") return nfOpts(x).length > 0;
+  var s = x.suggest||x.mc||{};
+  return !!String(s.first||"").trim();
+}
+function nfFull(n){ return n ? ((n.first||"")+" "+(n.last||"")).replace(/\s+/g," ").trim() : ""; }
+function nfGroups(){
+  var items = (NFREP && NFREP.items) || [];
+  return {
+    auto: items.filter(function(x){ return x.cat==="excel" || x.cat==="clean"; }),
+    choose: items.filter(function(x){ return x.cat==="conflict"; }),
+    manual: items.filter(function(x){ return x.cat==="manual" || x.cat==="mc"; })
+  };
+}
+function nfWhy(x){
+  if(x.why==="multi") return "כמה אנשי קשר במניצ'ט";
+  if(x.why==="mc_error") return "מניצ'ט לא נקרא";
+  if(x.cat==="mc") return "לא נמצאה באקסל";
+  return "אין שם תקין";
+}
+function loadNameFix(){
+  NFERR = false;
+  return fetch("/api/admin?namefix&screen=1&format=json&key="+encodeURIComponent(KEY))
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if(!d || !d.ok) throw new Error(); NFREP = d; })
+    .catch(function(){ NFERR = true; });
+}
+function nfPost(body){
+  body.by = WHO;
+  return fetch("/api/admin?namefix&format=json&key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)})
+    .then(function(r){ return r.json(); });
+}
+// **בדב הכפתורים אינם שומרים**, כי לדב אותו מניצ'ט של הייצור. השרת מחזיר "preview",
+// והמסך אומר את זה במפורש ולא "לא נשמר", שנקרא כתקלה. נוסח רון, v8.05.
+var NF_PREVIEW_MSG = "בדב הכפתורים אינם שומרים. השמירה פועלת בייצור בלבד.";
+var NF_FAIL_MSG = "לא נשמר. אפשר לנסות שוב בעוד רגע.";
+function nfErr(d){ var e = new Error(); e.preview = !!(d && d.error === "preview"); return e; }
+function nfDrop(phones){
+  if(!NFREP) return;
+  var gone = {}; phones.forEach(function(p){ gone[String(p)] = 1; });
+  NFREP.items = (NFREP.items||[]).filter(function(x){ return !gone[String(x.phone)]; });
+}
+function nfRunAll(){
+  var g = nfGroups();
+  NFRUN = { done:0, total:g.auto.length, failed:[], busy:true };
+  render();
+  (function step(){
+    nfPost({ fixAll:true, skip:NFRUN.failed }).then(function(d){
+      if(!d || !d.ok) throw nfErr(d);
+      nfDrop(d.fixed||[]);
+      NFRUN.done += (d.fixed||[]).length;
+      NFRUN.failed = NFRUN.failed.concat(d.failed||[]);
+      render();
+      if(d.more && ((d.fixed||[]).length || (d.failed||[]).length)) return step();
+      NFRUN.busy = false; render();
+    }).catch(function(e){ NFRUN.busy = false; NFRUN.error = (e && e.preview) ? "preview" : true; render(); });
+  })();
+}
+function nameFixBlock(){
+  if(!DATA.owner) return "";
+  if(!NFOPEN) return '<div class="chips"><span class="chip" data-nfopen="1">תיקון שמות מהאקסל</span></div>';
+  var h = '<div class="card"><div class="row1"><span class="nm">תיקון שמות מהאקסל</span>'+
+    '<button class="lnk" data-nfopen="0">סגירה</button></div>';
+  if(NFERR) return h+'<div class="note">לא הצלחתי לטעון את הנתונים. נסי לרענן.</div></div>';
+  if(!NFREP) return h+'<div class="note">טוען...</div></div>';
+  var g = nfGroups();
+  h += '<div class="note"><b>לתיקון אוטומטי: '+nf(g.auto.length)+' · לבחירה שלך: '+nf(g.choose.length)+' · לבירור ידני: '+nf(g.manual.length)+'</b></div>';
+  if(NFRUN && NFRUN.busy) h += '<div class="note">תוקנו '+nf(NFRUN.done)+' מתוך '+nf(NFRUN.total)+'...</div>';
+  else if(g.auto.length) h += '<div class="edit"><button class="btn p" data-nfall="1">תקני את כל ה-'+nf(g.auto.length)+'</button></div>';
+  if(NFRUN && !NFRUN.busy && NFRUN.failed.length) h += '<div class="note"><b>לא נשמרו: '+nf(NFRUN.failed.length)+'.</b></div>';
+  if(NFRUN && !NFRUN.busy && NFRUN.error) h += '<div class="note">'+(NFRUN.error === "preview" ? NF_PREVIEW_MSG : NF_FAIL_MSG)+'</div>';
+  var selHead = function(grp){
+    return ' <button class="lnk" data-nfselall="'+grp+'" data-v="1">סימון הכל</button> · <button class="lnk" data-nfselall="'+grp+'" data-v="0">ביטול הכל</button>';
+  };
+  var bulkBtn = function(grp, list){
+    var n = list.filter(function(x){ return nfIsSel(x, grp) && (grp==="choose" || nfManualName(x).first); }).length;
+    return '<div class="edit"><button class="btn p" data-nfbulk="'+grp+'"'+((!n||NFBULK)?' disabled':'')+'>שמירת המסומנות ('+nf(n)+')</button></div>';
+  };
+  if(g.choose.length){
+    h += '<div class="note"><b>לבחירה שלך</b>'+selHead("choose")+'</div>';
+    g.choose.forEach(function(x){
+      var busy = NFBUSY[x.phone] || NFBULK;
+      var opts = nfOpts(x), pi = nfPickIdx(x);
+      h += '<div class="card" data-nfrow="'+esc(x.phone)+'">'+
+        '<div class="note"><input type="checkbox" data-nfsel="'+esc(x.phone)+'" data-nfgrp="choose"'+(nfIsSel(x,"choose")?' checked':'')+(busy?' disabled':'')+'> במערכת: <b>'+esc(nfFull(x.cur)||"ריק")+'</b></div>'+
+        opts.map(function(o,i){
+          return '<div class="edit"><span>באקסל: <b>'+esc(nfFull(o))+'</b></span>'+
+            '<button class="btn'+(i===pi?' p':'')+'" data-nfpick="'+esc(x.phone)+'" data-nfi="'+i+'"'+(busy?' disabled':'')+'>שם מהאקסל</button></div>';
+        }).join("")+
+        '<div class="note">במניצ\'ט: <b>'+esc(nfFull(x.mc)||"—")+'</b></div>'+
+        '<div class="edit"><button class="btn" data-nfkeep="'+esc(x.phone)+'"'+(busy?' disabled':'')+'>להשאיר</button>'+
+        '<span class="note">'+esc(x.email||"")+'</span></div>'+
+      '</div>';
+    });
+    h += bulkBtn("choose", g.choose);
+  }
+  if(g.manual.length){
+    h += '<div class="note"><b>לבירור ידני</b>'+selHead("manual")+'</div>';
+    g.manual.forEach(function(x){
+      var busy = NFBUSY[x.phone] || NFBULK;
+      var pre = NFTYPE[x.phone] || { first:(x.suggest||x.mc||{}).first||"", last:(x.suggest||x.mc||{}).last||"" };
+      h += '<div class="card" data-nfrow="'+esc(x.phone)+'">'+
+        '<div class="note"><input type="checkbox" data-nfsel="'+esc(x.phone)+'" data-nfgrp="manual"'+(nfIsSel(x,"manual")?' checked':'')+(busy?' disabled':'')+'> במערכת: <b>'+esc(nfFull(x.cur)||"ריק")+'</b> · '+esc(nfWhy(x))+'</div>'+
+        '<div class="note">'+esc(x.email||"")+'</div>'+
+        '<div class="edit">'+
+          '<input class="field sm" style="max-width:140px" data-nffirst="'+esc(x.phone)+'" placeholder="שם פרטי" value="'+esc(pre.first)+'">'+
+          '<input class="field sm" style="max-width:140px" data-nflast="'+esc(x.phone)+'" placeholder="שם משפחה" value="'+esc(pre.last)+'">'+
+          '<button class="btn p" data-nfsave="'+esc(x.phone)+'"'+(busy?' disabled':'')+'>שמירה</button></div>'+
+      '</div>';
+    });
+    h += bulkBtn("manual", g.manual);
+  }
+  return h+'</div>';
+}
+
 // תג התוכנית. סולו למי שיש לה, ו-360 לכל השאר. הוא נשאר גם למי שביטלה, לפי
 // החלטת רון: תג לא יורד, כי צריך לדעת באיזו תוכנית היא הייתה. הביטול הוא תג
 // נוסף לצידו ולא במקומו.
@@ -1302,6 +1442,7 @@ function render(){
     '</div>'+
     mcSyncBlock()+
     teamBlock()+
+    nameFixBlock()+
     '<div class="toolbar'+(SEL?" picked":"")+'">'+
     '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(qRaw)+'">'+
     '<div class="qhint">אפשר להדביק מספר טלפון בכל צורה, עם + עם רווחים או עם מקפים.</div>'+
@@ -2413,6 +2554,77 @@ function render(){
     CODESOPEN = el.getAttribute("data-team")==="1";
     if(CODESOPEN && CODES === null){ render(); loadCodes().then(render); return; }
     render();
+  }; });
+  // תיקון שמות מהאקסל. v8.02.
+  app.querySelectorAll("[data-nfopen]").forEach(function(el){ el.onclick=function(){
+    NFOPEN = el.getAttribute("data-nfopen")==="1";
+    if(NFOPEN && !NFREP){ render(); loadNameFix().then(render); return; }
+    render();
+  }; });
+  app.querySelectorAll("[data-nfall]").forEach(function(el){ el.onclick=function(){
+    if(NFRUN && NFRUN.busy) return;
+    nfRunAll();
+  }; });
+  app.querySelectorAll("[data-nffirst],[data-nflast]").forEach(function(el){ el.oninput=function(){
+    var p = el.getAttribute("data-nffirst") || el.getAttribute("data-nflast");
+    var f = app.querySelector('[data-nffirst="'+p+'"]'), l = app.querySelector('[data-nflast="'+p+'"]');
+    NFTYPE[p] = { first:f?f.value:"", last:l?l.value:"" };
+  }; });
+  function nfAct(phone, body){
+    NFBUSY[phone] = true; render();
+    return nfPost(body).then(function(d){
+      if(!d || !d.ok) throw nfErr(d);
+      nfDrop([phone]); delete NFTYPE[phone];
+    }).catch(function(e){ alert((e && e.preview) ? NF_PREVIEW_MSG : NF_FAIL_MSG); })
+      .then(function(){ delete NFBUSY[phone]; render(); });
+  }
+  function nfItem(phone){ return ((NFREP&&NFREP.items)||[]).filter(function(x){ return String(x.phone)===String(phone); })[0]; }
+  // בחירת שם מהאקסל מסמנת אותו ואת השורה, והשמירה ב"שמירת המסומנות". v8.06.
+  app.querySelectorAll("[data-nfpick]").forEach(function(el){ el.onclick=function(){
+    var p = el.getAttribute("data-nfpick");
+    NFPICK[p] = +el.getAttribute("data-nfi"); NFSEL[p] = true; render();
+  }; });
+  app.querySelectorAll("[data-nfsel]").forEach(function(el){ el.onchange=function(){
+    NFSEL[el.getAttribute("data-nfsel")] = !!el.checked; render();
+  }; });
+  app.querySelectorAll("[data-nfselall]").forEach(function(el){ el.onclick=function(){
+    var g = nfGroups()[el.getAttribute("data-nfselall")] || [], v = el.getAttribute("data-v") === "1";
+    g.forEach(function(x){ NFSEL[x.phone] = v; }); render();
+  }; });
+  app.querySelectorAll("[data-nfbulk]").forEach(function(el){ el.onclick=function(){
+    var grp = el.getAttribute("data-nfbulk");
+    var todo = (nfGroups()[grp] || []).filter(function(x){ return nfIsSel(x, grp); }).map(function(x){
+      var o = grp === "choose" ? nfOpts(x)[nfPickIdx(x)] : nfManualName(x);
+      return (o && String(o.first||"").trim()) ? { phone:x.phone, email:x.email, first:String(o.first).trim(), last:String(o.last||"").trim(), from:x.cur } : null;
+    }).filter(Boolean);
+    if(!todo.length || NFBULK) return;
+    // אחת אחרי השנייה, כי מניצ'ט מגביל קריאות בשנייה. "בדב" עוצר מיד, כי אף אחת לא תישמר.
+    NFBULK = grp; render();
+    var failed = 0, preview = false;
+    (function next(i){
+      if(i >= todo.length || preview){
+        NFBULK = null; render();
+        if(preview) alert(NF_PREVIEW_MSG); else if(failed) alert(NF_FAIL_MSG);
+        return;
+      }
+      var t = todo[i];
+      nfPost({ setName:t }).then(function(d){
+        if(!d || !d.ok) throw nfErr(d);
+        nfDrop([t.phone]); delete NFTYPE[t.phone]; delete NFSEL[t.phone]; delete NFPICK[t.phone]; render();
+      }).catch(function(e){ if(e && e.preview) preview = true; else failed++; })
+        .then(function(){ next(i+1); });
+    })(0);
+  }; });
+  app.querySelectorAll("[data-nfkeep]").forEach(function(el){ el.onclick=function(){
+    var p = el.getAttribute("data-nfkeep");
+    nfAct(p, { keep:p });
+  }; });
+  app.querySelectorAll("[data-nfsave]").forEach(function(el){ el.onclick=function(){
+    var x = nfItem(el.getAttribute("data-nfsave")); if(!x) return;
+    var f = app.querySelector('[data-nffirst="'+x.phone+'"]'), l = app.querySelector('[data-nflast="'+x.phone+'"]');
+    var first = (f?f.value:"").trim(), last = (l?l.value:"").trim();
+    if(!first){ alert("צריך להזין שם"); return; }
+    nfAct(x.phone, { setName:{ phone:x.phone, email:x.email, first:first, last:last, from:x.cur } });
   }; });
   app.querySelectorAll("[data-mcimport]").forEach(function(el){ el.onclick=function(){
     if(MCBUSY) return;
