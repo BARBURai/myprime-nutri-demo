@@ -295,13 +295,23 @@ delete process.env.NAMEFIX_LIVE;
 const callScreen = async (query) => { const res = mkRes(); await adminHandler({ query: { namefix: "", format: "json", ...query }, method: "GET", headers: {}, body: null }, res); return res; };
 const post = async (key, body) => { const res = mkRes(); await adminHandler({ query: { namefix: "", format: "json", key }, method: "POST", headers: {}, body }, res); return res; };
 
+// **v8.08: גם לקוד עובדת**, רון: "מאשר". ומי ששמרה נרשמת ביומן מהקוד, ולא ממה שהמסך שולח.
+const logBy = () => (LISTS["namefix:log"] || []).map((x) => JSON.parse(x).by);
 reset(); H["admin:codes"] = { "ABCD-EFGH": JSON.stringify({ name: "טלי" }) };
 r = await callScreen({ key: "ABCD-EFGH", screen: "1" });
-ok(r.code === 403, "קוד של המשרד אינו פותח את המסך");
+ok(r.code === 200 && r.body.ok && (r.body.items || []).length > 0, "קוד של עובדת פותח את המסך");
+r = await post("ABCD-EFGH", { setName: { phone: "972544000001", first: "מיה", last: "ביטון" }, by: "מישהי אחרת" });
+ok(r.code === 200 && r.body.ok && logBy()[0] === "טלי", "עובדת כותבת שם, וביומן נרשם שמה מהקוד ולא מהמסך");
+reset(); H["admin:codes"] = { "ABCD-EFGH": JSON.stringify({ name: "טלי" }) };
 r = await post("ABCD-EFGH", { fixAll: true });
-ok(r.code === 403 && mcLog.length === 0, "קוד של המשרד אינו יכול לתקן");
-r = await post("ABCD-EFGH", { setName: { phone: "972544000001", first: "מיה", last: "ביטון" } });
-ok(r.code === 403 && mcLog.length === 0, "קוד של המשרד אינו יכול לכתוב שם");
+ok(r.code === 200 && r.body.ok && r.body.fixed.length > 0 && logBy().length > 0 && logBy().every((x) => x === "טלי"), "עובדת מתקנת את כולן, וכל שורה ביומן נושאת את שמה");
+reset(); H["admin:codes"] = { "ABCD-EFGH": JSON.stringify({ name: "טלי" }) };
+r = await post("WRONG-CODE", { setName: { phone: "972544000001", first: "מיה", last: "ביטון" } });
+ok(r.code === 401 && mcLog.length === 0, "קוד שגוי אינו יכול לכתוב שם");
+reset(); H["admin:codes"] = { "ABCD-EFGH": JSON.stringify({ name: "טלי" }) }; process.env.NAMEFIX_LIVE = "1";
+r = await callScreen({ key: "ABCD-EFGH", run: "1" });
+ok(mcLog.filter((x) => /setCustomField|updateSubscriber|setInfo/i.test(JSON.stringify(x))).length === 0 && !(LISTS["namefix:log"] || []).length, "הריצה בכתובת (run=1) נשארת למנהל בלבד");
+delete process.env.NAMEFIX_LIVE;
 
 reset();
 r = await callScreen({ key: KEY, screen: "1" });
@@ -359,7 +369,7 @@ reset(); MCDB["972544000001"].F_NAME = "x";
   const adm = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
   for (const t of ["תיקון שמות מהאקסל", "לתיקון אוטומטי: ", " · לבחירה שלך: ", " · לבירור ידני: ", "תקני את כל ה-", "תוקנו ", "שם מהאקסל", ">להשאיר<", ">שמירה<"])
     ok(adm.includes(t), "הנוסח שאושר במסך: " + t);
-  ok(/function nameFixBlock\(\)\{\s*if\(!DATA\.owner\) return "";/.test(adm), "המסך מוצג למנהל בלבד");
+  ok(/function nameFixBlock\(\)\{\s*if\(!NFOPEN\)/.test(adm), "המסך מוצג גם לקוד עובדת (v8.08)");
 }
 console.log(`${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);

@@ -112,7 +112,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.07";
+const ADMIN_VERSION = "8.08";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -467,7 +467,7 @@ async function sendReport(subject, html) {
   } catch (e) { return false; }
 }
 
-async function nameFix({ RU, RT, live, cap, batch, prefer, skip }) {
+async function nameFix({ RU, RT, live, cap, batch, prefer, skip, by }) {
   const failHtml = (why) => `<div dir="rtl" style="font-family:Arial,sans-serif"><h2>תיקון שמות שבועי</h2><p><b>לא שונה כלום.</b> ${why}</p></div>`;
   if (!RU || !RT) return { ok: false, error: "no_store", html: failHtml("השרת לא זמין.") };
   const key = parseKey(process.env.GOOGLE_SA_KEY);
@@ -524,7 +524,7 @@ async function nameFix({ RU, RT, live, cap, batch, prefer, skip }) {
         return { first: arr[0].first_name || "", last: arr[0].last_name || "" };
       },
       async log(entry) {
-        await redis(RU, RT, "LPUSH", NAMEFIX_LOG, JSON.stringify(entry));
+        await redis(RU, RT, "LPUSH", NAMEFIX_LOG, JSON.stringify(by ? { ...entry, by } : entry));
         await redis(RU, RT, "LTRIM", NAMEFIX_LOG, "0", "1999");
       },
       async write(t, to) {
@@ -578,14 +578,15 @@ export default async function handler(req, res) {
     const cron = !!process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`;
     // **תצוגה מקדימה לכל מפתח של המשרד**, כי היא קריאה בלבד ומראה את מה שהמסך כבר מראה.
     // **ריצה אמיתית ידנית, `run=1`, למנהל בלבד.**
-    let staff = false, owner = false;
-    if (!cron) { const who = await whoIs(key, RU, RT); staff = !!who.ok; owner = staff && who.owner; }
+    let staff = false, owner = false, by = "";
+    if (!cron) { const who = await whoIs(key, RU, RT); staff = !!who.ok; owner = staff && who.owner; by = owner ? "מנהל" : String(who.name || "עובדת").slice(0, 40); }
     if (!cron && !staff) return res.status(401).json({ ok: false, error: "unauthorized" });
-    // ===== המסך במסך הניהול, למנהל בלבד. v8.02 =====
+    // ===== המסך במסך הניהול. v8.02, ומ-v8.08 גם לקוד עובדת =====
+    // רון, 11.10.2026: "מאשר", לפתוח לטלי. **מי ששמרה נקבע כאן מהקוד ולא מהמסך**, ונרשם
+    // ביומן לצד השם הישן. הריצה הידנית בכתובת (`run=1`) ויום חמישי לא השתנו.
     // **הלחיצה של רון היא האישור**, ולכן כאן אין צורך ב-`NAMEFIX_LIVE`. המתג בוורסל נשאר רק
     // לריצה האוטומטית של יום חמישי. רון אישר את זה, 11.10.2026.
     if (!cron && (req.query.screen !== undefined || req.method === "POST")) {
-      if (!owner) return res.status(403).json({ ok: false, error: "owner_only" });
       if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
       let body = req.body;
       if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
@@ -612,7 +613,7 @@ export default async function handler(req, res) {
           const raw = await redis(RU, RT, "GET", NAMEFIX_REPORT);
           if (raw) prefer = new Set((JSON.parse(raw).items || []).filter((x) => x.cat === "excel" || x.cat === "clean").map((x) => String(x.phone)));
         } catch (e) {}
-        const out = await nameFix({ RU, RT, live: true, cap: NAMEFIX_SCREEN_BATCH, batch: true, prefer, skip });
+        const out = await nameFix({ RU, RT, live: true, cap: NAMEFIX_SCREEN_BATCH, batch: true, prefer, skip, by });
         if (!out.ok) return res.status(500).json({ ok: false, error: out.error });
         return res.status(200).json({ ok: true, fixed: out.fixedPhones, failed: out.failedPhones, more: out.more });
       }
@@ -625,7 +626,7 @@ export default async function handler(req, res) {
         if (!process.env.MANYCHAT_TOKEN) return res.status(500).json({ ok: false, error: "no_mc" });
         try {
           // **השם הישן נשמר לפני הכתיבה**, כמו בתיקון האוטומטי.
-          await redis(RU, RT, "LPUSH", NAMEFIX_LOG, JSON.stringify({ at: new Date().toISOString(), phone, email: String(body.setName.email || ""), from: body.setName.from || null, to: { first, last }, cat: "screen", by: String(body.by || "").slice(0, 40) }));
+          await redis(RU, RT, "LPUSH", NAMEFIX_LOG, JSON.stringify({ at: new Date().toISOString(), phone, email: String(body.setName.email || ""), from: body.setName.from || null, to: { first, last }, cat: "screen", by }));
           await redis(RU, RT, "LTRIM", NAMEFIX_LOG, "0", "1999");
         } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
         const r = await mcPush({ phone, hasName: true, first, last });
@@ -639,7 +640,7 @@ export default async function handler(req, res) {
       if (body.keep) {
         const phone = String(body.keep).replace(/[^\d]/g, "");
         if (!phone) return res.status(400).json({ ok: false });
-        try { await redis(RU, RT, "HSET", NAMEFIX_KEEP, phone, JSON.stringify({ at: new Date().toISOString(), by: String(body.by || "").slice(0, 40) })); }
+        try { await redis(RU, RT, "HSET", NAMEFIX_KEEP, phone, JSON.stringify({ at: new Date().toISOString(), by })); }
         catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
         await nameReportDrop(RU, RT, [phone]);
         return res.status(200).json({ ok: true });
