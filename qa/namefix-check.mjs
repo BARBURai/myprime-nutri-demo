@@ -265,5 +265,10 @@ reset(); process.env.GOOGLE_SA_KEY = "not json";
 r = await call({}, cron);
 ok(r.body.error === "no_key" && mcLog.length === 0, "מפתח חסר: לא משתנה כלום");
 
+{
+  const { readFileSync } = await import("node:fs");
+  const adm = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  ok(/namefix\\b\/\.test\(location\.search\) && KEY/.test(adm) && /"\/api\/admin\?namefix&key="\+encodeURIComponent\(KEY\)/.test(adm), "admin.html?namefix פותח את התצוגה עם המפתח השמור");
+}
 console.log(`${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);
