@@ -33,6 +33,13 @@
 - **בלי ווידג'טים אינטראקטיביים לשאלות.** לשאול כטקסט רגיל.
 - **תמיד לציין את מספר הגרסה** בתשובה.
 - **תמציתי.** רון עובד מהטלפון.
+- **כל מקום שמבקשים מרון לבדוק או לשנות מגיע עם הלינק הישיר אליו**, באותה הודעה. לא "בוורסל" ולא "בדב", אלא הכתובת עצמה. רון ביקש את זה פעמים רבות, 11 באוקטובר 2026: "אין לי כוח להתחיל לחפש". הכתובות הקבועות:
+  - מסך הניהול בדב: `https://myprime-nutri-demo-git-dev-barburais-projects.vercel.app/admin.html`
+  - מסך הניהול בייצור: `https://app.myprime.co.il/admin.html`
+  - האפליקציה בדב: `https://myprime-nutri-demo-git-dev-barburais-projects.vercel.app`
+  - משתני הסביבה בוורסל: `https://vercel.com/barburais-projects/myprime-nutri-demo/settings/environment-variables`
+  - הדיפלויים בוורסל: `https://vercel.com/barburais-projects/myprime-nutri-demo/deployments`
+  - האוטומציות במניצ'ט: `https://app.manychat.com/fb111742985290180/cms`
 - **לרון אין רקע בתכנות.** הסבר בשפה רגילה. כל מונח טכני שאתה חייב להשתמש בו, הסבר אותו במילה או שתיים באותו משפט. אל תניח ידע מוקדם על גיט, על מבנה קבצים או על מושגים בקוד.
 
 ---
