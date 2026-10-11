@@ -733,7 +733,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.95";
+const VERSION = "8.00";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4425,12 +4425,25 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               )}
               {aiDoneItems && (
                 <div style={{ border: `1px solid ${C.brand}`, borderRadius: 12, padding: 10, marginTop: 6 }}>
+                  {/* Protein, fat and carbs per item and in total, before she commits: they
+                      were computed and saved but only shown once in the diary, so a woman who
+                      wanted to decide first had to log each item alone. Same wording as the diary
+                      line, and ungated by week exactly like it. v7.99. */}
                   {aiDoneItems.map((it, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
-                      <span style={{ fontSize: 16, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source={it.source || "estimated"} /></span>
-                      <span style={{ fontSize: 15, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
+                    <div key={i} style={{ padding: "6px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 16, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source={it.source || "estimated"} /></span>
+                        <span style={{ fontSize: 15, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
+                      </div>
+                      {((it.p || 0) + (it.f || 0) + (it.c || 0) > 0) && (
+                        <div data-ai-macros style={{ fontSize: 12.5, color: C.faint, marginTop: 2 }}>חלבון {Math.round(it.p || 0)} · שומן {Math.round(it.f || 0)} · פחמ׳ {Math.round(it.c || 0)} ג׳</div>
+                      )}
                     </div>
                   ))}
+                  {aiDoneItems.length >= 2 && (() => {
+                    const t = aiDoneItems.reduce((a, it) => ({ kcal: a.kcal + (it.kcal || 0), p: a.p + (it.p || 0), f: a.f + (it.f || 0), c: a.c + (it.c || 0) }), { kcal: 0, p: 0, f: 0, c: 0 });
+                    return <div data-ai-total style={{ fontSize: 14, fontWeight: 600, color: C.ink, padding: "8px 0 2px", borderTop: `1px solid ${C.line}` }}>סה״כ {Math.round(t.kcal)} קק״ל · חלבון {Math.round(t.p)} · שומן {Math.round(t.f)} · פחמ׳ {Math.round(t.c)} ג׳</div>;
+                  })()}
                   <div style={{ fontSize: 12, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"לפי מה שהזנת" = המספרים שמסרת מהאריזה · "מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז - סריקת ברקוד היא המדויקת ביותר.</div>
                   <div style={{ fontSize: 13, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>
@@ -6890,8 +6903,9 @@ function urlBase64ToUint8Array(base64String) {
 
 // The hour she wants the evening reminder at. Kept on the device and sent up with the
 // subscription, so every existing caller of enableDailyReminder keeps working unchanged and
-// the choice is re-sent on every app load. Friday is fixed at 18:00 for everyone and
-// Saturday is silent, both decided in api/notify.js, not here.
+// the choice is re-sent on every app load. The eve of Shabbat or a festival is two hours
+// before candle lighting for everyone (v6.85), and Shabbat and festivals are silent, all
+// decided in api/notify.js, not here. The line in the profile said 18:00 until v7.98.
 const REMINDER_HOURS = [19, 20, 21, 22];
 const REMINDER_HOUR_KEY = "myprime_reminder_hour";
 function reminderHour() {
@@ -6993,7 +7007,7 @@ function ReminderRow({ email }) {
             <button key={h} onClick={busy ? undefined : () => pickHour(h)} style={{ flex: 1, border: hour === h ? "none" : `1px solid ${C.line}`, background: hour === h ? C.brand : "transparent", color: hour === h ? "#fff" : C.sub, borderRadius: 10, padding: "8px 0", fontSize: 14.5, fontFamily: fontStack, fontWeight: 600, cursor: "pointer" }}>{h}:00</button>
           ))}
         </div>
-        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>בשישי התזכורת תגיע ב-18:00, לפני כניסת השבת. בשבת לא נשלחת תזכורת.</div>
+        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>בשישי ובערב חג התזכורת מגיעה שעתיים לפני כניסת השבת או החג. בשבת ובחג לא נשלחות תזכורות.</div>
       </div>
     )}
     </>

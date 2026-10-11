@@ -15,7 +15,7 @@
 //   mc:shadow:<תאריך>  same · diff · onlySheet · onlyMc
 //   mc:diffs     200 הפערים האחרונים, לבדיקה
 
-import { findCol, parseDateToSunday, slimCells } from "./_sheet.js";
+import { findCol, parseDateToSunday, slimCells, SHEET_COLS } from "./_sheet.js";
 
 export const MC_ROWS = "mc:rows";
 export const MC_BYEMAIL = "mc:byemail";
@@ -321,6 +321,30 @@ export async function ingest(body, RU, RT, now = Date.now()) {
   } catch (e) { /* הספירה היא תצוגה בלבד */ }
   await bumpRev(RU, RT);
   return { status: 200, json: { ok: true, phone, email } };
+}
+
+// **השם בעותק שבשרת, אחרי שנכתב במניצ'ט. v8.00.** שינוי של F_NAME ו-L_NAME אינו מפעיל
+// אוטומציה, ולכן מניצ'ט לא ישלח את השורה אלינו מעצמו, והמסך היה ממשיך להראות את השם הישן.
+// **שורה שאינה בשרת אינה נוצרת כאן**: המסך לוקח אותה מהגיליון, שמתעדכן ממניצ'ט.
+export async function setName(RU, RT, phone, first, last) {
+  const prev = parseJson(await rpost(RU, RT, ["HGET", MC_ROWS, phone]), null);
+  if (!prev || !prev.cells) return false;
+  const cells = Object.assign({}, prev.cells);
+  const keys = Object.keys(cells);
+  const fk = keys[findCol(keys, SHEET_COLS.first)] || "F_NAME";
+  const lk = keys[findCol(keys, SHEET_COLS.last)] || "L_NAME";
+  cells[fk] = first;
+  cells[lk] = last;
+  await rpost(RU, RT, ["HSET", MC_ROWS, phone, JSON.stringify(Object.assign({}, prev, { cells }))]);
+  try { await rpost(RU, RT, ["HSET", MC_SLIM, phone, JSON.stringify(slimCells(cells))]); } catch (e) {}
+  const email = emailOf(cells);
+  if (email) {
+    try {
+      const map = parseJson(await rpost(RU, RT, ["HGET", MC_BYEMAIL, email]), {});
+      if (map[phone]) { map[phone] = cells; await rpost(RU, RT, ["HSET", MC_BYEMAIL, email, JSON.stringify(map)]); }
+    } catch (e) {}
+  }
+  return true;
 }
 
 // הסיסמה של הכתובת. **בלי המשתנה בוורסל הכתובת אינה פתוחה בכלל**, בדיוק כמו מסך הניהול.

@@ -24,7 +24,10 @@ import { loadSheet, israelDay, accessEnd, ymd, fetchSheetText, parseCsvLine, cac
 import { KB } from "./_kb.js";
 import { oldAppEmails, APPOLD_KEY } from "./_appemails.js";
 import { DAILY_LIMIT, PHOTO_LIMIT } from "./ai.js";
-import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus, importSheet as mcImportSheet, MC_SLIM, ADMIN_REV, bumpRev } from "./_mcsync.js";
+import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus, importSheet as mcImportSheet, MC_SLIM, ADMIN_REV, bumpRev, scanHash, setName as mcSetName } from "./_mcsync.js";
+import { readXlsx } from "./_xlsx.js";
+import { parseKey, driveDownload } from "./_gdrive.js";
+import { excelIndex, targets as nameTargets, run as nameRun, mailHtml as nameMail, CAP as NAME_CAP } from "./_namefix.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -106,7 +109,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "7.95";
+const ADMIN_VERSION = "8.00";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -169,14 +172,27 @@ const MC_TAGS = {
 // or off while she is frozen.
 const MC_FREEZE_TAG = "הקפאה";
 
+// **מניצ'ט מגביל קריאות בשנייה** ועונה 429 "Api max rps reached". נמדד 11.10.2026: חמש
+// קריאות במקביל, ו-34 מתוך 60 נדחו. לכן 429 מנוסה שוב אחרי המתנה, ובתיקון השמות השבועי
+// הקריאות גם מרווחות (`mcPace`), כדי לא לחסום את מסך הניהול ואת העדכון ממניצ'ט באותו זמן.
+// **נמדד אחר כך, שלוש הרצות: שלוש במקביל ברווח של 150 אלפיות, 60 מתוך 60 עברו בכל אחת.**
+let mcPace = 0, mcLast = 0;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function mc(path, body) {
   const token = process.env.MANYCHAT_TOKEN;
   if (!token) return { off: true };
-  const r = await fetch(MC + path, {
-    method: body ? "POST" : "GET",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let r;
+  for (let attempt = 1; ; attempt++) {
+    // כל קריאה שומרת לעצמה תור מראש, כדי שגם כמה במקביל לא ייצאו באותו רגע.
+    if (mcPace) { const slot = Math.max(Date.now(), mcLast + mcPace); mcLast = slot; if (slot > Date.now()) await sleep(slot - Date.now()); }
+    r = await fetch(MC + path, {
+      method: body ? "POST" : "GET",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (r.status !== 429 || attempt >= 4) break;
+    await sleep(1000 * attempt);
+  }
   let j = null;
   try { j = await r.json(); } catch (e) {}
   // ManyChat answers 200 with a body that says it failed, so the HTTP code alone is not the
@@ -408,6 +424,93 @@ async function moveRecords(RU, RT, from, to) {
   return moved;
 }
 
+// ===== תיקון השמות השבועי. v8.00 =====
+const NAMEFIX_FILE = "1IoiVqbLXlpQ9tkPXIH6u35771gZP4d-U"; // האקסל של הפקידה, משותף לקריאה בלבד
+const NAMEFIX_LOG = "namefix:log";
+
+async function sendReport(subject, html) {
+  const RESEND = process.env.RESEND_API_KEY;
+  if (!RESEND) return false;
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: process.env.REPORT_FROM || "MyPrime <onboarding@resend.dev>", to: process.env.REPORT_TO || "Ron@myprime.co.il", subject, html }),
+    });
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+async function nameFix({ RU, RT, live, cap, batch }) {
+  const failHtml = (why) => `<div dir="rtl" style="font-family:Arial,sans-serif"><h2>תיקון שמות שבועי</h2><p><b>לא שונה כלום.</b> ${why}</p></div>`;
+  if (!RU || !RT) return { ok: false, error: "no_store", html: failHtml("השרת לא זמין.") };
+  const key = parseKey(process.env.GOOGLE_SA_KEY);
+  if (!key) return { ok: false, error: "no_key", html: failHtml("המפתח של גוגל חסר בוורסל.") };
+  let idx;
+  try { idx = excelIndex(readXlsx(await driveDownload(NAMEFIX_FILE, key))); }
+  catch (e) { return { ok: false, error: "excel_failed", detail: String(e && e.message || e).slice(0, 200), html: failHtml("האקסל של הפקידה לא נקרא.") }; }
+  if (!idx.rows) return { ok: false, error: "excel_empty", html: failHtml("באקסל של הפקידה לא נמצאו שורות.") };
+  let slim;
+  try { slim = await scanHash(RU, RT, MC_SLIM); }
+  catch (e) { return { ok: false, error: "store_failed", html: failHtml("הנשים בשרת לא נקראו.") }; }
+  // סימוני המשרד נקראים רק למי שהשם שלה משובש, ולא לכולן.
+  const pre = nameTargets(slim, null);
+  const overrides = {};
+  // פקודה אחת לכל 200 נשים, ולא אחת לכל אישה. עם השמות באנגלית אלה מאות.
+  const ems = [...new Set(pre.map((t) => t.email).filter(Boolean))];
+  for (let i = 0; i < ems.length; i += 200) {
+    const part = ems.slice(i, i + 200);
+    try {
+      const vals = await redisPost(RU, RT, ["HMGET", "admin:overrides", ...part]);
+      part.forEach((em, k) => { const raw = Array.isArray(vals) ? vals[k] : null; if (raw) { try { overrides[em] = JSON.parse(raw); } catch (e) {} } });
+    } catch (e) { return { ok: false, error: "store_failed", html: failHtml("סימוני המשרד לא נקראו.") }; }
+  }
+  const list = nameTargets(slim, overrides);
+  if (!process.env.MANYCHAT_TOKEN) return { ok: false, error: "no_mc", html: failHtml("אין חיבור למניצ'ט.") };
+  mcPace = 150;
+  let rep;
+  try {
+  rep = await nameRun({
+    list, idx, live, cap, batch,
+    deps: {
+      // **תקלה אינה "לא נמצאה"**: היא נזרקת, והאישה עוברת לבירור ולא לתיקון. אחרת תשובה
+      // שנדחתה הייתה נקראת כאילו אין במניצ'ט שם, והשם מהאקסל היה נכתב גם כשמניצ'ט חולק.
+      async mcMain(phone) {
+        if (!process.env.MANYCHAT_TOKEN) throw new Error("no_mc");
+        const p = String(phone || "").replace(/[^\d]/g, "");
+        const r = await mc(`/fb/subscriber/findByCustomField?field_id=${MC_WA_PHONE_FIELD}&field_value=${encodeURIComponent(p)}`);
+        if (!r.ok) throw new Error("mc " + r.status);
+        const d = r.j && r.j.data;
+        const arr = Array.isArray(d) ? d : (d ? [d] : []);
+        if (!arr.length) return null;
+        if (arr.length > 1) return "multi";
+        return { first: arr[0].first_name || "", last: arr[0].last_name || "" };
+      },
+      async log(entry) {
+        await redis(RU, RT, "LPUSH", NAMEFIX_LOG, JSON.stringify(entry));
+        await redis(RU, RT, "LTRIM", NAMEFIX_LOG, "0", "1999");
+      },
+      async write(t, to) {
+        // **אותה כתיבה בדיוק כמו תיקון שם בכרטיס**, כולל קריאה חוזרת שמוודאת שנשמר.
+        const r = await mcPush({ phone: t.phone, hasName: true, first: to.first, last: to.last });
+        if (r !== "ok") return r;
+        try { await mcSetName(RU, RT, t.phone, to.first, to.last); } catch (e) { /* מניצ'ט נשמר, והמסך יתעדכן מהגיליון */ }
+        return "ok";
+      },
+    },
+  });
+  } finally { mcPace = 0; }
+  if (live && rep.fixed.length) await bumpRev(RU, RT);
+  const strip = (x) => ({ email: x.email, start: x.start, cat: x.cat, to: x.to, suggest: x.suggest, mc: x.mc, error: x.error });
+  return {
+    ok: true, live: rep.live, stopped: rep.stopped, more: !!rep.more, excelRows: idx.rows, total: rep.total,
+    counts: rep.items.reduce((a, x) => (a[x.cat] = (a[x.cat] || 0) + 1, a), {}),
+    fixed: rep.fixed.length, failed: rep.failed.map(strip),
+    items: rep.items.map(strip),
+    html: nameMail(rep, idx.rows),
+  };
+}
+
 export default async function handler(req, res) {
   const key = String(req.query.key || "");
   const RU = process.env.UPSTASH_REDIS_REST_URL;
@@ -423,6 +526,32 @@ export default async function handler(req, res) {
       const out = await mcIngest(req.body, RU, RT);
       return res.status(out.status).json(out.json);
     } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+  }
+  // **תיקון השמות השבועי. v8.00.** ראה `api/_namefix.js`. יושב כאן ולא בקובץ חדש, כי
+  // בוורסל יש תקרה של 12 פונקציות. **מוורסל ביום חמישי**, או מהמנהל לתצוגה מקדימה.
+  if (req.query.namefix !== undefined) {
+    const auth = req.headers.authorization || "";
+    const cron = !!process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`;
+    // **תצוגה מקדימה לכל מפתח של המשרד**, כי היא קריאה בלבד ומראה את מה שהמסך כבר מראה.
+    // **ריצה אמיתית ידנית, `run=1`, למנהל בלבד.**
+    let staff = false, owner = false;
+    if (!cron) { const who = await whoIs(key, RU, RT); staff = !!who.ok; owner = staff && who.owner; }
+    if (!cron && !staff) return res.status(401).json({ ok: false, error: "unauthorized" });
+    // **כתיבה רק כשרון הדליק `NAMEFIX_LIVE=1` בוורסל**, אחרי שראה תצוגה מקדימה ואישר. עד אז
+    // גם ההרצה של יום חמישי היא תצוגה מקדימה בלבד.
+    const liveOn = process.env.NAMEFIX_LIVE === "1";
+    const live = liveOn && (cron || (owner && req.query.run === "1"));
+    const cap = owner && req.query.max ? Math.min(200, Math.max(1, parseInt(req.query.max, 10) || NAME_CAP)) : NAME_CAP;
+    // הריצה הידנית של המנהל היא בקבוצות, כדי שמאות שמות בשבוע הראשון ייכנסו בזמן הריצה.
+    const out = await nameFix({ RU, RT, live, cap, batch: live && !cron });
+    const mail = cron || req.query.mail === "1";
+    if (mail && out.html) out.emailed = await sendReport("MyPrime · תיקון שמות שבועי · " + israelDay(0), out.html);
+    if (staff && req.query.format !== "json" && out.html) {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      return res.status(200).send(out.html);
+    }
+    const { html, ...rest } = out;
+    return res.status(out.ok ? 200 : 500).json(rest);
   }
   const me = await whoIs(key, RU, RT);
   if (!me.ok) return res.status(401).json({ ok: false, error: "unauthorized" });
