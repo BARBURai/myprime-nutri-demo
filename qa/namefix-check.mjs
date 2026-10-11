@@ -150,9 +150,11 @@ process.env.UPSTASH_REDIS_REST_TOKEN = "t";
 process.env.MANYCHAT_TOKEN = "mc-test";
 process.env.GOOGLE_SA_KEY = JSON.stringify({ client_email: "names-reader@x.iam.gserviceaccount.com", private_key: privateKey.export({ type: "pkcs8", format: "pem" }), token_uri: "https://oauth2.test/token" });
 delete process.env.RESEND_API_KEY;
+const SA_KEY = process.env.GOOGLE_SA_KEY;
 
-let H, LISTS, MCDB, mcLog, driveCalls, driveFail, rps429;
+let H, LISTS, MCDB, mcLog, driveCalls, driveFail, rps429, STR = {};
 function reset() {
+  STR = {};
   H = { "mc:slim": { ...slim }, "mc:rows": {}, "admin:overrides": { "fixed@test.com": JSON.stringify({ first: "שם", last: "שהמשרד תיקן" }) } };
   H["mc:rows"]["972544000001"] = JSON.stringify({ cells: JSON.parse(slim["972544000001"]), src: "mc" });
   LISTS = {};
@@ -167,6 +169,9 @@ const redisCmd = (cmd, a, b, c, ...rest) => {
   if (cmd === "HSCAN") { const o = h(a); return ["0", Object.keys(o).flatMap((k) => [k, o[k]])]; }
   if (cmd === "LPUSH") { (LISTS[a] = LISTS[a] || []).unshift(b); return 1; }
   if (cmd === "LTRIM") return "OK";
+  if (cmd === "GET") return STR[a] ?? null;
+  if (cmd === "SET") { STR[a] = b; return "OK"; }
+  if (cmd === "HGETALL") { const o = h(a); return Object.keys(o).flatMap((k) => [k, o[k]]); }
   if (cmd === "INCR") return 1;
   return null;
 };
@@ -281,6 +286,70 @@ ok(r.body.error === "no_key" && mcLog.length === 0, "מפתח חסר: לא מש�
   const { readFileSync } = await import("node:fs");
   const adm = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
   ok(/namefix\\b\/\.test\(location\.search\) && KEY/.test(adm) && /"\/api\/admin\?namefix&key="\+encodeURIComponent\(KEY\)/.test(adm), "admin.html?namefix פותח את התצוגה עם המפתח השמור");
+}
+
+// ===== המסך במסך הניהול, למנהל בלבד. v8.02 =====
+// רון: "זה צריך להיות צ'יק צ'יק צ'יק". הלחיצה שלו היא האישור, ולכן בלי NAMEFIX_LIVE.
+process.env.GOOGLE_SA_KEY = SA_KEY;
+delete process.env.NAMEFIX_LIVE;
+const callScreen = async (query) => { const res = mkRes(); await adminHandler({ query: { namefix: "", format: "json", ...query }, method: "GET", headers: {}, body: null }, res); return res; };
+const post = async (key, body) => { const res = mkRes(); await adminHandler({ query: { namefix: "", format: "json", key }, method: "POST", headers: {}, body }, res); return res; };
+
+reset(); H["admin:codes"] = { "ABCD-EFGH": JSON.stringify({ name: "טלי" }) };
+r = await callScreen({ key: "ABCD-EFGH", screen: "1" });
+ok(r.code === 403, "קוד של המשרד אינו פותח את המסך");
+r = await post("ABCD-EFGH", { fixAll: true });
+ok(r.code === 403 && mcLog.length === 0, "קוד של המשרד אינו יכול לתקן");
+r = await post("ABCD-EFGH", { setName: { phone: "972544000001", first: "מיה", last: "ביטון" } });
+ok(r.code === 403 && mcLog.length === 0, "קוד של המשרד אינו יכול לכתוב שם");
+
+reset();
+r = await callScreen({ key: KEY, screen: "1" });
+const maya = r.body && (r.body.items || []).find((x) => x.phone === "972544000001");
+ok(r.code === 200 && r.body.ok && maya && maya.cat === "excel" && maya.to.first === "מיה", "המסך נפתח עם מיה לתיקון מהאקסל");
+ok(mcLog.length === 0 && !(LISTS["namefix:log"] || []).length, "פתיחת המסך אינה כותבת דבר");
+ok(!!STR["namefix:report"], "הדוח נשמר לפתיחה הבאה");
+driveCalls = [];
+r = await callScreen({ key: KEY, screen: "1" });
+ok(r.body.ok && driveCalls.length === 0, "בפתיחה השנייה המסך נפתח מהדוח השמור, בלי לקרוא שוב את האקסל");
+
+r = await post(KEY, { fixAll: true });
+ok(r.code === 200 && r.body.ok && r.body.fixed.includes("972544000001"), "תקני את כולן עובד גם בלי NAMEFIX_LIVE, כי הלחיצה היא האישור");
+ok(mcLog.join("|") === "F_NAME=מיה|L_NAME=ביטון", "נכתב למניצ'ט F_NAME ו-L_NAME בלבד");
+ok(JSON.parse(LISTS["namefix:log"][0]).from.first === "ה-iPhone של מיה", "השם הישן נשמר לפני הכתיבה");
+ok(!JSON.parse(STR["namefix:report"]).items.some((x) => x.phone === "972544000001"), "מי שתוקנה יוצאת מהדוח השמור");
+ok(r.body.more === false, "כשאין עוד, המסך יודע לעצור");
+
+reset();
+r = await post(KEY, { keep: "972544000001" });
+ok(r.code === 200 && r.body.ok && !!H["namefix:keep"]["972544000001"] && mcLog.length === 0, "להשאיר: נשמר, ושום דבר לא נכתב למניצ'ט");
+process.env.NAMEFIX_LIVE = "1";
+r = await call({}, cron);
+ok(r.body.total === 0 && mcLog.length === 0, "מי שרון השאיר לה את השם לא חוזרת, גם לא ביום חמישי");
+delete process.env.NAMEFIX_LIVE;
+
+reset();
+r = await post(KEY, { setName: { phone: "972544000001", email: "maya@test.com", first: " מיה  ", last: "לוי", from: { first: "ה-iPhone של מיה", last: "" } } });
+ok(r.code === 200 && r.body.ok && mcLog.join("|") === "F_NAME=מיה|L_NAME=לוי", "שם שרון בחר או הקליד נכתב כמו שהוא, בלי רווחים מיותרים");
+ok(JSON.parse(LISTS["namefix:log"][0]).from.first === "ה-iPhone של מיה" && JSON.parse(H["mc:slim"]["972544000001"]).L_NAME === "לוי", "השם הישן נשמר, והשרת שלנו מתעדכן");
+reset();
+r = await post(KEY, { setName: { phone: "972544000001", first: "  ", last: "לוי" } });
+ok(r.code === 400 && mcLog.length === 0 && !(LISTS["namefix:log"] || []).length, "בלי שם פרטי לא נכתב כלום");
+reset(); MCDB["972544000001"].F_NAME = "x";
+{
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (u, o) => { if (String(u).includes("setCustomFieldByName") && JSON.parse(o.body).field_name === "L_NAME") return { ok: true, status: 200, json: async () => ({ status: "error", message: "nope" }) }; return orig(u, o); };
+  r = await post(KEY, { setName: { phone: "972544000001", first: "מיה", last: "ביטון" } });
+  globalThis.fetch = orig;
+  ok(r.body.ok === false && JSON.parse(H["mc:slim"]["972544000001"]).F_NAME === "ה-iPhone של מיה", "מניצ'ט דחה: המסך מקבל תקלה, והשרת שלנו לא משתנה");
+}
+
+{
+  const { readFileSync } = await import("node:fs");
+  const adm = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  for (const t of ["תיקון שמות מהאקסל", "לתיקון אוטומטי: ", " · לבחירה שלך: ", " · לבירור ידני: ", "תקני את כל ה-", "תוקנו ", "שם מהאקסל", ">להשאיר<", ">שמירה<"])
+    ok(adm.includes(t), "הנוסח שאושר במסך: " + t);
+  ok(/function nameFixBlock\(\)\{\s*if\(!DATA\.owner\) return "";/.test(adm), "המסך מוצג למנהל בלבד");
 }
 console.log(`${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);

@@ -1112,6 +1112,108 @@ function teamBlock(){
   '</div>';
 }
 
+// ===== תיקון שמות מהאקסל, למנהל בלבד. v8.02 =====
+// רון, 11.10.2026: "איך אתה מתכוון שאני אעבור על כל האנשים האלה זה צריך להיות צ'יק צ'יק
+// צ'יק". הקופי אושר: "מאשר". **כל לחיצה היא אישה אחת**, והשם הישן נשמר בשרת לפני כל כתיבה.
+// "לבחירה שלך" הן מי שהאקסל ומניצ'ט חולקים עליהן. "לבירור ידני" הן כל השאר, ומי שיש לה
+// שם במניצ'ט ולא באקסל מגיעה לשם עם השם ממניצ'ט כבר בשדה.
+var NFOPEN = false, NFREP = null, NFERR = false, NFRUN = null, NFBUSY = {}, NFTYPE = {};
+function nfFull(n){ return n ? ((n.first||"")+" "+(n.last||"")).replace(/\s+/g," ").trim() : ""; }
+function nfGroups(){
+  var items = (NFREP && NFREP.items) || [];
+  return {
+    auto: items.filter(function(x){ return x.cat==="excel" || x.cat==="clean"; }),
+    choose: items.filter(function(x){ return x.cat==="conflict"; }),
+    manual: items.filter(function(x){ return x.cat==="manual" || x.cat==="mc"; })
+  };
+}
+function nfWhy(x){
+  if(x.why==="multi") return "כמה אנשי קשר במניצ'ט";
+  if(x.why==="mc_error") return "מניצ'ט לא נקרא";
+  if(x.cat==="mc") return "לא נמצאה באקסל";
+  return "אין שם תקין";
+}
+function loadNameFix(){
+  NFERR = false;
+  return fetch("/api/admin?namefix&screen=1&format=json&key="+encodeURIComponent(KEY))
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if(!d || !d.ok) throw new Error(); NFREP = d; })
+    .catch(function(){ NFERR = true; });
+}
+function nfPost(body){
+  body.by = WHO;
+  return fetch("/api/admin?namefix&format=json&key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)})
+    .then(function(r){ return r.json(); });
+}
+function nfDrop(phones){
+  if(!NFREP) return;
+  var gone = {}; phones.forEach(function(p){ gone[String(p)] = 1; });
+  NFREP.items = (NFREP.items||[]).filter(function(x){ return !gone[String(x.phone)]; });
+}
+function nfRunAll(){
+  var g = nfGroups();
+  NFRUN = { done:0, total:g.auto.length, failed:[], busy:true };
+  render();
+  (function step(){
+    nfPost({ fixAll:true, skip:NFRUN.failed }).then(function(d){
+      if(!d || !d.ok) throw new Error();
+      nfDrop(d.fixed||[]);
+      NFRUN.done += (d.fixed||[]).length;
+      NFRUN.failed = NFRUN.failed.concat(d.failed||[]);
+      render();
+      if(d.more && ((d.fixed||[]).length || (d.failed||[]).length)) return step();
+      NFRUN.busy = false; render();
+    }).catch(function(){ NFRUN.busy = false; NFRUN.error = true; render(); });
+  })();
+}
+function nameFixBlock(){
+  if(!DATA.owner) return "";
+  if(!NFOPEN) return '<div class="chips"><span class="chip" data-nfopen="1">תיקון שמות מהאקסל</span></div>';
+  var h = '<div class="card"><div class="row1"><span class="nm">תיקון שמות מהאקסל</span>'+
+    '<button class="lnk" data-nfopen="0">סגירה</button></div>';
+  if(NFERR) return h+'<div class="note">לא הצלחתי לטעון את הנתונים. נסי לרענן.</div></div>';
+  if(!NFREP) return h+'<div class="note">טוען...</div></div>';
+  var g = nfGroups();
+  h += '<div class="note"><b>לתיקון אוטומטי: '+nf(g.auto.length)+' · לבחירה שלך: '+nf(g.choose.length)+' · לבירור ידני: '+nf(g.manual.length)+'</b></div>';
+  if(NFRUN && NFRUN.busy) h += '<div class="note">תוקנו '+nf(NFRUN.done)+' מתוך '+nf(NFRUN.total)+'...</div>';
+  else if(g.auto.length) h += '<div class="edit"><button class="btn p" data-nfall="1">תקני את כל ה-'+nf(g.auto.length)+'</button></div>';
+  if(NFRUN && !NFRUN.busy && NFRUN.failed.length) h += '<div class="note"><b>לא נשמרו: '+nf(NFRUN.failed.length)+'.</b></div>';
+  if(NFRUN && !NFRUN.busy && NFRUN.error) h += '<div class="note">לא נשמר. אפשר לנסות שוב בעוד רגע.</div>';
+  if(g.choose.length){
+    h += '<div class="note"><b>לבחירה שלך</b></div>';
+    g.choose.forEach(function(x){
+      var busy = NFBUSY[x.phone];
+      var opts = (x.options && x.options.length ? x.options : (x.suggest ? [x.suggest] : []));
+      h += '<div class="card" data-nfrow="'+esc(x.phone)+'">'+
+        '<div class="note">במערכת: <b>'+esc(nfFull(x.cur)||"ריק")+'</b></div>'+
+        opts.map(function(o,i){
+          return '<div class="edit"><span>באקסל: <b>'+esc(nfFull(o))+'</b></span>'+
+            '<button class="btn p" data-nfpick="'+esc(x.phone)+'" data-nfi="'+i+'"'+(busy?' disabled':'')+'>שם מהאקסל</button></div>';
+        }).join("")+
+        '<div class="note">במניצ\'ט: <b>'+esc(nfFull(x.mc)||"—")+'</b></div>'+
+        '<div class="edit"><button class="btn" data-nfkeep="'+esc(x.phone)+'"'+(busy?' disabled':'')+'>להשאיר</button>'+
+        '<span class="note">'+esc(x.email||"")+'</span></div>'+
+      '</div>';
+    });
+  }
+  if(g.manual.length){
+    h += '<div class="note"><b>לבירור ידני</b></div>';
+    g.manual.forEach(function(x){
+      var busy = NFBUSY[x.phone];
+      var pre = NFTYPE[x.phone] || { first:(x.suggest||x.mc||{}).first||"", last:(x.suggest||x.mc||{}).last||"" };
+      h += '<div class="card" data-nfrow="'+esc(x.phone)+'">'+
+        '<div class="note">במערכת: <b>'+esc(nfFull(x.cur)||"ריק")+'</b> · '+esc(nfWhy(x))+'</div>'+
+        '<div class="note">'+esc(x.email||"")+'</div>'+
+        '<div class="edit">'+
+          '<input class="field sm" style="max-width:140px" data-nffirst="'+esc(x.phone)+'" placeholder="שם פרטי" value="'+esc(pre.first)+'">'+
+          '<input class="field sm" style="max-width:140px" data-nflast="'+esc(x.phone)+'" placeholder="שם משפחה" value="'+esc(pre.last)+'">'+
+          '<button class="btn p" data-nfsave="'+esc(x.phone)+'"'+(busy?' disabled':'')+'>שמירה</button></div>'+
+      '</div>';
+    });
+  }
+  return h+'</div>';
+}
+
 // תג התוכנית. סולו למי שיש לה, ו-360 לכל השאר. הוא נשאר גם למי שביטלה, לפי
 // החלטת רון: תג לא יורד, כי צריך לדעת באיזו תוכנית היא הייתה. הביטול הוא תג
 // נוסף לצידו ולא במקומו.
@@ -1302,6 +1404,7 @@ function render(){
     '</div>'+
     mcSyncBlock()+
     teamBlock()+
+    nameFixBlock()+
     '<div class="toolbar'+(SEL?" picked":"")+'">'+
     '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(qRaw)+'">'+
     '<div class="qhint">אפשר להדביק מספר טלפון בכל צורה, עם + עם רווחים או עם מקפים.</div>'+
@@ -2413,6 +2516,47 @@ function render(){
     CODESOPEN = el.getAttribute("data-team")==="1";
     if(CODESOPEN && CODES === null){ render(); loadCodes().then(render); return; }
     render();
+  }; });
+  // תיקון שמות מהאקסל. v8.02.
+  app.querySelectorAll("[data-nfopen]").forEach(function(el){ el.onclick=function(){
+    NFOPEN = el.getAttribute("data-nfopen")==="1";
+    if(NFOPEN && !NFREP){ render(); loadNameFix().then(render); return; }
+    render();
+  }; });
+  app.querySelectorAll("[data-nfall]").forEach(function(el){ el.onclick=function(){
+    if(NFRUN && NFRUN.busy) return;
+    nfRunAll();
+  }; });
+  app.querySelectorAll("[data-nffirst],[data-nflast]").forEach(function(el){ el.oninput=function(){
+    var p = el.getAttribute("data-nffirst") || el.getAttribute("data-nflast");
+    var f = app.querySelector('[data-nffirst="'+p+'"]'), l = app.querySelector('[data-nflast="'+p+'"]');
+    NFTYPE[p] = { first:f?f.value:"", last:l?l.value:"" };
+  }; });
+  function nfAct(phone, body){
+    NFBUSY[phone] = true; render();
+    return nfPost(body).then(function(d){
+      if(!d || !d.ok) throw new Error();
+      nfDrop([phone]); delete NFTYPE[phone];
+    }).catch(function(){ alert("לא נשמר. אפשר לנסות שוב בעוד רגע."); })
+      .then(function(){ delete NFBUSY[phone]; render(); });
+  }
+  function nfItem(phone){ return ((NFREP&&NFREP.items)||[]).filter(function(x){ return String(x.phone)===String(phone); })[0]; }
+  app.querySelectorAll("[data-nfpick]").forEach(function(el){ el.onclick=function(){
+    var x = nfItem(el.getAttribute("data-nfpick")); if(!x) return;
+    var opts = (x.options && x.options.length ? x.options : (x.suggest ? [x.suggest] : []));
+    var o = opts[+el.getAttribute("data-nfi")]; if(!o) return;
+    nfAct(x.phone, { setName:{ phone:x.phone, email:x.email, first:o.first, last:o.last, from:x.cur } });
+  }; });
+  app.querySelectorAll("[data-nfkeep]").forEach(function(el){ el.onclick=function(){
+    var p = el.getAttribute("data-nfkeep");
+    nfAct(p, { keep:p });
+  }; });
+  app.querySelectorAll("[data-nfsave]").forEach(function(el){ el.onclick=function(){
+    var x = nfItem(el.getAttribute("data-nfsave")); if(!x) return;
+    var f = app.querySelector('[data-nffirst="'+x.phone+'"]'), l = app.querySelector('[data-nflast="'+x.phone+'"]');
+    var first = (f?f.value:"").trim(), last = (l?l.value:"").trim();
+    if(!first){ alert("צריך להזין שם"); return; }
+    nfAct(x.phone, { setName:{ phone:x.phone, email:x.email, first:first, last:last, from:x.cur } });
   }; });
   app.querySelectorAll("[data-mcimport]").forEach(function(el){ el.onclick=function(){
     if(MCBUSY) return;
