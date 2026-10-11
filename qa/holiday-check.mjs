@@ -162,5 +162,11 @@ const hours = V.crons.filter((c) => c.path === "/api/notify").map((c) => parseIn
 ok("יש הרצה ב-12:00 UTC, שהיא 14:00 בישראל בחורף", hours.includes(12), hours.join(","));
 ok("ורצף שעות בלי חורים עד 21", [12, 13, 14, 15, 16, 17, 18, 19, 20, 21].every((h) => hours.includes(h)), hours.join(","));
 
+// The line in the profile must say what notify.js actually does. Until v7.98 it said the
+// Friday reminder comes at 18:00, three years after it moved, and a participant read it.
+const APP = readFileSync("src/App.jsx", "utf8");
+ok("**הפרופיל אומר שעתיים לפני כניסת השבת או החג**", APP.includes("בשישי ובערב חג התזכורת מגיעה שעתיים לפני כניסת השבת או החג. בשבת ובחג לא נשלחות תזכורות."));
+ok("**והנוסח הישן עם 18:00 אינו קיים יותר**", !APP.includes("בשישי התזכורת תגיע ב-18:00"));
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);

@@ -733,7 +733,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.97";
+const VERSION = "7.98";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -6890,8 +6890,9 @@ function urlBase64ToUint8Array(base64String) {
 
 // The hour she wants the evening reminder at. Kept on the device and sent up with the
 // subscription, so every existing caller of enableDailyReminder keeps working unchanged and
-// the choice is re-sent on every app load. Friday is fixed at 18:00 for everyone and
-// Saturday is silent, both decided in api/notify.js, not here.
+// the choice is re-sent on every app load. The eve of Shabbat or a festival is two hours
+// before candle lighting for everyone (v6.85), and Shabbat and festivals are silent, all
+// decided in api/notify.js, not here. The line in the profile said 18:00 until v7.98.
 const REMINDER_HOURS = [19, 20, 21, 22];
 const REMINDER_HOUR_KEY = "myprime_reminder_hour";
 function reminderHour() {
@@ -6993,7 +6994,7 @@ function ReminderRow({ email }) {
             <button key={h} onClick={busy ? undefined : () => pickHour(h)} style={{ flex: 1, border: hour === h ? "none" : `1px solid ${C.line}`, background: hour === h ? C.brand : "transparent", color: hour === h ? "#fff" : C.sub, borderRadius: 10, padding: "8px 0", fontSize: 14.5, fontFamily: fontStack, fontWeight: 600, cursor: "pointer" }}>{h}:00</button>
           ))}
         </div>
-        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>בשישי התזכורת תגיע ב-18:00, לפני כניסת השבת. בשבת לא נשלחת תזכורת.</div>
+        <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 6 }}>בשישי ובערב חג התזכורת מגיעה שעתיים לפני כניסת השבת או החג. בשבת ובחג לא נשלחות תזכורות.</div>
       </div>
     )}
     </>
