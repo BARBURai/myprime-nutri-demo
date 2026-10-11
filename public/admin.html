@@ -1115,6 +1115,14 @@ function teamBlock(){
 // תג התוכנית. סולו למי שיש לה, ו-360 לכל השאר. הוא נשאר גם למי שביטלה, לפי
 // החלטת רון: תג לא יורד, כי צריך לדעת באיזו תוכנית היא הייתה. הביטול הוא תג
 // נוסף לצידו ולא במקומו.
+// תג הקבוצה. **בסמארט ובסולו אין קבוצות בכלל**, רון 11.10.2026: "נשים שבסמארט
+// אין להם שום קבוצה". לכן אצלן "אין קבוצה" אינו מוצג, כי הוא נקרא כחוסר שצריך
+// לתקן. ומי ששויכה לקבוצה בכל זאת עדיין רואה אותה. v7.97.
+function groupPill(w, mark){
+  if(w.group) return '<span class="grp">קבוצה '+esc(w.group)+(mark&&w.groupOverride?" ✎":"")+'</span>';
+  if(w.solo) return '';
+  return '<span class="grp warnpill">אין קבוצה</span>';
+}
 function progPill(w){
   // הערך 10 הוא עשרה שבועות ולא חודשים, עמודה SMART או SOLO10WEEK. v7.47.
   // **נקרא SMART מ-v7.82**, החלטת רון: באנגלית, כמו התג במניצ'ט.
@@ -1712,7 +1720,7 @@ function render(){
       return '<div class="qitem">'+
         '<div class="qwho">'+
           '<b>'+esc(name || w.email)+'</b>'+
-          (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+          groupPill(w)+
           (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
           (w.cancelled?'<span class="grp dngpill">ביטלה</span>':'')+
         '</div>'+
@@ -1745,7 +1753,7 @@ function render(){
             '<span class="mono">'+esc(r.phone)+'</span>'+
             '<button class="btn sm" data-copy="'+esc(r.phone)+'">העתקה</button>'+
             '<a class="btn sm wa" href="https://wa.me/'+esc(r.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>'+
-            (r.group?'<span class="grp">קבוצה '+esc(r.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+            groupPill(r)+
           '</div>'+
           '<div class="qinfo">'+
             '<div><span class="flabel">מחזור</span> '+(r.start?esc(il(r.start)):"<b>אין תאריך התחלה בשורה</b>")+
@@ -1866,7 +1874,7 @@ function render(){
               '<button class="lnk" data-open="'+esc(em)+'">'+esc(((w.first||"")+" "+(w.last||"")).trim() || em)+'</button>'+
               // מתי היא כתבה, על השורה של השם ולפני שפותחים כלום: זה מה שאומר מי קדמה למי.
               '<span class="qwhen">'+esc(noteWhen(n))+'</span>'+
-              (w.group?'<span class="grp">קבוצה '+esc(w.group)+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+              groupPill(w)+
               '<button class="btn sm" data-qinfo="'+esc(em)+'">'+(QINFO[em]?"סגירת הפרטים":"פרטים")+'</button>'+
               (w.phone?'<a class="btn sm wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
             '</div>'+
@@ -1954,7 +1962,7 @@ function render(){
       '<button class="btn back" data-back="1">→ חזרה לרשימה</button>'+
       '<div class="dhead">'+
         '<div class="row1"><span class="nm">'+esc(nm)+'</span>'+
-        (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+        groupPill(w,true)+
         (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
       progPill(w)+
         (w.cancelled?'<span class="grp dngpill">ביטלה</span>':'')+
@@ -1982,7 +1990,7 @@ function render(){
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
     return '<button class="lrow'+(SEL===w.email?" on":"")+'" data-open="'+esc(w.email)+'">'+
       '<span class="row1"><span class="nm">'+esc(nm)+'</span>'+
-      (w.group?'<span class="grp">קבוצה '+esc(w.group)+(w.groupOverride?" ✎":"")+'</span>':'<span class="grp warnpill">אין קבוצה</span>')+
+      groupPill(w,true)+
       (w.newApp?'<span class="grp newpill">אפליקציה חדשה</span>':'<span class="grp oldpill">קג\'אבי</span>')+
       progPill(w)+
       (w.cancelled?'<span class="grp dngpill">ביטלה</span>':'')+

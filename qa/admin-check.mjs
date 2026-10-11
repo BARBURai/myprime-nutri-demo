@@ -1204,5 +1204,22 @@ console.log("\nחיפוש, תגי תוכנית ותאריך במסך הניהו�
   check("והשרת עדיין דוחה יום שאינו ראשון", readFileSync(new URL("../api/admin.js", import.meta.url), "utf8").includes('error: "not_sunday"'));
 }
 
+// תג הקבוצה: בסמארט ובסולו אין קבוצות, ולכן "אין קבוצה" אינו מוצג אצלן. v7.97.
+// נמשך מ-admin.html ומורץ, ולא מועתק.
+{
+  const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  const g = (name) => (html.match(new RegExp("function " + name + "\\([^)]*\\)\\{[\\s\\S]*?\\n\\}")) || [""])[0];
+  const escSrc = (html.match(/function esc\(s\)\{[^\n]*\}/) || [""])[0];
+  const src = escSrc + g("groupPill");
+  check("groupPill קיימת ב-admin.html", /function groupPill/.test(src) && /function esc/.test(src));
+  const gp = new Function(src + "; return groupPill;")();
+  check("**360 בלי קבוצה: 'אין קבוצה'**", gp({ solo: 0 }).includes("אין קבוצה"));
+  check("**SMART בלי קבוצה: שום תג**", gp({ solo: 10 }) === "");
+  check("סולו 6 ו-12 בלי קבוצה: שום תג", gp({ solo: 6 }) === "" && gp({ solo: 12 }) === "");
+  check("SMART ששויכה לקבוצה עדיין רואה אותה", gp({ solo: 10, group: "ב" }).includes("קבוצה ב"));
+  check("סימון ✎ רק כשמבקשים", gp({ group: "א", groupOverride: true }, true).includes("✎") && !gp({ group: "א", groupOverride: true }).includes("✎"));
+  check("**אין עוד 'אין קבוצה' כתוב ישירות מחוץ לפונקציה**", (html.match(/אין קבוצה<\/span>/g) || []).length === 1);
+}
+
 console.log("\n" + pass + " מתוך " + (pass + fail) + " עברו.");
 process.exit(fail ? 1 : 0);
