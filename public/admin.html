@@ -1118,6 +1118,30 @@ function teamBlock(){
 // "לבחירה שלך" הן מי שהאקסל ומניצ'ט חולקים עליהן. "לבירור ידני" הן כל השאר, ומי שיש לה
 // שם במניצ'ט ולא באקסל מגיעה לשם עם השם ממניצ'ט כבר בשדה.
 var NFOPEN = false, NFREP = null, NFERR = false, NFRUN = null, NFBUSY = {}, NFTYPE = {};
+// **בחירה מרובה. v8.06.** רון: "למה אני לא יכול לעשות בחירה מרובה". כל שורה מסומנת מראש
+// עם השם המוצע, והוא מבטל או מחליף רק איפה שצריך, ושומר את כולן בלחיצה אחת.
+// NFSEL: סימון שהוא שינה ביד. NFPICK: איזה שם מהאקסל בחר. NFBULK: הקבוצה שנשמרת עכשיו.
+var NFSEL = {}, NFPICK = {}, NFBULK = null;
+function nfOpts(x){ return (x.options && x.options.length ? x.options : (x.suggest ? [x.suggest] : [])); }
+function nfPickIdx(x){
+  if(NFPICK[x.phone] != null) return NFPICK[x.phone];
+  var o = nfOpts(x), s = x.suggest;
+  for(var i=0;i<o.length;i++) if(s && o[i].first===s.first && o[i].last===s.last) return i;
+  return 0;
+}
+function nfManualName(x){
+  var t = NFTYPE[x.phone];
+  if(t) return { first:(t.first||"").trim(), last:(t.last||"").trim() };
+  var s = x.suggest||x.mc||{};
+  return { first:(s.first||"").trim(), last:(s.last||"").trim() };
+}
+// ברירת המחדל: בבחירה תמיד מסומנת, ובבירור ידני רק מי שהגיעה עם שם.
+function nfIsSel(x, grp){
+  if(NFSEL[x.phone] != null) return NFSEL[x.phone];
+  if(grp === "choose") return nfOpts(x).length > 0;
+  var s = x.suggest||x.mc||{};
+  return !!String(s.first||"").trim();
+}
 function nfFull(n){ return n ? ((n.first||"")+" "+(n.last||"")).replace(/\s+/g," ").trim() : ""; }
 function nfGroups(){
   var items = (NFREP && NFREP.items) || [];
@@ -1184,30 +1208,38 @@ function nameFixBlock(){
   else if(g.auto.length) h += '<div class="edit"><button class="btn p" data-nfall="1">תקני את כל ה-'+nf(g.auto.length)+'</button></div>';
   if(NFRUN && !NFRUN.busy && NFRUN.failed.length) h += '<div class="note"><b>לא נשמרו: '+nf(NFRUN.failed.length)+'.</b></div>';
   if(NFRUN && !NFRUN.busy && NFRUN.error) h += '<div class="note">'+(NFRUN.error === "preview" ? NF_PREVIEW_MSG : NF_FAIL_MSG)+'</div>';
+  var selHead = function(grp){
+    return ' <button class="lnk" data-nfselall="'+grp+'" data-v="1">סימון הכל</button> · <button class="lnk" data-nfselall="'+grp+'" data-v="0">ביטול הכל</button>';
+  };
+  var bulkBtn = function(grp, list){
+    var n = list.filter(function(x){ return nfIsSel(x, grp) && (grp==="choose" || nfManualName(x).first); }).length;
+    return '<div class="edit"><button class="btn p" data-nfbulk="'+grp+'"'+((!n||NFBULK)?' disabled':'')+'>שמירת המסומנות ('+nf(n)+')</button></div>';
+  };
   if(g.choose.length){
-    h += '<div class="note"><b>לבחירה שלך</b></div>';
+    h += '<div class="note"><b>לבחירה שלך</b>'+selHead("choose")+'</div>';
     g.choose.forEach(function(x){
-      var busy = NFBUSY[x.phone];
-      var opts = (x.options && x.options.length ? x.options : (x.suggest ? [x.suggest] : []));
+      var busy = NFBUSY[x.phone] || NFBULK;
+      var opts = nfOpts(x), pi = nfPickIdx(x);
       h += '<div class="card" data-nfrow="'+esc(x.phone)+'">'+
-        '<div class="note">במערכת: <b>'+esc(nfFull(x.cur)||"ריק")+'</b></div>'+
+        '<div class="note"><input type="checkbox" data-nfsel="'+esc(x.phone)+'" data-nfgrp="choose"'+(nfIsSel(x,"choose")?' checked':'')+(busy?' disabled':'')+'> במערכת: <b>'+esc(nfFull(x.cur)||"ריק")+'</b></div>'+
         opts.map(function(o,i){
           return '<div class="edit"><span>באקסל: <b>'+esc(nfFull(o))+'</b></span>'+
-            '<button class="btn p" data-nfpick="'+esc(x.phone)+'" data-nfi="'+i+'"'+(busy?' disabled':'')+'>שם מהאקסל</button></div>';
+            '<button class="btn'+(i===pi?' p':'')+'" data-nfpick="'+esc(x.phone)+'" data-nfi="'+i+'"'+(busy?' disabled':'')+'>שם מהאקסל</button></div>';
         }).join("")+
         '<div class="note">במניצ\'ט: <b>'+esc(nfFull(x.mc)||"—")+'</b></div>'+
         '<div class="edit"><button class="btn" data-nfkeep="'+esc(x.phone)+'"'+(busy?' disabled':'')+'>להשאיר</button>'+
         '<span class="note">'+esc(x.email||"")+'</span></div>'+
       '</div>';
     });
+    h += bulkBtn("choose", g.choose);
   }
   if(g.manual.length){
-    h += '<div class="note"><b>לבירור ידני</b></div>';
+    h += '<div class="note"><b>לבירור ידני</b>'+selHead("manual")+'</div>';
     g.manual.forEach(function(x){
-      var busy = NFBUSY[x.phone];
+      var busy = NFBUSY[x.phone] || NFBULK;
       var pre = NFTYPE[x.phone] || { first:(x.suggest||x.mc||{}).first||"", last:(x.suggest||x.mc||{}).last||"" };
       h += '<div class="card" data-nfrow="'+esc(x.phone)+'">'+
-        '<div class="note">במערכת: <b>'+esc(nfFull(x.cur)||"ריק")+'</b> · '+esc(nfWhy(x))+'</div>'+
+        '<div class="note"><input type="checkbox" data-nfsel="'+esc(x.phone)+'" data-nfgrp="manual"'+(nfIsSel(x,"manual")?' checked':'')+(busy?' disabled':'')+'> במערכת: <b>'+esc(nfFull(x.cur)||"ריק")+'</b> · '+esc(nfWhy(x))+'</div>'+
         '<div class="note">'+esc(x.email||"")+'</div>'+
         '<div class="edit">'+
           '<input class="field sm" style="max-width:140px" data-nffirst="'+esc(x.phone)+'" placeholder="שם פרטי" value="'+esc(pre.first)+'">'+
@@ -1215,6 +1247,7 @@ function nameFixBlock(){
           '<button class="btn p" data-nfsave="'+esc(x.phone)+'"'+(busy?' disabled':'')+'>שמירה</button></div>'+
       '</div>';
     });
+    h += bulkBtn("manual", g.manual);
   }
   return h+'</div>';
 }
@@ -2546,11 +2579,41 @@ function render(){
       .then(function(){ delete NFBUSY[phone]; render(); });
   }
   function nfItem(phone){ return ((NFREP&&NFREP.items)||[]).filter(function(x){ return String(x.phone)===String(phone); })[0]; }
+  // בחירת שם מהאקסל מסמנת אותו ואת השורה, והשמירה ב"שמירת המסומנות". v8.06.
   app.querySelectorAll("[data-nfpick]").forEach(function(el){ el.onclick=function(){
-    var x = nfItem(el.getAttribute("data-nfpick")); if(!x) return;
-    var opts = (x.options && x.options.length ? x.options : (x.suggest ? [x.suggest] : []));
-    var o = opts[+el.getAttribute("data-nfi")]; if(!o) return;
-    nfAct(x.phone, { setName:{ phone:x.phone, email:x.email, first:o.first, last:o.last, from:x.cur } });
+    var p = el.getAttribute("data-nfpick");
+    NFPICK[p] = +el.getAttribute("data-nfi"); NFSEL[p] = true; render();
+  }; });
+  app.querySelectorAll("[data-nfsel]").forEach(function(el){ el.onchange=function(){
+    NFSEL[el.getAttribute("data-nfsel")] = !!el.checked; render();
+  }; });
+  app.querySelectorAll("[data-nfselall]").forEach(function(el){ el.onclick=function(){
+    var g = nfGroups()[el.getAttribute("data-nfselall")] || [], v = el.getAttribute("data-v") === "1";
+    g.forEach(function(x){ NFSEL[x.phone] = v; }); render();
+  }; });
+  app.querySelectorAll("[data-nfbulk]").forEach(function(el){ el.onclick=function(){
+    var grp = el.getAttribute("data-nfbulk");
+    var todo = (nfGroups()[grp] || []).filter(function(x){ return nfIsSel(x, grp); }).map(function(x){
+      var o = grp === "choose" ? nfOpts(x)[nfPickIdx(x)] : nfManualName(x);
+      return (o && String(o.first||"").trim()) ? { phone:x.phone, email:x.email, first:String(o.first).trim(), last:String(o.last||"").trim(), from:x.cur } : null;
+    }).filter(Boolean);
+    if(!todo.length || NFBULK) return;
+    // אחת אחרי השנייה, כי מניצ'ט מגביל קריאות בשנייה. "בדב" עוצר מיד, כי אף אחת לא תישמר.
+    NFBULK = grp; render();
+    var failed = 0, preview = false;
+    (function next(i){
+      if(i >= todo.length || preview){
+        NFBULK = null; render();
+        if(preview) alert(NF_PREVIEW_MSG); else if(failed) alert(NF_FAIL_MSG);
+        return;
+      }
+      var t = todo[i];
+      nfPost({ setName:t }).then(function(d){
+        if(!d || !d.ok) throw nfErr(d);
+        nfDrop([t.phone]); delete NFTYPE[t.phone]; delete NFSEL[t.phone]; delete NFPICK[t.phone]; render();
+      }).catch(function(e){ if(e && e.preview) preview = true; else failed++; })
+        .then(function(){ next(i+1); });
+    })(0);
   }; });
   app.querySelectorAll("[data-nfkeep]").forEach(function(el){ el.onclick=function(){
     var p = el.getAttribute("data-nfkeep");

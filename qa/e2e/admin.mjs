@@ -719,6 +719,8 @@ CHECKS.push({
     const pre = await p.locator('[data-nffirst="5"]').inputValue();
     await p.locator('[data-nflast="5"]').fill("אבן-חן");
     await p.locator('[data-nfpick="4"][data-nfi="1"]').click();
+    await p.waitForTimeout(300);
+    await p.locator('[data-nfbulk="choose"]').click();
     await p.waitForTimeout(500);
     const picked = posts.some((b) => b.setName && b.setName.phone === "4" && b.setName.first === "דנה" && b.setName.last === "לוי");
     const rowGone = !(await p.locator('[data-nfrow="4"]').count());
@@ -733,6 +735,59 @@ CHECKS.push({
     const errs = o.errors.concat(c.errors);
     return { ok: counts0 && btn0 && allDone && pre === "שרה" && picked && rowGone && kept === "אבן-חן" && saved && clerk === 0 && !errs.length,
       detail: `מספרים ${counts0} · כפתור ${btn0} · כולן ${allDone} (${fixCalls} קריאות) · מוכן מראש "${pre}" · בחירה ${picked} · שורה ירדה ${rowGone} · נשמר בהקלדה "${kept}" · נשמר ${saved} · פקידה ${clerk} · שגיאות ${errs[0] || "אין"}` };
+  },
+});
+
+// v8.06: בחירה מרובה. **שני הצדדים**: מה שמסומן נשמר בלחיצה אחת, עם השם שנבחר, ומה שבוטל
+// אינו נשלח. ובבירור ידני, שורה בלי שם אינה מסומנת ואינה נשלחת.
+CHECKS.push({
+  name: "תיקון שמות: בחירה מרובה",
+  async run(browser, device) {
+    const o = await open(browser, device);
+    const it = (phone, cat, extra) => ({ phone, email: phone + "@t.com", start: "2026-10-04", cur: { first: "x", last: "" }, cat, ...extra });
+    const REP = { ok: true, at: new Date().toISOString(), excelRows: 9, items: [
+      it("11", "conflict", { options: [{ first: "דנה", last: "כהן" }, { first: "דנה", last: "לוי" }], suggest: { first: "דנה", last: "כהן" }, mc: { first: "ד", last: "" } }),
+      it("12", "conflict", { options: [{ first: "רות", last: "אבן" }, { first: "רותי", last: "אבן" }], suggest: { first: "רות", last: "אבן" }, mc: { first: "ר", last: "" } }),
+      it("13", "conflict", { options: [{ first: "נגה", last: "בר" }, { first: "נוגה", last: "בר" }], suggest: { first: "נגה", last: "בר" }, mc: { first: "נ", last: "" } }),
+      it("21", "mc", { suggest: { first: "שרה", last: "אבן" } }),
+      it("22", "manual", { why: "noname" }),
+      it("23", "mc", { suggest: { first: "לאה", last: "גל" } }),
+    ] };
+    const posts = [];
+    await o.ctx.route("**/api/**", (route) => {
+      const url = route.request().url();
+      if (!url.includes("namefix")) return route.fallback();
+      if (route.request().method() === "GET") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(REP) });
+      posts.push(JSON.parse(route.request().postData() || "{}"));
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    });
+    const p = o.page;
+    await p.locator('[data-nfopen="1"]').click();
+    await p.waitForTimeout(500);
+    const txt = () => p.locator("body").innerText();
+    const t0 = await txt();
+    const c0 = t0.includes("שמירת המסומנות (3)") && t0.includes("שמירת המסומנות (2)");
+    const noName = !(await p.locator('[data-nfsel="22"]').isChecked());
+    await p.locator('[data-nfpick="12"][data-nfi="1"]').click();
+    await p.waitForTimeout(200);
+    await p.locator('[data-nfsel="13"]').uncheck();
+    await p.waitForTimeout(200);
+    const c1 = (await txt()).includes("שמירת המסומנות (2)");
+    await p.locator('[data-nfbulk="choose"]').click();
+    await p.waitForTimeout(800);
+    const names = posts.filter((b) => b.setName).map((b) => b.setName.phone + ":" + b.setName.first + " " + b.setName.last);
+    const chooseOk = names.join("|") === "11:דנה כהן|12:רותי אבן";
+    const left13 = await p.locator('[data-nfrow="13"]').count() === 1 && !(await p.locator('[data-nfrow="11"]').count());
+    await p.locator('[data-nfbulk="manual"]').click();
+    await p.waitForTimeout(800);
+    const names2 = posts.filter((b) => b.setName).map((b) => b.setName.phone).slice(2).join(",");
+    const manualOk = names2 === "21,23" && await p.locator('[data-nfrow="22"]').count() === 1;
+    await p.locator('[data-nfselall="choose"][data-v="1"]').click();
+    await p.waitForTimeout(200);
+    const all = await p.locator('[data-nfsel="13"]').isChecked();
+    await o.ctx.close();
+    const ok = c0 && noName && c1 && chooseOk && left13 && manualOk && all && !o.errors.length;
+    return { ok, detail: `מונים ${c0} · בלי שם לא מסומנת ${noName} · אחרי ביטול ${c1} · נשלחו "${names.join("|")}" · נשארה ${left13} · ידני "${names2}" ${manualOk} · סימון הכל ${all} · שגיאות ${o.errors[0] || "אין"}` };
   },
 });
 
