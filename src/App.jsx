@@ -733,7 +733,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "7.98";
+const VERSION = "7.99";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -4425,12 +4425,25 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
               )}
               {aiDoneItems && (
                 <div style={{ border: `1px solid ${C.brand}`, borderRadius: 12, padding: 10, marginTop: 6 }}>
+                  {/* Protein, fat and carbs per item and in total, before she commits: they
+                      were computed and saved but only shown once in the diary, so a woman who
+                      wanted to decide first had to log each item alone. Same wording as the diary
+                      line, and ungated by week exactly like it. v7.99. */}
                   {aiDoneItems.map((it, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
-                      <span style={{ fontSize: 16, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source={it.source || "estimated"} /></span>
-                      <span style={{ fontSize: 15, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
+                    <div key={i} style={{ padding: "6px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 16, color: C.ink, display: "flex", gap: 6, alignItems: "center" }}>{it.name} <SrcBadge source={it.source || "estimated"} /></span>
+                        <span style={{ fontSize: 15, color: C.sub }}>{it.grams} {it.unit === "ml" ? "מ\"ל" : "ג׳"} · {it.kcal} קק״ל</span>
+                      </div>
+                      {((it.p || 0) + (it.f || 0) + (it.c || 0) > 0) && (
+                        <div data-ai-macros style={{ fontSize: 12.5, color: C.faint, marginTop: 2 }}>חלבון {Math.round(it.p || 0)} · שומן {Math.round(it.f || 0)} · פחמ׳ {Math.round(it.c || 0)} ג׳</div>
+                      )}
                     </div>
                   ))}
+                  {aiDoneItems.length >= 2 && (() => {
+                    const t = aiDoneItems.reduce((a, it) => ({ kcal: a.kcal + (it.kcal || 0), p: a.p + (it.p || 0), f: a.f + (it.f || 0), c: a.c + (it.c || 0) }), { kcal: 0, p: 0, f: 0, c: 0 });
+                    return <div data-ai-total style={{ fontSize: 14, fontWeight: 600, color: C.ink, padding: "8px 0 2px", borderTop: `1px solid ${C.line}` }}>סה״כ {Math.round(t.kcal)} קק״ל · חלבון {Math.round(t.p)} · שומן {Math.round(t.f)} · פחמ׳ {Math.round(t.c)} ג׳</div>;
+                  })()}
                   <div style={{ fontSize: 12, color: C.faint, padding: "4px 0", lineHeight: 1.5 }}>"לפי מה שהזנת" = המספרים שמסרת מהאריזה · "מהמאגר" = ערכים אמיתיים ממאגר מוצרים · "מוערך" = הערכת AI. למוצר ארוז - סריקת ברקוד היא המדויקת ביותר.</div>
                   <div style={{ fontSize: 13, color: C.sub, margin: "10px 0 6px" }}>שיוך לארוחה</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{MEALS.map((m) => (<span key={m} onClick={() => setMeal(m)} style={{ fontSize: 14, padding: "5px 11px", borderRadius: 16, cursor: "pointer", background: m === meal ? C.ink : "transparent", color: m === meal ? "#fff" : C.sub, boxShadow: m === meal ? "none" : `inset 0 0 0 1px ${C.line}` }}>{m}</span>))}</div>

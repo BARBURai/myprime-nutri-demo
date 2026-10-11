@@ -2392,6 +2392,49 @@ const CHECKS = [
     },
   },
   {
+    // משתתפת, 11 באוקטובר 2026: "האפליקציה מראה רק את הערך הקלורי הצפוי ורק לאחר
+    // הזנה סופית ניתן לראות את כל הערכים... אם הזנתי כמה פריטים אני לא יכולה לראות
+    // כמה כל אחד שווה". v7.99: חלבון, שומן ופחמימות לכל פריט ושורת סה״כ, לפני ההוספה.
+    // שני הצדדים: שני פריטים מקבלים שורה לכל אחד ושורת סה״כ, ופריט אחד בלי סה״כ.
+    name: "כרטיס הבינה מראה חלבון, שומן ופחמימות לכל פריט וסה״כ לפני ההוספה",
+    async run(browser, device) {
+      const bad = [];
+      const run1 = async (answer, text) => {
+        const { context, page, errors } = await openApp(browser, device, { day: 5, aiAnswer: answer });
+        await page.locator('[aria-label="הוספה"]').click();
+        await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click();
+        await page.waitForTimeout(500);
+        await page.locator("text=ספרי לי מה אכלת").first().click();
+        await page.waitForTimeout(600);
+        await page.locator("textarea").first().fill(text);
+        await page.keyboard.press("Enter");
+        await page.waitForTimeout(9000);
+        const per = await page.locator("[data-ai-macros]").allInnerTexts();
+        const tot = await page.locator("[data-ai-total]").allInnerTexts();
+        const logLen = await page.evaluate(() => (JSON.parse(localStorage.getItem("myprime_demo_state_v1") || "{}").log || []).length);
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 40));
+        await context.close();
+        return { per, tot, logLen };
+      };
+      const two = await run1({ reply: "רשמתי", done: true, items: [
+        { name: "ביצה בדיקה", unit: "g", grams: 100, kcal: 155, protein: 13, fat: 11, carbs: 1, stated: true },
+        { name: "פיתה בדיקה", unit: "g", grams: 100, kcal: 275, protein: 9, fat: 1.4, carbs: 55, stated: true },
+      ] }, "ביצה ופיתה");
+      if (two.per.length !== 2) bad.push(`שורות מאקרו לפריטים: ${two.per.length} במקום 2`);
+      if (two.per[0] !== "חלבון 13 · שומן 11 · פחמ׳ 1 ג׳") bad.push(`פריט ראשון: "${two.per[0]}"`);
+      if (two.per[1] !== "חלבון 9 · שומן 1 · פחמ׳ 55 ג׳") bad.push(`פריט שני: "${two.per[1]}"`);
+      if (two.tot[0] !== "סה״כ 430 קק״ל · חלבון 22 · שומן 12 · פחמ׳ 56 ג׳") bad.push(`סה״כ: "${two.tot[0]}"`);
+      if (two.logLen !== 0) bad.push("נשמר ליומן לפני ההוספה");
+      const one = await run1({ reply: "רשמתי", done: true, items: [
+        { name: "ביצה בדיקה", unit: "g", grams: 100, kcal: 155, protein: 13, fat: 11, carbs: 1, stated: true },
+      ] }, "ביצה");
+      if (one.per.length !== 1) bad.push(`פריט אחד: ${one.per.length} שורות מאקרו`);
+      if (one.tot.length !== 0) bad.push("לפריט אחד הוצגה שורת סה״כ");
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : `${two.per.join(" | ")} · ${two.tot[0]}` };
+    },
+  },
+  {
     // רון, 9 בספטמבר 2026: "מקבל המלצה, לא לוחץ על שום המלצה, יוצא החוצה והשיחה
     // נמחקה." שני הצדדים באותה הרצה, כי זיכרון שאינו נמחק לעולם נראה בדיוק כמו
     // זיכרון שעובד: השיחה חוזרת אחרי יציאה, ומתאפסת אחרי שנרשמה מנה ליומן.
