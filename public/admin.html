@@ -1145,6 +1145,11 @@ function nfPost(body){
   return fetch("/api/admin?namefix&format=json&key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)})
     .then(function(r){ return r.json(); });
 }
+// **בדב הכפתורים אינם שומרים**, כי לדב אותו מניצ'ט של הייצור. השרת מחזיר "preview",
+// והמסך אומר את זה במפורש ולא "לא נשמר", שנקרא כתקלה. נוסח רון, v8.05.
+var NF_PREVIEW_MSG = "בדב הכפתורים אינם שומרים. השמירה פועלת בייצור בלבד.";
+var NF_FAIL_MSG = "לא נשמר. אפשר לנסות שוב בעוד רגע.";
+function nfErr(d){ var e = new Error(); e.preview = !!(d && d.error === "preview"); return e; }
 function nfDrop(phones){
   if(!NFREP) return;
   var gone = {}; phones.forEach(function(p){ gone[String(p)] = 1; });
@@ -1156,14 +1161,14 @@ function nfRunAll(){
   render();
   (function step(){
     nfPost({ fixAll:true, skip:NFRUN.failed }).then(function(d){
-      if(!d || !d.ok) throw new Error();
+      if(!d || !d.ok) throw nfErr(d);
       nfDrop(d.fixed||[]);
       NFRUN.done += (d.fixed||[]).length;
       NFRUN.failed = NFRUN.failed.concat(d.failed||[]);
       render();
       if(d.more && ((d.fixed||[]).length || (d.failed||[]).length)) return step();
       NFRUN.busy = false; render();
-    }).catch(function(){ NFRUN.busy = false; NFRUN.error = true; render(); });
+    }).catch(function(e){ NFRUN.busy = false; NFRUN.error = (e && e.preview) ? "preview" : true; render(); });
   })();
 }
 function nameFixBlock(){
@@ -1178,7 +1183,7 @@ function nameFixBlock(){
   if(NFRUN && NFRUN.busy) h += '<div class="note">תוקנו '+nf(NFRUN.done)+' מתוך '+nf(NFRUN.total)+'...</div>';
   else if(g.auto.length) h += '<div class="edit"><button class="btn p" data-nfall="1">תקני את כל ה-'+nf(g.auto.length)+'</button></div>';
   if(NFRUN && !NFRUN.busy && NFRUN.failed.length) h += '<div class="note"><b>לא נשמרו: '+nf(NFRUN.failed.length)+'.</b></div>';
-  if(NFRUN && !NFRUN.busy && NFRUN.error) h += '<div class="note">לא נשמר. אפשר לנסות שוב בעוד רגע.</div>';
+  if(NFRUN && !NFRUN.busy && NFRUN.error) h += '<div class="note">'+(NFRUN.error === "preview" ? NF_PREVIEW_MSG : NF_FAIL_MSG)+'</div>';
   if(g.choose.length){
     h += '<div class="note"><b>לבחירה שלך</b></div>';
     g.choose.forEach(function(x){
@@ -2535,9 +2540,9 @@ function render(){
   function nfAct(phone, body){
     NFBUSY[phone] = true; render();
     return nfPost(body).then(function(d){
-      if(!d || !d.ok) throw new Error();
+      if(!d || !d.ok) throw nfErr(d);
       nfDrop([phone]); delete NFTYPE[phone];
-    }).catch(function(){ alert("לא נשמר. אפשר לנסות שוב בעוד רגע."); })
+    }).catch(function(e){ alert((e && e.preview) ? NF_PREVIEW_MSG : NF_FAIL_MSG); })
       .then(function(){ delete NFBUSY[phone]; render(); });
   }
   function nfItem(phone){ return ((NFREP&&NFREP.items)||[]).filter(function(x){ return String(x.phone)===String(phone); })[0]; }

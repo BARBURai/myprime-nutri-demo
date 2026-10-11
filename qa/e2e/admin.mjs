@@ -736,6 +736,46 @@ CHECKS.push({
   },
 });
 
+// v8.05: בדב הכפתורים אינם שומרים, והמסך אומר את זה ולא "לא נשמר". **שני הצדדים**: תשובת
+// "preview" מקבלת את הנוסח של הדב, ותקלה רגילה את הנוסח הקיים. בחלונית ובשורה של "תקני את כולן".
+CHECKS.push({
+  name: "תיקון שמות: ההודעה בדב",
+  async run(browser, device) {
+    const o = await open(browser, device);
+    const REP = { ok: true, at: new Date().toISOString(), excelRows: 9, items: [
+      { phone: "1", email: "1@t.com", start: "2026-10-04", cur: { first: "x", last: "" }, cat: "excel", to: { first: "מיה", last: "ביטון" } },
+      { phone: "5", email: "5@t.com", start: "2026-10-04", cur: { first: "x", last: "" }, cat: "mc", suggest: { first: "שרה", last: "אבן" } },
+    ] };
+    let mode = "preview";
+    await o.ctx.route("**/api/**", (route) => {
+      const url = route.request().url();
+      if (!url.includes("namefix")) return route.fallback();
+      if (route.request().method() === "GET") return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(REP) });
+      return mode === "preview"
+        ? route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ ok: false, error: "preview" }) })
+        : route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ ok: false, error: "x" }) });
+    });
+    const alerts = [];
+    o.page.on("dialog", (d) => { alerts.push(d.message()); });
+    const p = o.page;
+    await p.locator('[data-nfopen="1"]').click();
+    await p.waitForTimeout(500);
+    await p.locator('[data-nfsave="5"]').click();
+    await p.waitForTimeout(500);
+    mode = "fail";
+    await p.locator('[data-nfsave="5"]').click();
+    await p.waitForTimeout(500);
+    mode = "preview";
+    await p.locator("[data-nfall]").click();
+    await p.waitForTimeout(500);
+    const runTxt = await p.locator("body").innerText();
+    await o.ctx.close();
+    const DEV = "בדב הכפתורים אינם שומרים. השמירה פועלת בייצור בלבד.", FAIL = "לא נשמר. אפשר לנסות שוב בעוד רגע.";
+    const ok = alerts[0] === DEV && alerts[1] === FAIL && runTxt.includes(DEV) && !o.errors.length;
+    return { ok, detail: `חלונית בדב "${alerts[0]}" · תקלה "${alerts[1]}" · שורת "כולן" ${runTxt.includes(DEV)} · שגיאות ${o.errors[0] || "אין"}` };
+  },
+});
+
 const browser = await chromium.launch({ executablePath: BROWSER });
 const ONLY = process.env.E2E_ONLY || "";
 const RUN = CHECKS.filter((c) => !ONLY || c.name.includes(ONLY));
