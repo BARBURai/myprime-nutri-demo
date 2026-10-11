@@ -41,6 +41,7 @@ function run(cmd) {
     case "HDEL": if (H[a[0]]) for (const f of a.slice(1)) delete H[a[0]][f]; return 1;
     case "HLEN": return Object.keys(H[a[0]] || {}).length;
     case "HSET_MULTI": return 1;
+    case "INCR": S[a[0]] = String((Number(S[a[0]]) || 0) + 1); return Number(S[a[0]]);
     case "DEL": delete H[a[0]]; delete S[a[0]]; delete L[a[0]]; return 1;
     case "RENAME": H[a[1]] = H[a[0]]; delete H[a[0]]; return "OK";
     case "HGETALL": if (OVERSIZE.has(a[0])) return { __error: "ERR max request size exceeded" }; return Object.entries(H[a[0]] || {}).flat();
@@ -113,7 +114,7 @@ ck("הכתובת סגורה בלי המשתנה, גם עם סיסמה", (await p
 process.env.MC_SYNC_SECRET = "s3cret-mc";
 
 console.log("\nהכתובת עצמה\n");
-const nonMc = () => JSON.stringify([Object.entries(H).filter(([k]) => !/^mc:/.test(k)), S]);
+const nonMc = () => JSON.stringify([Object.entries(H).filter(([k]) => !/^mc:/.test(k)), Object.entries(S).filter(([k]) => !/^mc:/.test(k))]);
 const before = nonMc();
 ck("סיסמה שגויה נדחית", (await push(row({}), "wrong-secre")).code === 401);
 ck("בלי סיסמה נדחית", (await push(row({}), "")).code === 401);
@@ -633,7 +634,8 @@ console.log("\nv7.89: מסך הניהול רואה את קורס האיפור ו
   const after = await list();
   ck("**קורס האיפור המלא מוצג לפי השרת**, כשהגיליון ריק", after["amal@test.com"].glowFull === true, strip(after["amal@test.com"]));
   ck("**והיא מוצגת כאפליקציה חדשה**", after["amal@test.com"].newApp === true);
-  ck("ומה שהגיליון אומר נשאר גלוי בנפרד", after["amal@test.com"].sheetGlowFull === false);
+  // **מ-v7.95 הרשימה נבנית מהשרת**, ולכן "מה שהמקור אומר" (sheetGlowFull) הוא מה שהשרת אומר.
+  ck("ומה שהמקור אומר נשאר גלוי בנפרד, ומ-v7.95 המקור הוא השרת", after["amal@test.com"].sheetGlowFull === true);
   ck("אישה אחרת לא נגעה", after["shira@test.com"].glowFull === false && after["shira@test.com"].newApp === false);
   ck("**סימון בגיליון בלי שרת נשאר כמו שהוא**", after["carm@test.com"].glowFull === true);
   await push({ ID: "972507700001", F_NAME: "עמליה", CF_EMAIL: "amal@test.com", [START]: sunday + " 12:00:00", "GLOW-FULL": "", "אפליקציית תזונה": "TRUE" });
@@ -648,9 +650,10 @@ console.log("\nv7.89: מסך הניהול רואה את קורס האיפור ו
   const off = await list();
   ck("**בלי MC_SYNC_SECRET המסך מתעלם מהשרת**, כמו השער", off["amal@test.com"].glowFull === false && off["amal@test.com"].newApp === false, strip(off["amal@test.com"]));
   process.env.MC_SYNC_SECRET = "s3cret-mc";
-  OVERSIZE.add("mc:flags");
+  OVERSIZE.add("mc:flags"); OVERSIZE.add("mc:slim");
   const bad = await list();
-  ck("**תקלה בקריאת הסימונים משאירה את הגיליון לבדו**, והמסך נטען", bad["amal@test.com"] && bad["amal@test.com"].glowFull === false, strip(bad["amal@test.com"]));
+  ck("**תקלה בקריאת השרת משאירה את הגיליון לבדו**, והמסך נטען", bad["amal@test.com"] && bad["amal@test.com"].glowFull === false, strip(bad["amal@test.com"]));
+  OVERSIZE.delete("mc:slim");
   OVERSIZE.delete("mc:flags");
   delete H["mc:flags"]; delete S["sheet:csv:v1"];
   hash("mc:rows")["972507700002"] = JSON.stringify({ cells: { ID: "972507700002", CF_EMAIL: "shira@test.com", [START]: sunday, "GLOW-FULL": "TRUE" }, t: 1, src: "mc" });
@@ -694,6 +697,94 @@ console.log("\nv7.93: מסך הניהול מציג SMART מהשרת, כמו הש
   process.env.MC_SYNC_SECRET = "s3cret-mc";
   await push({ ID: "972507800001", F_NAME: "אפי", CF_EMAIL: "effi@test.com", [START]: sunday + " 12:00:00", "SMART": "" });
   ck("תג שהוסר במניצ'ט מחזיר את המסך לגיליון", !(H["mc:flags"] || {})["972507800001"] && (await list())["effi@test.com"].solo === 0, strip(H["mc:flags"]));
+}
+
+// ============================================================
+console.log("\nמסך הניהול מהשרת, ומתעדכן לבד. v7.95\n");
+{
+  H = {}; S = {}; L = {}; OVERSIZE.clear();
+  process.env.MC_SYNC_SECRET = "s3cret-mc";
+  SHEET = `ID,F_NAME,L_NAME,CF_EMAIL,${START},ביטלה,חודשי גישה נוספים,GLOW-FULL,קבוצה,SMART
+972508800001,שרה,כהן,sara@test.com,${sunday} 12:00:00,,,TRUE,ב,
+,בלי,טלפון,nophone@test.com,${sunday} 12:00:00,,,,א,
+972508800003,כפולה,אחת,dup@test.com,${older} 12:00:00,,,,,
+972508800004,כפולה,שתיים,dup@test.com,${sunday} 12:00:00,,,,,
+972508800005,החליפה,מייל,old@test.com,${sunday} 12:00:00,,,,,
+972508800006,ביטלה,כן,canc@test.com,${sunday} 12:00:00,TRUE,,,,
+`;
+  const call = async (query, method = "GET", body) => { const [o, r] = resOf(); await admin({ method, query: Object.assign({ key: "owner-key-123" }, query), headers: {}, body }, r); return o; };
+  const listFull = async () => (await call({})).body || {};
+  const byEmail = (b) => Object.fromEntries(((b && b.women) || []).map((w) => [w.email, w]));
+  const count = (b, e) => ((b && b.women) || []).filter((w) => w.email === e).length;
+
+  const sheetMode = await listFull();
+  ck("**לפני הייבוא העותק הרזה ריק, והמסך מהגיליון כמו היום**", sheetMode.source === "sheet" && byEmail(sheetMode)["sara@test.com"], strip({ source: sheetMode.source }));
+
+  const imp = await call({}, "POST", { mcImport: true });
+  ck("הייבוא בונה את העותק הרזה", imp.body && imp.body.ok && Object.keys(H["mc:slim"] || {}).length === 5, strip(Object.keys(H["mc:slim"] || {})));
+  ck("**העותק רזה**: רק העמודות שהמסך צריך", Object.values(H["mc:slim"] || {}).every((v) => Object.keys(JSON.parse(v)).every((k) => ["ID","F_NAME","L_NAME","CF_EMAIL","360 - FINAL PERSONAL START","ביטלה","חודשי גישה נוספים","GLOW-FULL","קבוצה","SMART","SOLO10WEEK","אפליקציית תזונה","בונוס איפור","GLOW-FULL-M","GLOW-PAID","GLOW-SOLO","SOLO6","SOLO12"].includes(k))), strip(Object.values(H["mc:slim"] || {})[0]));
+
+  const srv = await listFull();
+  const A = byEmail(sheetMode), B = byEmail(srv);
+  ck("**אחרי הייבוא המסך מהשרת**", srv.source === "server", srv.source);
+  // **אותה אישה, שני מקורות, תשובה זהה.** זה מה שמבטיח שהמעבר אינו משנה דבר כשהנתונים זהים.
+  const same = (e) => { const a = { ...A[e] }, b = { ...B[e] }; return JSON.stringify(a) === JSON.stringify(b); };
+  ck("**שרה נראית בדיוק אותו דבר מהשרת ומהגיליון**, שדה בשדה", same("sara@test.com"), strip(A["sara@test.com"]) + "\n    " + strip(B["sara@test.com"]));
+  ck("וגם מי שביטלה", same("canc@test.com"));
+  ck("**אישה בלי טלפון, שאינה יכולה להיות בשרת, עדיין מוצגת**, מהגיליון", count(srv, "nophone@test.com") === 1);
+  ck("**הכפילות בגיליון עדיין מוצגת**: שתי שורות, ושני התאריכים", B["dup@test.com"] && B["dup@test.com"].dupRows === 2 && (B["dup@test.com"].dupStarts || []).length === 2, strip(B["dup@test.com"]));
+  ck("ומספר הנשים זהה לגיליון", (srv.women || []).length === (sheetMode.women || []).length, (srv.women || []).length + " / " + (sheetMode.women || []).length);
+
+  const rev0 = (await call({ rev: "1" })).body;
+  ck("**\"היה שינוי?\" מחזיר מספר**", rev0 && rev0.ok === true && rev0.rev !== undefined, strip(rev0));
+  ck("והרשימה נושאת את אותו מספר", String(srv.rev) === String(rev0.rev), srv.rev + " / " + rev0.rev);
+  const sheetGets = sheetCalls.length;
+  const p1 = await push({ ID: "972508800009", F_NAME: "נועה", L_NAME: "חדשה", CF_EMAIL: "new@test.com", [START]: sunday + " 12:00:00", "SMART": "TRUE" });
+  ck("מניצ'ט שולח אישה חדשה, שאינה בגיליון", p1.code === 200, strip(p1.body));
+  const rev1 = (await call({ rev: "1" })).body;
+  ck("**המספר זז**", Number(rev1.rev) > Number(rev0.rev), rev0.rev + " → " + rev1.rev);
+  const after = await listFull();
+  ck("**והיא מופיעה במסך מיד**, פעם אחת", count(after, "new@test.com") === 1, strip(byEmail(after)["new@test.com"]));
+  ck("עם המסלול שמניצ'ט שלח", byEmail(after)["new@test.com"].solo === 10);
+  ck("**בלי ללכת לגוגל**", sheetCalls.length === sheetGets, sheetCalls.length - sheetGets + " קריאות");
+
+  SHEET += `972508800009,נועה,חדשה,new@test.com,${sunday} 12:00:00,,,,,TRUE\n`;
+  delete S["sheet:csv:v1"];
+  await call({}, "POST", { mcImport: true });
+  ck("**כשהגיליון מתעדכן היא עדיין פעם אחת בלבד**", count(await listFull(), "new@test.com") === 1);
+
+  await push({ ID: "972508800005", F_NAME: "החליפה", L_NAME: "מייל", CF_EMAIL: "new2@test.com", [START]: sunday + " 12:00:00" });
+  const moved = await listFull();
+  ck("**מייל שהשתנה במניצ'ט: היא מוצגת פעם אחת, בכתובת החדשה**", count(moved, "new2@test.com") === 1 && count(moved, "old@test.com") === 0, count(moved, "new2@test.com") + "/" + count(moved, "old@test.com"));
+
+  delete S["sheet:csv:v1"];
+  const g0 = sheetCalls.length;
+  const noCache = await listFull();
+  ck("**בלי עותק מוכן של הגיליון המסך עדיין מהשרת, ואינו מחכה לגוגל**", noCache.source === "server" && sheetCalls.length === g0, noCache.source + " / " + (sheetCalls.length - g0));
+  ck("ומה שמגיע רק מהגיליון נשמר מהפעם הקודמת: האישה בלי טלפון", count(noCache, "nophone@test.com") === 1);
+  ck("והכפילות", byEmail(noCache)["dup@test.com"] && byEmail(noCache)["dup@test.com"].dupRows === 2);
+
+  const r0 = Number((await call({ rev: "1" })).body.rev);
+  const sv = await call({}, "POST", { email: "sara@test.com", group: "ג", by: "טלי" });
+  ck("שמירה של פקידה", sv.body && sv.body.ok, strip(sv.body));
+  ck("**מזיזה את המספר**, כדי שמסכים פתוחים אחרים יתעדכנו", Number((await call({ rev: "1" })).body.rev) > r0);
+
+  const add = await call({}, "POST", { addWoman: { first: "נועה", email: "new2@test.com", start: sunday }, by: "טלי" });
+  ck("**\"הוספת משתתפת\" מסרבת לכתובת שכבר בשרת**", add.body && add.body.error === "email_taken", strip(add.body));
+
+  OVERSIZE.add("mc:slim");
+  const bad = await listFull();
+  ck("**תקלה בקריאת השרת: המסך מהגיליון, ולא ריק**", bad.ok === true && bad.source === "sheet" && (bad.women || []).length > 0, strip({ ok: bad.ok, source: bad.source }));
+  OVERSIZE.delete("mc:slim");
+  redisDown = true;
+  const down = await listFull();
+  redisDown = false;
+  ck("**Upstash נופל לגמרי: המסך מהגיליון, ולא ריק**", down.ok === true && (down.women || []).length > 0, strip({ ok: down.ok, n: (down.women || []).length }));
+  delete process.env.MC_SYNC_SECRET;
+  ck("**בלי MC_SYNC_SECRET המסך מהגיליון**, כמו השער", (await listFull()).source === "sheet");
+  process.env.MC_SYNC_SECRET = "s3cret-mc";
+  const lead = await push({ ID: "972508800099", F_NAME: "ליד", CF_EMAIL: "lead@test.com" });
+  ck("ליד אינו נכנס לעותק הרזה", lead.code === 200 && !(H["mc:slim"] || {})["972508800099"], strip(lead.body));
 }
 
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);

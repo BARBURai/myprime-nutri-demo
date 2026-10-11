@@ -826,7 +826,7 @@ function load(){
   return fetch("/api/admin?key="+encodeURIComponent(KEY)).then(function(r){
     if(r.status===401) throw new Error("unauthorized");
     return r.json();
-  }).then(function(d){ if(!d.ok) throw new Error(d.error||"failed"); DATA=d;
+  }).then(function(d){ if(!d.ok) throw new Error(d.error||"failed"); DATA=d; if(d.rev!=null) REV=String(d.rev);
     // שורת המצב של מניצ'ט נטענת פעם אחת, ברקע, ואינה מעכבת את הרשימה.
     if(MCST===null){ MCST = {}; loadMc().then(function(){ if(typeof render==="function") render(); }); }
   });
@@ -2590,10 +2590,64 @@ function render(){
   }; });
 }
 
+// ===== המסך מתעדכן לבד. v7.95 =====
+// **רון: "למה אין מנגנון שבודק את השרת ואם יש בו שינוי הוא עושה ריפרוש".** כל 15 שניות,
+// רק כשהלשונית מוצגת, המסך שואל מספר אחד: מונה השינויים. **רק כשהוא זז הרשימה נטענת.**
+//
+// **ולעולם לא באמצע הקלדה.** המסך מצויר מחדש כולו, ולכן טקסט שלא נשמר היה נמחק תחת האצבע,
+// בדיוק המלכודת של v6.72 ושל v7.18. כשיש כזה, הרענון ממתין לבדיקה הבאה. הכרטיס הפתוח ומצבי
+// העריכה שמורים במשתנים, ולכן הם נשארים גם אחרי ציור מחדש, כמו אחרי כל שמירה היום.
+var REV = null, REV_PENDING = false, REV_BUSY = false;
+var REV_MS = (typeof window !== "undefined" && window.__ADMIN_REV_MS) || 15000; // שכבה 3 מקצרת אותו
+function screenBusy(){
+  var a = document.activeElement;
+  if(a && a !== document.body && a.id !== "q" && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
+  var els = app.querySelectorAll("input,textarea,select");
+  for(var i=0;i<els.length;i++){
+    var e = els[i];
+    if(e.id === "q") continue;
+    if(e.tagName === "SELECT"){
+      // תפריט שאין בו אפשרות מסומנת מראש פותח על הראשונה. זה מצב ההתחלה ולא שינוי שלה,
+      // וזה מה שעצר את הרענון בכל כרטיס פתוח, בגלל תפריט "פעולות מהירות".
+      var def = -1;
+      for(var j=0;j<e.options.length;j++) if(e.options[j].defaultSelected){ def = j; break; }
+      if(def === -1) def = 0;
+      if(e.selectedIndex !== def) return true;
+    } else if(e.type === "checkbox" || e.type === "radio"){
+      if(e.checked !== e.defaultChecked) return true;
+    } else if(e.value !== e.defaultValue) return true;
+  }
+  return false;
+}
+function revTick(){
+  if(document.hidden || !DATA || !KEY || REV_BUSY) return;
+  REV_BUSY = true;
+  fetch("/api/admin?rev=1&key="+encodeURIComponent(KEY)).then(function(r){ return r.json(); }).then(function(d){
+    if(d && d.ok && d.rev != null && String(d.rev) !== REV) REV_PENDING = true;
+    if(!REV_PENDING) return;
+    if(screenBusy()) return;
+    REV_PENDING = false;
+    // **תקלה בטעינה אינה מוחקת את מה שעל המסך**: DATA מתחלף רק כשהתשובה תקינה.
+    return load().then(function(){
+      if(screenBusy()){ REV_PENDING = true; return; }
+      // שדה החיפוש מצויר מחדש עם הטקסט שבו. אם הסמן היה בו, הוא חוזר לאותו מקום.
+      var a = document.activeElement, inQ = a && a.id === "q", pos = inQ ? a.selectionStart : 0;
+      render();
+      if(inQ){ var n = document.getElementById("q"); if(n){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(e){} } }
+    });
+  }).catch(function(){}).then(function(){ REV_BUSY = false; });
+}
+var REV_TIMER = null;
+function startRevPoll(){
+  if(REV_TIMER) return;
+  REV_TIMER = setInterval(revTick, REV_MS);
+  document.addEventListener("visibilitychange", function(){ if(!document.hidden) revTick(); });
+}
+
 function boot(){
   if(!KEY){ askKey(); return; }
   app.innerHTML = '<div class="empty">טוען...</div>';
-  load().then(render).catch(function(e){
+  load().then(render).then(startRevPoll).catch(function(e){
     if(String(e.message)==="unauthorized"){ KEY=""; try{ localStorage.removeItem("mp_admin_key"); }catch(x){} askKey("המפתח שגוי. נסי שוב."); }
     else app.innerHTML = '<div class="empty">לא הצלחתי לטעון את הנתונים. נסי לרענן.</div>';
   });
