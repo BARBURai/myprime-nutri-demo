@@ -36,7 +36,9 @@ const KEYS = Object.keys(SHOTS);
 const TAIL = ["sheet", "more", "add", "home"];
 const PATHS = { share: ["share", ...TAIL], dots: ["dots", "dotsMenu", ...TAIL] };
 
-const BOX = { w: 1000, h: 1440 };
+// גובה האזור נבחר כך שכל הבלוק, כרטיס וצילום, נכנס במסך אחד של אייפון בלי לגלול. רון:
+// "נחתך לי או החלק העליון או החלק התחתון". ב-1440 הבלוק היה כ-760 פיקסלים.
+const BOX = { w: 1000, h: 1080 };
 // מאיץ לבדיקות בדפדפן בלבד, כדי שתרחיש לא יחכה דקה שלמה. אצל אישה אמיתית הוא תמיד 1.
 const SPEED = (() => { try { return Number(localStorage.getItem("mp_walk_speed")) || 1; } catch { return 1; } })();
 const XF = 0.8;
@@ -52,7 +54,10 @@ KEYS.forEach((k) => {
 
 function cam(s, lt) {
   const k = seg(lt, ...T.zoom);
-  const z = 1 + ((s.zoom || 1) - 1) * k;
+  // בסוף ההתקרבות התמונה תמיד ממלאת את רוחב המסגרת, אחרת נשאר פס ריק בצד. במסגרת
+  // הנמוכה צילום מסך שלם צר ממנה, ולכן ההתקרבות לעולם אינה קטנה מהיחס הזה.
+  const zEnd = Math.max(s.zoom || 1, BOX.w / (s.w * s.f));
+  const z = 1 + (zEnd - 1) * k;
   const L = [s.tap[0] * s.f, s.tap[1] * s.f];
   const P = [s.ox + L[0], s.oy + L[1]];
   const C = [BOX.w / 2, BOX.h * 0.45];
@@ -192,9 +197,9 @@ export default function IosInstallWalk({ font }) {
     ["ring", "pill", "ripple", "finger", "arrow", "dim"].forEach((id) => { ov.current[id].style.opacity = 0; });
   }, [phase]);
 
-  const card = { position: "relative", background: "#fff", border: `3px solid ${PINK}`, borderRadius: 18, padding: "26px 14px 14px", textAlign: "center", boxShadow: "0 6px 18px rgba(168,66,92,.18)", marginTop: 22, minHeight: 92 };
+  const card = { position: "relative", background: "#fff", border: `3px solid ${PINK}`, borderRadius: 18, padding: "24px 12px 12px", textAlign: "center", boxShadow: "0 6px 18px rgba(168,66,92,.18)", marginTop: 20 };
   const badge = { position: "absolute", top: -22, left: "50%", marginLeft: -22, width: 44, height: 44, borderRadius: "50%", background: PINK, color: "#fff", fontWeight: 700, fontSize: 26, display: "flex", alignItems: "center", justifyContent: "center", border: "3px solid #fff", boxSizing: "border-box" };
-  const optBtn = { display: "block", width: "100%", border: `2.5px solid ${PINK}`, background: "#fff", borderRadius: 16, padding: 10, marginBottom: 12, cursor: "pointer", fontFamily: font };
+  const optBtn = { display: "block", width: "100%", border: `2.5px solid ${PINK}`, background: "#fff", borderRadius: 16, padding: 8, marginBottom: 12, cursor: "pointer", fontFamily: font, boxShadow: "0 4px 12px rgba(168,66,92,.2)" };
 
   return (
     <div data-walk="ios" style={{ maxWidth: 340, margin: "0 auto", fontFamily: font }}>
@@ -203,11 +208,11 @@ export default function IosInstallWalk({ font }) {
       </div>
       <div ref={(el) => { cap.current.card = el; }} style={card}>
         <div ref={(el) => { cap.current.num = el; }} style={badge}>1</div>
-        <div ref={(el) => { cap.current.small = el; }} style={{ fontSize: 15.5, fontWeight: 500, lineHeight: 1.45, color: PINK_D, marginBottom: 6 }} />
-        <div ref={(el) => { cap.current.big = el; }} style={{ fontSize: 21, fontWeight: 700, lineHeight: 1.4, color: INK }}>{SHOTS.s1.big}</div>
-        <div ref={(el) => { cap.current.extra = el; }} style={{ fontSize: 17, fontWeight: 500, lineHeight: 1.45, color: INK, marginTop: 6, display: "none" }} />
+        <div ref={(el) => { cap.current.small = el; }} style={{ fontSize: 14.5, fontWeight: 500, lineHeight: 1.4, color: PINK_D, marginBottom: 4 }} />
+        <div ref={(el) => { cap.current.big = el; }} style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.35, color: INK }}>{SHOTS.s1.big}</div>
+        <div ref={(el) => { cap.current.extra = el; }} style={{ fontSize: 16, fontWeight: 500, lineHeight: 1.4, color: INK, marginTop: 4, display: "none" }} />
       </div>
-      <div ref={wrap} style={{ position: "relative", width: "100%", height: BOX.h * scale, marginTop: 14, borderRadius: 16, overflow: "hidden", background: "#F7EEF0" }}>
+      <div ref={wrap} style={{ position: "relative", width: "100%", height: BOX.h * scale, marginTop: 10, borderRadius: 16, overflow: "hidden", background: "#F7EEF0" }}>
         <div style={{ position: "absolute", top: 0, right: 0, width: BOX.w, height: BOX.h, transform: `scale(${scale})`, transformOrigin: "top right", direction: "ltr" }}>
           {KEYS.map((k) => (
             <div key={k} ref={(el) => { layers.current[k] = el; }} style={{ position: "absolute", left: 0, top: 0, transformOrigin: "0 0", opacity: k === "s1" ? 1 : 0, transform: `translate(${SHOTS[k].ox}px,${SHOTS[k].oy}px)` }}>
@@ -230,19 +235,23 @@ export default function IosInstallWalk({ font }) {
             </g>
           </svg>
         </div>
+        {/* שני הכפתורים מתנפחים אחד אחרי השני, כדי שיהיה ברור שהם כפתורים ושצריך
+            להקיש על אחד מהם. רון: "זה לא ברור שהיא צריכה ללחוץ על אחד מהכפתורים". */}
+        <style>{`@keyframes mpWalkPulse{0%,50%,100%{transform:scale(1);box-shadow:0 4px 12px rgba(168,66,92,.2)}20%{transform:scale(1.06);box-shadow:0 8px 26px rgba(212,93,121,.55)}}
+          .mp-walk-pulse{animation:mpWalkPulse 2.4s ease-in-out infinite}.mp-walk-pulse2{animation-delay:1.2s}`}</style>
         {phase === "choice" && (
           <div style={{ position: "absolute", inset: 0, background: "rgba(250,243,244,.97)", padding: 12, display: "flex", flexDirection: "column", justifyContent: "center", direction: "rtl" }}>
             {[["share", "bar-share.png", "הסרגל התחתון של ספארי, עם כפתור השיתוף"], ["dots", "bar-dots.png", "הסרגל התחתון של ספארי במצב מכווץ, עם שלוש נקודות"]].map(([p, img, alt]) => (
-              <button key={p} data-walk-choice={p} onClick={() => choose(p)} style={optBtn}>
+              <button key={p} data-walk-choice={p} onClick={() => choose(p)} className={"mp-walk-pulse" + (p === "dots" ? " mp-walk-pulse2" : "")} style={optBtn}>
                 <img src={DIR + img} alt={alt} style={{ display: "block", width: "100%", borderRadius: 10 }} />
-                <div style={{ marginTop: 8, fontSize: 17, fontWeight: 700, color: PINK_D }}>זה מה שאני רואה</div>
+                <div style={{ marginTop: 8, background: PINK, color: "#fff", borderRadius: 999, padding: "7px 12px", fontSize: 17, fontWeight: 700 }}>זה מה שאני רואה</div>
               </button>
             ))}
           </div>
         )}
       </div>
       {phase === "end" && (
-        <button data-walk-replay onClick={replay} style={{ display: "block", margin: "12px auto 0", border: `2px solid ${PINK}`, background: "#fff", color: PINK_D, borderRadius: 12, padding: "10px 22px", fontSize: 16, fontWeight: 700, fontFamily: font, cursor: "pointer" }}>לצפות שוב</button>
+        <button data-walk-replay onClick={replay} style={{ display: "block", margin: "10px auto 0", border: `2px solid ${PINK}`, background: "#fff", color: PINK_D, borderRadius: 12, padding: "10px 22px", fontSize: 16, fontWeight: 700, fontFamily: font, cursor: "pointer" }}>לצפות שוב</button>
       )}
     </div>
   );
