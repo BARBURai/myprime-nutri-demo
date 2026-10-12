@@ -733,7 +733,7 @@ CHECKS.push({
     const clerk = await c.page.locator("[data-nfopen]").count();
     await c.ctx.close();
     const errs = o.errors.concat(c.errors);
-    return { ok: counts0 && btn0 && allDone && pre === "שרה" && picked && rowGone && kept === "אבן-חן" && saved && clerk === 0 && !errs.length,
+    return { ok: counts0 && btn0 && allDone && pre === "שרה" && picked && rowGone && kept === "אבן-חן" && saved && clerk === 1 && !errs.length,
       detail: `מספרים ${counts0} · כפתור ${btn0} · כולן ${allDone} (${fixCalls} קריאות) · מוכן מראש "${pre}" · בחירה ${picked} · שורה ירדה ${rowGone} · נשמר בהקלדה "${kept}" · נשמר ${saved} · פקידה ${clerk} · שגיאות ${errs[0] || "אין"}` };
   },
 });
