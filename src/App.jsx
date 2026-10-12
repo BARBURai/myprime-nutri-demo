@@ -734,7 +734,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.12";
+const VERSION = "8.13";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1378,6 +1378,12 @@ function InstallGate({ onSkip }) {
               <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
               <li>בחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
+              {/* שלב 6 היה קופסה נפרדת מתחת לשלבים (OpenFromIconNote), ורון ביקש אותו
+                  כשלב בתוך הרשימה, עם אייקון גדול יותר. אותו נוסח, מילה במילה. */}
+              <li style={{ fontWeight: 600, color: C.brandD }}>
+                אחרי ההתקנה, עברי למסך הבית של הטלפון (או לרשימת כל האפליקציות), חפשי את אפליקציית מיי פריים 360 עם האייקון הזה, ולחצי עליו - ומשם נמשיך יחד 💜
+                <img data-step6-icon src="/icon-192.png" alt="אייקון מיי פריים 360" width={60} height={60} style={{ display: "block", borderRadius: 13, margin: "8px 0 2px" }} />
+              </li>
             </ol>
           </div>
         ) : isSamsungBrowser() ? (
@@ -1393,14 +1399,15 @@ function InstallGate({ onSkip }) {
             </ol>
           </div>
         )}
-        <OpenFromIconNote />
+        {!(isIOS && !iosOtherBrowser()) && <OpenFromIconNote />}
         {/* באייפון זו אנימציה בתוך המסך ולא סרטון מבאני, כי בשלב 2 היא עוצרת ושואלת
             איזה סרגל היא רואה, וממשיכה רק במסלול שלה. סרטון הראה את שני המסלולים ברצף,
             ומי שיש לה אחד חיפשה את השני. ראה src/features/IosInstallWalk.jsx. */}
         {(isIOS || vid) && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>ואותם שלבים בסרטון קצר</div>
-            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>אם נוח לך לראות במקום לקרוא, הסרטון מראה כל שלב על המסך.</p>
+            <div data-video-head style={{ fontSize: 23, fontWeight: 800, color: C.brandD, textAlign: "center", lineHeight: 1.35, marginBottom: 4 }}>ואותם שלבים בסרטון קצר</div>
+            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, textAlign: "center", margin: "0 0 4px" }}>אם נוח לך לראות במקום לקרוא, הסרטון מראה כל שלב על המסך.</p>
+            <div style={{ display: "flex", justifyContent: "center", color: C.brandD, marginBottom: 8 }}><ChevronDown size={34} strokeWidth={2.8} /></div>
             {isIOS ? <IosInstallWalk font={fontStack} /> : <InstallVideo videoId={vid} />}
           </div>
         )}
