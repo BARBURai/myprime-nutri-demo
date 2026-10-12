@@ -10,6 +10,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { RECIPES } from "./recipes";
 import { SWEETS } from "./sweets";
+import IosInstallWalk from "./features/IosInstallWalk";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
 import { GLOW_STARTED_KEY, hasGlow, glowStarted } from "./content/glow";
@@ -733,7 +734,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.08";
+const VERSION = "8.12";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1301,8 +1302,10 @@ function InstallGuideModal({ onClose }) {
 // שני סרטוני ההתקנה, בספרייה של באני. מזהה ריק פירושו שאין סרטון למערכת ההפעלה הזאת,
 // ואז לא מוצג כלום והמסך זהה למה שהיה. אלה אינם סרטוני בונוס, ולכן api/bunny-token.js
 // חותם עליהם בלי לדרוש מייל, וזה חשוב: המסך הזה מוצג לפני שהיא בכלל הזינה מייל.
+// באייפון אין סרטון מ-v8.10: ההדרכה היא אנימציה בתוך המסך (IosInstallWalk). הסרטון
+// הישן בבאני, 31e51696-6f76-4209-a8c9-cec1d1c3b3f8, הראה שישה שלבים לפי הנוסח הישן.
 const INSTALL_VIDEO = {
-  ios: "31e51696-6f76-4209-a8c9-cec1d1c3b3f8",
+  ios: "",
   android: "a4580411-9255-4ef1-a862-b93554cc0c81",
 };
 const INSTALL_VIDEO_RATIO = "1080 / 2340";
@@ -1371,15 +1374,16 @@ function InstallGate({ onSkip }) {
             <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 6 }}>אייפון (Safari)</div>
             <ol style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.8, margin: 0, paddingInlineStart: 20 }}>
               <li>ודאי שאת בדפדפן Safari.</li>
-              <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions />
-                {/* **הסרטון מראה מסלול אחד מתוך השניים.** הוא הורכב מצילומי מסך של טלפון
-                    שהסרגל שלו מכווץ, ולכן אישה שרואה סרגל פרוש עם כפתור השיתוף רואה בו
-                    משהו אחר ממה שיש אצלה. **המשפט מופיע רק כאן, במסך היחיד שיש בו סרטון.** */}
-                {vid && <div style={{ fontSize: 14.5, color: C.faint, marginTop: 6 }}>בסרטון רואים את המסלול של שלוש הנקודות.</div>}
-              </li>
+              <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions /></li>
               <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
               <li>בחרי "הוספה למסך הבית".</li>
               <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
+              {/* שלב 6 היה קופסה נפרדת מתחת לשלבים (OpenFromIconNote), ורון ביקש אותו
+                  כשלב בתוך הרשימה, עם אייקון גדול יותר. אותו נוסח, מילה במילה. */}
+              <li style={{ fontWeight: 600, color: C.brandD }}>
+                אחרי ההתקנה, עברי למסך הבית של הטלפון (או לרשימת כל האפליקציות), חפשי את אפליקציית מיי פריים 360 עם האייקון הזה, ולחצי עליו - ומשם נמשיך יחד 💜
+                <img data-step6-icon src="/icon-192.png" alt="אייקון מיי פריים 360" width={60} height={60} style={{ display: "block", borderRadius: 13, margin: "8px 0 2px" }} />
+              </li>
             </ol>
           </div>
         ) : isSamsungBrowser() ? (
@@ -1395,12 +1399,16 @@ function InstallGate({ onSkip }) {
             </ol>
           </div>
         )}
-        <OpenFromIconNote />
-        {vid && (
+        {!(isIOS && !iosOtherBrowser()) && <OpenFromIconNote />}
+        {/* באייפון זו אנימציה בתוך המסך ולא סרטון מבאני, כי בשלב 2 היא עוצרת ושואלת
+            איזה סרגל היא רואה, וממשיכה רק במסלול שלה. סרטון הראה את שני המסלולים ברצף,
+            ומי שיש לה אחד חיפשה את השני. ראה src/features/IosInstallWalk.jsx. */}
+        {(isIOS || vid) && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>ואותם שלבים בסרטון קצר</div>
-            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, marginBottom: 10 }}>אם נוח לך לראות במקום לקרוא, הסרטון מראה כל שלב על המסך.</p>
-            <InstallVideo videoId={vid} />
+            <div data-video-head style={{ fontSize: 23, fontWeight: 800, color: C.brandD, textAlign: "center", lineHeight: 1.35, marginBottom: 4 }}>ואותם שלבים בסרטון קצר</div>
+            <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.6, textAlign: "center", margin: "0 0 4px" }}>אם נוח לך לראות במקום לקרוא, הסרטון מראה כל שלב על המסך.</p>
+            <div style={{ display: "flex", justifyContent: "center", color: C.brandD, marginBottom: 8 }}><ChevronDown size={34} strokeWidth={2.8} /></div>
+            {isIOS ? <IosInstallWalk font={fontStack} /> : <InstallVideo videoId={vid} />}
           </div>
         )}
         <a href={waHref} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "#25D366", color: "#fff", borderRadius: 12, padding: "13px", fontSize: 15.5, fontWeight: 700, textDecoration: "none", marginBottom: 10 }}>

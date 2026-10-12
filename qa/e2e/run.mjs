@@ -1604,18 +1604,18 @@ const CHECKS = [
       await page.waitForTimeout(3000);
       const intro = await page.locator("text=/ואותם שלבים בסרטון קצר/").count();
       const frame = await page.locator('iframe[title="סרטון התקנה"]').count();
+      // באייפון אין נגן מ-v8.10 אלא אנימציה בתוך המסך, ולכן היא שתופסת את מקומו
+      const walk = await page.locator('[data-walk="ios"]').count();
       const plain = await page.locator("text=/^אייפון \\(Safari\\)$|^אנדרואיד \\(Chrome\\)$/").count();
       const list = await page.locator("ol li").count();
       const shots = await page.locator('img[src*="/guides/install-ios-"]').count();
-      // הסרטון הורכב מצילומי מסך של טלפון שהסרגל שלו מכווץ, ולכן הוא מראה מסלול
-      // אחד מתוך השניים. המשפט הזה אומר את זה, ומופיע רק במסך שיש בו סרטון.
       const vidNote = await page.locator("text=בסרטון רואים את המסלול של שלוש הנקודות").count();
       // הכלל החדש: ההנחיות הכתובות קודם והסרטון אחריהן. הסרטון מצלם מסך טלפון
       // שלם, ולכן כשהוא ראשון הוא דוחף את השלבים אל מחוץ לתמונה, וזה בדיוק מה
       // שרון תפס בבדיקה. השוואת המיקום היא על סדר האלמנטים בדף ולא על העין.
       const stepsFirst = await page.evaluate(() => {
         const ol = document.querySelector("ol");
-        const f = document.querySelector('iframe[title="סרטון התקנה"]');
+        const f = document.querySelector('iframe[title="סרטון התקנה"], [data-walk="ios"]');
         if (!ol || !f) return null;
         return !!(ol.compareDocumentPosition(f) & Node.DOCUMENT_POSITION_FOLLOWING);
       });
@@ -1623,14 +1623,70 @@ const CHECKS = [
       await context.close();
       // מערכת הפעלה שאין לה עדיין מזהה סרטון חייבת להיראות בדיוק כמו לפני התוספת:
       // או פתיח ונגן, או אף אחד מהם. אין חצי מסך. הכותרת היא תמיד הרגילה.
-      const full = intro === 1 && frame === 1 && stepsFirst === true;
-      const none = intro === 0 && frame === 0;
+      const player = isIOS ? walk === 1 && frame === 0 : frame === 1 && walk === 0;
+      const full = intro === 1 && player && stepsFirst === true;
+      const none = intro === 0 && frame === 0 && walk === 0;
       // באייפון שתי התמונות של הסרגל חייבות להיות שם, כי בלעדיהן ההנחיה חוזרת
       // לתאר צורה במקום מקום, וזה מה ששלח משתתפת לכפתור ה-AirPlay שעל הסרטון.
       const shotsOk = isIOS ? shots === 2 : true;
-      // ובאנדרואיד הוא לא מופיע כלל, כי שם אין שלב מפוצל ואין מה להבהיר.
-      const noteOk = isIOS ? (full ? vidNote === 1 : vidNote === 0) : vidNote === 0;
+      // מ-v8.10 המשפט ירד: ההדרכה באייפון שואלת איזה סרגל היא רואה ומראה רק את המסלול
+      // שלה, ולכן אין יותר מסלול אחד שצריך להסביר. ובאנדרואיד הוא מעולם לא הופיע.
+      const noteOk = vidNote === 0;
       return { ok: (full || none) && plain === 1 && list >= 4 && shotsOk && noteOk, detail: `${full ? "סרטון אחרי השלבים" : none ? "בלי סרטון (אין עדיין מזהה)" : `לא עקבי: פתיח ${intro}, נגן ${frame}, השלבים ראשונים ${stepsFirst}`} · ${list} שלבים · תמונות ${shots} · הערת הסרטון ${vidNote}` };
+    },
+  },
+  {
+    // v8.10: the iPhone install guide is an animation on the screen and not a Bunny video,
+    // so that at step 2 it stops and asks which Safari bar she sees, and plays only her
+    // path. Ron: a woman who has one bar went looking for the other one. Both sides are
+    // asserted in one run: before she answers nothing of step 2 is shown, and after she
+    // picks the three dots the share-button path never appears. Then "לצפות שוב" restarts.
+    name: "הדרכת ההתקנה באייפון עוצרת בשלב 2 וממשיכה רק במסלול שנבחר",
+    async run(browser, device) {
+      const isIOS = /iphone|ipad|ipod/i.test(device.userAgent || "");
+      if (!device.isMobile || !isIOS) return { skip: true, detail: "ההדרכה מוצגת באייפון בלבד" };
+      const context = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+      await context.route("**/api/**", (route) => {
+        const url = route.request().url();
+        const json = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+        if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate: startForDay(10) });
+        return json({ ok: true });
+      });
+      await context.addInitScript(() => {
+        localStorage.setItem("myprime_access_email", "qa@myprime.co.il");
+        localStorage.removeItem("myprime_install_ack");
+        localStorage.setItem("mp_walk_speed", "6");
+      });
+      const page = await context.newPage();
+      await page.goto(BASE, { waitUntil: "domcontentloaded" });
+      const walk = page.locator('[data-walk="ios"]');
+      await walk.waitFor({ timeout: 15000 });
+      await walk.scrollIntoViewIfNeeded();
+      const text = async () => (await walk.innerText()).replace(/\s+/g, " ");
+      const first = await text();
+      await page.locator("[data-walk-choice]").first().waitFor({ timeout: 15000 });
+      const atChoice = await text();
+      const choices = await page.locator("[data-walk-choice]").count();
+      await page.locator('[data-walk-choice="dots"]').click();
+      const seen = new Set();
+      let replay = 0;
+      for (let i = 0; i < 200 && !replay; i++) {
+        seen.add(await text());
+        replay = await page.locator("[data-walk-replay]").count();
+        await page.waitForTimeout(150);
+      }
+      const all = [...seen].join(" | ");
+      await page.locator("[data-walk-replay]").click().catch(() => {});
+      await page.waitForTimeout(300);
+      const again = await text();
+      const againChoices = await page.locator("[data-walk-choice]").count();
+      await context.close();
+      const s1 = first.includes("ודאי שאת בדפדפן Safari.");
+      const stopped = choices === 2 && atChoice.includes("מה את רואה בתחתית המסך?") && atChoice.includes("הקישי על התמונה שנראית כמו אצלך.") && !atChoice.includes("הקישי על הכפתור המסומן");
+      const onlyDots = all.includes("ואם את רואה רק שלוש נקודות") && !all.includes("אם את רואה את הסרגל הזה");
+      const reachedEnd = all.includes("בחרי \"הוספה למסך הבית\".") && replay === 1;
+      const restarted = again.includes("ודאי שאת בדפדפן Safari.") && againChoices === 0;
+      return { ok: s1 && stopped && onlyDots && reachedEnd && restarted, detail: (reachedEnd ? "" : all.slice(-300) + " ### ") + `שלב 1 ${s1} · עצירה ${stopped} · רק שלוש הנקודות ${onlyDots} · הגיעה לסוף ${reachedEnd} · מתחילה שוב ${restarted}` };
     },
   },
   {
@@ -2036,7 +2092,9 @@ const CHECKS = [
         const chromeSteps = await page.locator("text=ודאי שאת בדפדפן Chrome").count();
         const copyBtn = await page.getByRole("button", { name: /העתקת הקישור/ }).count();
         const iosNote = await page.locator("text=מתקינים רק דרך Safari").count();
-        const iosSteps = await page.locator("text=ודאי שאת בדפדפן Safari").count();
+        // נספר בתוך ההנחיות הכתובות בלבד. מ-v8.10 אותו משפט מופיע גם בכרטיס של הדרכת
+        // האנימציה, שמוצגת באייפון בכל מקרה, בדיוק כמו הסרטון שהיה שם לפניה.
+        const iosSteps = await page.locator("ol li", { hasText: "ודאי שאת בדפדפן Safari" }).count();
         await context.close();
         return { note, chromeSteps, copyBtn, iosNote, iosSteps };
       };
