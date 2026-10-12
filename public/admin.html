@@ -1630,7 +1630,18 @@ function render(){
       '<div class="sthead">מנוי חודשי: '+esc(head)+'</div>'+
       rows.map(function(r){ return '<div class="stline"><span>'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>'; }).join("")+
       (s.status === "active" ? '<button class="btn" data-subcancel="'+esc(w.email)+'" data-subuntil="'+esc(s.paidUntil)+'">ביטול מנוי</button>' : '')+
+      (s.status === "cancelled" ? '<button class="btn" data-copy="'+esc(subCancelMsg(w))+'">העתקת הודעה אליה</button>' : '')+
     '</div>';
+  }
+
+  // ההודעה אליה אחרי ביטול, בנוסח שרון אישר. v8.14.
+  function subCancelMsg(w){
+    var name = String(w.first||"").trim();
+    return 'היי'+(name?' '+name:'')+' 🌸\n'+
+      'המנוי החודשי שלך בוטל, ולא יהיו חיובים נוספים.\n'+
+      'הגישה שלך לאפליקציה נשארת פתוחה עד '+il(w.sub.paidUntil)+', ואפשר להמשיך להשתמש בה כרגיל עד אז.\n'+
+      'אם תרצי לחזור בהמשך, אנחנו כאן.\n'+
+      'צוות מיי פריים';
   }
 
   // וההיסטוריה, בדרופדאון כדי שלא תעמיס. החלטת רון.

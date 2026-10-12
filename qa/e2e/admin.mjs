@@ -881,6 +881,36 @@ CHECKS.push({
   },
 });
 
+// **כפתור ההודעה אחרי ביטול. v8.14.** מופיע רק במנוי שבוטל, ומעתיק את הנוסח שרון אישר עם השם
+// ועם התאריך. ובמנוי פעיל הוא אינו קיים, כי שם היא עוד לא ביטלה.
+CHECKS.push({
+  name: "מנוי חודשי: הודעה אליה אחרי ביטול",
+  async run(browser, device) {
+    const SUB = { status: "cancelled", paidUntil: "2026-11-16", lastCharge: "2026-10-12", firstCharge: "2026-10-12", count: 1, cancelledAt: "2026-10-12", cancelledBy: "טלי", payEmail: "", matched: "email" };
+    const o = await open(browser, device, (d) => { d.women[0].sub = SUB; return d; });
+    await o.page.evaluate(() => { window.__copied = []; navigator.clipboard.writeText = (t) => { window.__copied.push(t); return Promise.resolve(); }; });
+    await o.page.locator('[data-open="lior5066@gmail.com"]').first().click();
+    await o.page.waitForTimeout(400);
+    const card = await o.page.locator(".card.open").innerText();
+    const btn = o.page.locator(".card.open button", { hasText: "העתקת הודעה אליה" });
+    const n = await btn.count();
+    const noCancel = await o.page.locator(".card.open [data-subcancel]").count();
+    if (n) await btn.first().click();
+    await o.page.waitForTimeout(300);
+    const copied = (await o.page.evaluate(() => window.__copied))[0] || "";
+    // ובמנוי פעיל אין כפתור כזה.
+    await o.ctx.close();
+    const o2 = await open(browser, device, (d) => { d.women[0].sub = { ...SUB, status: "active", cancelledAt: "", cancelledBy: "" }; return d; });
+    await o2.page.locator('[data-open="lior5066@gmail.com"]').first().click();
+    await o2.page.waitForTimeout(400);
+    const n2 = await o2.page.locator(".card.open button", { hasText: "העתקת הודעה אליה" }).count();
+    await o2.ctx.close();
+    const WANT = "היי אורלי 🌸\nהמנוי החודשי שלך בוטל, ולא יהיו חיובים נוספים.\nהגישה שלך לאפליקציה נשארת פתוחה עד 16.11.2026, ואפשר להמשיך להשתמש בה כרגיל עד אז.\nאם תרצי לחזור בהמשך, אנחנו כאן.\nצוות מיי פריים";
+    const ok = card.includes("מנוי חודשי: בוטל, גישה עד 16.11.2026") && n === 1 && noCancel === 0 && copied === WANT && n2 === 0 && !o.errors.length && !o2.errors.length;
+    return { ok, detail: `שורה ${card.includes("בוטל, גישה עד 16.11.2026")} · כפתור ${n} · ביטול ${noCancel} · הועתק ${copied === WANT ? "נכון" : JSON.stringify(copied.slice(0, 60))} · בפעיל ${n2} · שגיאות ${o.errors[0] || o2.errors[0] || "אין"}` };
+  },
+});
+
 const browser = await chromium.launch({ executablePath: BROWSER });
 const ONLY = process.env.E2E_ONLY || "";
 const RUN = CHECKS.filter((c) => !ONLY || c.name.includes(ONLY));
