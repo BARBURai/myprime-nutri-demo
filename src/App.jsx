@@ -733,7 +733,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.09";
+const VERSION = "8.10";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2989,6 +2989,13 @@ function parseMealOptions(text) {
 // Gentle photo-budget nudges (the HARD 70 cap is enforced server-side in api/ai.js).
 const PHOTO_HEADSUP_MSG = "הערה קטנה ממני אלייך 💜 שימי לב שכמות התמונות שניתן להעלות במהלך תוכנית הליווי מוגבלת ל-70 תמונות. לאחר מכן תמיד אפשר לתאר לי בטקסט מה אכלת.";
 const PHOTO_END_MSG = "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים.";
+// **מנויה חודשית בתוקף מצלמת גם אחרי יום 70.** החלטת רון, 12 באוקטובר 2026. השער כותב את
+// סוף המנוי בכל כניסה, והתקרה של 30 בחודש נאכפת בשרת (api/ai.js). v8.10.
+function photoEnded(startDate) {
+  if (programDayNumber(startDate, TODAY) <= 70) return false;
+  try { const u = localStorage.getItem("myprime_sub_until") || ""; if (u && TODAY <= u) return false; } catch (e) {}
+  return true;
+}
 function bumpPhotosToday() {
   try {
     let o = {};
@@ -3872,8 +3879,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   };
   const sendAiImage = async (base64, mediaType) => {
     if (aiLoading) return;
-    // Meal photos are available only during the 10-week program (days 1-70). After that: text only.
-    if (programDayNumber(startDate, TODAY) > 70) {
+    // Meal photos are available only during the 10-week program (days 1-70), or to a woman on
+    // the monthly subscription. After that: text only.
+    if (photoEnded(startDate)) {
       setStep("ai");
       setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]);
       return;
@@ -3890,8 +3898,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       setAiApi([...apiMsgs, { role: "assistant", content: r.raw }]);
       setAiMsgs((m) => [...m, { role: "assistant", text: r.reply }]);
       if (r.done && r.items.length) finishItems(r.items);
-      // Gentle nudges only on a real (non-limited) photo analysis.
-      if (!r.limited) {
+      // Gentle nudges only on a real (non-limited) photo analysis, and only inside the
+      // programme: after day 70 the one photographing is on the monthly subscription, whose
+      // cap is 30 a month and not the 70 this message speaks of. v8.10.
+      if (!r.limited && programDayNumber(startDate, TODAY) <= 70) {
         const todayN = bumpPhotosToday();
         let nudge = todayN === 3;
         if (r.photoCount && r.photoCount >= 35 && !photoHeadsup35Seen()) { nudge = true; markPhotoHeadsup35(); }
@@ -4098,7 +4108,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         {step === "method" && (
           <>
             {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { usageBump("ai"); setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
-              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { usageBump("photo"); if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
+              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { usageBump("photo"); if (photoEnded(startDate)) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
               { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => { usageBump("barcode"); setStep("barcode"); } },
               { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => { usageBump("history"); setHistQ(""); setStep("history"); } },
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => { usageBump("search"); setStep("list"); } },
@@ -7290,6 +7300,12 @@ export default function App() {
         // בלי שום צעד ידני.
         setProduct(d.product === "glow" ? "glow" : "360");
         try { localStorage.setItem("myprime_product", d.product === "glow" ? "glow" : "360"); } catch (e) {}
+        // המנוי החודשי, עד מתי. **נכתב מחדש בכל כניסה ונמחק כשאין**, ולכן מנוי שהסתיים
+        // סוגר את הצילום אחרי יום 70 בכניסה הבאה. v8.10.
+        try {
+          if (d.sub && d.sub.until) localStorage.setItem("myprime_sub_until", String(d.sub.until));
+          else localStorage.removeItem("myprime_sub_until");
+        } catch (e) {}
         // Answers the office wrote to notes she left, that she has not read yet. They light
         // the dot on the notes bubble and sit at the top of it until she taps "תודה, הבנתי".
         setReplies(Array.isArray(d.replies) ? d.replies : []);

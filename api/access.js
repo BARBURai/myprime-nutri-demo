@@ -18,6 +18,7 @@
 import { decideAccess } from "./_product.js";
 import { fetchSheetText, findCols, SMART_COLS, accessEnd } from "./_sheet.js";
 import { MC_BYEMAIL, MC_DIFFS, mcShadowKey, diffFields } from "./_mcsync.js";
+import { SUB_HASH, parseRec as parseSubRec } from "./_sub.js";
 // ===== תקרת המתנה ל-Upstash, 3 שניות לפנייה. v7.45 =====
 //
 // **כל פנייה כאן כבר עטופה ב-try/catch שנכשל לצד הפתוח**, ולכן תקלה אינה נועלת אישה.
@@ -612,6 +613,22 @@ export default async function handler(req, res) {
       if (Number.isFinite(gmo) && gmo > 0) glowMonths = gmo;
     }
   } catch (e) { /* fall through to the sheet */ }
+  // **מנוי חודשי מדף התשלום. v8.10.** נקרא לפי הכתובת שהיא נכנסת איתה, כי שם `api/_sub.js`
+  // שומר אותו. **ותקלה בקריאה אינה סוגרת אותה:** היא מסמנת את התשובה `degraded`, והבדיקה
+  // החוזרת באפליקציה לעולם אינה מוציאה אישה על תשובה כזאת. ראה v7.74.
+  let subUntil = "";
+  let subRead = true;
+  {
+    const RUs = process.env.UPSTASH_REDIS_REST_URL, RTs = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (RUs && RTs) {
+      try {
+        const raw = await redis(RUs, RTs, "HGET", SUB_HASH, email);
+        if (raw === undefined) subRead = false;
+        const rec = parseSubRec(raw);
+        if (rec && rec.paidUntil) subUntil = String(rec.paidUntil);
+      } catch (e) { subRead = false; }
+    }
+  }
   const startSunday = parseDateToSunday(clerkStart || startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
 
@@ -631,7 +648,7 @@ export default async function handler(req, res) {
   // לדעת אם צריך לתפוס אותו בכלל.
   const facts = {
     startSunday, cancelled, clerkBlocked, clerkUntil, freeze,
-    extraMonths, solo, glowFull, glowPaid, glowSolo, glowMonths,
+    extraMonths, solo, glowFull, glowPaid, glowSolo, glowMonths, subUntil,
     glowStart: "", today: israelDay(0),
   };
   let glowStart = "";
@@ -650,7 +667,9 @@ export default async function handler(req, res) {
   // וההכרעה הסופית, עכשיו עם שעון הקורס בידיים.
   facts.glowStart = glowStart;
   const decision = decideAccess(facts);
-  const glowOnly = decision.glowOnly;
+  // **מסך הקורס בלבד, ולא "הקורס פתוח לה".** מנויה שקנתה גם את הקורס מקבלת את התוכנית, ואסור
+  // לסמן אותה `glowonly`, אחרת סרטוני התוכנית נחסמים לה. v8.10.
+  const glowOnly = decision.product === "glow";
   // **הקורס המלא נפתח לה ביום 1 ולא לפניו.** לפני זה היא מקבלת בדיוק את מה שיש
   // לה חוץ ממנו: שלושת שיעורי המתנה אם סומנו לה, ואחרת שום דבר מגלו. זה נוסע
   // בשדה `glowFull` עצמו, ולכן המסכים באפליקציה נסגרים מאליהם בלי מסלול נוסף.
@@ -672,7 +691,7 @@ export default async function handler(req, res) {
         await redis(RUx, RTx, "DEL", `glowfull:${email}`);
       } catch (e) { /* ניקוי שנכשל לעולם אינו משנה את התשובה לאישה */ }
     }
-    const degraded = !overridesRead;
+    const degraded = !overridesRead || !subRead;
     if (decision.reason === "frozen") return res.status(200).json({ allowed: false, reason: "frozen", configured: true, back: (freeze && freeze.back) || "", degraded });
     if (decision.reason === "cancelled") return res.status(200).json({ allowed: false, reason: "cancelled", configured: true, degraded });
     return res.status(200).json({ allowed: false, reason: "expired", configured: true, startDate, degraded });
@@ -759,5 +778,5 @@ export default async function handler(req, res) {
 
   // `freeze` travels on so the diary can leave the frozen days out of her day strip and
   // label the days before them for what they are. Nothing of hers is deleted.
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull: glowFullNow, glowSoon: decision.glowSoon, glowSoonSolo: !!decision.glowSoonSolo, product: glowOnly ? "glow" : "360", replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull: glowFullNow, glowSoon: decision.glowSoon, glowSoonSolo: !!decision.glowSoonSolo, product: glowOnly ? "glow" : "360", sub: decision.subOn ? { until: subUntil } : null, replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
 }

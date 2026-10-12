@@ -28,6 +28,7 @@ import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus, importS
 import { readXlsx } from "./_xlsx.js";
 import { parseKey, driveDownload } from "./_gdrive.js";
 import { excelIndex, targets as nameTargets, run as nameRun, mailHtml as nameMail, CAP as NAME_CAP } from "./_namefix.js";
+import { SUB_HASH, SUB_TAG_ID, SUB_PHOTO_LIMIT, secretOk as subSecretOk, handleCharge as subCharge, sweep as subSweep, cancelSub, payRecurringUrl, parseRec as parseSubRec, subStatus, subPhotoKey } from "./_sub.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -112,7 +113,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.09";
+const ADMIN_VERSION = "8.10";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -375,7 +376,7 @@ async function whoIs(key, RU, RT) {
 // these makes her a new person to us: no backup, no usage history, no clerk decisions. Her
 // diary itself is not here - it lives on her phone and is not keyed by address - so it
 // survives the change on the device she is already using.
-const MOVE_HASHES = ["admin:overrides", "admin:seen", "admin:usage"];
+const MOVE_HASHES = ["admin:overrides", "admin:seen", "admin:usage", SUB_HASH];
 async function moveRecords(RU, RT, from, to) {
   const moved = [];
   for (const h of MOVE_HASHES) {
@@ -465,6 +466,67 @@ async function sendReport(subject, html) {
     });
     return r.ok;
   } catch (e) { return false; }
+}
+
+// ===== מה שהמנוי החודשי צריך מהקובץ הזה. v8.10 =====
+// הלוגיקה עצמה ב-`api/_sub.js`, בלי רשת, כדי שבדיקה תריץ אותה מול Redis מדומה.
+function subDeps(RU, RT, by) {
+  const flat = (v) => {
+    const o = {};
+    if (Array.isArray(v)) { for (let i = 0; i < v.length; i += 2) o[v[i]] = v[i + 1]; return o; }
+    return v && typeof v === "object" ? v : o;
+  };
+  return {
+    cmd: (arr) => redisPost(RU, RT, arr),
+    // כל מי שרשומה: מהשרת, ובכל תקלה שם מהגיליון, ועוד ההוספות הידניות. **אם שניהם נופלים
+    // זה זורק**, ודף התשלום מקבל 503 ומנסה שוב, במקום שאישה רשומה תיקרא כמי שאינה קיימת.
+    loadList: async () => {
+      let sheet = null;
+      try { sheet = await serverSheet(RU, RT); } catch (e) { sheet = null; }
+      if (!sheet) sheet = await loadSheet(process.env.ACCESS_SHEET_CSV_URL, RU, RT);
+      const list = (sheet.women || []).map((w) => ({ email: w.email, phone: w.phone }));
+      const manual = flat(await redisPost(RU, RT, ["HGETALL", "admin:manual"]));
+      Object.keys(manual).forEach((em) => { let m = null; try { m = JSON.parse(manual[em]); } catch (e) {} list.push({ email: em, phone: (m && m.phone) || "" }); });
+      return list;
+    },
+    loadEmailOld: async () => flat(await redisPost(RU, RT, ["HGETALL", "admin:emailold"])),
+    tag: async (phone, on) => {
+      if (!process.env.MANYCHAT_TOKEN) return "off";
+      let sub;
+      try { sub = await mcFind(phone); } catch (e) { return "failed"; }
+      if (!sub) return "not_found";
+      try {
+        const r = await mc(on ? "/fb/subscriber/addTag" : "/fb/subscriber/removeTag", { subscriber_id: sub.id, tag_id: SUB_TAG_ID });
+        return r.ok ? "ok" : "failed";
+      } catch (e) { return "failed"; }
+    },
+    mail: (subject, html) => sendReport(subject, html),
+    log: async (email, entry) => {
+      let cur = {};
+      const old = await redis(RU, RT, "HGET", "admin:overrides", email);
+      if (old) cur = JSON.parse(old) || {};
+      const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
+      log.unshift({ at: new Date().toISOString(), by, ...entry });
+      cur.log = log.slice(0, 20);
+      await redisPost(RU, RT, ["HSET", "admin:overrides", email, JSON.stringify(cur)]);
+    },
+    bump: () => bumpRev(RU, RT),
+    pay: async (body) => {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 20000);
+      try {
+        const r = await fetch(payRecurringUrl(process.env), {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-sub-key": process.env.APP_SUB_KEY || "" },
+          body: JSON.stringify(body),
+          signal: ctl.signal,
+        });
+        let j = null;
+        try { j = await r.json(); } catch (e) {}
+        return { status: r.status, json: j };
+      } finally { clearTimeout(timer); }
+    },
+  };
 }
 
 async function nameFix({ RU, RT, live, cap, batch, prefer, skip, by }) {
@@ -570,6 +632,28 @@ export default async function handler(req, res) {
       const out = await mcIngest(req.body, RU, RT);
       return res.status(out.status).json(out.json);
     } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+  }
+  // **המנוי החודשי מדף התשלום. v8.10.** ראה `api/_sub.js`. נבדק במפתח משלו, `APP_SUB_KEY`
+  // בכותרת `x-sub-key`, לפני מפתח המשרד, בדיוק כמו מניצ'ט למעלה. **בלי המשתנה הכתובת סגורה.**
+  // יושב כאן ולא בקובץ חדש, כי בוורסל יש תקרה של 12 פונקציות.
+  if (req.query.subcharge !== undefined) {
+    if (req.method !== "POST") return res.status(405).json({ ok: false });
+    if (!subSecretOk(req, process.env)) return res.status(401).json({ ok: false, error: "unauthorized" });
+    if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
+    try {
+      const out = await subCharge(req.body, subDeps(RU, RT, "דף התשלום"), new Date().toISOString());
+      return res.status(out.status).json(out.json);
+    } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+  }
+  // הסריקה היומית שמורידה את התגית כשהמנוי הסתיים. מוורסל בלבד.
+  if (req.query.subsweep !== undefined) {
+    const auth = req.headers.authorization || "";
+    if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) return res.status(401).json({ ok: false, error: "unauthorized" });
+    if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
+    try {
+      const out = await subSweep(subDeps(RU, RT, "סריקה יומית"), israelDay(0), new Date().toISOString());
+      return res.status(200).json({ ok: true, checked: out.checked, ended: out.ended.length, untagged: out.untagged.length, failed: out.failed.length });
+    } catch (e) { return res.status(500).json({ ok: false, error: "sweep_failed" }); }
   }
   // **תיקון השמות השבועי. v8.00.** ראה `api/_namefix.js`. יושב כאן ולא בקובץ חדש, כי
   // בוורסל יש תקרה של 12 פונקציות. **מוורסל ביום חמישי**, או מהמנהל לתצוגה מקדימה.
@@ -681,6 +765,17 @@ export default async function handler(req, res) {
       const st = await mcStatus(RU, RT, days);
       return res.status(200).json({ ok: true, configured: !!process.env.MC_SYNC_SECRET, ...st });
     } catch (e) { return res.status(200).json({ ok: false, error: "read_failed" }); }
+  }
+
+  // **ביטול מנוי חודשי, מהכרטיס אל דף התשלום. v8.10.** כל מפתח של המשרד, כמו כל פעולה אחרת
+  // במסך. **רק תשובה 200 משם משנה משהו אצלנו**, וכל השאר נאמר לפקידה כביטול שנכשל.
+  if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("subCancel") : req.body.subCancel)) {
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+    if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+    const by = me.owner ? (String((body && body.by) || "").trim().slice(0, 40) || "מנהל") : me.name;
+    const out = await cancelSub({ email: String((body && body.subCancel) || ""), by }, subDeps(RU, RT, by), new Date().toISOString());
+    return res.status(out.status).json(out.json);
   }
 
   // ייבוא הגיליון לשרת, פעם אחת. v7.66. **מנהל בלבד**, וכותב אך ורק ל-mc:.
@@ -1440,7 +1535,7 @@ JSON בלבד, בלי שום טקסט אחר:
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
-  let overrides = {}, seen = {}, emailMap = {}, emailOld = {}, manual = {}, glowStart = {}, mcFlags = {};
+  let overrides = {}, seen = {}, emailMap = {}, emailOld = {}, manual = {}, glowStart = {}, mcFlags = {}, subs = {};
   const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
@@ -1458,6 +1553,8 @@ JSON בלבד, בלי שום טקסט אחר:
     // היום הראשון שבו נכנסה לקורס. **זה אינו תאריך הקנייה**, שאינו קיים אצלנו
     // בשום מקום, אלא הרגע שבו הקורס נפתח לה בפועל. נתפס ב-HSETNX בשער.
     try { glowStart = flat(await redis(RU, RT, "HGETALL", "glow:start")); } catch (e) {}
+    // המנויות החודשיות מדף התשלום. v8.10. **קריאה של מסמך POST**, כי הערכים כוללים רשימת חיובים.
+    try { subs = flat(await redisPost(RU, RT, ["HGETALL", SUB_HASH])); } catch (e) {}
     // **מה שמניצ'ט אומר, גם כשהגיליון מפגר.** קורס האיפור המלא ואפליקציית תזונה, לפי
     // הטלפון. רק כשהחיבור למניצ'ט פעיל, בדיוק כמו בשער. תקלה כאן משאירה את הגיליון לבדו. v7.89.
     if (process.env.MC_SYNC_SECRET) { try { mcFlags = flat(await redis(RU, RT, "HGETALL", "mc:flags")); } catch (e) {} }
@@ -1589,6 +1686,8 @@ JSON בלבד, בלי שום טקסט אחר:
     const glowFullNow = (ovr && ovr.glowFull) ? ovr.glowFull === "1" : (!!w.glowFull || srvFlags.includes("g"));
     const glowPaidNow = (ovr && ovr.glowPaid) ? ovr.glowPaid === "1" : !!w.glowPaid;
     const glowStartAt = glowStart[w.email] || "";
+    // המנוי יושב תחת הכתובת שבתוקף, כמו שהשער קורא אותו.
+    const subRec = parseSubRec(subs[pendingBySheetEmail[w.email] || w.email]);
     const state = decideAccess({
       startSunday: start ? new Date(start + "T00:00:00Z") : null,
       cancelled: !!w.cancelled,
@@ -1602,6 +1701,7 @@ JSON בלבד, בלי שום טקסט אחר:
       glowSolo: !!w.glowSolo,
       glowMonths: w.glowM,
       glowStart: glowStartAt,
+      subUntil: (subRec && subRec.paidUntil) || "",
       today,
     });
     return {
@@ -1658,16 +1758,28 @@ JSON בלבד, בלי שום טקסט אחר:
         preStart: state.preStart,
         glowFullOpen: state.glowFullOpen,
         glowSource: state.glowSource,
+        subOn: !!state.subOn,
+        open360Base: !!state.open360Base,
         end360: state.end360,
         endGlow: state.endGlow,
       },
       glowOverride: (ovr && ovr.glow) ? { glow: ovr.glow, by: ovr.by || "" } : null,
+      // המנוי החודשי, כפי שהכרטיס מציג אותו. **בלי רשימת החיובים המלאה**, שאין לה מה לעשות במסך.
+      sub: subRec ? {
+        status: subStatus(subRec, today), paidUntil: subRec.paidUntil || "", lastCharge: subRec.lastCharge || "",
+        firstCharge: subRec.firstCharge || "", count: Number(subRec.count) || 0, cancelledAt: subRec.cancelledAt || "",
+        cancelledBy: subRec.cancelledBy || "", payEmail: subRec.payEmail || "", matched: subRec.matched || "",
+        photoKey: subPhotoKey(pendingBySheetEmail[w.email] || w.email, subRec),
+      } : null,
       until,
       // `override` is only in force while it carries a date. The log survives a clearing, so
       // the office can always see what was done and by whom.
       override: (ovr && ovr.until) ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "" } : null,
       log: (ovr && Array.isArray(ovr.log)) ? ovr.log : [],
-      expired: !!until && today > until,
+      // **עד מתי היא באמת נכנסת**, כולל המנוי החודשי. `until` נשאר מה שהמשרד והגיליון אומרים,
+      // כי משם הוא נערך. v8.10.
+      accessUntil: (state.subOn && subRec && subRec.paidUntil > until) ? subRec.paidUntil : until,
+      expired: !!until && today > until && !state.subOn,
       needsGroup: !w.cancelled && !group && !solo && (start === thisWeek || start === nextWeek),
       // כפילות בגיליון. `dupRows` הוא כמה שורות נושאות את הכתובת שלה ו-`dupStarts`
       // מה כתוב בכל אחת, ו-`dupPhone` הוא הכתובות האחרות שיושבות על אותו טלפון.
@@ -1722,8 +1834,15 @@ JSON בלבד, בלי שום טקסט אחר:
       const photos = await mget(forAi.map((w) => `ai:photos:${aiEmail(w)}`));
       const days = await mget(forAi.map((w) => `ai:day:${aiEmail(w)}:${today}`));
       forAi.forEach((w, i) => { w.ai = { photos: parseInt(photos[i], 10) || 0, today: parseInt(days[i], 10) || 0 }; });
+      // ומנויה בתוקף: הצילומים של החודש הנוכחי, מאותו מונה ש-api/ai.js עוצר לפיו. v8.10.
+      const subbed = forAi.filter((w) => w.sub && w.sub.status !== "ended");
+      if (subbed.length) {
+        const sp = await mget(subbed.map((w) => w.sub.photoKey));
+        subbed.forEach((w, i) => { w.ai.subPhotos = parseInt(sp[i], 10) || 0; });
+      }
     } catch (e) { /* the line reads "not known", never zero */ }
   }
+  women.forEach((w) => { if (w.sub) delete w.sub.photoKey; });
 
   // The tile and the queue must say the same number. The tile used to add up only the women
   // the list itself holds, and the queue reads the pending hash straight, so a woman who
@@ -1777,7 +1896,7 @@ JSON בלבד, בלי שום טקסט אחר:
   women.forEach((w) => { if (w.dupRows > 1 || (w.dupPhone && w.dupPhone.length)) markIgnore("dup", w.email, w); });
   noEmail.forEach((r) => markIgnore("mail", r.phone, r));
 
-  const listBody = { ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, aiLimits: { photos: PHOTO_LIMIT, day: DAILY_LIMIT }, women, notesTotal, notesOff, noEmail, source, rev };
+  const listBody = { ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, aiLimits: { photos: PHOTO_LIMIT, day: DAILY_LIMIT, subPhotos: SUB_PHOTO_LIMIT }, women, notesTotal, notesOff, noEmail, source, rev };
   return sendList(req, res, listBody);
 }
 

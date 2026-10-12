@@ -22,6 +22,7 @@
 import webpush from "web-push";
 import { isQuietDay, isErev, isErevYomTov, wasYomTov, erevHour } from "./_hebcal.js";
 import { whoKey, WHO_TTL } from "./_pushaudit.js";
+import { SUB_HASH, subOpen, parseRec as parseSubRec } from "./_sub.js";
 
 async function redisCmd(base, token, cmd) {
   const r = await fetch(base, {
@@ -251,6 +252,18 @@ export default async function handler(req, res) {
     });
   } catch (e) { /* unreadable: send as usual rather than silence everyone */ }
 
+  // **מנויות חודשיות מקבלות תזכורת ערב גם אחרי יום 70, וגם בהקפאה.** החלטת רון, 12 באוקטובר
+  // 2026: המנוי גובר על ביטול ועל הקפאה. קריאה אחת לכולן. **תקלה כאן משאירה את הכלל הרגיל**,
+  // כלומר בדיוק מה שהיה נשלח בלי המנוי. v8.10, ראה api/_sub.js.
+  const subbed = new Set();
+  try {
+    const raw3 = await redisCmd(RU, RT, ["HGETALL", SUB_HASH]);
+    const flat3 = {};
+    if (Array.isArray(raw3)) { for (let i = 0; i < raw3.length; i += 2) flat3[raw3[i]] = raw3[i + 1]; }
+    else if (raw3 && typeof raw3 === "object") Object.assign(flat3, raw3);
+    Object.keys(flat3).forEach((em) => { if (subOpen(parseSubRec(flat3[em]), today)) subbed.add(em.toLowerCase()); });
+  } catch (e) { /* the usual rule stands */ }
+
   // Two phases on purpose: decide who gets what, then send. Deciding is pure and instant.
   // Sending is the slow part, and it used to happen one phone at a time inside this same loop:
   // one network round trip, wait, next. At 26 registered devices that was fine. At 350 it took
@@ -275,9 +288,10 @@ export default async function handler(req, res) {
     // here: it is on the celebration screen inside the app, the moment she closes the day.
     // That reaches her at any hour, including long after this reminder has gone out, and it
     // reaches her even if she has notifications turned off.
-    if (frozen.has((rec.email || "").trim().toLowerCase())) { quiet++; continue; }
+    const isSub = !morning && subbed.has((rec.email || "").trim().toLowerCase());
+    if (!isSub && frozen.has((rec.email || "").trim().toLowerCase())) { quiet++; continue; }
     if (!morning && doneToday.has((rec.email || "").trim().toLowerCase())) { quiet++; doneSkip.push(rec.email); continue; }
-    if (!morning && !hasTracker(rec.startDate, today)) { quiet++; continue; }
+    if (!morning && !(isSub ? !isQuietDay(today) : hasTracker(rec.startDate, today))) { quiet++; continue; }
     if (!morning && !serve.includes(reminderHourOf(rec, today))) { quiet++; continue; }
     if (morning) {
       if (!hasNewContent(rec.startDate, today)) { quiet++; continue; }

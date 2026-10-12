@@ -68,7 +68,13 @@ export function decideAccess(f) {
   const expired360 = f.clerkUntil
     ? today > f.clerkUntil
     : !!(end360At && today > ymdOf(end360At));
-  const open360 = has360 && !stopped360 && !frozenNow && !expired360;
+  const open360Base = has360 && !stopped360 && !frozenNow && !expired360;
+  // **מנוי חודשי מדף התשלום. v8.10.** החלטות רון, 12 באוקטובר 2026: **המנוי פותח לה את
+  // האפליקציה עד `paidUntil`, וגובר על ביטול ועל הקפאה.** הוא יכול רק להאריך ולעולם אינו
+  // מקצר חלון שכבר יש לה. **ו-Glow אינו מושפע ממנו בשום כיוון**, ולכן כל חישוב הקורס למטה
+  // נשען על `open360Base` ולא על `open360`.
+  const subOn = has360 && !!f.subUntil && today <= String(f.subUntil);
+  const open360 = open360Base || subOn;
 
   // **הקורס שנקנה בכסף שורד את סיום 360; הקורס שניתן במתנה בוובינר נגמר איתו.**
   // החלטת רון מ-v7.03 נשמרת כאן במלואה. ומי שמעולם לא הייתה ב-360 היא קונה מעצם
@@ -94,7 +100,7 @@ export function decideAccess(f) {
   // ביטול אצל מי שמעולם לא הייתה ב-360 יכול לדבר רק על הקורס עצמו, כי אין לה שום
   // מוצר אחר לבטל, ולכן שם הוא סוגר גם אותו.
   const glowStopped = !has360 && stopped360;
-  const glowStandalone = glowOwned && !glowStopped && !open360;
+  const glowStandalone = glowOwned && !glowStopped && !open360Base;
 
   const endGlowAt = endGlow(f.glowStart, f.glowMonths);
   // הארכה ידנית מהמשרד גוברת על חלון הקורס **רק אצל מי שאין לה 360 בכלל**, כי שם
@@ -107,7 +113,7 @@ export function decideAccess(f) {
   // **האם הקורס פתוח לה עכשיו.** כאן נשאל `glowFull` ולא `glowOwned`, כי `glowOwned`
   // עונה על שאלה אחרת לגמרי, "האם הוא שורד את סיום 360", **ומתנת הוובינר אינה
   // שורדת ובכל זאת פתוחה לה כל עוד התוכנית רצה.**
-  const glowOpen = hasGlow && !glowStopped && (open360 || glowOnly);
+  const glowOpen = hasGlow && !glowStopped && (open360Base || glowOnly);
 
   // **לפני יום 1 הקורס המלא נעול, בדיוק כמו היומן והדוח.** החלטת רון, 15 בספטמבר
   // 2026: "מי שנרשמת ויש לה גלו פול היום תקבל רק את גלו פול, ואני רוצה שזה ייפתח
@@ -143,7 +149,7 @@ export function decideAccess(f) {
   if (!allowed) reason = stopped360 ? "cancelled" : frozenNow ? "frozen" : "expired";
 
   return {
-    has360, open360, stopped360, frozenNow, expired360, waiting360,
+    has360, open360, open360Base, subOn, stopped360, frozenNow, expired360, waiting360,
     glowOwned, glowStopped, glowStandalone, glowPast, glowOnly, glowOpen,
     preStart, glowFullOpen, glowSoon, glowSoonSolo,
     // מתנה מול קנייה, כפי שהמשרד צריך לראות את זה.
@@ -152,6 +158,7 @@ export function decideAccess(f) {
     end360: ymdOf(end360At),
     endGlow: ymdOf(endGlowAt),
     allowed, reason,
-    product: glowOnly ? "glow" : "360",
+    // מנויה שיש לה גם קורס בתשלום מקבלת את התוכנית, והקורס בתוכה.
+    product: glowOnly && !subOn ? "glow" : "360",
   };
 }

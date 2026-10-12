@@ -17,6 +17,7 @@
 
 import { isQuietDay } from "./_hebcal.js";
 import { oldAppEmails } from "./_appemails.js";
+import { subOpen, parseRec as parseSubRec, SUB_HASH } from "./_sub.js";
 
 export const WHO_TTL = 345600; // ארבעה ימים. הדוח קורא אותם למחרת בבוקר
 export const whoKey = (date, kind, status) => `push:who:${date}:${kind}:${status}`;
@@ -41,7 +42,8 @@ function programDay(start, date) {
 // appEmails - מי שהשאירה עקבה כלשהי באפליקציה החדשה
 // subEmails - מי שיש לה עכשיו לפחות מכשיר אחד רשום להתראות
 // who       - { sent, failed, pruned, done }, כל אחד Set של מיילים, מה ש-notify.js רשם
-export function auditPush({ kind, date, women, manual, overrides, emailMap, appEmails, subEmails, who }) {
+// subs      - { מייל: JSON } מ-admin:subs, מנויות חודשיות. v8.10
+export function auditPush({ kind, date, women, manual, overrides, emailMap, appEmails, subEmails, who, subs }) {
   if (isQuietDay(date)) return { quiet: true };
   const win = AUDIT_DAYS[kind];
   const renamed = {};
@@ -71,16 +73,21 @@ export function auditPush({ kind, date, women, manual, overrides, emailMap, appE
   list.forEach((w) => {
     if (!w.email || seen.has(w.email)) return;
     seen.add(w.email);
-    if (w.cancelled) return;
+    // **מנויה חודשית מקבלת תזכורת ערב בכל יום שאינו שקט**, גם אחרי יום 70 וגם כשביטלה או
+    // בהקפאה, בדיוק כמו ב-notify.js. v8.10.
+    const subNow = kind === "evening" && !!subs && subOpen(parseSubRec(subs[w.email]), date);
     let o = null;
     try { o = overrides && overrides[w.email] ? JSON.parse(overrides[w.email]) : null; } catch (e) {}
-    if (o && o.blocked === "1") return;
-    // אותו תנאי הקפאה כמו ב-notify.js, רק ביחס לתאריך שנבדק ולא ליום הדוח.
-    if (o && o.freeze && (!o.freeze.back || !o.freeze.week || date < o.freeze.back)) return;
+    if (!subNow) {
+      if (w.cancelled) return;
+      if (o && o.blocked === "1") return;
+      // אותו תנאי הקפאה כמו ב-notify.js, רק ביחס לתאריך שנבדק ולא ליום הדוח.
+      if (o && o.freeze && (!o.freeze.back || !o.freeze.week || date < o.freeze.back)) return;
+    }
     const start = (o && o.start) || w.start;
     if (!start) return;
     const d = programDay(start, date);
-    if (d < win.first || d > win.last) return;
+    if (!subNow && (d < win.first || d > win.last)) return;
 
     // **נשים באפליקציה הישנה אינן אמורות לקבל כלום מהאפליקציה הזאת**, וזה אותו כלל של
     // מסך הניהול: עמודה בגיליון, רישום ידני, או עקבה שהשאירה באפליקציה.
@@ -115,6 +122,7 @@ export async function loadAuditInputs({ redisCmd, base, token, loadSheet, csvUrl
   const overrides = await hget("admin:overrides");
   const manual = await hget("admin:manual");
   const emailMap = await hget("admin:emailmap");
+  const subs = await hget(SUB_HASH);
   const seenApp = await hget("admin:seen");
   const appEmails = new Set(Object.keys(seenApp).map(low));
   // אותה רשימה שמסך הניהול קורא, בלי סריקה של כל המסד. v7.53, api/_appemails.js.
@@ -123,7 +131,7 @@ export async function loadAuditInputs({ redisCmd, base, token, loadSheet, csvUrl
   Object.values(await hget("push:subs")).forEach((v) => {
     try { const j = JSON.parse(v); if (j && j.email) subEmails.add(low(j.email)); } catch (e) {}
   });
-  return { women: sheet.women || [], overrides, manual, emailMap, appEmails, subEmails };
+  return { women: sheet.women || [], overrides, manual, emailMap, appEmails, subEmails, subs };
 }
 
 // מה ש-notify.js רשם לתאריך ולסוג. **null כשלא נרשם דבר**, כדי שהדוח יבדיל בין "אף אחת

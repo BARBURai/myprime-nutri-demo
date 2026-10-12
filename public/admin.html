@@ -1541,6 +1541,8 @@ function render(){
     var st = w.state || {};
     var end360Shown = st.end360 && !w.startOverride && !w.override ? st.end360 : (w.until||st.end360);
     var l360 = !w.start ? 'עוד לא שובצה למחזור'
+      // מנוי חודשי שמחזיק אותה אחרי שהתוכנית נגמרה, או בביטול ובהקפאה. v8.10.
+      : (st.subOn && !st.open360Base && w.sub) ? 'פעיל במנוי החודשי עד '+il(w.sub.paidUntil)
       : st.open360 ? 'פעיל עד '+il(end360Shown)
       : w.cancelled || w.blocked ? 'בוטל'
       : w.frozen ? 'בהקפאה'
@@ -1610,6 +1612,27 @@ function render(){
     '</div>';
   }
 
+  // **המנוי החודשי מדף התשלום. v8.10.** שלוש השורות בנוסח של רון, והכפתור רק כשהמנוי פעיל.
+  // **ביטול לא מוריד את הגישה**: היא נשארת עד התאריך ששולם, ואז המנוי מסתיים לבד.
+  function subBox(w){
+    var s = w.sub;
+    if(!s) return '';
+    var head = s.status === "active" ? 'פעיל עד '+il(s.paidUntil)
+      : s.status === "cancelled" ? 'בוטל, גישה עד '+il(s.paidUntil)
+      : 'הסתיים ב-'+il(s.paidUntil);
+    var rows = [['חיוב אחרון', il(s.lastCharge)], ['מספר חיובים', String(s.count)]];
+    if (s.cancelledAt) rows.push(['בוטל', il(s.cancelledAt)+(s.cancelledBy?' · '+s.cancelledBy:'')]);
+    if (s.payEmail && s.payEmail !== w.email && s.payEmail !== w.pendingEmail) rows.push(['שילמה עם המייל', s.payEmail]);
+    var L = (DATA && DATA.aiLimits) || {};
+    var ai = w.ai || {};
+    if (s.status !== "ended") rows.push(['צילומי ארוחה, החודש', typeof ai.subPhotos === "number" ? ai.subPhotos+' מתוך '+(L.subPhotos||30) : 'לא ידוע']);
+    return '<div class="statebox">'+
+      '<div class="sthead">מנוי חודשי: '+esc(head)+'</div>'+
+      rows.map(function(r){ return '<div class="stline"><span>'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>'; }).join("")+
+      (s.status === "active" ? '<button class="btn" data-subcancel="'+esc(w.email)+'" data-subuntil="'+esc(s.paidUntil)+'">ביטול מנוי</button>' : '')+
+    '</div>';
+  }
+
   // וההיסטוריה, בדרופדאון כדי שלא תעמיס. החלטת רון.
   function histBox(w){
     var st = w.state || {};
@@ -1638,6 +1661,9 @@ function render(){
       if(L.field === "tag:app") return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה' : 'הסירה את הסימון של האפליקציה החדשה');
       if(L.field === "freeze") return pre + (L.to ? 'הכניסה אותה להקפאה · '+esc(L.to) : 'סיימה לה את ההקפאה'+(L.from?' (הייתה '+esc(L.from)+')':''));
       if(L.field === "email") return pre + 'שינתה לה את כתובת המייל מ-'+esc(L.from)+' ל-'+esc(L.to);
+      if(L.field === "sub") return pre + 'חיוב במנוי החודשי'+(L.n?' מספר '+esc(L.n):'')+' · גישה עד '+esc(il(L.to));
+      if(L.field === "sub_cancel") return pre + 'ביטלה את המנוי החודשי · גישה עד '+esc(il(L.to));
+      if(L.field === "sub_end") return pre + 'המנוי החודשי הסתיים';
       if(L.field === "name") return pre + (L.to ? 'תיקנה את השם ל-'+esc(L.to)+(L.from?' (היה '+esc(L.from)+')':'') : 'החזירה את השם לזה שבגיליון'+(L.from?' (היה '+esc(L.from)+')':''));
       if(L.field === "start") return pre + (L.to ? 'העבירה אותה למחזור של '+il(L.to)+(L.from?' (הייתה ב-'+il(L.from)+')':'') : 'החזירה את תאריך ההתחלה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
       if(L.field === "group") return pre + (L.to ? 'שינתה את הקבוצה מ-'+(L.from?esc(L.from):"ללא קבוצה")+' ל-'+esc(L.to) : 'החזירה את הקבוצה לערך שבגיליון'+(L.from?' (הייתה '+esc(L.from)+')':''));
@@ -2109,10 +2135,11 @@ function render(){
         (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
         (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+'</div>'+
         '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+
-          (w.newApp?' · גישה עד <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+(w.expired?" (הסתיימה)":""):"")+'</div>'+
+          (w.newApp?' · גישה עד <b class="'+(w.expired?"expired":"")+'">'+((w.accessUntil||w.until)?il(w.accessUntil||w.until):"לא ידוע")+'</b>'+(w.expired?" (הסתיימה)":""):"")+'</div>'+
         ((w.backSoon && w.backCohort)?'<div class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></div>':'')+
         dupBox(w)+
         stateBox(w)+
+        subBox(w)+
         aiBox(w)+
         histBox(w)+
         quickActs(w)+
@@ -2687,6 +2714,25 @@ function render(){
     el.disabled=true;
     save(em,{freeze:{off:true}}).then(function(r){ if(!r.ok) throw new Error(); mcWarn(r); FREEZING=""; delete MC[em]; return load().then(function(){ render(); mcLoad(em); }); })
       .catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
+  }; });
+  app.querySelectorAll("[data-subcancel]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-subcancel"), until=el.getAttribute("data-subuntil");
+    if(!confirm("לבטל את המנוי החודשי?\n\nהחיובים ייעצרו מהחיוב הבא.\nהגישה שלה לאפליקציה נשארת עד "+il(until)+", ואז המנוי מסתיים.")) return;
+    el.disabled=true; el.textContent="מבטלת...";
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({subCancel:em, by:WHO})})
+      .then(function(r){ return r.json().catch(function(){ return null; }); })
+      .then(function(d){
+        if(d && d.ok){
+          alert((d.already?"המנוי כבר היה מבוטל.":"המנוי בוטל. לא יהיו חיובים נוספים.")+"\n\nהגישה שלה נשארת עד "+il(d.paidUntil||until)+"."+(d.saved===false?"\n\nהביטול בוצע בדף התשלום, אבל הכרטיס כאן לא התעדכן. כדאי לרענן.":""));
+          return load().then(render);
+        }
+        var why = d && d.error === "no_sub_at_pay" ? "אין לה מנוי בדף התשלום."
+                : d && d.error === "no_sub" ? "אין לה מנוי אצלנו."
+                : "הביטול נכשל: דף התשלום או קארדקום לא ענו.";
+        alert(why+"\n\nשום דבר לא בוטל, והחיובים ממשיכים. אפשר לנסות שוב בעוד כמה דקות.");
+        el.disabled=false; el.textContent="ביטול מנוי";
+      }).catch(function(){ alert("הביטול נכשל.\n\nשום דבר לא בוטל, והחיובים ממשיכים. אפשר לנסות שוב בעוד כמה דקות."); el.disabled=false; el.textContent="ביטול מנוי"; });
   }; });
   app.querySelectorAll("[data-saveemail]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-saveemail"), box=document.getElementById("e_"+em);

@@ -831,6 +831,56 @@ CHECKS.push({
   },
 });
 
+// **המנוי החודשי בכרטיס. v8.10.** שני הצדדים באותה הרצה: אישה עם מנוי מקבלת את השורה ואת
+// הכפתור, ואישה בלי מנוי אינה מקבלת כלום. **וביטול שנכשל אצל קארדקום נאמר כנכשל**, ולא
+// מוצג כמבוטל. קופסה שנעלמת תמיד נראית בדיוק כמו קופסה שאינה מרונדרת אף פעם.
+CHECKS.push({
+  name: "מנוי חודשי: השורה, הכפתור, וביטול שנכשל",
+  async run(browser, device) {
+    const SUB = { status: "active", paidUntil: "2026-11-16", lastCharge: "2026-10-12", firstCharge: "2026-09-12", count: 2, cancelledAt: "", cancelledBy: "", payEmail: "other@gmail.com", matched: "phone" };
+    const patch = (d) => { d.women[0].sub = SUB; d.women[0].ai = { photos: 70, today: 2, subPhotos: 4 }; d.aiLimits = { photos: 70, day: 30, subPhotos: 30 }; return d; };
+    const o = await open(browser, device, patch);
+    const alerts = [];
+    o.page.on("dialog", (dlg) => alerts.push(dlg.message()));
+    let payOk = false;
+    await o.ctx.route("**/api/**", (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      let b = {}; try { b = JSON.parse(route.request().postData() || "{}"); } catch (e) {}
+      if (!b.subCancel) return route.fallback();
+      o.posts.push(b);
+      return route.fulfill({ status: payOk ? 200 : 502, contentType: "application/json", body: JSON.stringify(payOk ? { ok: true, paidUntil: "2026-11-16", cancelledAt: "2026-10-12", saved: true } : { ok: false, error: "pay_failed" }) });
+    });
+    await o.page.locator('[data-open="lior5066@gmail.com"]').first().click();
+    await o.page.waitForTimeout(400);
+    const card = await o.page.locator(".card.open").innerText();
+    const btn = o.page.locator("[data-subcancel]");
+    const hasBtn = await btn.count();
+    // צילום לעין, רק כשמבקשים: QA_SHOT_DIR=<תיקייה>.
+    if (process.env.QA_SHOT_DIR) { await o.page.locator(".statebox", { hasText: "מנוי חודשי" }).first().scrollIntoViewIfNeeded().catch(() => {}); await o.page.screenshot({ path: process.env.QA_SHOT_DIR + "/admin-sub-" + (device.name === "טלפון" ? "phone" : "desktop") + ".png" }).catch(() => {}); }
+    await btn.first().click();
+    await o.page.waitForTimeout(500);
+    const failAlert = alerts.find((m) => m.includes("הביטול נכשל")) || "";
+    const btnAfterFail = await o.page.locator("[data-subcancel]").first().textContent();
+    payOk = true;
+    await o.page.locator("[data-subcancel]").first().click();
+    await o.page.waitForTimeout(500);
+    const okAlert = alerts.find((m) => m.includes("המנוי בוטל")) || "";
+    // ואישה בלי מנוי: אין קופסה ואין כפתור.
+    await o.page.goto(BASE, { waitUntil: "domcontentloaded" });
+    await o.page.waitForTimeout(600);
+    await o.page.locator('[data-open="ronit@test.com"]').first().click();
+    await o.page.waitForTimeout(400);
+    const other = await o.page.locator(".card.open").innerText();
+    await o.ctx.close();
+    const ok = card.includes("מנוי חודשי: פעיל עד 16.11.2026") && card.includes("4 מתוך 30") && card.includes("other@gmail.com")
+      && hasBtn === 1 && o.posts.filter((p) => p.subCancel === "lior5066@gmail.com").length === 2
+      && failAlert.includes("שום דבר לא בוטל") && btnAfterFail === "ביטול מנוי"
+      && okAlert.includes("16.11.2026") && alerts.some((m) => m.startsWith("לבטל את המנוי החודשי"))
+      && !other.includes("מנוי חודשי") && !o.errors.length;
+    return { ok, detail: `שורה ${card.includes("מנוי חודשי: פעיל עד 16.11.2026")} · צילומים ${card.includes("4 מתוך 30")} · כפתור ${hasBtn} · נכשל "${failAlert.slice(0, 40)}" · הצליח "${okAlert.slice(0, 30)}" · בלי מנוי ${!other.includes("מנוי חודשי")} · שגיאות ${o.errors[0] || "אין"}` };
+  },
+});
+
 const browser = await chromium.launch({ executablePath: BROWSER });
 const ONLY = process.env.E2E_ONLY || "";
 const RUN = CHECKS.filter((c) => !ONLY || c.name.includes(ONLY));

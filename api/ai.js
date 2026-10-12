@@ -16,11 +16,14 @@
 //  The photo budget is a hard server-side cap (per email) so it cannot be reset by clearing the browser.
 
 import { normName } from "../lib/foodcheck.js";
+import { SUB_HASH, SUB_PHOTO_LIMIT, subOpen, subPhotoKey, parseRec as parseSubRec } from "./_sub.js";
 
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
 export const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 30);
 const BURST_LIMIT = Number(process.env.AI_BURST_LIMIT || 10);
 export const PHOTO_LIMIT = Number(process.env.AI_PHOTO_LIMIT || 70);
+// ההודעה למנויה שסיימה את 30 הצילומים של החודש. v8.10.
+export const SUB_PHOTO_MSG = "סיימת את 30 צילומי הארוחה של החודש 💜 הם מתחדשים בחיוב הבא של המנוי. עד אז תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים.";
 
 async function redis(base, token, ...args) {
   const path = args.map((a) => encodeURIComponent(String(a))).join("/");
@@ -111,14 +114,28 @@ export default async function handler(req, res) {
         return res.status(429).json({ error: "limit", scope: "burst", message: "רגע, יותר מדי בקשות בבת אחת. נסי שוב עוד דקה." });
       }
       let photoHad = 0;
+      let photoCounter = photoKey;
       if (isPhoto) {
-        photoHad = Number(await redis(base, token, "GET", photoKey)) || 0;
-        if (photoHad >= PHOTO_LIMIT) {
-          res.setHeader("x-photo-count", String(photoHad));
-          return res.status(429).json({ error: "limit", scope: "photos", message: "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים." });
+        // **מנויה חודשית: 30 צילומים בחודש, ומתחילים מחדש בכל חיוב.** החלטת רון, 12 באוקטובר
+        // 2026. המונה של התוכנית אינו נגע ואינו נספר בזמן המנוי. v8.10, ראה api/_sub.js.
+        let sub = null;
+        if (uid) { try { const rec = parseSubRec(await redis(base, token, "HGET", SUB_HASH, uid)); if (subOpen(rec, israelDay())) sub = rec; } catch (e) { sub = null; } }
+        if (sub) {
+          photoCounter = subPhotoKey(uid, sub);
+          photoHad = Number(await redis(base, token, "GET", photoCounter)) || 0;
+          if (photoHad >= SUB_PHOTO_LIMIT) {
+            res.setHeader("x-photo-count", String(photoHad));
+            return res.status(429).json({ error: "limit", scope: "photos", message: SUB_PHOTO_MSG });
+          }
+        } else {
+          photoHad = Number(await redis(base, token, "GET", photoKey)) || 0;
+          if (photoHad >= PHOTO_LIMIT) {
+            res.setHeader("x-photo-count", String(photoHad));
+            return res.status(429).json({ error: "limit", scope: "photos", message: "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים." });
+          }
         }
       }
-      counters = { id, dayKey, minKey, photoKey, dayHad, photoHad };
+      counters = { id, dayKey, minKey, photoKey: photoCounter, dayHad, photoHad, subPhotos: photoCounter !== photoKey };
     } catch (e) {
       // If the limiter itself errors, do not block the user - just log.
       console.warn("rate-limit error:", String(e));
@@ -162,7 +179,7 @@ export default async function handler(req, res) {
           if (minNow === 1) await redis(base, token, "EXPIRE", counters.minKey, 120);
           if (isPhoto) {
             const photoNow = await redis(base, token, "INCR", counters.photoKey);
-            if (photoNow === 1) await redis(base, token, "EXPIRE", counters.photoKey, 18144000); // ~210 days
+            if (photoNow === 1) await redis(base, token, "EXPIRE", counters.photoKey, counters.subPhotos ? 5184000 : 18144000); // ~60 days a month of a sub, ~210 days the programme
             res.setHeader("x-photo-count", String(photoNow));
           }
         } else if (isPhoto) {
