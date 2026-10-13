@@ -21,6 +21,12 @@ export const DEFAULT_MODEL = "claude-sonnet-4-6";
 export const DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 30);
 const BURST_LIMIT = Number(process.env.AI_BURST_LIMIT || 10);
 export const PHOTO_LIMIT = Number(process.env.AI_PHOTO_LIMIT || 70);
+// **פניות נסתרות אינן נספרות ב-30 היומיות. v8.17.** האפליקציה מריצה שתיים בלי שהאישה
+// שלחה דבר: חילוץ ההעדפות במסך "מה כדאי לאכול", ותרגום לאנגלית בחיפוש שלא מצא. הן
+// מסומנות `x-ai-kind: aux`, ונחשבות ככאלה רק כשהן נראות כמו הן: טקסט, תור אחד, ותשובה
+// קצרה. **מונה משלהן ותקרה משלהן**, כדי שהכותרת לא תהפוך לדלת אחורית, והמגבלה לדקה חלה.
+export const AUX_LIMIT = Number(process.env.AI_AUX_LIMIT || 60);
+const AUX_MAX_TOKENS = 300;
 
 async function redis(base, token, ...args) {
   const path = args.map((a) => encodeURIComponent(String(a))).join("/");
@@ -69,6 +75,8 @@ export default async function handler(req, res) {
   const userMsgs = msgs.filter((m) => m && m.role === "user");
   const asstMsgs = msgs.filter((m) => m && m.role === "assistant");
   const firstTurn = userMsgs.length === 1 && asstMsgs.length === 0;
+  const isAux = String((req.headers && req.headers["x-ai-kind"]) || "") === "aux" && !isPhoto && msgs.length === 1 && firstTurn
+    && Number(body && body.max_tokens) > 0 && Number(body && body.max_tokens) <= AUX_MAX_TOKENS;
   const lastUserText = (() => { const m = userMsgs[userMsgs.length - 1]; if (!m) return ""; if (typeof m.content === "string") return m.content; if (Array.isArray(m.content)) return m.content.filter((c) => c && c.type === "text").map((c) => c.text).join(" "); return ""; })();
   const normQuery = normName(lastUserText);
   const cacheable = !isPhoto && firstTurn && normQuery.length >= 2 && normQuery.length <= 200;
@@ -107,12 +115,14 @@ export default async function handler(req, res) {
       const uid = String(req.headers["x-user-id"] || "").trim().toLowerCase();
       const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
       const id = uid || (fwd ? "ip:" + fwd : "anon");
-      const dayKey = `ai:day:${id}:${israelDay()}`;
+      const dayKey = isAux ? `ai:aux:${id}:${israelDay()}` : `ai:day:${id}:${israelDay()}`;
+      const dayLimit = isAux ? AUX_LIMIT : DAILY_LIMIT;
       const minKey = `ai:min:${id}:${Math.floor(Date.now() / 60000)}`;
       const photoKey = `ai:photos:${id}`;
 
       const dayHad = Number(await redis(base, token, "GET", dayKey)) || 0;
-      if (dayHad >= DAILY_LIMIT) {
+      if (dayHad >= dayLimit) {
+        if (isAux) return res.status(429).json({ error: "limit", scope: "aux" });
         return res.status(429).json({ error: "limit", scope: "day", message: "הגעת למכסת ניתוחי ה-AI להיום 💜 אפשר להמשיך לתעד ארוחות דרך חיפוש או ברקוד, ומחר המכסה מתאפסת." });
       }
       const minHad = Number(await redis(base, token, "GET", minKey)) || 0;
@@ -166,7 +176,7 @@ export default async function handler(req, res) {
         if (fresh) {
           const dayNow = await redis(base, token, "INCR", counters.dayKey);
           if (dayNow === 1) await redis(base, token, "EXPIRE", counters.dayKey, 172800); // ~48h
-          if (dayNow === DAILY_LIMIT) res.setHeader("x-ai-limit", "soft"); // her last one for today
+          if (!isAux && dayNow === DAILY_LIMIT) res.setHeader("x-ai-limit", "soft"); // her last one for today
           const minNow = await redis(base, token, "INCR", counters.minKey);
           if (minNow === 1) await redis(base, token, "EXPIRE", counters.minKey, 120);
           if (isPhoto) {

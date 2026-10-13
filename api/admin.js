@@ -112,7 +112,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.16";
+const ADMIN_VERSION = "8.18";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -555,10 +555,10 @@ async function nameFix({ RU, RT, live, cap, batch, prefer, skip, by }) {
   };
 }
 
-async function sendTracks(res, RU, RT) {
+async function sendTracks(res, RU, RT, only360) {
   if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
   try {
-    const rows = await mcTracks(RU, RT);
+    const rows = await mcTracks(RU, RT, only360);
     return res.status(200).json({ ok: true, count: rows.length, rows });
   } catch (e) { return res.status(502).json({ ok: false, error: "read_failed" }); }
 }
@@ -675,7 +675,7 @@ export default async function handler(req, res) {
   // שהסקריפט בגוגל שיטס לא יחזיק את מפתח המנהל. **בלי המשתנה בוורסל הוא אינו קיים.**
   const reportKey = process.env.REPORT_KEY || "";
   if (req.method === "GET" && req.query.tracks !== undefined && reportKey && key.length === reportKey.length && key === reportKey) {
-    return sendTracks(res, RU, RT);
+    return sendTracks(res, RU, RT, String(req.query.tracks) === "360");
   }
   const me = await whoIs(key, RU, RT);
   if (!me.ok) return res.status(401).json({ ok: false, error: "unauthorized" });
@@ -689,9 +689,10 @@ export default async function handler(req, res) {
 
   // **רשימת המסלולים לדוח הביטולים בגוגל שיטס. v8.15.** מנהל בלבד, קריאה בלבד.
   // GET /api/admin?tracks&key=<ADMIN_KEY> -> { ok, count, rows: [{ phone, track, start }] }
+  // GET /api/admin?tracks=360&key=...       -> אותו מבנה, נשות 360 בלבד. v8.18
   if (req.method === "GET" && req.query.tracks !== undefined) {
     if (!me.owner) return res.status(403).json({ ok: false, error: "owner_only" });
-    return sendTracks(res, RU, RT);
+    return sendTracks(res, RU, RT, String(req.query.tracks) === "360");
   }
 
   // ההשוואה בין מניצ'ט לגיליון, לשבעת הימים האחרונים.
