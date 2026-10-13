@@ -265,16 +265,18 @@ export const MC_PRUNED = "mc:pruned";
 // כי שם סימון הסמארט נכתב לפעמים בשורה ריקה בלי טלפון. SMART ו-SOLO10WEEK הם אותו מסלול
 // (v7.82) ויוצאים "SMART". כמה סימונים: הארוך מנצח, כמו בשער (v6.28). התאריך הוא יום ראשון
 // של המחזור, אותו עיגול של השער, וריק כשאין.
+// **ומ-v8.18 גם נשות 360: `track: "360"`**, כל מי שיש לה תאריך התחלה ואין לה מסלול אחר,
+// **כולל מי שביטלה**, כי הדוח מחלק מבטלות במספר המשתתפות של המחזור.
 const TRACK_ORDER = [["SOLO12", ["solo12"]], ["SOLO6", ["solo6"]], ["SMART", ["smart", "solo10week"]]];
 export function trackOf(cells) {
   if (!cells) return null;
   const on = new Set(Object.keys(cells).filter((k) => isTrueCell(cells[k])).map(norm));
   const hit = TRACK_ORDER.find(([, cols]) => cols.some((c) => on.has(c)));
-  if (!hit) return null;
   const sk = Object.keys(cells).find((k) => norm(k) === START_KEY);
   const m = sk ? String(cells[sk] || "").match(DATE_IN) : null;
   const sun = m ? parseDateToSunday(m[0]) : null;
-  return { track: hit[0], start: sun ? ymd(sun) : "" };
+  if (!hit && !sun) return null;
+  return { track: hit ? hit[0] : "360", start: sun ? ymd(sun) : "" };
 }
 export async function tracks(RU, RT) {
   const all = await scanHash(RU, RT, MC_ROWS);

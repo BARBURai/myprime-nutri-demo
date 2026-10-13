@@ -51,6 +51,7 @@ rows = {
   "972500000004": row({ ID: "972500000004", SMART: "TRUE" }),
   "972500000005": row({ ID: "972500000005", "GLOW-FULL": "TRUE", [START]: "2026-10-04" }),
   "972500000006": "not json",
+  "972500000012": row({ ID: "972500000012", "GLOW-SOLO": "", "השתתפה בוובינר": "TRUE", "EAT - Personal Start": "2026-09-01" }),
 };
 
 console.log("\nמי מקבלת את הרשימה\n");
@@ -62,23 +63,24 @@ const by = Object.fromEntries((r.out.rows || []).map((x) => [x.phone, x]));
 
 console.log("\nהמסלולים\n");
 check("**סמארט עם ביטלה יוצאת SMART**, מ-11.10", JSON.stringify(by["972500000010"]) === JSON.stringify({ phone: "972500000010", track: "SMART", start: "2026-10-11" }), JSON.stringify(by["972500000010"]));
-check("**ביטלה בלי מסלול אינה ברשימה**", !by["972500000011"]);
+check("**ביטלה בלי מסלול נספרת כ-360**, כי היא במכנה של המחזור", JSON.stringify(by["972500000011"]) === JSON.stringify({ phone: "972500000011", track: "360", start: "2026-10-11" }), JSON.stringify(by["972500000011"]));
 check("SOLO10WEEK יוצא SMART", by["972500000001"] && by["972500000001"].track === "SMART");
 check("ותאריך בצורה 27/09/2026 יוצא 2026-09-27", by["972500000001"] && by["972500000001"].start === "2026-09-27");
 check("SOLO6", by["972500000002"] && by["972500000002"].track === "SOLO6");
 check("ותאריך שאינו יום ראשון מעוגל ליום ראשון, כמו בשער", by["972500000002"] && by["972500000002"].start === "2026-08-30", by["972500000002"] && by["972500000002"].start);
 check("SOLO12 עם SMART: הארוך מנצח", by["972500000003"] && by["972500000003"].track === "SOLO12");
 check("מסלול בלי תאריך התחלה: start ריק", by["972500000004"] && by["972500000004"].start === "");
-check("Glow בלי מסלול אינה ברשימה", !by["972500000005"]);
+check("360 עם Glow יוצאת 360", by["972500000005"] && by["972500000005"].track === "360" && by["972500000005"].start === "2026-10-04", JSON.stringify(by["972500000005"]));
+check("ליד בלי תאריך ובלי מסלול אינו ברשימה", !by["972500000012"]);
 check("שורה פגומה מדולגת ואינה מפילה", !by["972500000006"]);
-check("count תואם", r.out.count === 5 && r.out.rows.length === 5, String(r.out.count));
-check("ממוין לפי תאריך התחלה", r.out.rows.map((x) => x.start).join() === ["", "2026-08-30", "2026-08-30", "2026-09-27", "2026-10-11"].join(), r.out.rows.map((x) => x.start).join());
+check("count תואם", r.out.count === 7 && r.out.rows.length === 7, String(r.out.count));
+check("ממוין לפי תאריך התחלה", r.out.rows.map((x) => x.start).join() === ["", "2026-08-30", "2026-08-30", "2026-09-27", "2026-10-04", "2026-10-11", "2026-10-11"].join(), r.out.rows.map((x) => x.start).join());
 
 console.log("\nמפתח לדוח בלבד, REPORT_KEY. v8.16\n");
 check("בלי המשתנה בוורסל, מפתח ריק אינו פותח", (await call({ tracks: "", key: "" })).code === 401);
 process.env.REPORT_KEY = "report-only-key";
 const rk = await call({ tracks: "", key: "report-only-key" });
-check("**מפתח הדוח פותח את הרשימה**", rk.code === 200 && rk.out.count === 5, rk.code + " " + (rk.out && rk.out.count));
+check("**מפתח הדוח פותח את הרשימה**", rk.code === 200 && rk.out.count === 7, rk.code + " " + (rk.out && rk.out.count));
 check("**ואינו פותח את מסך הניהול**", (await call({ key: "report-only-key" })).code === 401);
 check("ואינו פותח את נתוני השימוש", (await call({ usage: "a@b.com", key: "report-only-key" })).code === 401);
 check("מפתח שגוי: 401", (await call({ tracks: "", key: "report-only-kex" })).code === 401);
