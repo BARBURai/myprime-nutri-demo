@@ -267,6 +267,8 @@ export const MC_PRUNED = "mc:pruned";
 // של המחזור, אותו עיגול של השער, וריק כשאין.
 // **ומ-v8.18 גם נשות 360: `track: "360"`**, כל מי שיש לה תאריך התחלה ואין לה מסלול אחר,
 // **כולל מי שביטלה**, כי הדוח מחלק מבטלות במספר המשתתפות של המחזור.
+// **אבל בכתובת נפרדת, `?tracks=360`, ולא בתוך הרשימה הקיימת**, החלטת רון: לסמארט ול-360 יש
+// שני גיליונות, והגיליון של סמארט קורא את `?tracks` ואסור שישתנה לו דבר.
 const TRACK_ORDER = [["SOLO12", ["solo12"]], ["SOLO6", ["solo6"]], ["SMART", ["smart", "solo10week"]]];
 export function trackOf(cells) {
   if (!cells) return null;
@@ -278,14 +280,14 @@ export function trackOf(cells) {
   if (!hit && !sun) return null;
   return { track: hit ? hit[0] : "360", start: sun ? ymd(sun) : "" };
 }
-export async function tracks(RU, RT) {
+export async function tracks(RU, RT, only360 = false) {
   const all = await scanHash(RU, RT, MC_ROWS);
   const rows = [];
   for (const [phone, raw] of Object.entries(all)) {
     let cells = null;
     try { cells = (JSON.parse(raw) || {}).cells; } catch (e) { continue; }
     const t = trackOf(cells);
-    if (t) rows.push({ phone, track: t.track, start: t.start });
+    if (t && (t.track === "360") === !!only360) rows.push({ phone, track: t.track, start: t.start });
   }
   rows.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.phone < b.phone ? -1 : 1));
   return rows;

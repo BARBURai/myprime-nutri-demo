@@ -51,7 +51,7 @@ rows = {
   "972500000004": row({ ID: "972500000004", SMART: "TRUE" }),
   "972500000005": row({ ID: "972500000005", "GLOW-FULL": "TRUE", [START]: "2026-10-04" }),
   "972500000006": "not json",
-  "972500000012": row({ ID: "972500000012", "GLOW-SOLO": "", "השתתפה בוובינר": "TRUE", "EAT - Personal Start": "2026-09-01" }),
+  "972500000012": row({ ID: "972500000012", "השתתפה בוובינר": "TRUE", "EAT - Personal Start": "2026-09-01" }),
 };
 
 console.log("\nמי מקבלת את הרשימה\n");
@@ -63,28 +63,44 @@ const by = Object.fromEntries((r.out.rows || []).map((x) => [x.phone, x]));
 
 console.log("\nהמסלולים\n");
 check("**סמארט עם ביטלה יוצאת SMART**, מ-11.10", JSON.stringify(by["972500000010"]) === JSON.stringify({ phone: "972500000010", track: "SMART", start: "2026-10-11" }), JSON.stringify(by["972500000010"]));
-check("**ביטלה בלי מסלול נספרת כ-360**, כי היא במכנה של המחזור", JSON.stringify(by["972500000011"]) === JSON.stringify({ phone: "972500000011", track: "360", start: "2026-10-11" }), JSON.stringify(by["972500000011"]));
+check("**ביטלה בלי מסלול אינה ברשימה**", !by["972500000011"]);
 check("SOLO10WEEK יוצא SMART", by["972500000001"] && by["972500000001"].track === "SMART");
 check("ותאריך בצורה 27/09/2026 יוצא 2026-09-27", by["972500000001"] && by["972500000001"].start === "2026-09-27");
 check("SOLO6", by["972500000002"] && by["972500000002"].track === "SOLO6");
 check("ותאריך שאינו יום ראשון מעוגל ליום ראשון, כמו בשער", by["972500000002"] && by["972500000002"].start === "2026-08-30", by["972500000002"] && by["972500000002"].start);
 check("SOLO12 עם SMART: הארוך מנצח", by["972500000003"] && by["972500000003"].track === "SOLO12");
 check("מסלול בלי תאריך התחלה: start ריק", by["972500000004"] && by["972500000004"].start === "");
-check("360 עם Glow יוצאת 360", by["972500000005"] && by["972500000005"].track === "360" && by["972500000005"].start === "2026-10-04", JSON.stringify(by["972500000005"]));
-check("ליד בלי תאריך ובלי מסלול אינו ברשימה", !by["972500000012"]);
+check("Glow בלי מסלול אינה ברשימה", !by["972500000005"]);
 check("שורה פגומה מדולגת ואינה מפילה", !by["972500000006"]);
-check("count תואם", r.out.count === 7 && r.out.rows.length === 7, String(r.out.count));
-check("ממוין לפי תאריך התחלה", r.out.rows.map((x) => x.start).join() === ["", "2026-08-30", "2026-08-30", "2026-09-27", "2026-10-04", "2026-10-11", "2026-10-11"].join(), r.out.rows.map((x) => x.start).join());
+check("count תואם", r.out.count === 5 && r.out.rows.length === 5, String(r.out.count));
+check("ממוין לפי תאריך התחלה", r.out.rows.map((x) => x.start).join() === ["", "2026-08-30", "2026-08-30", "2026-09-27", "2026-10-11"].join(), r.out.rows.map((x) => x.start).join());
+
+console.log("\nנשות 360 בכתובת נפרדת, ?tracks=360. v8.18\n");
+// רון: לסמארט ול-360 שני גיליונות, ואסור לערבב. **?tracks נשאר בדיוק כמו קודם**, וזה מה
+// שהבדיקות למעלה נועלות: 5 שורות, ואף אחת לא 360.
+check("**?tracks לא השתנה: אף שורה של 360**", r.out.rows.every((x) => x.track !== "360"));
+const t360 = await call({ tracks: "360", key: "owner-key" });
+const b360 = Object.fromEntries((t360.out.rows || []).map((x) => [x.phone, x]));
+check("?tracks=360 עונה 200", t360.code === 200, String(t360.code));
+check("**ורק 360**", (t360.out.rows || []).every((x) => x.track === "360"));
+check("**ביטלה בלי מסלול נספרת**, כי היא במכנה של המחזור", JSON.stringify(b360["972500000011"]) === JSON.stringify({ phone: "972500000011", track: "360", start: "2026-10-11" }), JSON.stringify(b360["972500000011"]));
+check("360 עם Glow נספרת", b360["972500000005"] && b360["972500000005"].start === "2026-10-04");
+check("סמארט, סולו 6 וסולו 12 אינן שם", !b360["972500000010"] && !b360["972500000002"] && !b360["972500000003"] && !b360["972500000001"]);
+check("ליד בלי תאריך של 360 אינו שם, גם עם תאריך בשדה אחר", !b360["972500000012"]);
+check("count תואם", t360.out.count === 2 && t360.out.rows.length === 2, String(t360.out.count));
+check("ערך אחר מ-360 מחזיר את הרשימה הרגילה", (await call({ tracks: "x", key: "owner-key" })).out.count === 5);
 
 console.log("\nמפתח לדוח בלבד, REPORT_KEY. v8.16\n");
 check("בלי המשתנה בוורסל, מפתח ריק אינו פותח", (await call({ tracks: "", key: "" })).code === 401);
 process.env.REPORT_KEY = "report-only-key";
 const rk = await call({ tracks: "", key: "report-only-key" });
-check("**מפתח הדוח פותח את הרשימה**", rk.code === 200 && rk.out.count === 7, rk.code + " " + (rk.out && rk.out.count));
+check("**מפתח הדוח פותח את הרשימה**", rk.code === 200 && rk.out.count === 5, rk.code + " " + (rk.out && rk.out.count));
 check("**ואינו פותח את מסך הניהול**", (await call({ key: "report-only-key" })).code === 401);
 check("ואינו פותח את נתוני השימוש", (await call({ usage: "a@b.com", key: "report-only-key" })).code === 401);
 check("מפתח שגוי: 401", (await call({ tracks: "", key: "report-only-kex" })).code === 401);
 check("ומפתח המנהל ממשיך לפתוח", (await call({ tracks: "", key: "owner-key" })).code === 200);
+const rk360 = await call({ tracks: "360", key: "report-only-key" });
+check("**מפתח הדוח פותח גם את ?tracks=360**", rk360.code === 200 && rk360.out.count === 2, rk360.code + " " + (rk360.out && rk360.out.count));
 
 console.log("\nקריאה בלבד, ותקלה נאמרת\n");
 check("**שום כתיבה ל-Redis**", writes.length === 0, JSON.stringify(writes));
