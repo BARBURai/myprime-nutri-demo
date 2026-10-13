@@ -24,7 +24,7 @@ import { loadSheet, israelDay, accessEnd, ymd, fetchSheetText, parseCsvLine, cac
 import { KB } from "./_kb.js";
 import { oldAppEmails, APPOLD_KEY } from "./_appemails.js";
 import { DAILY_LIMIT, PHOTO_LIMIT } from "./ai.js";
-import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus, importSheet as mcImportSheet, MC_SLIM, ADMIN_REV, bumpRev, scanHash, setName as mcSetName } from "./_mcsync.js";
+import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus, importSheet as mcImportSheet, MC_SLIM, ADMIN_REV, bumpRev, scanHash, setName as mcSetName, tracks as mcTracks } from "./_mcsync.js";
 import { readXlsx } from "./_xlsx.js";
 import { parseKey, driveDownload } from "./_gdrive.js";
 import { excelIndex, targets as nameTargets, run as nameRun, mailHtml as nameMail, CAP as NAME_CAP } from "./_namefix.js";
@@ -113,7 +113,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.14";
+const ADMIN_VERSION = "8.15";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -755,6 +755,17 @@ export default async function handler(req, res) {
     let rev = "0";
     try { rev = String((await redis(RU, RT, "GET", ADMIN_REV)) || "0"); } catch (e) { return res.status(200).json({ ok: false }); }
     return res.status(200).json({ ok: true, rev });
+  }
+
+  // **רשימת המסלולים לדוח הביטולים בגוגל שיטס. v8.15.** מנהל בלבד, קריאה בלבד.
+  // GET /api/admin?tracks&key=<ADMIN_KEY> -> { ok, count, rows: [{ phone, track, start }] }
+  if (req.method === "GET" && req.query.tracks !== undefined) {
+    if (!me.owner) return res.status(403).json({ ok: false, error: "owner_only" });
+    if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
+    try {
+      const rows = await mcTracks(RU, RT);
+      return res.status(200).json({ ok: true, count: rows.length, rows });
+    } catch (e) { return res.status(502).json({ ok: false, error: "read_failed" }); }
   }
 
   // ההשוואה בין מניצ'ט לגיליון, לשבעת הימים האחרונים.

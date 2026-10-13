@@ -15,7 +15,7 @@
 //   mc:shadow:<תאריך>  same · diff · onlySheet · onlyMc
 //   mc:diffs     200 הפערים האחרונים, לבדיקה
 
-import { findCol, parseDateToSunday, slimCells, SHEET_COLS } from "./_sheet.js";
+import { findCol, parseDateToSunday, ymd, slimCells, SHEET_COLS } from "./_sheet.js";
 
 export const MC_ROWS = "mc:rows";
 export const MC_BYEMAIL = "mc:byemail";
@@ -260,6 +260,34 @@ export function isMember(cells) {
   return PRODUCT_COLS.some((c) => isTrueCell(cells[c]));
 }
 export const MC_PRUNED = "mc:pruned";
+
+// **רשימת המסלולים, לדוח הביטולים בגוגל שיטס. v8.15.** קריאה בלבד מ-mc:rows, ולא מהגיליון,
+// כי שם סימון הסמארט נכתב לפעמים בשורה ריקה בלי טלפון. SMART ו-SOLO10WEEK הם אותו מסלול
+// (v7.82) ויוצאים "SMART". כמה סימונים: הארוך מנצח, כמו בשער (v6.28). התאריך הוא יום ראשון
+// של המחזור, אותו עיגול של השער, וריק כשאין.
+const TRACK_ORDER = [["SOLO12", ["solo12"]], ["SOLO6", ["solo6"]], ["SMART", ["smart", "solo10week"]]];
+export function trackOf(cells) {
+  if (!cells) return null;
+  const on = new Set(Object.keys(cells).filter((k) => isTrueCell(cells[k])).map(norm));
+  const hit = TRACK_ORDER.find(([, cols]) => cols.some((c) => on.has(c)));
+  if (!hit) return null;
+  const sk = Object.keys(cells).find((k) => norm(k) === START_KEY);
+  const m = sk ? String(cells[sk] || "").match(DATE_IN) : null;
+  const sun = m ? parseDateToSunday(m[0]) : null;
+  return { track: hit[0], start: sun ? ymd(sun) : "" };
+}
+export async function tracks(RU, RT) {
+  const all = await scanHash(RU, RT, MC_ROWS);
+  const rows = [];
+  for (const [phone, raw] of Object.entries(all)) {
+    let cells = null;
+    try { cells = (JSON.parse(raw) || {}).cells; } catch (e) { continue; }
+    const t = trackOf(cells);
+    if (t) rows.push({ phone, track: t.track, start: t.start });
+  }
+  rows.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.phone < b.phone ? -1 : 1));
+  return rows;
+}
 
 // קליטת שורה אחת ממניצ'ט.
 export async function ingest(body, RU, RT, now = Date.now()) {

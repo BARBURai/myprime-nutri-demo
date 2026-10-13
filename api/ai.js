@@ -51,8 +51,17 @@ export default async function handler(req, res) {
 
   let body;
   try { body = typeof req.body === "string" ? JSON.parse(req.body) : req.body; } catch (e) { return res.status(400).json({ error: "bad body" }); }
-  // A "photo" call is any request whose messages include an image block.
-  const isPhoto = Array.isArray(body && body.messages) && body.messages.some((m) => Array.isArray(m.content) && m.content.some((c) => c && c.type === "image"));
+  // A "photo" call is one whose NEWEST user message carries an image. v8.15: the photo chat
+  // keeps the image in its history, so every follow-up reply ("כן", "חצי מנה") resent it, and
+  // checking all messages counted each reply as another photo. Follow-ups still count daily.
+  const isPhoto = (() => {
+    const all = Array.isArray(body && body.messages) ? body.messages : [];
+    for (let i = all.length - 1; i >= 0; i--) {
+      const m = all[i];
+      if (m && m.role === "user") return Array.isArray(m.content) && m.content.some((c) => c && c.type === "image");
+    }
+    return false;
+  })();
 
   const base = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;

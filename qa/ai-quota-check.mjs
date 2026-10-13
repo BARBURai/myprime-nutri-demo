@@ -115,6 +115,23 @@ await call(PHOTO, { reqId: "id-1" });
 await call(PHOTO, { reqId: "id-2" });
 check("ושתי תמונות שונות כן נספרות שתיהן", Number(store["ai:photos:a@b.com"]) === 2, String(store["ai:photos:a@b.com"]));
 
+console.log("\nתשובה בשיחה על התמונה אינה נספרת כתמונה נוספת. v8.15\n");
+// סוזי דרור, 12.10.2026: 28 כניסות למסך הצילום ומונה של 70. השיחה שומרת את התמונה
+// בהיסטוריה, ולכן כל "כן" או "חצי מנה" שלחו אותה שוב ונספרו כצילום.
+fresh();
+const FOLLOW = [...PHOTO, { role: "assistant", content: "כמה אכלת?" }, { role: "user", content: "חצי מנה" }];
+await call(PHOTO, { reqId: "p-1" });
+const f1 = await call(FOLLOW, { reqId: "f-1" });
+const f2 = await call([...FOLLOW, { role: "assistant", content: "ועוד משהו?" }, { role: "user", content: "לא" }], { reqId: "f-2" });
+check("התשובות עוברות", f1.code === 200 && f2.code === 200, f1.code + "," + f2.code);
+check("**ונספרה תמונה אחת בלבד, ולא שלוש**", Number(store["ai:photos:a@b.com"]) === 1, String(store["ai:photos:a@b.com"]));
+check("והתשובות כן נספרות במכסה היומית", Number(store[dayKey]) === 3, String(store[dayKey]));
+store["ai:photos:a@b.com"] = 70;
+const f3 = await call(FOLLOW, { reqId: "f-3" });
+check("ומי שהגיעה ל-70 עוד יכולה לענות על התמונה האחרונה", f3.code === 200, String(f3.code));
+const p71 = await call(PHOTO, { reqId: "p-71" });
+check("אבל תמונה חדשה נעצרת, כמו קודם", p71.code !== 200, String(p71.code));
+
 console.log("\nושום דבר אינו נועל אישה כשהתשתית נופלת\n");
 fresh();
 const noRedis = await (async () => {
