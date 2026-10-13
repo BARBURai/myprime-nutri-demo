@@ -74,6 +74,16 @@ check("שורה פגומה מדולגת ואינה מפילה", !by["97250000000
 check("count תואם", r.out.count === 5 && r.out.rows.length === 5, String(r.out.count));
 check("ממוין לפי תאריך התחלה", r.out.rows.map((x) => x.start).join() === ["", "2026-08-30", "2026-08-30", "2026-09-27", "2026-10-11"].join(), r.out.rows.map((x) => x.start).join());
 
+console.log("\nמפתח לדוח בלבד, REPORT_KEY. v8.16\n");
+check("בלי המשתנה בוורסל, מפתח ריק אינו פותח", (await call({ tracks: "", key: "" })).code === 401);
+process.env.REPORT_KEY = "report-only-key";
+const rk = await call({ tracks: "", key: "report-only-key" });
+check("**מפתח הדוח פותח את הרשימה**", rk.code === 200 && rk.out.count === 5, rk.code + " " + (rk.out && rk.out.count));
+check("**ואינו פותח את מסך הניהול**", (await call({ key: "report-only-key" })).code === 401);
+check("ואינו פותח את נתוני השימוש", (await call({ usage: "a@b.com", key: "report-only-key" })).code === 401);
+check("מפתח שגוי: 401", (await call({ tracks: "", key: "report-only-kex" })).code === 401);
+check("ומפתח המנהל ממשיך לפתוח", (await call({ tracks: "", key: "owner-key" })).code === 200);
+
 console.log("\nקריאה בלבד, ותקלה נאמרת\n");
 check("**שום כתיבה ל-Redis**", writes.length === 0, JSON.stringify(writes));
 scanFail = true;
