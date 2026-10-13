@@ -734,7 +734,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.16";
+const VERSION = "8.17";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3151,7 +3151,8 @@ async function extractPreferences(userText, existing) {
       + ((existing && existing.length) ? existing.join(", ") : "(ריק)")
       + ". החזירי JSON בלבד, בלי טקסט נוסף ובלי סימוני קוד: {\"diet\":[],\"avoid\":[]}. diet = סגנונות תזונה בלבד (צמחוני/טבעוני/כשר/דל פחמימה/ים-תיכוני). avoid = מאכלים או רכיבים להימנע מהם (כולל רגישויות, אלרגיות, ולא-אוהבת). אם אין שום דבר חדש, החזירי {\"diet\":[],\"avoid\":[]}.";
     const res = await fetch(AI_ENDPOINT, {
-      method: "POST", headers: aiHeaders(),
+      // פנייה נסתרת: אינה נספרת ב-30 היומיות שלה. v8.17, ראה api/ai.js.
+      method: "POST", headers: { ...aiHeaders(), "x-ai-kind": "aux" },
       body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 200, system: sys, messages: [{ role: "user", content: userText }] }),
     });
     const data = await res.json();
@@ -3270,7 +3271,8 @@ async function translateFoodToEnglish(q) {
   if (TRANSLATE_CACHE.has(key)) return TRANSLATE_CACHE.get(key);
   try {
     const res = await fetch(AI_ENDPOINT, {
-      method: "POST", headers: aiHeaders(),
+      // פנייה נסתרת: אינה נספרת ב-30 היומיות שלה. v8.17, ראה api/ai.js.
+      method: "POST", headers: { ...aiHeaders(), "x-ai-kind": "aux" },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514", max_tokens: 40,
         system: "Translate the Hebrew food name to a short English food-search query (2-4 words, common USDA-style naming, include cooking method if implied, e.g. 'grilled ribeye steak', 'white rice cooked'). Reply with ONLY the English term - no quotes, no punctuation, no extra words.",

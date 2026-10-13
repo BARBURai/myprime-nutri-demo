@@ -48,12 +48,13 @@ globalThis.fetch = async (url, opt) => {
 const PHOTO = [{ role: "user", content: [{ type: "image", source: {} }, { type: "text", text: "ארוחה" }] }];
 const TEXT  = [{ role: "user", content: "אכלתי תפוח" }];
 
-async function call(messages, { email = "a@b.com", reqId = null } = {}) {
+async function call(messages, { email = "a@b.com", reqId = null, kind = null, maxTokens = 10 } = {}) {
   const headers = { "x-user-id": email };
+  if (kind) headers["x-ai-kind"] = kind;
   if (reqId) headers["x-request-id"] = reqId;
   let out = null, code = 0, hdrs = {};
   await handler(
-    { method: "POST", headers, body: { messages, model: "m", max_tokens: 10 } },
+    { method: "POST", headers, body: { messages, model: "m", max_tokens: maxTokens } },
     { setHeader: (k, v) => { hdrs[k] = v; }, status: (c) => { code = c; return { json: (j) => { out = j; } }; } }
   );
   return { code, out, hdrs };
@@ -131,6 +132,42 @@ const f3 = await call(FOLLOW, { reqId: "f-3" });
 check("ומי שהגיעה ל-70 עוד יכולה לענות על התמונה האחרונה", f3.code === 200, String(f3.code));
 const p71 = await call(PHOTO, { reqId: "p-71" });
 check("אבל תמונה חדשה נעצרת, כמו קודם", p71.code !== 200, String(p71.code));
+
+console.log("\nפניות נסתרות אינן נספרות ב-30 היומיות. v8.17\n");
+// טובית, 13.10.2026: הגיעה ל-30, וחלק מהן היו פניות שהאפליקציה שלחה בלי שהיא כתבה דבר.
+const auxKey = "ai:aux:a@b.com:" + dayKey.split(":").pop();
+fresh();
+const ax = await call(TEXT, { kind: "aux" });
+check("פנייה נסתרת עוברת", ax.code === 200, String(ax.code));
+check("**ואינה נגרעת מ-30 היומיות**", store[dayKey] === undefined, String(store[dayKey]));
+check("ונספרת במונה משלה", Number(store[auxKey]) === 1, String(store[auxKey]));
+store[dayKey] = 30;
+check("**מי שהגיעה ל-30 עדיין מקבלת פנייה נסתרת**", (await call(TEXT, { kind: "aux" })).code === 200);
+check("אבל פנייה רגילה נעצרת, כמו קודם", (await call(TEXT)).code === 429);
+fresh();
+await call(PHOTO, { kind: "aux" });
+check("כותרת על צילום אינה עוקפת: נספר כרגיל, גם כצילום", Number(store[dayKey]) === 1 && Number(store["ai:photos:a@b.com"]) === 1, store[dayKey] + "," + store["ai:photos:a@b.com"]);
+fresh();
+await call([...TEXT, { role: "assistant", content: "כמה?" }, { role: "user", content: "שניים" }], { kind: "aux" });
+check("כותרת על שיחה של כמה תורות אינה עוקפת", Number(store[dayKey]) === 1, String(store[dayKey]));
+fresh();
+await call(TEXT, { kind: "aux", maxTokens: 2200 });
+check("כותרת על תשובה ארוכה אינה עוקפת", Number(store[dayKey]) === 1, String(store[dayKey]));
+fresh();
+store[auxKey] = 60;
+const axCap = await call(TEXT, { kind: "aux" });
+check("לנסתרות תקרה משלהן, 60 ביום", axCap.code === 429 && store[dayKey] === undefined, String(axCap.code));
+fresh();
+store["ai:min:a@b.com:" + Math.floor(Date.now() / 60000)] = 10;
+check("והמגבלה לדקה חלה גם עליהן", (await call(TEXT, { kind: "aux" })).code === 429);
+
+const fs = await import("node:fs");
+const app = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+const fnBody = (name) => { const i = app.indexOf("async function " + name + "("); return i < 0 ? "" : app.slice(i, app.indexOf("\n}\n", i)); };
+check("האפליקציה מסמנת את חילוץ ההעדפות", /"x-ai-kind": "aux"/.test(fnBody("extractPreferences")));
+check("ואת התרגום לאנגלית", /"x-ai-kind": "aux"/.test(fnBody("translateFoodToEnglish")));
+check("ורק אותן: שתי הופעות בכל האפליקציה", (app.match(/"x-ai-kind": "aux"/g) || []).length === 2);
+check("השיחה שהיא כותבת בה אינה מסומנת", !/"x-ai-kind"/.test(fnBody("aiNutritionChat")) && !/"x-ai-kind"/.test(fnBody("aiMealChat")));
 
 console.log("\nושום דבר אינו נועל אישה כשהתשתית נופלת\n");
 fresh();
