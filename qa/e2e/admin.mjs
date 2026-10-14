@@ -165,6 +165,36 @@ const ACTIONS = [
 
 const CHECKS = [
   {
+    // v8.20: הקפאה שתאריך החזרה שלה עבר מוצגת כמה שהייתה, בלי "בהקפאה" ובלי כפתור "סיום
+    // ההקפאה", ובשני המצבים כתוב ממתי ההקפאה. שני הצדדים באותה הרצה, כי כרטיס שתמיד אומר
+    // "בהקפאה" נראה בדיוק כמו כרטיס שעובד, אם בודקים רק אישה שעדיין מוקפאת.
+    name: "הקפאה: ממתי, ומה רואים אחרי החזרה",
+    async run(browser, device) {
+      const fz = (from, back, week, frozen) => ({ freeze: { from, back, week, origStart: "2026-08-09" }, frozen, freezeTodo: "" });
+      const { ctx, page, errors } = await open(browser, device, (d) => {
+        Object.assign(d.women[0], fz("2026-08-20", "2026-09-06", 2, true));
+        Object.assign(d.women[1], fz("2026-08-01", "2026-08-23", 3, false));
+        return d;
+      });
+      const read = async (email) => {
+        await page.locator('[data-open="' + email + '"]').first().click();
+        await page.waitForTimeout(400);
+        await page.locator(".card.open .tab", { hasText: "מחזור וקבוצה" }).first().click();
+        await page.waitForTimeout(300);
+        const box = page.locator(".card.open #fld-frz").first();
+        const out = { text: (await box.innerText()).replace(/\s+/g, " ").trim(), end: await box.locator("[data-unfreeze]").count() };
+        await page.goto(BASE, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(700);
+        return out;
+      };
+      const a = await read("lior5066@gmail.com");
+      const b = await read("ronit@test.com");
+      await ctx.close();
+      const okA = a.text.includes("בהקפאה מ-20.08.2026") && a.text.includes("חוזרת 06.09.2026 לשבוע 2") && a.end === 1;
+      const okB = b.text.includes("הקפאה מ-01.08.2026") && b.text.includes("חזרה מהקפאה ב-23.08.2026 לשבוע 3") && !b.text.includes("בהקפאה") && b.end === 0;
+      return { ok: okA && okB && !errors.length, detail: `בזמן: "${a.text.slice(0, 70)}" סיום ${a.end} · אחרי: "${b.text.slice(0, 70)}" סיום ${b.end}${errors.length ? " · " + errors[0] : ""}` };
+    },
+  },
+  {
     // **v7.95: המסך מתעדכן לבד.** שני הצדדים באותה הרצה: אישה חדשה מופיעה בלי רענון, ושינוי
     // שלא נשמר בכרטיס עוצר את הרענון עד שהוא מתבטל. רענון שמוחק בחירה של הפקידה נראה בדיוק
     // כמו רענון שעובד, אם בודקים רק שהאישה הופיעה.
