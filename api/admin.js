@@ -113,7 +113,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.19";
+const ADMIN_VERSION = "8.20";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -322,6 +322,48 @@ async function mcPush({ phone, hasGroup, group, start, newEmail, glow, glowFull,
     }
   } catch (e) { return "failed"; }
   return startEcho ? "ok:" + startEcho : "ok";
+}
+
+// **סוף הקפאה ביום החזרה. v8.20.** רון: "אני לא רואה עניין בזה שיהיה לה רשום הקפאה כשנגמרה
+// לה הקפאה, זה חיווי לא נכון". עד כאן התגית במניצ'ט ירדה רק בלחיצה על "סיום ההקפאה", **וזו
+// מחקה את תאריך ההתחלה המקורי**, כלומר הסתירה ממנה באפליקציה את כל מה שמילאה לפני ההקפאה.
+// כאן ההקפאה **אינה נמחקת** אלא מסומנת `ended`, ולכן `origStart` נשאר והיומן שלה שלם.
+// **תגית שלא ירדה אינה מסמנת `ended`**, וננסה שוב בלילה הבא. **ובדב אין כתיבה למניצ'ט**,
+// כי לדב אותו מניצ'ט כמו לייצור.
+export async function freezeSweep({ RU, RT, today, at, writeMc, untag }) {
+  const out = { checked: 0, ended: [], failed: [] };
+  const all = await redis(RU, RT, "HGETALL", "admin:overrides");
+  const pairs = [];
+  if (Array.isArray(all)) for (let i = 0; i + 1 < all.length; i += 2) pairs.push([all[i], all[i + 1]]);
+  else if (all && typeof all === "object") for (const k of Object.keys(all)) pairs.push([k, all[k]]);
+  for (const [email, raw] of pairs) {
+    let cur; try { cur = JSON.parse(raw); } catch (e) { continue; }
+    const fz = cur && cur.freeze;
+    if (!fz || fz.ended || !fz.back || !fz.week || fz.back > today) continue;
+    out.checked++;
+    let tagOff = false;
+    if (writeMc) {
+      let phones = [];
+      try { const m = JSON.parse((await redis(RU, RT, "HGET", "mc:byemail", email)) || "{}"); phones = Object.keys(m || {}); } catch (e) {}
+      if (phones.length) {
+        let ok = true;
+        for (const p of phones) { try { if (!(await untag(p))) ok = false; } catch (e) { ok = false; } }
+        if (!ok) { out.failed.push(email); continue; }
+        tagOff = true;
+      }
+    }
+    // קוראים שוב ממש לפני הכתיבה, כדי לא לדרוס שינוי שהפקידה שמרה באמצע הסריקה.
+    let fresh; try { fresh = JSON.parse((await redis(RU, RT, "HGET", "admin:overrides", email)) || "null"); } catch (e) { fresh = null; }
+    if (!fresh || !fresh.freeze || fresh.freeze.ended || fresh.freeze.back !== fz.back) continue;
+    fresh.freeze = { ...fresh.freeze, ended: today, endedBy: "מערכת" };
+    const log = Array.isArray(fresh.log) ? fresh.log : [];
+    log.unshift({ at, by: "מערכת", field: "freezeEnd", from: fz.from || "", to: fz.back + "|" + fz.week, tag: tagOff ? "1" : "" });
+    fresh.log = log.slice(0, 20);
+    await redis(RU, RT, "HSET", "admin:overrides", email, JSON.stringify(fresh));
+    out.ended.push(email);
+  }
+  if (out.ended.length) { try { await bumpRev(RU, RT); } catch (e) {} }
+  return out;
 }
 
 // Codes the office holds, one per person, kept in the Redis hash `admin:codes`:
@@ -661,6 +703,29 @@ export default async function handler(req, res) {
     try {
       const out = await subSweep(subDeps(RU, RT, "סריקה יומית"), israelDay(0), new Date().toISOString());
       return res.status(200).json({ ok: true, checked: out.checked, ended: out.ended.length, untagged: out.untagged.length, failed: out.failed.length });
+    } catch (e) { return res.status(500).json({ ok: false, error: "sweep_failed" }); }
+  }
+  // סוף הקפאה ביום החזרה, ותגית ההקפאה יורדת במניצ'ט. מוורסל בלבד. v8.20.
+  if (req.query.freezesweep !== undefined) {
+    const auth = req.headers.authorization || "";
+    if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) return res.status(401).json({ ok: false, error: "unauthorized" });
+    if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
+    try {
+      const writeMc = !!process.env.MANYCHAT_TOKEN && process.env.VERCEL_ENV !== "preview";
+      const untag = async (phone) => {
+        // לא דרך mcFind, כי שם תקלה ו"לא נמצאה" נראות אותו דבר, ותקלה כאן חייבת לנסות שוב.
+        const p = String(phone || "").replace(/[^\d]/g, "");
+        if (!p) return true;
+        const f = await mc(`/fb/subscriber/findByCustomField?field_id=${MC_WA_PHONE_FIELD}&field_value=${encodeURIComponent(p)}`);
+        if (f.off || !f.ok) return false;
+        const d = f.j && f.j.data;
+        const sub = Array.isArray(d) ? d[0] : d;
+        if (!sub || !sub.id) return true;
+        const w = await mc("/fb/subscriber/removeTagByName", { subscriber_id: sub.id, tag_name: MC_FREEZE_TAG });
+        return !!w.ok;
+      };
+      const out = await freezeSweep({ RU, RT, today: israelDay(0), at: new Date().toISOString(), writeMc, untag });
+      return res.status(200).json({ ok: true, checked: out.checked, ended: out.ended.length, failed: out.failed.length });
     } catch (e) { return res.status(500).json({ ok: false, error: "sweep_failed" }); }
   }
   // **תיקון השמות השבועי. v8.00.** ראה `api/_namefix.js`. יושב כאן ולא בקובץ חדש, כי
@@ -1453,13 +1518,23 @@ JSON בלבד, בלי שום טקסט אחר:
       let freezeStart = "";
       if (hasFreeze) {
         if (!fz || fz.off) {
-          log.unshift({ at, by, field: "freeze", from: freeze ? (freeze.back || "ללא תאריך") : "", to: "" });
-          freeze = null;
+          log.unshift({ at, by, field: "freeze", from: freeze ? (freeze.back || "ללא תאריך") : "", to: "", since: (freeze && freeze.from) || "" });
+          // **v8.20: הקפאה שהזיזה את תאריך ההתחלה אינה נמחקת**, אלא מסתיימת היום. מחיקה
+          // הייתה לוקחת איתה את `origStart`, ואז האפליקציה מסתירה לה כל יום שמילאה לפני
+          // ההקפאה (`stripFrom` ב-`src/App.jsx`). הקפאה בלי תאריך או בלי שבוע לא הזיזה דבר,
+          // ולכן היא נמחקת כמו קודם.
+          if (freeze && freeze.back && freeze.week) {
+            const td = israelDay(0);
+            freeze = { ...freeze, back: freeze.back > td ? td : freeze.back, ended: td, endedBy: by };
+          } else {
+            freeze = null;
+          }
         } else {
           const wkRaw = parseInt(fz.week, 10);
           const wk = Number.isFinite(wkRaw) && wkRaw >= 1 && wkRaw <= 10 ? wkRaw : 0;
           freeze = {
-            from: (freeze && freeze.from) || israelDay(0),
+            // הקפאה חדשה אחרי שקודמת הסתיימה מתחילה היום. `origStart` נשאר המקורי.
+            from: (freeze && !freeze.ended && freeze.from) || israelDay(0),
             // Where her diary really began, kept so the app can still show her every day she
             // actually filled. Moving her start date forward would otherwise hide her own
             // history behind it, which is the one thing that must not happen.
@@ -1473,7 +1548,7 @@ JSON בלבד, בלי שום טקסט אחר:
             d.setUTCDate(d.getUTCDate() - (wk - 1) * 7);
             freezeStart = ymd(d);
           }
-          log.unshift({ at, by, field: "freeze", from: "", to: (fz.back ? fz.back : "בלי תאריך") + " · " + (wk ? `שבוע ${wk}` : "בלי שבוע") });
+          log.unshift({ at, by, field: "freeze", from: "", to: (fz.back ? fz.back : "בלי תאריך") + " · " + (wk ? `שבוע ${wk}` : "בלי שבוע"), since: freeze.from });
         }
       }
       if (hasGlow) {
@@ -1523,7 +1598,7 @@ JSON בלבד, בלי שום טקסט אחר:
       // The computed start date travels to ManyChat exactly like a cohort move, because the
       // automations there hang off her start date and not off the day she comes back.
       const mcStart = hasStart ? start : freezeStart;
-      const freezeTag = hasFreeze ? (freeze ? "on" : "off") : "";
+      const freezeTag = hasFreeze ? (freeze && !freeze.ended ? "on" : "off") : "";
       if (process.env.MANYCHAT_TOKEN && (hasGroup || mcStart || glow === "1" || glow === "0" || glowFull === "1" || glowFull === "0" || tag || freezeTag || hasName)) {
         mcState = await mcPush({ phone, hasGroup, group, start: mcStart, glow: hasGlow ? glow : "", glowFull: hasGlowFull ? glowFull : "", tag, on, freezeTag, hasName, first, last, out: mcOut });
       }

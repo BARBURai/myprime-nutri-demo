@@ -444,6 +444,27 @@ var VIEWS_SINCE = "2026-08-13";
 var app = document.getElementById("app");
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+// v8.20: שורות ההקפאה ביומן השינויים, ובכולן גם ממתי היא בהקפאה. בשורה שנכתבה לפני
+// v8.20 אין `since`, ולכן תאריך הכניסה להקפאה נלקח מהיום שבו השורה נכתבה, שזה בדיוק היום
+// שבו ההקפאה התחילה. בסיום ידני אין דרך כזאת, ובלי `since` התאריך פשוט לא נכתב.
+function ilDayOf(iso){ try { var d = new Date(iso); if(isNaN(d)) return ""; return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Jerusalem"}).format(d); } catch(e){ return ""; } }
+function freezeLogText(L){
+  if(L.to){
+    var since = L.since || ilDayOf(L.at);
+    var p = String(L.to).split(" · ");
+    var back = /^\d{4}-\d{2}-\d{2}$/.test(p[0]||"") ? p[0] : "";
+    var wk = /^שבוע \d+$/.test(p[1]||"") ? p[1] : "";
+    var head = 'הכניסה אותה להקפאה'+(since?' מ-'+il(since):'');
+    if(back && wk) return esc(head+' · חוזרת '+il(back)+' ל'+wk);
+    return esc(head+' · '+(back?il(back):(p[0]||""))+' · '+(p[1]||""));
+  }
+  var was = /^\d{4}-\d{2}-\d{2}$/.test(L.from||"") ? il(L.from) : "";
+  return esc('סיימה לה את ההקפאה'+(L.since?' מ-'+il(L.since):'')+(was?' (הייתה אמורה לחזור ב-'+was+')':''));
+}
+function freezeEndText(L){
+  var p = String(L.to||"").split("|");
+  return esc('ההקפאה'+(L.from?' מ-'+il(L.from):'')+' הסתיימה ב-'+il(p[0]||"")+', חזרה לשבוע '+(p[1]||"")+'.'+(L.tag==="1"?' תגית ההקפאה הוסרה במניצ\'ט.':''));
+}
 function il(d){ if(!d) return ""; var p=d.split("-"); return p[2]+"."+p[1]+"."+p[0]; }
 // מספר טלפון מנוקה: בלי פלוס, בלי רווחים, בלי מקפים, בלי 972 ובלי אפס מוביל.
 // כך "+972 54-767-6619", "054-7676619" ו-"547676619" נראים אותו דבר בחיפוש.
@@ -1670,7 +1691,8 @@ function render(){
       if(L.field === "glowfull") return pre + (L.to === "1" ? 'נתנה גישה לקורס האיפור המלא' : L.to === "0" ? 'הסירה את הגישה לקורס האיפור המלא' : 'החזירה את הקורס המלא לערך שבגיליון');
       if(L.field === "tag:cancelproc") return pre + (L.to === "1" ? 'סימנה אותה כביטול בתהליך וחסמה לה את האפליקציה' : 'הסירה את הסימון של ביטול בתהליך והחזירה לה את הגישה');
       if(L.field === "tag:app") return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה' : 'הסירה את הסימון של האפליקציה החדשה');
-      if(L.field === "freeze") return pre + (L.to ? 'הכניסה אותה להקפאה · '+esc(L.to) : 'סיימה לה את ההקפאה'+(L.from?' (הייתה '+esc(L.from)+')':''));
+      if(L.field === "freeze") return pre + freezeLogText(L);
+      if(L.field === "freezeEnd") return pre + freezeEndText(L);
       if(L.field === "email") return pre + 'שינתה לה את כתובת המייל מ-'+esc(L.from)+' ל-'+esc(L.to);
       if(L.field === "sub") return pre + 'חיוב במנוי החודשי'+(L.n?' מספר '+esc(L.n):'')+' · גישה עד '+esc(il(L.to));
       if(L.field === "sub_cancel") return pre + 'ביטלה את המנוי החודשי · גישה עד '+esc(il(L.to));
@@ -1710,6 +1732,10 @@ function render(){
   }
 
   function tabCohort(w){
+    // v8.20: הקפאה שתאריך החזרה שלה הגיע נשארת ברשומה, כדי שהיומן שלה באפליקציה יישאר שלם,
+    // אבל כאן היא מוצגת כמה שהייתה ולא כמה שהיא. ותאריך תחילת ההקפאה כתוב תמיד.
+    var fzPast = !!(w.freeze && w.freeze.back && w.freeze.week && !w.frozen);
+    var fzSince = (w.freeze && w.freeze.from) ? ' מ-'+il(w.freeze.from) : '';
     return '<div class="edit" id="fld-coh"><span>תאריך תחילת המחזור'+(w.startOverride?" ✎":"")+'</span>'+
       '<select class="field sm" style="width:230px" id="s_'+esc(w.email)+'">'+
         cohortSundays(w.start).map(function(d){ return '<option value="'+d+'"'+(w.start===d?" selected":"")+'>'+cohortOptLabel(d, w.start)+'</option>'; }).join("")+
@@ -1729,8 +1755,10 @@ function render(){
     '</div>'+
     '<div class="note">שיוך הקבוצה נשמר גם במניצ\'ט, ומשם הוא מגיע לגיליון לבד. <b>אין צורך לעדכן את הגיליון ידנית.</b></div>'+
     '<div class="frz'+((w.frozen && w.freezeTodo)?" todo":"")+'" id="fld-frz">'+
-      '<div class="frzhead">'+I_SNOW+'<b>'+(w.freeze ? ((w.frozen && w.freezeTodo) ? "הקפאה להשלמה" : "בהקפאה") : "הקפאה")+'</b><span>'+
-        (w.freeze
+      '<div class="frzhead">'+I_SNOW+'<b>'+(fzPast ? 'הקפאה'+fzSince : w.freeze ? ((w.frozen && w.freezeTodo) ? "הקפאה להשלמה" : "בהקפאה"+fzSince) : "הקפאה")+'</b><span>'+
+        (fzPast
+          ? 'חזרה מהקפאה ב-'+il(w.freeze.back)+' לשבוע '+w.freeze.week
+          : w.freeze
           ? ((w.freeze.back && w.freeze.week)
               ? 'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+(w.backCohort?' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b>':'')
               : esc(w.freezeTodo||"עוד לא ידוע מתי חוזרת ולאיזה שבוע"))
@@ -1740,19 +1768,19 @@ function render(){
         ? '<div class="control">'+
             '<select class="field sm" style="width:200px" id="fb_'+esc(w.email)+'">'+
               '<option value="">עוד לא יודעת</option>'+
-              freezeSundays().map(function(d){ return '<option value="'+d+'"'+((w.freeze&&w.freeze.back===d)?" selected":"")+'>'+il(d)+(d===sundays()[0]?" · השבוע הנוכחי":(d<DATA.today?" · כבר עבר":""))+'</option>'; }).join("")+
+              freezeSundays().map(function(d){ return '<option value="'+d+'"'+((w.freeze&&!fzPast&&w.freeze.back===d)?" selected":"")+'>'+il(d)+(d===sundays()[0]?" · השבוע הנוכחי":(d<DATA.today?" · כבר עבר":""))+'</option>'; }).join("")+
             '</select>'+
             '<select class="field sm" style="width:150px" id="fw_'+esc(w.email)+'">'+
               '<option value="">עוד לא יודעת</option>'+
-              [1,2,3,4,5,6,7,8,9,10].map(function(n){ return '<option value="'+n+'"'+((w.freeze&&w.freeze.week===n)?" selected":"")+'>שבוע '+n+'</option>'; }).join("")+
+              [1,2,3,4,5,6,7,8,9,10].map(function(n){ return '<option value="'+n+'"'+((w.freeze&&!fzPast&&w.freeze.week===n)?" selected":"")+'>שבוע '+n+'</option>'; }).join("")+
             '</select>'+
             '<button class="btn p" data-savefreeze="'+esc(w.email)+'">שמירה</button>'+
             '<button class="btn ghost" data-nofreeze="1">ביטול</button>'+
           '</div>'+
           '<div class="note">תאריך חזרה של <b>השבוע הנוכחי או של שבוע שכבר עבר מחזיר אותה מיד</b>, והיא נכנסת לשבוע שבחרת. בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב והתגית "הקפאה" נכתבים גם למניצ\'ט</b>, וסיום ההקפאה מסיר את התגית.</div>'
         : '<div class="control">'+
-            '<button class="btn" data-freeze="'+esc(w.email)+'">'+(w.freeze?"שינוי ההקפאה":"הכנסה להקפאה")+'</button>'+
-            (w.freeze?'<button class="btn dng" data-unfreeze="'+esc(w.email)+'">סיום ההקפאה</button>':'')+
+            '<button class="btn" data-freeze="'+esc(w.email)+'">'+((w.freeze&&!fzPast)?"שינוי ההקפאה":"הכנסה להקפאה")+'</button>'+
+            ((w.freeze&&!fzPast)?'<button class="btn dng" data-unfreeze="'+esc(w.email)+'">סיום ההקפאה</button>':'')+
           '</div>')+
     '</div>';
   }
@@ -2093,7 +2121,7 @@ function render(){
 
   function quickActs(w){
     var opts = [["fld-coh","העברת מחזור"],["fld-grp","שיוך קבוצה"],
-      ["fld-frz", w.freeze ? ((w.frozen && w.freezeTodo) ? "השלמת ההקפאה" : "עדכון ההקפאה") : "הכנסה להקפאה"]];
+      ["fld-frz", (w.freeze && (w.frozen || !w.freeze.back || !w.freeze.week)) ? ((w.frozen && w.freezeTodo) ? "השלמת ההקפאה" : "עדכון ההקפאה") : "הכנסה להקפאה"]];
     if(w.newApp) opts.push(["fld-until","הארכת גישה"]);
     opts.push(["fld-name","שינוי השם"]);
     opts.push(["fld-mail","שינוי כתובת מייל"]);

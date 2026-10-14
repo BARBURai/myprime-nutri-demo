@@ -14,7 +14,8 @@
     { "path": "/api/notify?kind=morning", "schedule": "0 5 * * *" },
     { "path": "/api/usage-report", "schedule": "0 5 * * *" },
     { "path": "/api/admin?namefix", "schedule": "0 12 * * 4" },
-    { "path": "/api/admin?subsweep", "schedule": "10 22 * * *" }
+    { "path": "/api/admin?subsweep", "schedule": "10 22 * * *" },
+    { "path": "/api/admin?freezesweep", "schedule": "20 22 * * *" }
   ],
   "functions": {
     "api/admin.js": { "maxDuration": 300 }
