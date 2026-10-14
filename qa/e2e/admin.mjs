@@ -189,7 +189,7 @@ const CHECKS = [
       const a = await read("lior5066@gmail.com");
       const b = await read("ronit@test.com");
       await ctx.close();
-      const okA = a.text.includes("בהקפאה מ-20.08.2026") && a.text.includes("חוזרת 06.09.2026 לשבוע 2") && a.end === 1;
+      const okA = a.text.includes("בהקפאה מ-20.08.2026") && a.text.includes("חוזרת 06.09.2026 לשבוע 2") && a.end === 0;
       const okB = b.text.includes("הקפאה מ-01.08.2026") && b.text.includes("חזרה מהקפאה ב-23.08.2026 לשבוע 3") && !b.text.includes("בהקפאה") && b.end === 0;
       return { ok: okA && okB && !errors.length, detail: `בזמן: "${a.text.slice(0, 70)}" סיום ${a.end} · אחרי: "${b.text.slice(0, 70)}" סיום ${b.end}${errors.length ? " · " + errors[0] : ""}` };
     },

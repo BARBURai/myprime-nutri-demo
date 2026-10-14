@@ -208,7 +208,10 @@ console.log("\nהנוסחים במסך הניהול, שרון אישר מילה 
   check("סיום ביד", f.freezeLogText({ to: "", from: "2026-11-01", since: "2026-10-14" }) === "סיימה לה את ההקפאה מ-14.10.2026 (הייתה אמורה לחזור ב-01.11.2026)");
   check("בכרטיס בזמן ההקפאה", /"בהקפאה"\+fzSince/.test(HTML) && HTML.includes("'חוזרת '+il(w.freeze.back)+' לשבוע '"));
   check("בכרטיס אחרי שחזרה", HTML.includes("'הקפאה'+fzSince") && HTML.includes("'חזרה מהקפאה ב-'+il(w.freeze.back)+' לשבוע '+w.freeze.week"));
-  check("**ואחרי שחזרה אין כפתור סיום הקפאה**", HTML.includes("((w.freeze&&!fzPast)?'<button class=\"btn dng\" data-unfreeze="));
+  // **v8.23: אין כפתור "סיום ההקפאה" בכלל.** רון: "הכפתור היחידי שרלוונטי זה שינוי הקפאה".
+  // בחזרה מוקדמת הוא השאיר את תאריך ההתחלה של החזרה המקורית, ולכן היא לא חזרה לשבוע הנכון.
+  check("**אין כפתור סיום הקפאה**", !HTML.includes("data-unfreeze") && !HTML.includes(">סיום ההקפאה<"));
+  check("ההסבר אומר שהתגית יורדת לבד", HTML.includes("וביום החזרה התגית יורדת לבד בלילה.") && !HTML.includes("וסיום ההקפאה מסיר את התגית"));
 }
 
 console.log(`\n${pass} עברו, ${fail} נכשלו`);
