@@ -734,7 +734,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.18";
+const VERSION = "8.19";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1198,7 +1198,7 @@ function IosBarOptions() {
     <div style={{ marginTop: 6 }}>
       <div style={head}>אם את רואה את הסרגל הזה, הקישי על הכפתור המסומן.</div>
       <InstallShot src="/guides/install-ios-share.png" alt="הסרגל התחתון של ספארי, כפתור השיתוף מסומן בעיגול אדום" />
-      <div style={{ ...head, marginTop: 12 }}>ואם את רואה רק שלוש נקודות, הקישי עליהן ואז בחרי "שיתוף".</div>
+      <div style={{ ...head, marginTop: 12 }}>ואם את רואה רק שלוש נקודות, הקישי עליהן ואז בחרי "שיתוף" (Share).</div>
       <InstallShot src="/guides/install-ios-dots.png" alt="הסרגל התחתון של ספארי במצב מכווץ, שלוש הנקודות מסומנות בעיגול אדום" />
     </div>
   );
@@ -1286,8 +1286,8 @@ function InstallGuideModal({ onClose }) {
           <li>פתחי את האפליקציה בדפדפן Safari.</li>
           <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions /></li>
           <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
-          <li>בחרי "הוספה למסך הבית".</li>
-          <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
+          <li>בחרי "הוספה למסך הבית" (Add to Home Screen).</li>
+          <li>הקישי "הוספה" (Add) - והאייקון יופיע במסך הבית.</li>
         </ol>
         <OpenFromIconNote />
         <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>לרענון האפליקציה באייפון</div>
@@ -1376,8 +1376,8 @@ function InstallGate({ onSkip }) {
               <li>ודאי שאת בדפדפן Safari.</li>
               <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions /></li>
               <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
-              <li>בחרי "הוספה למסך הבית".</li>
-              <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
+              <li>בחרי "הוספה למסך הבית" (Add to Home Screen).</li>
+              <li>הקישי "הוספה" (Add) - והאייקון יופיע במסך הבית.</li>
               {/* שלב 6 היה קופסה נפרדת מתחת לשלבים (OpenFromIconNote), ורון ביקש אותו
                   כשלב בתוך הרשימה, עם אייקון גדול יותר. אותו נוסח, מילה במילה. */}
               <li style={{ fontWeight: 600, color: C.brandD }}>
@@ -1777,8 +1777,8 @@ function Onboarding({ onFinish, name, email, fixedStart, onRestore }) {
               <li>פתחי את האפליקציה בדפדפן Safari.</li>
               <li>גללי לתחתית המסך, לסרגל של ספארי. <b>מה שאת רואה שם קובע:</b><IosBarOptions /></li>
               <li>הקישי על החץ שבפינה השמאלית התחתונה, "הצגת עוד", כדי לפתוח את כל הרשימה.</li>
-              <li>בחרי "הוספה למסך הבית".</li>
-              <li>הקישי "הוספה" - והאייקון יופיע במסך הבית.</li>
+              <li>בחרי "הוספה למסך הבית" (Add to Home Screen).</li>
+              <li>הקישי "הוספה" (Add) - והאייקון יופיע במסך הבית.</li>
             </ol>
             <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, marginBottom: 4 }}>לרענון האפליקציה באייפון</div>
             <p style={{ fontSize: 14.5, color: C.sub, lineHeight: 1.7, margin: "0 0 16px" }}>באייפון משיכה למטה לא מרעננת את האפליקציה. כדי לרענן: סגרי אותה לגמרי (החליקי מלמטה למעלה ועצרי באמצע, ואז החליקי את הכרטיס של האפליקציה כלפי מעלה), ופתחי שוב מהאייקון.</p>

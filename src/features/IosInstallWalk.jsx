@@ -15,8 +15,8 @@ import { useEffect, useRef, useState } from "react";
 const DIR = "/guides/ios-walk/";
 const PH = { w: 1170, h: 2532 };
 const S2 = "גללי לתחתית המסך, לסרגל של ספארי. מה שאת רואה שם קובע:";
-const B2 = "ואם את רואה רק שלוש נקודות, הקישי עליהן ואז בחרי \"שיתוף\".";
-const S5 = "הקישי \"הוספה\" - והאייקון יופיע במסך הבית.";
+const B2 = "ואם את רואה רק שלוש נקודות, הקישי עליהן ואז בחרי \"שיתוף\" (Share).";
+const S5 = "הקישי \"הוספה\" (Add) - והאייקון יופיע במסך הבית.";
 
 // tap הוא מיקום הכפתור בפיקסלים של הצילום המקורי. box הוא שורה בתפריט, שמסומנת
 // במסגרת מעוגלת סביב כל המילים. ring:false כשהעיגול כבר צרוב בצילום, noTap כשמסמנים
@@ -28,7 +28,7 @@ const SHOTS = {
   dots: { num: 2, small: S2, big: B2, src: "safari-dots.jpg", ...PH, tap: [174, 2355], r: 75, zoom: 2.0, dur: 8.6 },
   dotsMenu: { num: 2, small: S2, big: B2, src: "dots-menu.jpg", ...PH, tap: [495, 1572], box: [560, 120], zoom: 1.7, dur: 8.2 },
   sheet: { num: 3, big: "הקישי על החץ שבפינה השמאלית התחתונה, \"הצגת עוד\", כדי לפתוח את כל הרשימה.", src: "share-sheet.jpg", ...PH, tap: [201, 2256], r: 110, zoom: 1.9, dur: 8.6 },
-  more: { num: 4, big: "בחרי \"הוספה למסך הבית\".", src: "share-more.jpg", ...PH, tap: [818, 1827], box: [560, 120], zoom: 1.7, dur: 8.6 },
+  more: { num: 4, big: "בחרי \"הוספה למסך הבית\" (Add to Home Screen).", src: "share-more.jpg", ...PH, tap: [818, 1827], box: [560, 120], zoom: 1.7, dur: 8.6 },
   add: { num: 5, big: S5, src: "add-screen.jpg", ...PH, tap: [168, 285], r: 100, zoom: 1.9, dur: 8.6 },
   home: { num: 5, big: S5, src: "home.jpg", ...PH, tap: [990, 1200], r: 150, zoom: 1.6, noTap: true, dur: 6.5 },
 };

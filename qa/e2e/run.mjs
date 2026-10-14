@@ -1684,7 +1684,7 @@ const CHECKS = [
       const s1 = first.includes("ודאי שאת בדפדפן Safari.");
       const stopped = choices === 2 && atChoice.includes("מה את רואה בתחתית המסך?") && atChoice.includes("הקישי על התמונה שנראית כמו אצלך.") && !atChoice.includes("הקישי על הכפתור המסומן");
       const onlyDots = all.includes("ואם את רואה רק שלוש נקודות") && !all.includes("אם את רואה את הסרגל הזה");
-      const reachedEnd = all.includes("בחרי \"הוספה למסך הבית\".") && replay === 1;
+      const reachedEnd = all.includes("בחרי \"הוספה למסך הבית\" (Add to Home Screen).") && replay === 1;
       const restarted = again.includes("ודאי שאת בדפדפן Safari.") && againChoices === 0;
       return { ok: s1 && stopped && onlyDots && reachedEnd && restarted, detail: (reachedEnd ? "" : all.slice(-300) + " ### ") + `שלב 1 ${s1} · עצירה ${stopped} · רק שלוש הנקודות ${onlyDots} · הגיעה לסוף ${reachedEnd} · מתחילה שוב ${restarted}` };
     },
