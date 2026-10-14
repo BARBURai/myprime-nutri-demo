@@ -195,6 +195,43 @@ const CHECKS = [
     },
   },
   {
+    // **v8.24:** סימן ? פותח ונסגר, והעתקת ההודעה אליה רק בזמן הקפאה. שני הצדדים: מי שחזרה
+    // מהקפאה אינה מקבלת כפתור העתקה.
+    name: "הקפאה: הסבר ב-? והודעה אליה",
+    async run(browser, device) {
+      const fz = (from, back, week, frozen) => ({ freeze: { from, back, week, origStart: "2026-08-09" }, frozen, freezeTodo: "" });
+      const { ctx, page, errors } = await open(browser, device, (d) => {
+        Object.assign(d.women[0], fz("2026-08-20", "2026-09-06", 2, true), { first: "ליאור" });
+        Object.assign(d.women[1], fz("2026-08-01", "2026-08-23", 3, false));
+        return d;
+      });
+      await page.evaluate(() => { window.__copied = []; navigator.clipboard.writeText = (t) => { window.__copied.push(t); return Promise.resolve(); }; });
+      const tab = async (email) => {
+        await page.locator('[data-open="' + email + '"]').first().click();
+        await page.waitForTimeout(400);
+        await page.locator(".card.open .tab", { hasText: "מחזור וקבוצה" }).first().click();
+        await page.waitForTimeout(300);
+        return page.locator(".card.open #fld-frz").first();
+      };
+      let box = await tab("lior5066@gmail.com");
+      const before = await box.locator(".frzhelp").count();
+      await box.locator("[data-frzhelp]").click(); await page.waitForTimeout(300);
+      box = page.locator(".card.open #fld-frz").first();
+      const helpText = (await box.locator(".frzhelp").innerText().catch(() => "")).replace(/\s+/g, " ");
+      await box.locator("[data-frzhelp]").click(); await page.waitForTimeout(300);
+      const after = await page.locator(".card.open #fld-frz .frzhelp").count();
+      await page.locator(".card.open #fld-frz button", { hasText: "העתקת הודעה אליה" }).click(); await page.waitForTimeout(300);
+      const copied = (await page.evaluate(() => window.__copied))[0] || "";
+      await page.goto(BASE, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(700);
+      const boxB = await tab("ronit@test.com");
+      const copyB = await boxB.locator("button", { hasText: "העתקת הודעה אליה" }).count();
+      await ctx.close();
+      const WANT = "היי ליאור 🌸\nההקפאה שלך נרשמה מ-20.08.2026.\nב-06.09.2026 האפליקציה תיפתח לך שוב לבד, ותחזרי לשבוע 2 בתוכנית. אין צורך לעשות דבר.\nכל מה שמילאת עד עכשיו נשמר.\nאם תרצי לחזור מוקדם יותר, כתבי לנו ונחזיר אותך.\nצוות מיי פריים";
+      const ok = before === 0 && helpText.includes("איך עובדת הקפאה") && helpText.includes("רוצה לחזור לפני הזמן") && after === 0 && copied === WANT && copyB === 0 && !errors.length;
+      return { ok, detail: `לפני ${before} · נפתח ${helpText.includes("איך עובדת הקפאה")} · נסגר ${after === 0} · הועתק ${copied === WANT ? "נכון" : JSON.stringify(copied.slice(0, 60))} · אחרי חזרה ${copyB}${errors.length ? " · " + errors[0] : ""}` };
+    },
+  },
+  {
     // **v8.22:** הפס הצהוב של החזרה מתחיל בתאריך ההקפאה, ואצל סמארט אין "להכניס לקבוצה".
     // שני הצדדים באותה הרצה, כי שורה שלעולם אינה מוצגת נראית בדיוק כמו שורה שהוסתרה נכון.
     name: "פס החזרה מהקפאה: ממתי, ובלי קבוצה לסמארט",

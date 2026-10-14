@@ -274,6 +274,8 @@
   .frz.todo .frzhead{color:var(--warn)}
   .frzhead span{color:var(--ink-2);font-size:13.5px}
   .frz .note{margin-top:8px}
+  .frzq{min-width:38px;padding-inline:0;font-weight:800}
+  .frzhelp ul{margin:6px 0 0;padding-inline-start:18px;display:grid;gap:4px}
   .frzpick{display:grid;gap:4px}
   .frzpick span{font-size:13px;font-weight:700;color:var(--ink)}
 
@@ -997,7 +999,7 @@ function appGap(){
     'ההפרש: '+why.join(" · ")+'. <b>מי שאין לה תאריך התחלה אינה משתתפת בתוכנית שרצה ולכן אינה מוצגת כאן.</b></div>';
 }
 
-var CODES = null, CODESOPEN = false, FREEZING = "", VIEW = "";
+var CODES = null, CODESOPEN = false, FREEZING = "", FRZHELP = "", VIEW = "";
 // אילו מהחלקים במסך "בעיות בגיליון" מציגים גם את המוסתרות. לסשן הזה בלבד.
 var IGNOPEN = { mail: false, dup: false };
 var NAMING = "";   // הכרטיס שבו שדה השם פתוח לעריכה
@@ -1657,6 +1659,34 @@ function render(){
     '</div>';
   }
 
+  // ההסבר על ההקפאה, נפתח בסימן ? ליד הכפתור. בנוסח שרון אישר. v8.24.
+  function freezeHelp(){
+    return '<div class="note frzhelp"><b>איך עובדת הקפאה</b><ul>'+
+      '<li><b>הכנסה להקפאה:</b> בוחרים מתי היא חוזרת ולאיזה שבוע. עד אז היא לא נכנסת לאפליקציה ולא מקבלת תזכורות, ורואה מסך שאומר לה מתי היא חוזרת.</li>'+
+      '<li><b>עוד לא יודעת מתי היא חוזרת:</b> בוחרים "עוד לא יודעת". כשהיא יודעת, נכנסים ל"שינוי ההקפאה" ובוחרים תאריך ושבוע.</li>'+
+      '<li><b>חוזרת בזמן:</b> לא עושים כלום. ביום החזרה הכל נפתח לה לבד, והתגית "הקפאה" יורדת במניצ\'ט בלילה.</li>'+
+      '<li><b>רוצה לחזור לפני הזמן:</b> "שינוי ההקפאה". בתאריך בוחרים את יום ראשון שמסומן "השבוע הנוכחי", ובשבוע בוחרים לאיזה שבוע היא חוזרת. היא נכנסת מיד.</li>'+
+      '<li><b>הקפאה בטעות:</b> אותה פעולה, עם השבוע שהיא הייתה בו.</li>'+
+      '<li>כל מה שהיא מילאה לפני ההקפאה נשמר ביומן שלה.</li>'+
+    '</ul></div>';
+  }
+
+  // ההודעה אליה כשהיא בהקפאה, בנוסח שרון אישר. קול המערכת, בלי חתימה של ענת. v8.24.
+  function freezeMsg(w){
+    var name = String(w.first||"").trim(), fz = w.freeze || {};
+    var since = fz.from ? ' מ-'+il(fz.from) : '';
+    var head = 'היי'+(name?' '+name:'')+' 🌸\n'+'ההקפאה שלך נרשמה'+since+'.\n';
+    if(fz.back && fz.week) return head+
+      'ב-'+il(fz.back)+' האפליקציה תיפתח לך שוב לבד, ותחזרי לשבוע '+fz.week+' בתוכנית. אין צורך לעשות דבר.\n'+
+      'כל מה שמילאת עד עכשיו נשמר.\n'+
+      'אם תרצי לחזור מוקדם יותר, כתבי לנו ונחזיר אותך.\n'+
+      'צוות מיי פריים';
+    return head+
+      'כשתדעי מתי את רוצה לחזור, כתבי לנו ונחזיר אותך לתוכנית.\n'+
+      'כל מה שמילאת עד עכשיו נשמר.\n'+
+      'צוות מיי פריים';
+  }
+
   // ההודעה אליה אחרי ביטול, בנוסח שרון אישר. v8.14.
   function subCancelMsg(w){
     var name = String(w.first||"").trim();
@@ -1782,7 +1812,10 @@ function render(){
           '<div class="note">תאריך חזרה של <b>השבוע הנוכחי או של שבוע שכבר עבר מחזיר אותה מיד</b>, והיא נכנסת לשבוע שבחרת. בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב והתגית "הקפאה" נכתבים גם למניצ\'ט</b>, וביום החזרה התגית יורדת לבד בלילה.</div>'
         : '<div class="control">'+
             '<button class="btn" data-freeze="'+esc(w.email)+'">'+((w.freeze&&!fzPast)?"שינוי ההקפאה":"הכנסה להקפאה")+'</button>'+
-          '</div>')+
+            (w.frozen&&w.freeze?'<button class="btn" data-copy="'+esc(freezeMsg(w))+'">העתקת הודעה אליה</button>':'')+
+            '<button class="btn ghost frzq" data-frzhelp="'+esc(w.email)+'" aria-label="איך עובדת הקפאה">?</button>'+
+          '</div>'+
+          (FRZHELP===w.email?freezeHelp():''))+
     '</div>';
   }
 
@@ -2280,6 +2313,7 @@ function render(){
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-v]").forEach(function(el){ el.onclick=function(){
     var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; SEL=""; EDITING=""; render(); }; });
+  app.querySelectorAll("[data-frzhelp]").forEach(function(el){ el.onclick=function(){ var em=el.getAttribute("data-frzhelp"); FRZHELP = FRZHELP===em ? "" : em; render(); }; });
   app.querySelectorAll("[data-copy]").forEach(function(el){ el.onclick=function(){
     copyText(el.getAttribute("data-copy"), el); }; });
 
