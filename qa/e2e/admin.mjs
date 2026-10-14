@@ -215,20 +215,28 @@ const CHECKS = [
       };
       let box = await tab("lior5066@gmail.com");
       const before = await box.locator(".frzhelp").count();
-      await box.locator("[data-frzhelp]").click(); await page.waitForTimeout(300);
-      box = page.locator(".card.open #fld-frz").first();
-      const helpText = (await box.locator(".frzhelp").innerText().catch(() => "")).replace(/\s+/g, " ");
-      await box.locator("[data-frzhelp]").click(); await page.waitForTimeout(300);
-      const after = await page.locator(".card.open #fld-frz .frzhelp").count();
-      await page.locator(".card.open #fld-frz button", { hasText: "העתקת הודעה אליה" }).click(); await page.waitForTimeout(300);
+      const btn = box.locator("button[data-frzhelp]", { hasText: "איך עובדת הקפאה?" });
+      const label = (await btn.innerText()).trim();
+      await btn.click(); await page.waitForTimeout(300);
+      // חלונית קופצת במרכז המסך: קבועה, מעל הכל, וכולה בתוך המסך.
+      const pop = await page.evaluate(() => { const o = document.querySelector(".frzpop"), d = document.querySelector(".frzhelp"); if (!o || !d) return null; const r = d.getBoundingClientRect(); return { fixed: getComputedStyle(o).position === "fixed", inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth }; });
+      const helpText = (await page.locator(".frzhelp").innerText().catch(() => "")).replace(/\s+/g, " ");
+      await page.locator(".frzhelp li").first().click(); await page.waitForTimeout(200);
+      const stays = await page.locator(".frzhelp").count();
+      await page.locator(".frzx").click(); await page.waitForTimeout(300);
+      const afterX = await page.locator(".frzpop").count();
+      await page.locator("button[data-frzhelp]", { hasText: "איך עובדת הקפאה?" }).click(); await page.waitForTimeout(300);
+      await page.mouse.click(5, 5); await page.waitForTimeout(300);
+      const after = (await page.locator(".frzpop").count()) + afterX;
+      await page.locator(".card.open #fld-frz button", { hasText: "העתקת הודעת אישור אליה" }).click(); await page.waitForTimeout(300);
       const copied = (await page.evaluate(() => window.__copied))[0] || "";
       await page.goto(BASE, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(700);
       const boxB = await tab("ronit@test.com");
-      const copyB = await boxB.locator("button", { hasText: "העתקת הודעה אליה" }).count();
+      const copyB = await boxB.locator("button", { hasText: "העתקת הודעת אישור אליה" }).count();
       await ctx.close();
       const WANT = "היי ליאור 🌸\nההקפאה שלך נרשמה מ-20.08.2026.\nב-06.09.2026 האפליקציה תיפתח לך שוב לבד, ותחזרי לשבוע 2 בתוכנית. אין צורך לעשות דבר.\nכל מה שמילאת עד עכשיו נשמר.\nאם תרצי לחזור מוקדם יותר, כתבי לנו ונחזיר אותך.\nצוות מיי פריים";
-      const ok = before === 0 && helpText.includes("איך עובדת הקפאה") && helpText.includes("רוצה לחזור לפני הזמן") && after === 0 && copied === WANT && copyB === 0 && !errors.length;
-      return { ok, detail: `לפני ${before} · נפתח ${helpText.includes("איך עובדת הקפאה")} · נסגר ${after === 0} · הועתק ${copied === WANT ? "נכון" : JSON.stringify(copied.slice(0, 60))} · אחרי חזרה ${copyB}${errors.length ? " · " + errors[0] : ""}` };
+      const ok = before === 0 && label === "איך עובדת הקפאה?" && pop && pop.fixed && pop.inView && stays === 1 && helpText.includes("איך עובדת הקפאה") && helpText.includes("רוצה לחזור לפני הזמן") && after === 0 && copied === WANT && copyB === 0 && !errors.length;
+      return { ok, detail: `חלונית ${JSON.stringify(pop)} · נשארת ${stays} · לפני ${before} · נפתח ${helpText.includes("איך עובדת הקפאה")} · נסגר ${after === 0} · הועתק ${copied === WANT ? "נכון" : JSON.stringify(copied.slice(0, 60))} · אחרי חזרה ${copyB}${errors.length ? " · " + errors[0] : ""}` };
     },
   },
   {
