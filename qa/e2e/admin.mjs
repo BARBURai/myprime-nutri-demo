@@ -195,6 +195,32 @@ const CHECKS = [
     },
   },
   {
+    // **v8.22:** הפס הצהוב של החזרה מתחיל בתאריך ההקפאה, ואצל סמארט אין "להכניס לקבוצה".
+    // שני הצדדים באותה הרצה, כי שורה שלעולם אינה מוצגת נראית בדיוק כמו שורה שהוסתרה נכון.
+    name: "פס החזרה מהקפאה: ממתי, ובלי קבוצה לסמארט",
+    async run(browser, device) {
+      const fz = (solo) => ({ freeze: { from: "2026-08-20", back: "2026-09-06", week: 2, origStart: "2026-08-09" }, frozen: true, freezeTodo: "", backSoon: true, backCohort: "2026-08-30", solo });
+      const { ctx, page, errors } = await open(browser, device, (d) => {
+        Object.assign(d.women[0], fz(0));
+        Object.assign(d.women[1], fz(10));
+        return d;
+      });
+      const read = async (email) => {
+        await page.locator('[data-open="' + email + '"]').first().click();
+        await page.waitForTimeout(400);
+        const t = (await page.locator(".card.open .workline").first().innerText()).replace(/\s+/g, " ").trim();
+        await page.goto(BASE, { waitUntil: "domcontentloaded" }); await page.waitForTimeout(700);
+        return t;
+      };
+      const a = await read("lior5066@gmail.com");
+      const b = await read("ronit@test.com");
+      await ctx.close();
+      const okA = a.startsWith("בהקפאה מ-20.08.2026 · חוזרת 06.09.2026 לשבוע 2") && a.includes("להכניס לקבוצה של מחזור 30.08.2026");
+      const okB = b.startsWith("בהקפאה מ-20.08.2026 · חוזרת 06.09.2026 לשבוע 2") && !b.includes("קבוצה");
+      return { ok: okA && okB && !errors.length, detail: `360: "${a}" · סמארט: "${b}"${errors.length ? " · " + errors[0] : ""}` };
+    },
+  },
+  {
     // **v7.95: המסך מתעדכן לבד.** שני הצדדים באותה הרצה: אישה חדשה מופיעה בלי רענון, ושינוי
     // שלא נשמר בכרטיס עוצר את הרענון עד שהוא מתבטל. רענון שמוחק בחירה של הפקידה נראה בדיוק
     // כמו רענון שעובד, אם בודקים רק שהאישה הופיעה.

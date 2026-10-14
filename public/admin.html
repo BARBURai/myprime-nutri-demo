@@ -1725,7 +1725,7 @@ function render(){
           ? 'חזרה מהקפאה ב-'+il(w.freeze.back)+' לשבוע '+w.freeze.week
           : w.freeze
           ? ((w.freeze.back && w.freeze.week)
-              ? 'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+(w.backCohort?' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b>':'')
+              ? 'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+((w.backCohort&&!w.solo)?' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b>':'')
               : esc(w.freezeTodo||"עוד לא ידוע מתי חוזרת ולאיזה שבוע"))
           : 'היא פעילה. אפשר להקפיא אותה ולבחור מתי היא חוזרת.')+
       '</span></div>'+
@@ -2140,7 +2140,7 @@ function render(){
         (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+'</div>'+
         '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+
           (w.newApp?' · גישה עד <b class="'+(w.expired?"expired":"")+'">'+(w.until?il(w.until):"לא ידוע")+'</b>'+(w.expired?" (הסתיימה)":""):"")+'</div>'+
-        ((w.backSoon && w.backCohort)?'<div class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></div>':'')+
+        ((w.backSoon && w.backCohort)?'<div class="workline">'+(w.freeze.from?'בהקפאה מ-'+il(w.freeze.from)+' · ':'')+'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+(w.solo?'':' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b>')+'</div>':'')+
         dupBox(w)+
         stateBox(w)+
         aiBox(w)+
@@ -2170,7 +2170,7 @@ function render(){
       ((w.dupRows>1||(w.dupPhone&&w.dupPhone.length))?'<span class="grp warnpill">כפילות בגיליון</span>':'')+
       '</span>'+
       '<span class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+'</span>'+
-      ((w.backSoon && w.backCohort)?'<span class="workline">חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b></span>':'')+
+      ((w.backSoon && w.backCohort)?'<span class="workline">'+(w.freeze.from?'בהקפאה מ-'+il(w.freeze.from)+' · ':'')+'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+(w.solo?'':' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b>')+'</span>':'')+
       ((w.frozen && w.freezeTodo)?'<span class="workline">בהקפאה · '+esc(w.freezeTodo)+'</span>':'')+
       '</button>';
   }
