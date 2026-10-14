@@ -274,6 +274,12 @@
   .frz.todo .frzhead{color:var(--warn)}
   .frzhead span{color:var(--ink-2);font-size:13.5px}
   .frz .note{margin-top:8px}
+  .frzlink{background:none;border:0;padding:6px 2px;font:inherit;font-size:14px;font-weight:700;color:var(--cold);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+  .frzpop{position:fixed;inset:0;z-index:1000;background:rgba(18,16,26,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+  .frzhelp{position:relative;background:var(--card);color:var(--ink);border-radius:14px;padding:20px 20px 18px;max-width:480px;width:100%;max-height:85vh;overflow:auto;font-size:15px;line-height:1.55;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  .frzhelp > b{display:block;font-size:17px;margin-inline-end:30px}
+  .frzhelp ul{margin:10px 0 0;padding-inline-start:18px;display:grid;gap:8px}
+  .frzx{position:absolute;top:10px;inset-inline-end:10px;width:34px;height:34px;border:0;border-radius:50%;background:var(--card-2);color:var(--ink);font-size:16px;cursor:pointer}
   .frzpick{display:grid;gap:4px}
   .frzpick span{font-size:13px;font-weight:700;color:var(--ink)}
 
@@ -997,7 +1003,7 @@ function appGap(){
     'ההפרש: '+why.join(" · ")+'. <b>מי שאין לה תאריך התחלה אינה משתתפת בתוכנית שרצה ולכן אינה מוצגת כאן.</b></div>';
 }
 
-var CODES = null, CODESOPEN = false, FREEZING = "", VIEW = "";
+var CODES = null, CODESOPEN = false, FREEZING = "", FRZHELP = "", VIEW = "";
 // אילו מהחלקים במסך "בעיות בגיליון" מציגים גם את המוסתרות. לסשן הזה בלבד.
 var IGNOPEN = { mail: false, dup: false };
 var NAMING = "";   // הכרטיס שבו שדה השם פתוח לעריכה
@@ -1633,6 +1639,37 @@ function render(){
     '</div>';
   }
 
+  // ההסבר על ההקפאה, נפתח בסימן ? ליד הכפתור. בנוסח שרון אישר. v8.24.
+  // v8.25: חלונית במרכז המסך ולא שורה מתחת לכפתורים, כדי שיהיה ברור מה נפתח. רון.
+  function freezeHelp(){
+    return '<div class="frzpop" data-frzhelp="">'+'<div class="frzhelp" role="dialog" aria-modal="true">'+
+      '<button class="frzx" data-frzhelp="" aria-label="סגירה">✕</button>'+
+      '<b>איך עובדת הקפאה</b><ul>'+
+      '<li><b>הכנסה להקפאה:</b> בוחרים מתי היא חוזרת ולאיזה שבוע. עד אז היא לא נכנסת לאפליקציה ולא מקבלת תזכורות, ורואה מסך שאומר לה מתי היא חוזרת.</li>'+
+      '<li><b>עוד לא יודעת מתי היא חוזרת:</b> בוחרים "עוד לא יודעת". כשהיא יודעת, נכנסים ל"שינוי ההקפאה" ובוחרים תאריך ושבוע.</li>'+
+      '<li><b>חוזרת בזמן:</b> לא עושים כלום. ביום החזרה הכל נפתח לה לבד, והתגית "הקפאה" יורדת במניצ\'ט בלילה.</li>'+
+      '<li><b>רוצה לחזור לפני הזמן:</b> "שינוי ההקפאה". בתאריך בוחרים את יום ראשון שמסומן "השבוע הנוכחי", ובשבוע בוחרים לאיזה שבוע היא חוזרת. היא נכנסת מיד.</li>'+
+      '<li><b>הקפאה בטעות:</b> אותה פעולה, עם השבוע שהיא הייתה בו.</li>'+
+      '<li>כל מה שהיא מילאה לפני ההקפאה נשמר ביומן שלה.</li>'+
+    '</ul></div></div>';
+  }
+
+  // ההודעה אליה כשהיא בהקפאה, בנוסח שרון אישר. קול המערכת, בלי חתימה של ענת. v8.24.
+  function freezeMsg(w){
+    var name = String(w.first||"").trim(), fz = w.freeze || {};
+    var since = fz.from ? ' מ-'+il(fz.from) : '';
+    var head = 'היי'+(name?' '+name:'')+' 🌸\n'+'ההקפאה שלך נרשמה'+since+'.\n';
+    if(fz.back && fz.week) return head+
+      'ב-'+il(fz.back)+' האפליקציה תיפתח לך שוב לבד, ותחזרי לשבוע '+fz.week+' בתוכנית. אין צורך לעשות דבר.\n'+
+      'כל מה שמילאת עד עכשיו נשמר.\n'+
+      'אם תרצי לחזור מוקדם יותר, כתבי לנו ונחזיר אותך.\n'+
+      'צוות מיי פריים';
+    return head+
+      'כשתדעי מתי את רוצה לחזור, כתבי לנו ונחזיר אותך לתוכנית.\n'+
+      'כל מה שמילאת עד עכשיו נשמר.\n'+
+      'צוות מיי פריים';
+  }
+
   // וההיסטוריה, בדרופדאון כדי שלא תעמיס. החלטת רון.
   function histBox(w){
     var st = w.state || {};
@@ -1742,11 +1779,13 @@ function render(){
             '<button class="btn p" data-savefreeze="'+esc(w.email)+'">שמירה</button>'+
             '<button class="btn ghost" data-nofreeze="1">ביטול</button>'+
           '</div>'+
-          '<div class="note">תאריך חזרה של <b>השבוע הנוכחי או של שבוע שכבר עבר מחזיר אותה מיד</b>, והיא נכנסת לשבוע שבחרת. בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב והתגית "הקפאה" נכתבים גם למניצ\'ט</b>, וסיום ההקפאה מסיר את התגית.</div>'
+          '<div class="note">תאריך חזרה של <b>השבוע הנוכחי או של שבוע שכבר עבר מחזיר אותה מיד</b>, והיא נכנסת לשבוע שבחרת. בזמן ההקפאה היא <b>לא נכנסת לאפליקציה ולא מקבלת תזכורות</b>, ורואה מסך שאומר לה מתי היא חוזרת. ביום החזרה הכל נפתח לה לבד לפי השבוע שבחרת. <b>תאריך ההתחלה המחושב והתגית "הקפאה" נכתבים גם למניצ\'ט</b>, וביום החזרה התגית יורדת לבד בלילה.</div>'
         : '<div class="control">'+
             '<button class="btn" data-freeze="'+esc(w.email)+'">'+((w.freeze&&!fzPast)?"שינוי ההקפאה":"הכנסה להקפאה")+'</button>'+
-            ((w.freeze&&!fzPast)?'<button class="btn dng" data-unfreeze="'+esc(w.email)+'">סיום ההקפאה</button>':'')+
-          '</div>')+
+            (w.frozen&&w.freeze?'<button class="btn" data-copy="'+esc(freezeMsg(w))+'">העתקת הודעת אישור אליה</button>':'')+
+            '<button class="frzlink" data-frzhelp="'+esc(w.email)+'">איך עובדת הקפאה?</button>'+
+          '</div>'+
+          (FRZHELP===w.email?freezeHelp():''))+
     '</div>';
   }
 
@@ -2243,6 +2282,7 @@ function render(){
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-v]").forEach(function(el){ el.onclick=function(){
     var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; SEL=""; EDITING=""; render(); }; });
+  app.querySelectorAll("[data-frzhelp]").forEach(function(el){ el.onclick=function(e){ if(el.classList.contains("frzpop") && e.target!==el) return; var em=el.getAttribute("data-frzhelp"); FRZHELP = (em && FRZHELP!==em) ? em : ""; render(); }; });
   app.querySelectorAll("[data-copy]").forEach(function(el){ el.onclick=function(){
     copyText(el.getAttribute("data-copy"), el); }; });
 
@@ -2710,13 +2750,6 @@ function render(){
       else mcWarn(r);
       FREEZING=""; delete MC[em]; return load().then(function(){ render(); mcLoad(em); });
     }).catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירה"; });
-  }; });
-  app.querySelectorAll("[data-unfreeze]").forEach(function(el){ el.onclick=function(){
-    var em=el.getAttribute("data-unfreeze");
-    if(!confirm("לסיים לה את ההקפאה?\n\nהיא תחזור להיכנס לאפליקציה מיד.\nתאריך ההתחלה שנקבע לה נשאר כמו שהוא.\n\nהתגית \"הקפאה\" תוסר במניצ'ט, ואם יש שם אוטומציה שמחוברת להסרה היא תפעל.")) return;
-    el.disabled=true;
-    save(em,{freeze:{off:true}}).then(function(r){ if(!r.ok) throw new Error(); mcWarn(r); FREEZING=""; delete MC[em]; return load().then(function(){ render(); mcLoad(em); }); })
-      .catch(function(){ alert("הפעולה נכשלה. נסי שוב."); el.disabled=false; });
   }; });
   app.querySelectorAll("[data-saveemail]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-saveemail"), box=document.getElementById("e_"+em);
