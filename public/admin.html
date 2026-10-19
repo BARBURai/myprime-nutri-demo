@@ -1581,7 +1581,8 @@ function render(){
     var span360 = il(w.start)+' עד '+il(end360Shown);
     var prog = w.solo===10 ? 'SMART' : w.solo ? 'סולו '+w.solo : 'מיי פריים 360';
     var v360 = !w.start ? 'עוד לא שובצה למחזור'
-      : st.open360Base || st.preStart ? span360
+      // בלי המנוי החודשי השרת שולח רק `open360`, ואז הוא זהה ל-`open360Base`.
+      : (st.open360Base != null ? st.open360Base : st.open360) || st.preStart ? span360
       : w.cancelled || w.blocked ? 'בוטל'
       : w.frozen ? 'בהקפאה'+(w.freeze && w.freeze.back ? ', חוזרת '+il(w.freeze.back) : '')
       : 'הסתיים ב-'+il(w.until||st.end360);
