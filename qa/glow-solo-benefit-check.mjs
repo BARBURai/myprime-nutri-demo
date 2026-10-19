@@ -101,7 +101,8 @@ const grab = (name) => {
 };
 const helpers = `const esc = (s) => String(s == null ? "" : s); const il = (s) => { const p = String(s || "").match(/^(\\d{4})-(\\d{2})-(\\d{2})$/); return p ? p[3] + "." + p[2] + "." + p[1] : String(s || ""); };`;
 const box = new Function("return (function(){" + helpers + grab("stateBox") + grab("entryOf") + "return stateBox; })()")();
-const glowLine = (w) => { const m = box(w).match(/קורס האיפור המלא<\/span><b>([^<]*)</); return m ? m[1] : "?"; };
+// מ-v8.29 המקור בשם השורה והתאריכים בערך: "קורס האיפור המלא · הטבת סולו" ו-"<התחלה> עד <סוף>".
+const glowLine = (w) => { const m = box(w).match(/קורס האיפור המלא(?: · ([^<]*))?<\/span><b>([^<]*)</); return m ? (m[1] ? m[1] + " · " : "") + m[2] : "?"; };
 
 const L = await list();
 const A = (em) => (L.women || []).find((w) => w.email === em) || {};
@@ -110,7 +111,7 @@ const end70 = (s) => addDays(s, 70);
 console.log("\nהטבת סולו רגילה");
 let g = await gate("benefit@t.co");
 ok("**שבוע 4 בסולו: הקורס פתוח**", g.allowed && g.glowFull === true, JSON.stringify(g));
-ok("**במסך: 'הטבת סולו · פעיל עד' ותאריך סוף התוכנית**", glowLine(A("benefit@t.co")) === "הטבת סולו · פעיל עד " + il(end70(now3)), glowLine(A("benefit@t.co")));
+ok("**במסך: 'הטבת סולו' מתאריך ההתחלה עד סוף התוכנית**", glowLine(A("benefit@t.co")) === "הטבת סולו · " + il(now3) + " עד " + il(end70(now3)), glowLine(A("benefit@t.co")));
 ok("השרת חותם לה על הסרטונים", db.kv["glowfull:benefit@t.co"] === "1");
 ok("**התווית לבדה מספיקה, בלי GLOW-FULL**", A("benefit@t.co").glowFull === false && A("benefit@t.co").state.glowOpen === true);
 
@@ -119,7 +120,7 @@ g = await gate("soon@t.co");
 ok("**הקורס מחכה ליום 1, כמו המתנה**", g.allowed && g.glowFull === false);
 ok("**ואין לה את השורה 'במתנה', כי היא שילמה עליו**", g.glowSoon === false);
 ok("**ויש לה את השורה של הטבת הסולו**. v7.55", g.glowSoonSolo === true, JSON.stringify(g));
-ok("במסך: 'הטבת סולו · נפתח ב-' ותאריך ההתחלה", glowLine(A("soon@t.co")) === "הטבת סולו · נפתח ב-" + il(future), glowLine(A("soon@t.co")));
+ok("במסך, לפני יום 1: 'הטבת סולו' מתאריך ההתחלה", glowLine(A("soon@t.co")).startsWith("הטבת סולו · " + il(future) + " עד "), glowLine(A("soon@t.co")));
 
 console.log("\nשורת ההמתנה של הטבת הסולו. v7.55");
 g = await gate("benefit@t.co");
@@ -166,7 +167,7 @@ g = await gate("extended@t.co");
 ok("**המשרד האריך את התוכנית: גם הקורס מתארך**", g.allowed && g.glowFull === true, JSON.stringify(g));
 const L2 = await list();
 const ext = (L2.women || []).find((w) => w.email === "extended@t.co");
-ok("ובמסך התאריך הוא של ההארכה", glowLine(ext) === "הטבת סולו · פעיל עד " + il(addDays(ilToday(), 30)), glowLine(ext));
+ok("ובמסך התאריך הוא של ההארכה", glowLine(ext).startsWith("הטבת סולו · ") && glowLine(ext).endsWith(" עד " + il(addDays(ilToday(), 30))), glowLine(ext));
 delete db.hash["admin:overrides"];
 
 console.log("\nביטול");
