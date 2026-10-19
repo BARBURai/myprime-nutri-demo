@@ -155,7 +155,8 @@
   .stline{display:flex;gap:10px;justify-content:space-between;align-items:baseline;font-size:13.5px;padding:2px 0}
   .stline span{color:var(--ink);opacity:.8;flex:0 0 auto}
   .stline b{text-align:left;font-weight:600}
-  .stscreen{margin-top:7px;padding-top:7px;border-top:1px solid var(--line);font-size:13.5px}
+  .stsep{margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}
+  .stscreen{margin-top:2px;font-size:13.5px}
   .hist{margin-top:8px}
   .hist>summary{
     cursor:pointer;font-size:13px;font-weight:600;color:var(--brand);
@@ -1569,23 +1570,36 @@ function render(){
   function stateBox(w){
     var st = w.state || {};
     var end360Shown = st.end360 && !w.startOverride && !w.override ? st.end360 : (w.until||st.end360);
-    var l360 = !w.start ? 'עוד לא שובצה למחזור'
-      : st.open360 ? 'פעיל עד '+il(end360Shown)
-      : w.cancelled || w.blocked ? 'בוטל'
-      : w.frozen ? 'בהקפאה'
-      : 'הסתיים ב-'+il(w.until||st.end360);
     var src = st.glowSource === "paid" ? 'נקנה'
       : st.glowSource === "solo" ? 'נקנה'
-      : st.glowSource === "gift" ? 'מתנה מהוובינר · נגמר יחד עם 360'
+      : st.glowSource === "gift" ? 'מתנה מהוובינר'
       // הטבת Glow לקונות סולו, v7.54. הקורס פתוח בדיוק כמו התוכנית, ולכן התאריך שלו
       // הוא התאריך של התוכנית, כולל הארכה של המשרד. נוסח שרון אישר.
       : st.glowSource === "benefit" ? 'הטבת סולו' : '';
-    var lGlow = !(w.glowFull || w.glowSolo) ? 'אין'
-      : st.preStart ? src + ' · נפתח ב-'+il(w.start)
-      : st.glowOpen
-        ? src + (st.glowSource === "benefit" ? ' · פעיל עד '+il(end360Shown)
-          : st.endGlow && st.product === "glow" ? ' · פעיל עד '+il(st.endGlow) : '')
-        : src + ' · הסתיים'+(st.endGlow?' ב-'+il(st.endGlow):'');
+    // **רק מה שיש לה, שורה לכל דבר, עם תאריכים. v8.29.** רון: "למה לא לרשום פשוט את מה
+    // שיש לה... שורה לכל דבר שיש ומאיזה תאריך עד איזה תאריך". מה שאין לה אינו מופיע.
+    var span360 = il(w.start)+' עד '+il(end360Shown);
+    var prog = w.solo===10 ? 'SMART' : w.solo ? 'סולו '+w.solo : 'מיי פריים 360';
+    var v360 = !w.start ? 'עוד לא שובצה למחזור'
+      // בלי המנוי החודשי השרת שולח רק `open360`, ואז הוא זהה ל-`open360Base`.
+      : (st.open360Base != null ? st.open360Base : st.open360) || st.preStart ? span360
+      : w.cancelled || w.blocked ? 'בוטל'
+      : w.frozen ? 'בהקפאה'+(w.freeze && w.freeze.back ? ', חוזרת '+il(w.freeze.back) : '')
+      : 'הסתיים ב-'+il(w.until||st.end360);
+    // קונת הקורס לבדו אינה ב-360 בכלל, ולכן אין לה שורה של תוכנית.
+    var lines = (!w.start && st.product === "glow") ? [] : [[prog, v360]];
+    if (st.subOn && w.sub) lines.push(['מנוי חודשי', 'פעיל עד '+il(w.sub.paidUntil)]);
+    // שיעורי הבונוס פתוחים כל עוד היא נכנסת לאפליקציה, ונסגרים יחד איתה.
+    if (w.glow && st.allowed && st.product !== "glow") lines.push(['שיעורי הבונוס של Glow', 'עד '+il(end360Shown)]);
+    if (w.glowFull || w.glowSolo) {
+      var gift = st.glowSource === "gift" || st.glowSource === "benefit";
+      var vGlow = gift
+        ? ((st.glowOpen || st.preStart) ? span360 : 'הסתיים')
+        : st.preStart && !st.glowOpen ? 'נפתח ב-'+il(w.start)
+        : st.glowOpen ? (st.endGlow && st.product === "glow" ? 'עד '+il(st.endGlow) : 'פעיל')
+        : 'הסתיים'+(st.endGlow?' ב-'+il(st.endGlow):'');
+      lines.push(['קורס האיפור המלא'+(src?' · '+src:''), vGlow]);
+    }
     var screen = !st.allowed
       ? (st.reason === "cancelled" ? 'חסומה, בוטלה'
         : st.reason === "frozen" ? 'חסומה, בהקפאה' : 'חסומה, התוכנית הסתיימה')
@@ -1595,9 +1609,8 @@ function render(){
       : (w.glowFull || w.glowSolo) && st.glowOpen ? 'התוכנית, והקורס בתוכה' : 'התוכנית';
     return '<div class="statebox">'+
       '<div class="sthead">מה יש לה עכשיו</div>'+
-      '<div class="stline"><span>מיי פריים 360</span><b>'+esc(l360)+'</b></div>'+
-      '<div class="stline"><span>קורס האיפור המלא</span><b>'+esc(lGlow)+'</b></div>'+
-      '<div class="stline"><span>נכנסת מ</span><b>'+esc(entryOf(w))+'</b></div>'+
+      (lines.length ? lines.map(function(L){ return '<div class="stline"><span>'+esc(L[0])+'</span><b>'+esc(L[1])+'</b></div>'; }).join('') : '<div class="stline"><span>אין לה כרגע שום דבר פעיל</span></div>')+
+      '<div class="stline stsep"><span>נכנסת מ</span><b>'+esc(entryOf(w))+'</b></div>'+
       '<div class="stscreen">המסך שהיא רואה: <b>'+esc(screen)+'</b></div>'+
     '</div>';
   }

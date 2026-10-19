@@ -67,8 +67,8 @@ const gate = async (email) => {
 
 const sundayMonthsAgo = (n) => { const d = new Date(); d.setMonth(d.getMonth() - n); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); };
 const monthsAgo = (n) => { const d = new Date(); d.setMonth(d.getMonth() - n); return d.toISOString().slice(0, 10); };
-const row = ({ email, start = "", cancel = "FALSE", full = "", m = "", paid = "" }) =>
-  `972500000001,רונית,לוי,${email},${start ? start + " 0:00:00" : ""},${cancel},א,3,FALSE,${full},${m},${paid},TRUE`;
+const row = ({ email, start = "", cancel = "FALSE", full = "", m = "", paid = "", bonus = "FALSE" }) =>
+  `972500000001,רונית,לוי,${email},${start ? start + " 0:00:00" : ""},${cancel},א,3,${bonus},${full},${m},${paid},TRUE`;
 
 let pass = 0, fail = 0;
 const check = (name, cond, extra) => {
@@ -143,7 +143,10 @@ console.log("\nשורת הסיכום אומרת את מה שאושר");
   const w = await one("gift@t.com");
   const h = mod.stateBox(w);
   check("מתנת הוובינר מסומנת כמתנה", h.includes("מתנה מהוובינר"), h);
-  check("וכתוב שהיא נגמרת יחד עם 360", h.includes("נגמר יחד עם 360"), h);
+  // מ-v8.29: התאריכים של המתנה הם בדיוק התאריכים של 360, וזה מה שאומר שהיא נגמרת יחד איתו.
+  const d360 = (h.match(/מיי פריים 360<\/span><b>([^<]*)</) || [])[1];
+  const dGlow = (h.match(/מתנה מהוובינר<\/span><b>([^<]*)</) || [])[1];
+  check("והתאריכים שלה הם התאריכים של 360", !!d360 && d360 === dGlow && / עד /.test(d360), h);
   check("והמסך שלה הוא התוכנית והקורס בתוכה", h.includes("התוכנית, והקורס בתוכה"), h);
 }
 {
@@ -151,9 +154,11 @@ console.log("\nשורת הסיכום אומרת את מה שאושר");
   CSV = [HDR, row({ email: "plain@t.com", start: sundayMonthsAgo(1) })].join("\n");
   const w = await one("plain@t.com");
   const h = mod.stateBox(w);
-  // **השורה קיימת גם כשהתשובה היא "אין".** כלל v5.07: היעדר שורה אינו תשובה.
-  check("שורת הקורס קיימת גם למי שאין לה קורס", h.includes("קורס האיפור המלא"), h);
-  check("וכתוב בה 'אין'", /קורס האיפור המלא[\s\S]{0,80}אין/.test(h), h);
+  // **מ-v8.29 מוצג רק מה שיש לה.** רון: "למה לא לרשום פשוט את מה שיש לה". הכלל של
+  // v5.07 התהפך כאן במפורש, בהחלטת רון.
+  check("מי שאין לה קורס אינה מקבלת שורת קורס", !h.includes("קורס האיפור המלא"), h);
+  check("ואין בקופסה שום 'אין'", !/<b>אין<\/b>/.test(h), h);
+  check("ושורת 360 נושאת תאריך התחלה וסוף", /מיי פריים 360<\/span><b>\d\d\.\d\d\.\d{4} עד \d\d\.\d\d\.\d{4}</.test(h), h);
 }
 {
   reset();
@@ -186,8 +191,36 @@ console.log("\nשורת הסיכום אומרת את מה שאושר");
   CSV = [HDR, row({ email: "pre@t.com", start: inTwoWeeks.toISOString().slice(0, 10), full: "TRUE" })].join("\n");
   const w = await one("pre@t.com");
   const h = mod.stateBox(w);
-  check("בהמתנה כתוב מתי הקורס נפתח ולא שהוא הסתיים", h.includes("נפתח ב-") && !h.includes("הסתיים"), h);
+  check("בהמתנה הקורס מתחיל בתאריך ההתחלה ולא מוצג כהסתיים", /מתנה מהוובינר<\/span><b>\d\d\.\d\d\.\d{4} עד /.test(h) && !h.includes("הסתיים"), h);
   check("ושורת המסך אומרת מסך ההמתנה", h.includes("מסך ההמתנה"), h);
+}
+
+console.log("\nשורה לכל דבר שיש לה, v8.29");
+{
+  // **המקרה של הוובינר מ-19.10.2026:** GLOW- DEMO בלבד, כלומר שיעורי הבונוס, בהמתנה.
+  reset();
+  const inWeek = new Date(); inWeek.setDate(inWeek.getDate() + 7);
+  CSV = [HDR, row({ email: "demo@t.com", start: inWeek.toISOString().slice(0, 10), bonus: "TRUE" })].join("\n");
+  const w = await one("demo@t.com");
+  const h = mod.stateBox(w);
+  const end = (h.match(/מיי פריים 360<\/span><b>[^<]* עד ([^<]*)</) || [])[1];
+  check("שורת הבונוס מופיעה, עם 'עד' וסוף הגישה", !!end && h.includes("<span>שיעורי הבונוס של Glow</span><b>עד " + end + "</b>"), h);
+  check("והקורס המלא אינו מופיע", !h.includes("קורס האיפור המלא"), h);
+}
+{
+  reset();
+  CSV = [HDR, row({ email: "nobonus@t.com", start: sundayMonthsAgo(1) })].join("\n");
+  const h = mod.stateBox(await one("nobonus@t.com"));
+  check("בלי בונוס אין שורת בונוס", !h.includes("שיעורי הבונוס"), h);
+}
+{
+  // שם המסלול כמו התג שבכרטיס. החלטת רון: SMART.
+  const base = { start: "2026-10-25", state: { open360Base: true, allowed: true, end360: "2027-01-02", product: "360" } };
+  check("SMART נקרא SMART", mod.stateBox({ ...base, solo: 10 }).includes("<span>SMART</span><b>25.10.2026 עד 02.01.2027</b>"));
+  check("סולו 6 נקרא 'סולו 6'", mod.stateBox({ ...base, solo: 6 }).includes("<span>סולו 6</span>"));
+  check("מנוי פעיל מקבל שורה משלו", mod.stateBox({ ...base, sub: { paidUntil: "2026-11-16" }, state: { ...base.state, subOn: true } }).includes("<span>מנוי חודשי</span><b>פעיל עד 16.11.2026</b>"));
+  check("הקפאה עם תאריך חזרה", mod.stateBox({ start: "2026-09-06", frozen: true, freeze: { back: "2026-11-01" }, state: { allowed: false, reason: "frozen", product: "360" } }).includes("<b>בהקפאה, חוזרת 01.11.2026</b>"));
+  check("קונת הקורס לבדו אינה מקבלת שורת 360", !mod.stateBox({ glowFull: true, state: { allowed: true, product: "glow", glowSource: "paid", glowOpen: true, endGlow: "2027-10-01" } }).includes("מיי פריים 360"));
 }
 
 console.log("\nההיסטוריה, ובדרופדאון");
