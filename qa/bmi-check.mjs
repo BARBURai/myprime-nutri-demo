@@ -113,7 +113,7 @@ check("בלי דיווח נופלים חזרה למשקל הרישום", current
 check("ועם דיווח נלקח האחרון", currentWeightOf({ weightKg: 72 }, [{ date: "2026-08-01", kg: 70 }, { date: "2026-08-15", kg: 66 }]) === 66);
 check("הזנת משקל בדוח בודקת את הכלל", src.includes("if (!profile.lossStopAt && profile.weeklyRateG !== 0 && noLossRoom(cur, profile.heightCm))"));
 check("והיא בודקת את המשקל העדכני ולא את מה שהוקלד, בגלל מילוי לאחור", src.includes("const cur = next[next.length - 1].kg;"));
-check("היעד בשמירה מחושב מהמשקל האמיתי שלה עכשיו", src.includes("const effProfile = lossStopped ? { ...profile, weeklyRateG: 0, weightKg: curWeight } : profile;"));
+check("היעד בשמירה מחושב מהמשקל האמיתי שלה עכשיו", src.includes("const base = profile.lossStopAt ? { ...profile, weeklyRateG: 0, weightKg: curKg } : profile;") && src.includes("const effProfile = effectiveProfile(profile, curWeight);"));
 check("והמסך מוצג פעם אחת, כי הדגל נשמר", src.includes("lossStopAt: date"));
 check("מי שנרשמת כשאין לה לאן לרדת מסומנת כבר ברישום", src.includes("lossStopAt: noLoss ? startDate : null"));
 

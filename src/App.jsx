@@ -146,6 +146,19 @@ function rateCapFor(profile, weightKg) {
 }
 // המשקל האחרון שהיא דיווחה, ולא זה של הרישום. זו כל הבעיה שהייתה כאן: הכלל ירה
 // פעם אחת וקרא מספר שקפוא מאותו רגע. מכאן והלאה כל מסך שנוגע במשקל שואל את זה.
+// הפרופיל שממנו מחושבים היעדים. מקום אחד, כי גם המעבר לשמירה וגם התקרה צריכים
+// לדעת מה יהיה היעד המומלץ אחריהם. בשמירה הכל לפי המשקל עכשיו, ואצל כל השאר
+// רק החלבון. v8.33.
+function effectiveProfile(profile, curKg) {
+  const base = profile.lossStopAt ? { ...profile, weeklyRateG: 0, weightKg: curKg } : profile;
+  return curKg > 0 ? { ...base, proteinKg: curKg } : base;
+}
+// יעד שהיא קבעה לעצמה ונמוך מהיעד המומלץ אחרי מעבר לשמירה או לקצב 250 נמחק, אחרת
+// הוא ממשיך לתת לה גירעון שהמערכת הפסיקה לתת. יעד גבוה מהמומלץ נשאר. v8.33.
+function dropLowOverride(next, curKg) {
+  if (!next.calorieOverride) return next;
+  return computeTargets(effectiveProfile(next, curKg)).targetKcal > next.calorieOverride ? { ...next, calorieOverride: null } : next;
+}
 function currentWeightOf(profile, weights) {
   const last = weights && weights.length ? weights[weights.length - 1].kg : null;
   return last != null && isFinite(last) ? last : (profile ? profile.weightKg : 0);
@@ -195,7 +208,9 @@ function computeTargets(profile) {
   const raw = Math.round(tdee - deficit);
   const targetKcal = Math.max(KCAL_FLOOR, raw);
   const floored = raw < KCAL_FLOOR;
-  const protein = Math.round(PROTEIN_PER_KG * profile.weightKg);
+  // החלבון לפי המשקל האחרון שדווח, ולא לפי משקל הרישום. v8.33, החלטת רון: אצל מי
+  // שירדה הרבה היעד נשאר קפוא גבוה מ-1.6 לק״ג. היעד הקלורי לא זז בגלל זה.
+  const protein = Math.round(PROTEIN_PER_KG * (profile.proteinKg || profile.weightKg));
   const fat = Math.round(FAT_PER_KG * profile.weightKg);
   const carbKcal = Math.max(0, targetKcal - protein * 4 - fat * 9);
   const carbs = Math.round(carbKcal / 4);
@@ -734,7 +749,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.32";
+const VERSION = "8.33";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1852,7 +1867,7 @@ function PreStartScreen({ name, startDate, glow = false, glowSoon = false, glowS
   );
 }
 
-function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onStepsHelp, onOpenContent, onOpenOnboard, catchupDue = false, onOpenCatchup, introLock = false, overlayOpen = false, glow = false, freeze = null }) {
+function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, profile, activityLog, waterByDate, setWaterForDate, onWater, stepsByDate, onEditSteps, editEntry, deleteEntry, onRecommend, onAddCalorie, checkins, onOpenCheckin, onOpenCollection, onOpenSummary, stepAction, onStepSetup, tipsSeen, onTipsSeen, onStartTour, onStepsHelp, onOpenContent, onOpenOnboard, weightNow = 0, catchupDue = false, onOpenCatchup, introLock = false, overlayOpen = false, glow = false, freeze = null }) {
   const dayLog = log.filter((e) => e.date === date);
   // הרשימה מוצגת לפי סדר ההזנה, וזו ברירת המחדל. משתתפת ביקשה לראות אותה לפי
   // הארוחה, כדי לדעת מה אכלה מתי. הבחירה נזכרת על המכשיר שלה, כי מי שמעדיפה
@@ -1872,7 +1887,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const actKcal = dayAct.reduce((s, a) => s + (a.kcal || 0), 0);
   const stepsOpen = unlockedOn(profile.startDate, date, STEPS_UNLOCK);
   const steps = (stepsByDate && stepsByDate[date]) || 0;
-  const stepKcal = stepsOpen ? stepsKcal(steps, profile.weightKg) : 0;
+  const stepKcal = stepsOpen ? stepsKcal(steps, weightNow || profile.weightKg) : 0;
   const budget = dailyTarget + actKcal + stepKcal;
   const macros = dayLog.reduce((s, e) => ({ p: s.p + (e.p || 0), f: s.f + (e.f || 0), c: s.c + (e.c || 0), fib: s.fib + (e.fib || 0) }), { p: 0, f: 0, c: 0, fib: 0 });
   // NOT clamped, on purpose. The programme is 70 days, ten weeks of seven, and week 11 is
@@ -2608,20 +2623,23 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
       // הקובע. בלי זה עריכת נקודת הפתיחה כלפי מטה הייתה מעבירה אותה לשמירה
       // ומיד מציעה לה לחזור, כי המשקל האמיתי שלה גבוה מהקו השני.
       const nextCur = latestIsBase ? pendingWeight.value : curWeight;
+      let moved = false;
       if (pendingWeight.key === "weightKg" && next.weeklyRateG !== 0 && noLossRoom(nextCur, profile.heightCm)) {
         next.weeklyRateG = 0;
         next.goalWeightKg = nextCur;
         next.lossStopAt = TODAY;
         next.lossStopEver = true;
         next.resumeOfferAt = null;
+        moved = true;
         setShowLossStop(true);
       } else if (pendingWeight.key === "weightKg") {
         // אותה תקרה, מהמסלול השני. עריכת המשקל בפרופיל הייתה הדלת האחורית של
         // כלל ה-BMI, והיא גם הדלת האחורית של התקרה.
         const capped = rateCapFor(next, nextCur);
-        if (capped != null) { next.weeklyRateG = capped; setShowRateCap(true); }
+        if (capped != null) { next.weeklyRateG = capped; moved = true; setShowRateCap(true); }
       }
-      setProfile(next);
+      // רק במעבר עצמו. עריכת משקל רגילה אינה נוגעת ביעד שקבעה לעצמה.
+      setProfile(moved ? dropLowOverride(next, nextCur) : next);
       // המשקל שבפרופיל הוא נקודת הפתיחה של הגרף, ולכן שינוי שלו מזיז גם אותה.
       // בלי זה `curWeight` נשאר תקוע על משקל הרישום, ומי שנרשמה מתחת לקו ואז
       // תיקנה את המשקל כלפי מעלה נשארה נעולה בשמירה בלי שום דרך לצאת.
@@ -5604,6 +5622,7 @@ function LossStopSheet({ onAck }) {
       <div style={{ background: C.panel, borderRadius: 24, padding: "26px 22px", maxWidth: 320, width: "100%", animation: "cheerPop 0.4s ease both", boxShadow: "0 18px 50px rgba(58,43,48,0.28)" }}>
         <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.65 }}>לפי הנתונים שלך אנו לא ממליצים על ירידה נוספת במשקל ללא התייעצות עם דיאטנית קלינית.</div>
         <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>המערכת לא יכולה לתת ערכים של ירידה נוספת במשקל.</div>
+        <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>היעד הקלורי היומי עודכן בהתאם למשקל שלך עכשיו.</div>
         {/* המלצה בטקסט ולא בכפתור, לפי רון: כפתור וואטסאפ לצד "הבנתי" נותן לה שתי
             דרכים לצאת, ואז הלחיצה על "הבנתי" מפסיקה להיות אישור ונעשית בריחה. */}
         <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.65, marginTop: 10 }}>אנחנו ממליצים לך ליצור קשר עם הדיאטנית לקבלת הנחיות.</div>
@@ -7436,7 +7455,8 @@ export default function App() {
   const latestIsBase = !weights.length || weights[weights.length - 1].date === profile.startDate;
   // כשהיא בשמירה מטעמי בריאות, היעד הקלורי מחושב מהמשקל האמיתי שלה עכשיו. אחרת
   // התחזוקה נגזרת ממשקל שכבר אינו קיים, והיא גבוהה מדי. שאר הנשים לא מושפעות.
-  const effProfile = lossStopped ? { ...profile, weeklyRateG: 0, weightKg: curWeight } : profile;
+  // וחלבון לפי המשקל עכשיו אצל כולן, v8.33.
+  const effProfile = effectiveProfile(profile, curWeight);
   const targets = useMemo(() => computeTargets(effProfile), [profile, curWeight, lossStopped]);
   const dailyTarget = profile.calorieOverride || targets.targetKcal;
   const programWeek = programWeekFor(profile.startDate, TODAY);
@@ -7915,7 +7935,7 @@ export default function App() {
     const cur = next[next.length - 1].kg;
     if (!profile.lossStopAt && profile.weeklyRateG !== 0 && noLossRoom(cur, profile.heightCm)) {
       // resumeOfferAt מתאפס כאן, כדי שעלייה חוזרת בעתיד תציג את ההצעה שוב.
-      setProfile((pr) => ({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true, resumeOfferAt: null }));
+      setProfile((pr) => dropLowOverride({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true, resumeOfferAt: null }, cur));
       setSheet("lossStop");
       return;
     }
@@ -7932,7 +7952,7 @@ export default function App() {
     // בכ-275 קלוריות, ולכן זה לעולם לא קורה בשקט.
     const capped = rateCapFor(profile, cur);
     if (capped != null) {
-      setProfile((pr) => ({ ...pr, weeklyRateG: capped }));
+      setProfile((pr) => dropLowOverride({ ...pr, weeklyRateG: capped }, cur));
       setSheet("rateCap");
       return;
     }
@@ -8222,8 +8242,8 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} glowSoon={glowSoon} glowSoonSolo={glowSoonSolo} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow && !glowFull} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
-              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={profile.weightKg} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} glowSoon={glowSoon} glowSoonSolo={glowSoonSolo} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} weightNow={curWeight} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow && !glowFull} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
+              {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={curWeight} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
             </div>
@@ -8270,9 +8290,9 @@ export default function App() {
             {sheet === "faq" && <FaqModal startDate={profile.startDate} onReset={resetDemo} onLogout={logoutDevice} hasFutureEntries={hasFutureEntries} onClearFuture={() => setFutureConfirm(true)} backupOn={!!profile.backup?.enabled} onClose={() => setSheet(null)} onStartTour={preStart ? null : () => { setSelectedDate(addDays(profile.startDate, 2)); setTab("day"); setSheet(null); startTour(); }} />}
             {sheet === "backup" && <BackupModal backup={profile.backup} gateEmail={gateEmail} busy={bkBusy} onEnable={enableBackup} onBackupNow={backupNow} onResetCode={resetBackupCode} onClose={() => setSheet(null)} />}
             {sheet === "caloriemenu" && <EntryMenu mode="calorie" onClose={() => setSheet(null)} onPick={onPickEntry} />}
-            {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={profile.weightKg} autoFocusInput={!tour} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
+            {sheet === "steps" && <StepsModal current={stepsByDate[selectedDate] || 0} goal={effectiveStepGoal(profile.stepGoal, programWeek) || 0} weightKg={curWeight} autoFocusInput={!tour} onClose={() => setSheet(null)} onAdd={(n) => { setStepsForDate(selectedDate, n); setSheet(null); tourEvent("addsteps"); }} />}
             {sheet === "water" && <WaterModal currentMl={waterMlOf(waterByDate[selectedDate])} cupMl={profile.cupMl || DEFAULT_CUP_ML} onSetMl={(ml) => setWaterForDate(selectedDate, ml)} onSetCup={(cup) => setProfile({ ...profile, cupMl: cup })} onClose={() => setSheet(null)} />}
-            {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={profile.weightKg} />}
+            {sheet === "activity" && <ActivityModal onClose={() => setSheet(null)} onAdd={addActivity} weightKg={curWeight} />}
             {sheet === "weight" && <WeightModal weights={weights} today={today} minDate={profile.startDate} heightCm={profile.heightCm} onClose={() => setSheet(null)} onAdd={(kg, date) => setWeightForDate(date, kg)} />}
             {sheet === "calorie" && <CalorieGoalModal current={dailyTarget} onClose={() => setSheet(null)} onAdd={setCalorieGoal} />}
             {sheet === "recommend" && <RecommendModal remainingKcal={recRemainingKcal} remainingProtein={recRemainingProtein} profile={profile} setProfile={setProfile} mealsHad={recMealsHad} proteinFocus={unlockedOn(profile.startDate, selectedDate, MACRO_UNLOCK)} onLog={commit} onClose={() => setSheet(null)} onGoProfile={() => { setSheet(null); setTab("profile"); }} backRef={recBackRef} />}

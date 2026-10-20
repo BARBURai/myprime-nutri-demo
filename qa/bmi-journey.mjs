@@ -35,7 +35,7 @@ const A = new Function([
 /* ---------- כל מעבר מצב מאומת מול הקוד שמבצע אותו ---------- */
 const TRANSITIONS = [
   ["המעבר לשמירה נורה מהזנת משקל", "if (!profile.lossStopAt && profile.weeklyRateG !== 0 && noLossRoom(cur, profile.heightCm))"],
-  ["ומה שהוא כותב", "setProfile((pr) => ({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true, resumeOfferAt: null }));"],
+  ["ומה שהוא כותב", "setProfile((pr) => dropLowOverride({ ...pr, weeklyRateG: 0, goalWeightKg: cur, lossStopAt: date, lossStopEver: true, resumeOfferAt: null }, cur));"],
   ["הבדיקה היא על המשקל העדכני ולא על מה שהוקלד", "const cur = next[next.length - 1].kg;"],
   ["נעילת המסכים לפי המצב", "const inMaintain = !!profile.lossStopAt;"],
   ["והחזרה מול הקו השני", "const canResume = inMaintain && canResumeLoss("],
@@ -44,7 +44,7 @@ const TRANSITIONS = [
   ["ועל המשקל הקובע ולא על מה שהוקלד", "const nextCur = latestIsBase ? pendingWeight.value : curWeight;"],
   ["ההצעה לחזור נורית מהזנת משקל", "if (profile.lossStopAt && !profile.resumeOfferAt && canResumeLoss(cur, profile.heightCm))"],
   ["והיא מתאפסת בחצייה כלפי מטה", "lossStopEver: true, resumeOfferAt: null"],
-  ["היעד בשמירה מחושב מהמשקל האמיתי", "const effProfile = lossStopped"],
+  ["היעד בשמירה מחושב מהמשקל האמיתי", "const base = profile.lossStopAt ? { ...profile, weeklyRateG: 0, weightKg: curKg } : profile;"],
   ["רשימת הקצבים נעולה לפי המצב", "{(inMaintain ? [0] : rateOptionsFor("],
   ["ותקרת ה-500", "RATE_OPTIONS.filter((g) => g !== 500 || fastOk)"],
   ["והסימון שנשאר לתמיד", "lossStopEver: true"],
