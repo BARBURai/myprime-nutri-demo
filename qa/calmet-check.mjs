@@ -75,7 +75,7 @@ check("והיא מחברת גם אימון וגם צעדים",
 check("והצעדים נספרים רק מהיום שנפתחו לה",
   !!goalOnSrc && /unlockedOn\(startDate, d, STEPS_UNLOCK\)/.test(goalOnSrc[0]));
 check("הדוח מקבל את יומן הפעילות ואת המשקל מהאפליקציה",
-  /<ReportScreen[^>]*activityLog=\{activityLog\}/.test(src) && /<ReportScreen[^>]*weightKg=\{profile\.weightKg\}/.test(src));
+  /<ReportScreen[^>]*activityLog=\{activityLog\}/.test(src) && /<ReportScreen[^>]*weightKg=\{curWeight\}/.test(src) && /<DayScreen[^>]*weightNow=\{curWeight\}/.test(src));
 check("הספירה משתמשת ביעד של אותו יום",
   /calMet\(x\.kcal, x\.goal\)/.test(src));
 check("וגם צבע העמודות, אחרת השורה והגרף סותרים זה את זה",
