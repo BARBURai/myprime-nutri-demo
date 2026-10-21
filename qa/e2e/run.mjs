@@ -2493,6 +2493,80 @@ const CHECKS = [
     },
   },
   {
+    // v8.34. משתתפת: "לא מצליחה להפעיל את המקרופון". כשזיהוי הדיבור נכשל היא ראתה
+    // כפתור שלא עושה כלום. רון: "אם היא באמצע תהליך והיא תלחץ על זה זה יכול להפריע
+    // לה". שני הצדדים: השורה מופיעה וההנחיות נפתחות, והשיחה ומה שהקלידה נשארים.
+    name: "מיקרופון שנכשל מציג שורה והנחיות, והשיחה נשארת במקומה",
+    async run(browser, device) {
+      const bad = [];
+      const { context, page, errors } = await openApp(browser, device, { day: 5, aiAnswer: { reply: "תשובת בדיקה של הבינה", done: false, items: [] } });
+      await page.locator('[aria-label="הוספה"]').click();
+      await page.waitForTimeout(400);
+      await page.locator("text=הוספת מזון").first().click();
+      await page.waitForTimeout(500);
+      await page.locator("text=ספרי לי מה אכלת").first().click();
+      await page.waitForTimeout(600);
+      await page.evaluate(() => {
+        window.__micMode = "not-allowed";
+        // שני השמות, כי בכרום החדש גם השם בלי הקידומת קיים, והאפליקציה מעדיפה אותו.
+        window.SpeechRecognition = window.webkitSpeechRecognition = class {
+          start() { setTimeout(() => { if (this.onerror) this.onerror({ error: window.__micMode }); if (this.onend) this.onend(); }, 30); }
+          stop() {}
+        };
+      });
+      const ta = page.locator("textarea").first();
+      await ta.fill("ביצה");
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(2500);
+      await ta.fill("שתי פרוסות");
+      const micBtn = async () => { await page.evaluate(() => document.querySelector("textarea").previousElementSibling.click()); await page.waitForTimeout(300); };
+      if (await page.locator("[data-mic-err]").count()) bad.push("שורה מוצגת לפני תקלה");
+      await micBtn();
+      const line = (await page.locator("[data-mic-err]").innerText().catch(() => "")).trim();
+      if (line !== "המיקרופון חסום. מעבר להנחיות") bad.push(`שורה בחסום: "${line}"`);
+      if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/mic-line.png` });
+      if (await page.locator("text=הקישי על המיקרופון, דברי").count()) bad.push("ההנחיה הרגילה לא הוסתרה");
+      await page.locator("[data-mic-help]").click();
+      await page.waitForTimeout(300);
+      const sheet = await page.locator("[data-mic-sheet]").innerText().catch(() => "");
+      if (!sheet.includes("המיקרופון לא עובד, מה עושים?") || !sheet.includes("באנדרואיד: פותחים את Chrome")) bad.push("ההנחיות לא נפתחו");
+      if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/mic-sheet.png` });
+      await page.locator("[data-mic-close]").click();
+      await page.waitForTimeout(300);
+      if (await page.locator("[data-mic-sheet]").count()) bad.push("ההנחיות לא נסגרו ב-✕");
+      if ((await ta.inputValue()) !== "שתי פרוסות") bad.push("מה שהקלידה נמחק");
+      if (!(await page.locator("text=תשובת בדיקה של הבינה").count())) bad.push("השיחה נמחקה");
+      // כפתור החזרה של הטלפון סוגר את ההנחיות ולא את השיחה.
+      await page.locator("[data-mic-help]").click();
+      await page.waitForTimeout(300);
+      await page.goBack().catch(() => {});
+      await page.waitForTimeout(500);
+      if (await page.locator("[data-mic-sheet]").count()) bad.push("החזרה לא סגרה את ההנחיות");
+      if (!(await page.locator("textarea").count()) || (await ta.inputValue()) !== "שתי פרוסות") bad.push("החזרה סגרה את השיחה");
+      // הקלדה מחזירה את ההנחיה הרגילה, ושאר השגיאות.
+      await ta.fill("שתי פרוסות לחם");
+      if (await page.locator("[data-mic-err]").count()) bad.push("השורה לא ירדה בהקלדה");
+      await page.evaluate(() => { window.__micMode = "no-speech"; });
+      await micBtn();
+      const ns = (await page.locator("[data-mic-err]").innerText().catch(() => "")).trim();
+      if (ns !== "לא נשמע דיבור. אפשר לנסות שוב.") bad.push(`לא נשמע: "${ns}"`);
+      await page.evaluate(() => { window.__micMode = "network"; });
+      await micBtn();
+      const nw = (await page.locator("[data-mic-err]").innerText().catch(() => "")).trim();
+      if (nw !== "זיהוי הדיבור לא עבד הפעם. אפשר לנסות שוב, או להקליד.") bad.push(`רשת: "${nw}"`);
+      await page.evaluate(() => { window.__micMode = "aborted"; });
+      await micBtn();
+      if (await page.locator("[data-mic-err]").count()) bad.push("עצירה שלה הוצגה כתקלה");
+      await page.evaluate(() => { delete window.webkitSpeechRecognition; delete window.SpeechRecognition; });
+      await micBtn();
+      const un = (await page.locator("[data-mic-err]").innerText().catch(() => "")).trim();
+      if (un !== "זיהוי דיבור לא נתמך בדפדפן הזה. מעבר להנחיות") bad.push(`לא נתמך: "${un}"`);
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : `${line} · ${ns} · ${un}` };
+    },
+  },
+  {
     // רון, 9 בספטמבר 2026: "מקבל המלצה, לא לוחץ על שום המלצה, יוצא החוצה והשיחה
     // נמחקה." שני הצדדים באותה הרצה, כי זיכרון שאינו נמחק לעולם נראה בדיוק כמו
     // זיכרון שעובד: השיחה חוזרת אחרי יציאה, ומתאפסת אחרי שנרשמה מנה ליומן.

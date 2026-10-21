@@ -160,6 +160,9 @@ export default async function handler(req, res) {
     tasksAgg: pairMap(body && body.tasksAgg, MAX_DAYS),
     standalone: num(body && body.standalone, 1),
     notif: ["granted", "denied", "default"].includes(body && body.notif) ? body.notif : "",
+    // סוג המכשיר והדפדפן, v8.34. רק קודים מהרשימה, וכל דבר אחר נשמר ריק.
+    dev: ["iphone", "ipad", "android", "desktop"].includes(body && body.dev) ? body.dev : "",
+    br: ["safari", "chrome", "samsung", "firefox", "edge", "inapp", "other"].includes(body && body.br) ? body.br : "",
     at: new Date().toISOString(),
   };
 

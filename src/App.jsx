@@ -749,7 +749,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.33";
+const VERSION = "8.34";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1225,6 +1225,25 @@ function IosBarOptions() {
 // ואין לנו שום דרך להשפיע עליה, ולכן היחיד שאפשר לעשות הוא לומר לה את זה במפורש
 // במקום להציג לה שלבים שלא יעבדו. משתתפת שלחה את הצילום ב-27 באוגוסט 2026.
 const isSamsungBrowser = () => /samsungbrowser/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
+// סוג המכשיר והדפדפן, כדי שהמשרד יראה אותם בכרטיס ולא ישאל אותה. v8.34.
+// קודים בלבד, והשרת מקבל רק את הקודים שברשימה. מגיע עם נתוני השימוש.
+function deviceOf(ua, standalone, touch) {
+  ua = ua || "";
+  const inApp = /FBAN|FBAV|FB_IAB|Instagram/i.test(ua);
+  if (/iphone|ipod/i.test(ua) || /ipad/i.test(ua) || (/Macintosh/i.test(ua) && touch > 1)) {
+    const dev = /iphone|ipod/i.test(ua) ? "iphone" : "ipad";
+    const br = inApp ? "inapp" : /CriOS/i.test(ua) ? "chrome" : /FxiOS/i.test(ua) ? "firefox" : /EdgiOS/i.test(ua) ? "edge"
+      : (/Version\//i.test(ua) || standalone) ? "safari" : "inapp";
+    return { dev, br };
+  }
+  if (/android/i.test(ua)) {
+    const br = inApp ? "inapp" : /SamsungBrowser/i.test(ua) ? "samsung" : /Firefox/i.test(ua) ? "firefox" : /EdgA/i.test(ua) ? "edge"
+      : /; wv\)/i.test(ua) ? "inapp" : /Chrome/i.test(ua) ? "chrome" : "other";
+    return { dev: "android", br };
+  }
+  const br = /Edg\//i.test(ua) ? "edge" : /Firefox/i.test(ua) ? "firefox" : /Chrome/i.test(ua) ? "chrome" : /Safari/i.test(ua) ? "safari" : "other";
+  return { dev: "desktop", br };
+}
 // באייפון אפשר להוסיף למסך הבית אך ורק מספארי. זו מגבלה של אפל, וכל דפדפן אחר
 // שם הוא ספארי מבפנים בלי האפשרות הזאת. קישור שנפתח מוואטסאפ נוחת לעיתים
 // קרובות בדפדפן פנימי או בכרום, ואז השלבים שאנחנו מציגים לה פשוט לא קיימים אצלה.
@@ -3722,6 +3741,20 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, on
 // so nothing outlives the session and nothing is written to storage.
 const AI_OPENING = () => ([{ role: "assistant", text: "היי! ספרי לי מה אכלת ואעזור להעריך את הקלוריות 😋\nכדי שאוכל לדייק כבר מההתחלה, נסי לפרט כמה שיותר: איך האוכל הוכן (מטוגן / אפוי / מבושל / על הגריל), אם הוספת שמן / חמאה / רוטב, מה שתית, וכמות משוערת (גרמים, כוסות או כפות).\nככל שתפרטי יותר, ההערכה תהיה מדויקת יותר. אפשר לדבר או לכתוב." }]);
 let aiSession = null;
+// מה שהיא רואה כשהמיקרופון נכשל, לפי השגיאה של הדפדפן. קול המערכת, הנוסח אושר
+// ב-v8.34. "aborted" הוא עצירה שלה ואינו תקלה.
+const MIC_ERR_TEXT = {
+  blocked: "המיקרופון חסום.",
+  nospeech: "לא נשמע דיבור. אפשר לנסות שוב.",
+  other: "זיהוי הדיבור לא עבד הפעם. אפשר לנסות שוב, או להקליד.",
+  unsupported: "זיהוי דיבור לא נתמך בדפדפן הזה.",
+};
+function micErrKind(err) {
+  if (err === "aborted") return null;
+  if (err === "not-allowed" || err === "service-not-allowed" || err === "audio-capture") return "blocked";
+  if (err === "no-speech") return "nospeech";
+  return "other";
+}
 function AddModal({ state, close, commit, removeAndClose, favorites, recents, onDeleteFavorite, onDeleteRecent, onUndoEntry, onTourEvent, startDate, backRef }) {
   const [step, setStep] = useState(state.editEntry ? "qty" : state.kind === "ai" ? "ai" : (state.preMeal ? "list" : "method"));
   const kbOpen = useTyping();
@@ -3882,6 +3915,10 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   };
   const recRef = useRef(null);
   const [aiListening, setAiListening] = useState(false);
+  // למה המיקרופון לא עבד, כדי לומר לה במקום כפתור שלא עושה כלום. v8.34.
+  // "blocked" · "nospeech" · "other" · "unsupported", ו-null כשאין מה לומר.
+  const [aiMicErr, setAiMicErr] = useState(null);
+  const [micHelp, setMicHelp] = useState(false);
   const aiInputRef = useRef(null);
   const aiEndRef = useRef(null);
   useEffect(() => { const el = aiInputRef.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 96) + "px"; } }, [aiInput, step]);
@@ -3941,8 +3978,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   };
   const startMic = () => {
     if (aiListening && recRef.current) { recRef.current.stop(); return; }
+    setAiMicErr(null);
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("זיהוי דיבור לא נתמך בדפדפן הזה - נסי ב-Chrome/Safari עדכני, או הקלידי."); return; }
+    if (!SR) { setAiMicErr("unsupported"); return; }
     const rec = new SR();
     rec.lang = "he-IL";
     rec.interimResults = true;   // מציג טקסט תוך כדי דיבור
@@ -3954,9 +3992,9 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
       setAiInput(t);
     };
-    rec.onerror = () => setAiListening(false);
+    rec.onerror = (e) => { setAiListening(false); setAiMicErr(micErrKind(e && e.error)); };
     rec.onend = () => setAiListening(false);
-    try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); }
+    try { rec.start(); recRef.current = rec; } catch (e) { setAiListening(false); setAiMicErr("other"); }
   };
   const [qtyOrigin, setQtyOrigin] = useState("list");
   const pickFood = (f, g) => { setQtyTouched(false); setQtyText(null); setQtyAsked(false); setReachedQty(true); setQtyOrigin(step === "history" ? "history" : "list"); setQUnit((f.combo || f.servingDefault) ? (f.measures.find((m) => m.label === "מנה" || (f.pieceUnit && m.label === f.pieceUnit)) || null) : null); setFood(f); setGrams(g ?? f.measures[f.def].g); setStep("qty"); };
@@ -4120,6 +4158,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
       // חלונית פתוחה נסגרת קודם. בלי זה החזרה הייתה מזיזה את המסך מתחתיה.
       if (qtyWarn) { setQtyWarn(false); return true; }
       if (exitWarn) { setExitWarn(false); return true; }
+      if (micHelp) { setMicHelp(false); return true; }
       if (unsavedAny()) { askExit(!!back); return true; }
       if (back) { back(); return true; }
       return false;
@@ -4523,14 +4562,19 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
               <button onClick={startMic} disabled={aiLoading} className={aiListening ? "spin-pulse" : ""} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: aiListening ? C.brand : C.brandBg, color: aiListening ? "#fff" : C.brand, cursor: aiLoading ? "default" : "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Mic size={18} /></button>
-              <textarea ref={aiInputRef} value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }} disabled={aiLoading} rows={1} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
+              <textarea ref={aiInputRef} value={aiInput} onChange={(e) => { setAiInput(e.target.value); if (aiMicErr) setAiMicErr(null); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAi(); } }} disabled={aiLoading} rows={1} placeholder={aiLoading ? "רגע, מנתחת…" : aiListening ? "מקשיב… דברי עכשיו" : "כתבי מה אכלת…"} style={{ flex: 1, minWidth: 0, border: `1px solid ${aiListening ? C.brand : C.line}`, borderRadius: 20, padding: "10px 14px", fontSize: 16, fontFamily: fontStack, color: C.ink, outline: "none", boxSizing: "border-box", background: aiLoading ? C.bg : C.panel, resize: "none", maxHeight: 96, overflowY: "auto", lineHeight: 1.4 }} />
               <button onClick={() => sendAi()} disabled={aiLoading} style={{ width: 40, height: 40, borderRadius: "50%", border: "none", background: C.brand, color: "#fff", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: aiLoading ? 0.5 : 1 }}><Send size={18} /></button>
             </div>
             {/* Hidden while the keyboard is up. It wraps to two lines on a phone, and with
                 the keyboard open those two lines are the difference between reading the
                 whole message above and reading half of it. It is back the moment she is
                 done typing, which is when it is any use to her anyway. */}
-            {!kbOpen && <div style={{ fontSize: 13, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>}
+            {!kbOpen && !aiMicErr && <div style={{ fontSize: 13, color: C.faint, marginTop: 8, textAlign: "center" }}>הקישי על המיקרופון, דברי, והקישי שוב כדי לעצור. אפשר גם להקליד.</div>}
+            {/* המיקרופון נכשל. קול המערכת, והקישור פותח את התשובה כאן מעל השיחה, כדי
+                שהשיחה ומה שהקלידה יישארו במקומם. v8.34. */}
+            {aiMicErr && <div data-mic-err={aiMicErr} style={{ fontSize: 13.5, color: C.amber, marginTop: 8, textAlign: "center", lineHeight: 1.5 }}>
+              {MIC_ERR_TEXT[aiMicErr]}{(aiMicErr === "blocked" || aiMicErr === "unsupported") && <> <span data-mic-help onClick={() => setMicHelp(true)} style={{ fontWeight: 700, textDecoration: "underline", cursor: "pointer" }}>מעבר להנחיות</span></>}
+            </div>}
           </div>
         )}
         {step === "qty" && food && (
@@ -4630,6 +4674,17 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
           onSecondary={() => { setQtyWarn(false); doAdd(); }}
         />
       )}
+      {micHelp && (() => { const f = FAQ_ITEMS.find((x) => x.key === "mic"); return (
+        <div data-mic-sheet onClick={() => setMicHelp(false)} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "18px 18px 20px", maxWidth: 360, width: "100%", maxHeight: "80%", overflowY: "auto", boxSizing: "border-box", fontFamily: fontStack, boxShadow: "0 10px 30px rgba(58,43,48,0.25)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>{f.q}</div>
+              <button data-mic-close onClick={() => setMicHelp(false)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint, flexShrink: 0 }}><X size={20} /></button>
+            </div>
+            <div style={{ fontSize: 15, color: C.sub, lineHeight: 1.6, whiteSpace: "pre-line" }}>{f.a}</div>
+          </div>
+        </div>
+      ); })()}
       {exitWarn && (
         <AddAsk
           id="exit"
@@ -6635,6 +6690,8 @@ const FAQ_ITEMS = [
   { q: "איך מתקינים את האפליקציה בטלפון (כמו אפליקציה רגילה)?", a: "באנדרואיד פותחים בדפדפן Chrome, נכנסים לתפריט שלוש הנקודות ובוחרים 'הוספה למסך הבית'. באייפון פותחים ב-Safari, מקישים על שלוש הנקודות בתחתית המסך, בוחרים 'שיתוף' ואז 'הוספה למסך הבית'. כך נוצר אייקון של האפליקציה במסך הבית, ואפשר לפתוח אותה בלחיצה אחת כמו אפליקציה רגילה." },
   { q: "האפליקציה נראית ישנה או לא מתעדכנת - איך מרעננים?", a: "באנדרואיד אפשר למשוך את המסך כלפי מטה כדי לרענן, או לסגור את האפליקציה ולפתוח שוב. באייפון משיכה למטה לא עובדת - צריך לסגור את האפליקציה לגמרי (להחליק מלמטה למעלה, לעצור באמצע, ולהחליק את הכרטיס של האפליקציה כלפי מעלה), ואז לפתוח שוב מהאייקון. אם גם אחרי זה היא עדיין נראית ישנה, אפשר להסיר אותה ממסך הבית ולהוסיף מחדש - אבל שימי לב שזה מאפס את הנתונים במכשיר, אז כדאי לעשות קודם גיבוי במסך הפרופיל." },
   { q: "אין קול בסרטון, מה עושים?", a: "לשינוי עוצמת הקול: מקישים פעם אחת על הסרטון, ואז מקישים פעם אחת על סמל הרמקול, או על בורר הקול שנמצא בפס שלידו." },
+  // v8.34. מסך "ספרי לי מה אכלת" פותח את אותה תשובה כשהמיקרופון נכשל, לפי `key`.
+  { key: "mic", q: "המיקרופון לא עובד, מה עושים?", a: "הדרך הכי פשוטה: מקישים על שדה הכתיבה, ואז על סמל המיקרופון שבמקלדת של הטלפון, ומדברים. הטקסט נכתב בשדה כמו הקלדה.\nכדי שהמיקרופון של האפליקציה יעבוד, צריך לאשר לדפדפן גישה למיקרופון:\nבאנדרואיד: פותחים את Chrome, נכנסים לתפריט שלוש הנקודות, ואז הגדרות, הגדרות אתרים, מיקרופון, ומאשרים את app.myprime.co.il. אם המיקרופון עדיין חסום, נכנסים בהגדרות הטלפון לאפליקציות, Chrome, הרשאות, ומאשרים מיקרופון.\nבאייפון: נכנסים בהגדרות הטלפון ל-Safari, ואז מיקרופון, ובוחרים \"לשאול\" או \"לאפשר\"." },
   { q: "איך אני יודעת כמה צעדים עשיתי?", a: "פותחים את אפליקציית הבריאות בטלפון, בודקים את מספר הצעדים של היום ומזינים אותו במסך הצעדים. עדיף למלא מאוחר ככל האפשר במהלך היום, ותמיד אפשר לעדכן.", guide: true },
   { q: "אפשר להזין פעילות גופנית בכל יום?", a: "כן, בכל יום ובלי הגבלה. לוחצים על הפלוס במרכז המסך, בוחרים \"פעילות גופנית\", ומזינים את סוג הפעילות ואת משך הזמן. הקלוריות שנשרפו מתווספות לתקציב היומי שלך באותו יום.\n\nתיבת הסימון \"אימון כוח\" ביומן המעקב מופיעה בראשון, שלישי וחמישי, כי אלה ימי אימוני הכוח בתוכנית. אימון נוסף בכל יום אחר נרשם ונספר בדיוק אותו דבר, פשוט אין לו תיבה לסמן." },
   { q: "מה קורה לקלוריות שאני שורפת בפעילות גופנית?", a: "כל פעילות גופנית שתזיני מתווספת לתקציב הקלורי היומי שלך - כלומר מגדילה את הכמות שמותר לך לאכול באותו יום. הליכה לא מוזנת כפעילות כי היא נספרת אוטומטית דרך הצעדים." },
@@ -7203,15 +7260,16 @@ export default function App() {
           });
         }
       }
-      let standalone = 0, notif = "";
+      let standalone = 0, notif = "", device = {};
       try {
         standalone = ((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true) ? 1 : 0;
         notif = (typeof Notification !== "undefined" && Notification.permission) || "";
+        device = deviceOf(navigator.userAgent, standalone, navigator.maxTouchPoints || 0);
       } catch (e) {}
       payload = {
         email: em, ...u, trackerDays, day: TODAY, doneToday, phone: ph,
         opens: usg.opens || {}, mins: usg.mins || {}, hours: usg.hours || [], feat: usg.feat || {},
-        dayClosed, tasksAgg, standalone, notif,
+        dayClosed, tasksAgg, standalone, notif, dev: device.dev || "", br: device.br || "",
       };
     } catch (e) { return; }
     fetch("/api/usage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
