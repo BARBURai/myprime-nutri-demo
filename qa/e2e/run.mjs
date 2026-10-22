@@ -347,6 +347,31 @@ const CHECKS = [
     },
   },
   {
+    // v8.36. לירון, 22.10.2026: "יעד חלבון 115 ג׳ · ימים ביעד 0/6", כי המספר בכרטיס
+    // החלבון ספר ימים ביעד הקלורי. שני הצדדים באותה הרצה: ימים עם הרבה חלבון ומעט
+    // קלוריות נספרים בכרטיס החלבון, ואינם נספרים בכרטיס הקלורי.
+    name: "כרטיס יעד חלבון סופר ימי חלבון ולא ימי קלוריות",
+    async run(browser, device) {
+      const start = sundayWeeksAgo(4);
+      const d = (k) => new Date(Date.parse(TODAY + "T00:00:00Z") - k * 86400000).toISOString().slice(0, 10);
+      const e = (id, date, kcal, p) => ({ id, date, meal: "צהריים", name: "חזה עוף", g: 300, unit: "g", source: "verified", kcal, p, f: 5, c: 0 });
+      // 1.6 × 72 = 115. שלושה ימים מעל 95 אחוז ממנו, ויום אחד מתחת. כולם ב-600 קק״ל, מתחת לטווח הקלורי
+      const log = [e("a", d(0), 600, 130), e("b", d(1), 600, 120), e("c", d(2), 600, 110), e("x", d(3), 600, 50)];
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 65, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done", lossStopAt: null };
+      const { context, page, errors } = await openApp(browser, device, { startDate: start, seed: { profile: prof, log, weights: [{ date: start, kg: 72 }] } });
+      await page.locator("text=דוח").last().click();
+      await page.waitForTimeout(600);
+      const bad = [];
+      const prot = (await page.locator("[data-protein-days]").first().innerText().catch(() => "")).trim();
+      if (prot !== "3/4") bad.push("כרטיס החלבון " + (prot || "חסר"));
+      const body = await page.locator("body").innerText();
+      if (!body.includes("115")) bad.push("יעד החלבון אינו 115");
+      if (!body.includes("0 מתוך 4")) bad.push("כרטיס הקלורי השתנה");
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `חלבון ${prot} · קלורי 0 מתוך 4` };
+    },
+  },
+  {
     // The whole journey in one scenario, because the halves are meaningless apart: a rule
     // that only ever fires looks exactly like a rule that never fires. She crosses the line
     // on a weight she reports, gets the screen, lands in maintenance with the rate list

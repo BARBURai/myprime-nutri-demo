@@ -749,7 +749,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.35";
+const VERSION = "8.36";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2214,6 +2214,8 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
   const lastWUpdate = `${lastWDate.getUTCDate()}.${lastWDate.getUTCMonth() + 1}.${lastWDate.getUTCFullYear()}`;
   const calByDate = {};
   log.forEach((e) => { calByDate[e.date] = (calByDate[e.date] || 0) + e.kcal; });
+  const protByDate = {};
+  log.forEach((e) => { protByDate[e.date] = (protByDate[e.date] || 0) + (e.p || 0); });
   const goalKcal = targets.targetKcal;
   // כל יום נמדד מול היעד של אותו יום, בדיוק כמו ביומן. עד כאן הדוח השווה את כל שבעת
   // הימים ליעד הבסיסי, ולכן ביום שהיא התאמנה הוא סימן אותה כחורגת בזמן שהיומן הראה
@@ -2229,7 +2231,7 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
   const calSeries = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(TODAY, i - 6);
     const dd = parseDay(d);
-    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0), goal: Math.round(goalOn(d)) };
+    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0), goal: Math.round(goalOn(d)), p: protByDate[d] || 0 };
   });
   const loggedDays = calSeries.filter((x) => x.kcal > 0);
   // מתי יום נחשב "עמדה ביעד". החלטה של רון, 22 באוגוסט 2026, אחרי שהוא שאל:
@@ -2255,6 +2257,11 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
   const calBelow = (kc, g) => g > 0 && kc > 0 && kc < metFloor(g);
   const metDays = loggedDays.filter((x) => calMet(x.kcal, x.goal)).length;
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
+  // בכרטיס "יעד חלבון" נספרים ימי חלבון, ולא ימי קלוריות. עד v8.36 הוא הציג את
+  // daysOnTarget, ומשתתפת שהגיעה לחלבון בכל יום ראתה 0/6 מתחת לכותרת של חלבון.
+  // אותו סף של autoStatusFor, שמסמן את משימת החלבון ביומן המעקב: 95 אחוז מהיעד.
+  const proteinMetDays = loggedDays.filter((x) => targets.protein > 0 && x.p >= targets.protein * 0.95).length;
+  const proteinOnTarget = `${proteinMetDays}/${loggedDays.length}`;
   const maxCal = Math.max(goalKcal, ...calSeries.map((x) => Math.max(x.kcal, x.goal)));
   // The protein task opens on week 3 DAY 4, not on day 1 of week 3. Reading the week alone
   // turned protein on three days early, while the tracker itself already used the exact
@@ -2388,7 +2395,7 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
               <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>היעד היומי שלך לחלבון</div>
             </div>
             <div style={{ flex: 1, borderInlineStart: `1px solid ${C.line}`, paddingInlineStart: 14 }}>
-              <div style={{ fontSize: 29, fontWeight: 700, color: C.ink }}>{daysOnTarget}</div>
+              <div data-protein-days style={{ fontSize: 29, fontWeight: 700, color: C.ink }}>{proteinOnTarget}</div>
               <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>ימים ביעד</div>
             </div>
           </div>
