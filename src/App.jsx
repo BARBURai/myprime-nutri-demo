@@ -749,7 +749,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.36";
+const VERSION = "8.37";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -868,6 +868,17 @@ function bkUnpack(plaintext) {
 // לתשובה: הבדיקה שרצה מאחורי מסך הפתיחה, וזו שעוצרת בסיום ההרשמה. **בלי תפוגה,
 // שרת שלא עונה משאיר אותה על "טוען..." בלי דרך להתקדם**, ובסיום ההרשמה זה בדיוק
 // הרגע הכי רגיש שיש. בלי הפרמטר ההתנהגות זהה למה שהייתה, כלומר בלי תפוגה.
+// הבקשה לשער בפתיחה, עם תקרת זמן. **20 שניות, החלטת רון ב-22.10.2026**: השער עונה
+// בדרך כלל בכשנייה, ובקריאה הראשונה אחרי העלאה נמדדו פעם אחת 11.3 שניות.
+// `mp_access_timeout` במכשיר מקצר אותה, לבדיקות בלבד.
+const ACCESS_TIMEOUT_MS = (() => { try { const v = +localStorage.getItem("mp_access_timeout"); return v > 0 ? v : 20000; } catch (e) { return 20000; } })();
+async function fetchAccessOnce(url) {
+  const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => { try { ctl.abort(); } catch (e) {} }, ACCESS_TIMEOUT_MS) : null;
+  // גם קריאת הגוף בתוך התקרה, כי חיבור יכול להיתקע גם אחרי שהכותרות הגיעו.
+  try { const r = await fetch(url, ctl ? { signal: ctl.signal } : undefined); return await r.json(); }
+  finally { if (timer) clearTimeout(timer); }
+}
 async function bkFetch(email, timeoutMs) {
   let timer = null;
   try {
@@ -7367,8 +7378,13 @@ export default function App() {
     setGate("checking"); setGateMsg("");
     lastAccessRef.current = Date.now();
     try {
-      const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}${isLogin ? "&login=1" : ""}`);
-      const d = await r.json();
+      const url = `${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}${isLogin ? "&login=1" : ""}`;
+      // **תקרת זמן וניסיון חוזר אחד, v8.37.** יפית קלנר: "היא נתקעת ולא נפתחת. הפתרון
+      // סגירה ופתיחה מחדש". בקשה שלא ענתה השאירה את המסך על "טוען" לנצח. עכשיו אחרי
+      // ACCESS_TIMEOUT_MS נשלחת בקשה חדשה פעם אחת, ואם גם היא לא עונה מגיעה ההודעה
+      // הקיימת "תקלת תקשורת". **אינה נספרת ככניסה שנכשלה**: רק not_registered נספר.
+      let d;
+      try { d = await fetchAccessOnce(url); } catch (e1) { d = await fetchAccessOnce(url); }
       if (d.allowed) {
         try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
         if (d.startDate) { setGateStartDate(d.startDate); try { localStorage.setItem("myprime_start_date", d.startDate); } catch (e) {} }
@@ -7452,8 +7468,9 @@ export default function App() {
       if (!em) return;
       busy = true; lastAccessRef.current = Date.now();
       try {
-        const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
-        const d = await r.json();
+        // אותה תקרת זמן, בלי ניסיון חוזר. בלעדיה בקשה תקועה השאירה את `busy` דלוק,
+        // וכל בדיקה חוזרת אחריה דולגה עד הטעינה הבאה. v8.37.
+        const d = await fetchAccessOnce(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
         // **v7.77: לא על תשובה שניתנה בלי סימוני המשרד** (`degraded`). בתקלה ב-Upstash
         // השער מחליט לפי הגיליון לבד, ואישה שהמשרד האריך לה הייתה יוצאת באמצע. בטעינה
         // הבאה, כשהתקלה עברה, היא נבדקת שוב כרגיל.

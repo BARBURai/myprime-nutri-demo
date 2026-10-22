@@ -323,6 +323,7 @@
     background:var(--card-2);border:1px solid var(--line);font-size:14px;
   }
   .qinfo .flabel{display:inline}
+  .qinfo .qmeta{margin-bottom:6px}
   .qprev{display:grid;gap:9px;margin-top:4px}
   .qprev-none{color:var(--ink-3);font-size:13.5px}
   .qprev-i{border-inline-start:3px solid var(--line-2);padding-inline-start:10px}
@@ -2148,7 +2149,11 @@ function render(){
                 (w.phone?' <button class="btn sm" data-copy="'+esc(w.phone)+'">העתקה</button>':'')+'</div>'+
               '<div><span class="flabel">מייל</span> <span class="mono">'+esc(w.email||"")+'</span>'+
                 ' <button class="btn sm" data-copy="'+esc(w.email||"")+'">העתקה</button></div>'+
-              '<div><span class="flabel">מחזור</span> '+esc(il(w.start||""))+' · '+esc(dayInProgram(w))+' · '+esc(lastSeen(w))+'</div>'+
+              // **אותה שורה ואותה קופסה של הכרטיס, v8.37.** רון: "שיהיה רשום לי באיזה תוכנית
+              // היא נמצאת ומתי התחילה... ובאיזה שבוע היא נמצאת", בלי להיכנס לכרטיס.
+              (byMail[em]
+                ? (attachUsage(w), '<div class="qmeta">'+progPill(w)+' '+metaLine(w)+'</div>'+stateBox(w))
+                : '')+
               (function(){
                 // כל מה שכבר נענה לה, כאן ולא בכרטיס: רון ביקש שהכל יהיה נגיש מהמסך הזה.
                 var prev = (QUEUE[em].notes || []).map(function(x){ return { n:x, r: (QUEUE[em].replies||[]).filter(function(y){ return y.to === x.id; })[0] }; })
@@ -2214,6 +2219,13 @@ function render(){
     return out;
   }
 
+  // השורה שמתחת לשם: מחזור, שבוע ויום, כניסה אחרונה, וגישה עד. **משותפת לכרטיס
+  // ולפרטים שבתור המענה, v8.37**, כדי ששני המקומות יגידו אותו דבר בדיוק.
+  function metaLine(w){
+    return 'מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+
+      (w.newApp?' · גישה עד <b class="'+(w.expired?"expired":"")+'">'+((w.accessUntil||w.until)?il(w.accessUntil||w.until):"לא ידוע")+'</b>'+(w.expired?" (הסתיימה)":""):"");
+  }
+
   function womanCard(w){
     attachUsage(w);
     var nm = ((w.first||"")+" "+(w.last||"")).trim() || w.email;
@@ -2233,8 +2245,7 @@ function render(){
         (w.cancelled?'<span class="grp dngpill">ביטלה</span>':'')+
         (w.frozen?'<span class="grp coldpill">בהקפאה</span>':'')+
         (w.blocked?'<span class="grp dngpill">'+(w.newApp?'חסומה מהאפליקציה':'בביטול · לבטל בקג\'אבי')+'</span>':'')+'</div>'+
-        '<div class="meta">מחזור '+il(w.start)+(w.startOverride?" ✎":"")+' · '+dayInProgram(w)+' · '+lastSeen(w)+
-          (w.newApp?' · גישה עד <b class="'+(w.expired?"expired":"")+'">'+((w.accessUntil||w.until)?il(w.accessUntil||w.until):"לא ידוע")+'</b>'+(w.expired?" (הסתיימה)":""):"")+'</div>'+
+        '<div class="meta">'+metaLine(w)+'</div>'+
         ((w.backSoon && w.backCohort)?'<div class="workline">'+(w.freeze.from?'בהקפאה מ-'+il(w.freeze.from)+' · ':'')+'חוזרת '+il(w.freeze.back)+' לשבוע '+w.freeze.week+(w.solo?'':' · <b>להכניס לקבוצה של מחזור '+il(w.backCohort)+'</b>')+'</div>':'')+
         dupBox(w)+
         stateBox(w)+

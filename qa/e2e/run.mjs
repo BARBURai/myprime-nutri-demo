@@ -118,7 +118,7 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null, ilFood = null, accessExtra = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null, ilFood = null, accessExtra = null, beforeLoad = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
@@ -155,6 +155,8 @@ async function openApp(browser, device, { day = 10, startDate: fixedStart = null
     if (neverAsked) state.profile.tipsSeen = state.profile.tipsSeen.filter((k) => k !== "notifyAsked");
     localStorage.setItem("myprime_demo_state_v1", JSON.stringify(state));
   }, [startDate, seed, neverAskedNotify]);
+  // v8.37: מה שחייב לחול כבר בטעינה הראשונה, כמו שער שאינו עונה.
+  if (beforeLoad) await beforeLoad(context);
   const page = await context.newPage();
   lastPage = page;
   const errors = [];
@@ -518,6 +520,42 @@ const CHECKS = [
       const fab = await page.locator('[aria-label="הוספה"]').isVisible().catch(() => false);
       await context.close();
       return { ok: bar && fab && !errors.length, detail: `סרגל תחתון ${bar}, כפתור הוספה ${fab}, שגיאות ${errors.length ? errors[0].slice(0, 90) : "אין"}` };
+    },
+  },
+  {
+    // v8.37: בקשה לשער שאינה עונה. עד כאן המסך נשאר על "טוען" לנצח, והדרך היחידה הייתה
+    // לסגור ולפתוח. **שני הצדדים:** בקשה אחת תקועה והשנייה עונה, והיא בפנים · שתיהן
+    // תקועות, והיא מקבלת "תקלת תקשורת" ולא מסך תקוע. התקרה מקוצרת ל-1.5 שניות.
+    name: "שער שאינו עונה בפתיחה: ניסיון חוזר אחד, ואז הודעת תקלה ולא מסך תקוע",
+    async run(browser, device) {
+      const bad = [];
+      for (const hangs of [1, 2]) {
+        let calls = 0;
+        const { context, page, errors } = await openApp(browser, device, {
+          beforeLoad: async (ctx) => {
+            await ctx.addInitScript(() => localStorage.setItem("mp_access_timeout", "1500"));
+            await ctx.route("**/api/access**", (route) => {
+              calls++;
+              if (calls <= hangs) return; // לעולם אינה עונה
+              return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ allowed: true, name: "בדיקה", startDate: startForDay(10) }) });
+            });
+          },
+        });
+        await page.waitForTimeout(2500);
+        const inApp = (await page.locator('[aria-label="הוספה"]').count()) > 0;
+        const txt = await page.evaluate(() => document.body.innerText);
+        if (hangs === 1) {
+          if (!inApp) bad.push("בקשה אחת תקועה: לא נכנסה אחרי הניסיון החוזר");
+          if (calls !== 2) bad.push(`בקשה אחת תקועה: ${calls} פניות ולא 2`);
+        } else {
+          if (inApp) bad.push("שתי בקשות תקועות: נכנסה");
+          if (!txt.includes("תקלת תקשורת")) bad.push("שתי בקשות תקועות: אין הודעת תקלה");
+          if (calls !== 2) bad.push(`שתי בקשות תקועות: ${calls} פניות ולא 2`);
+        }
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "תקועה אחת: נכנסה בניסיון השני · שתיים: תקלת תקשורת, בדיוק שתי פניות" };
     },
   },
   {

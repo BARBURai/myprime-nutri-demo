@@ -120,7 +120,7 @@ async function open(browser, device, patch) {
     }
     // תור המענה מצפה ל-`all`, ולא ל-`notes`/`replies` של אישה אחת. בלי ההבחנה הזאת
     // QUEUE נשאר undefined והמסך נופל על Object.keys, כלומר הבדיקה נכשלת על המוק.
-    if (url.includes("notes=all")) return json({ ok: true, all: {} });
+    if (url.includes("notes=all")) return json({ ok: true, all: DATA0.__queue || {} });
     if (url.includes("notes=")) return json({ ok: true, notes: [], replies: [] });
     if (url.includes("bank=1")) return json({ ok: true, bank: [] });
     if (url.includes("mc=")) return json({ ok: true, found: false });
@@ -686,6 +686,30 @@ CHECKS.push({
       ok: /\(4\)/.test(label) && okSec && mail === 1 && okA && okB && card === 1 && errors.length === 0,
       detail: `האריח "${label}" · חלקים ${JSON.stringify(secs)} · מייל ${okA ? "אומר" : boxA} · טלפון ${okB ? "אומר" : boxB} · כרטיס ${card} · שגיאות ${errors[0] || "אין"}`,
     };
+  },
+}, {
+  // v8.37: "פרטים" בתור המענה מציג את אותה שורה ואותה קופסה של הכרטיס: מסלול, מחזור,
+  // שבוע ויום, גישה עד, ו"מה יש לה עכשיו". רון: "שיהיה רשום לי באיזה תוכנית היא נמצאת
+  // ומתי התחילה". שני הצדדים: לפני ההקשה על "פרטים" שום דבר מזה אינו מוצג.
+  name: "תור המענה: הפרטים מציגים את התוכנית, המחזור וגישה עד",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device, (d) => {
+      d.women[1].state = { allowed: true, open360Base: true, open360: true, product: "360" };
+      d.women[1].accessUntil = "2026-11-17";
+      d.__queue = { "ronit@test.com": { notes: [{ id: "n1", at: "2026-08-25T10:00:00Z", text: "שאלה לבדיקה" }], replies: [] } };
+      return d;
+    });
+    await page.locator('[data-v="notes"]').click();
+    await page.waitForTimeout(400);
+    const before = (await page.locator(".qinfo").count());
+    await page.locator('[data-qinfo="ronit@test.com"]').first().click();
+    await page.waitForTimeout(400);
+    const box = page.locator(".qinfo").first();
+    const t = (await box.count()) ? (await box.innerText()).replace(/\s+/g, " ") : "";
+    await ctx.close();
+    const want = ["סולו 6", "מחזור 09.08.2026", "שבוע", "גישה עד 17.11.2026", "מה יש לה עכשיו", "09.08.2026 עד", "המסך שהיא רואה"];
+    const miss = want.filter((x) => !t.includes(x));
+    return { ok: before === 0 && miss.length === 0 && errors.length === 0, detail: `לפני ${before} · חסר ${JSON.stringify(miss)} · "${t.slice(0, 160)}"${errors.length ? " · " + errors[0] : ""}` };
   },
 }, {
   // שאלה שהגיעה בוואטסאפ או במייל. בודק את שני הצדדים באותה הרצה, כי טופס שנפתח
