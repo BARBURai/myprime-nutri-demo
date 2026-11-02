@@ -5869,7 +5869,7 @@ function RefCard({ refInfo }) {
   return (
     <div data-ref-card style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
       <div style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>הזמיני חברה</div>
-      <div style={{ fontSize: 14.5, color: C.sub, marginTop: 6, lineHeight: 1.55 }}>על כל חברה שמצטרפת דרך הקישור שלך, שתיכן מקבלות חודש גישה נוסף. אפשר לצבור עד 3 חודשים.</div>
+      <div style={{ fontSize: 14.5, color: C.sub, marginTop: 6, lineHeight: 1.55 }}>על כל חברה שמצטרפת דרך הקישור שלך, שתיכן מקבלות <b data-ref-gift style={{ color: C.brandD, fontWeight: 800 }}>חודש נוסף במתנה</b>. אפשר לצבור עד 3 חודשים.</div>
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <a href={refWhatsApp(refInfo.code)} target="_blank" rel="noopener" style={{ flex: 1, textAlign: "center", background: C.brand, color: "#fff", borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
         <button onClick={copy} style={{ flex: 1, background: C.panel, color: C.brandD, border: `1px solid ${C.line}`, borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{copied ? "הועתק ✓" : "העתקת הקישור"}</button>

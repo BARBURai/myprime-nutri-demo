@@ -296,6 +296,7 @@ const CHECKS = [
           if (seen !== "1") bad.push("לא סומן שהוצג");
           await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
           if (!(await page.locator("[data-ref-card]").count())) bad.push("עם קוד: אין שורה בפרופיל");
+          else if ((await page.locator("[data-ref-card] [data-ref-gift]").first().textContent().catch(() => "")) !== "חודש נוסף במתנה") bad.push("בפרופיל אין 'חודש נוסף במתנה' מודגש");
         } else {
           if (has) bad.push("בלי קוד: הוצג כרטיס");
           if (!(await page.locator("text=מדליה נכנסה לאוסף").count())) bad.push("בלי קוד: אין מסך מדליה, כלומר הבדיקה לא הגיעה ליעד");
