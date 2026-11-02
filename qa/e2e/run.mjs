@@ -283,7 +283,14 @@ const CHECKS = [
             const txt = decodeURIComponent(href || "");
             if (!txt.includes("https://myprime.co.il/smart?ref=MAYA22")) bad.push("הקישור: " + txt.slice(0, 80));
             if (!txt.includes("שתינו נקבל חודש נוסף")) bad.push("ההודעה בוואטסאפ חסרה");
+            const gift = await offer.locator("[data-ref-gift]").first().textContent().catch(() => "");
+            if (gift !== "חודש נוסף במתנה") bad.push("אין 'חודש נוסף במתנה' מודגש");
+            // v8.42: "אולי אחר כך" אינו סוגר, אלא אומר לה שההזמנה בפרופיל.
             await offer.locator("text=אולי אחר כך").click(); await page.waitForTimeout(300);
+            if (await page.locator("[data-ref-offer]").count()) bad.push("אחרי 'אולי אחר כך' הכרטיס נשאר");
+            if (!(await page.locator('text=הקישור שלך נמצא תמיד בפרופיל').count())) bad.push("אחרי 'אולי אחר כך' אין הפניה לפרופיל");
+            await page.locator("text=יאללה, ממשיכות").first().click(); await page.waitForTimeout(300);
+            if (await page.locator("text=מדליה נכנסה לאוסף").count()) bad.push("המסך לא נסגר");
           }
           const seen = await page.evaluate(() => localStorage.getItem("mp_ref_offer_seen_v1"));
           if (seen !== "1") bad.push("לא סומן שהוצג");

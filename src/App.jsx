@@ -761,7 +761,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.41";
+const VERSION = "8.42";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5802,6 +5802,7 @@ function FastLossSheet({ onClose }) {
 function CheckinCheer({ name, streak, onClose, refCode }) {
   const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
   const cheer = cheerFor(streak, name);
+  const [refLater, setRefLater] = useState(false);
   // "מדליה נכנסה לאוסף" can read as though the day is now sealed. Said once, the first
   // time she ever sees this screen, so she knows she can keep adding to today.
   const [firstEver] = useState(() => {
@@ -5825,13 +5826,21 @@ function CheckinCheer({ name, streak, onClose, refCode }) {
         <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{cheer.text}
           {firstEver && <div style={{ marginTop: 6 }}>אפשר תמיד להוסיף עוד עדכונים באפליקציה</div>}
           <div style={{ marginTop: 2 }}>ענת</div></div>
-        {refCode ? (
+        {refCode && !refLater ? (
           // **פעם אחת, אחרי המדליה החמישית**, החלטת רון. המסך כבר סומן כנראה ברגע שנפתח.
-          <div data-ref-offer style={{ marginTop: 16, background: C.brandBg, borderRadius: 14, padding: "14px 12px" }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>את כבר בתנופה 💜</div>
-            <div style={{ fontSize: 14.5, color: C.sub, marginTop: 6, lineHeight: 1.55 }}>הכי כיף לעשות את זה עם חברה. שלחי לה את הקישור שלך, וכשהיא מצטרפת, שתיכן מקבלות חודש נוסף באפליקציה ובכל התכנים.</div>
-            <a href={refWhatsApp(refCode)} target="_blank" rel="noopener" onClick={onClose} style={{ display: "block", marginTop: 12, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
-            <div onClick={onClose} style={{ marginTop: 10, fontSize: 14.5, color: C.brandD, cursor: "pointer" }}>אולי אחר כך</div>
+          // v8.42: בולט יותר, ו"חודש נוסף במתנה" מודגש. רון: "שזה יהיה בולט... לא איזה משהו
+          // שהיא סתם תלחץ ותפספס אותו".
+          <div data-ref-offer style={{ marginTop: 16, background: C.brandBg, border: `2px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px" }}>
+            <div style={{ fontSize: 19, fontWeight: 700, color: C.brandD }}>את כבר בתנופה 💜</div>
+            <div style={{ fontSize: 15.5, color: C.ink, marginTop: 8, lineHeight: 1.6 }}>הכי כיף לעשות את זה עם חברה. שלחי לה את הקישור שלך, וכשהיא מצטרפת, שתיכן מקבלות <b data-ref-gift style={{ color: C.brandD, fontWeight: 800 }}>חודש נוסף במתנה</b> באפליקציה ובכל התכנים.</div>
+            <a href={refWhatsApp(refCode)} target="_blank" rel="noopener" onClick={onClose} style={{ display: "block", marginTop: 14, background: C.brand, color: "#fff", borderRadius: 12, padding: 13, fontSize: 16.5, fontWeight: 700, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
+            <div data-ref-later onClick={() => setRefLater(true)} style={{ marginTop: 10, fontSize: 14.5, color: C.brandD, cursor: "pointer" }}>אולי אחר כך</div>
+          </div>
+        ) : refCode && refLater ? (
+          // v8.42: "אולי אחר כך" אינו סוגר, אלא אומר לה איפה ההזמנה מחכה. הנוסח אושר על ידי רון.
+          <div data-ref-later-note style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.6, background: C.brandBg, borderRadius: 14, padding: "14px 12px" }}>אין בעיה. הקישור שלך נמצא תמיד בפרופיל, בשורה "הזמיני חברה", ואפשר להזמין משם בכל זמן.</div>
+            <div style={{ marginTop: 14 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>
           </div>
         ) : <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>}
       </div>
