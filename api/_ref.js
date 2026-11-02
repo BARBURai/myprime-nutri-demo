@@ -40,8 +40,8 @@ const digits = (p) => String(p || "").replace(/[^\d]/g, "").replace(/^0/, "972")
 export async function readBonus(redis, RU, RT, email) {
   try {
     const b = parse(await redis(RU, RT, "HGET", REF_BONUS, email)) || {};
-    return { months: Math.max(0, Number(b.m) || 0), friends: Number(b.f) || 0, via: !!b.via };
-  } catch (e) { return { months: 0, friends: 0, via: false }; }
+    return { months: Math.max(0, Number(b.m) || 0), days: Math.max(0, Number(b.pd) || 0), friends: Number(b.f) || 0, via: !!b.via };
+  } catch (e) { return { months: 0, days: 0, friends: 0, via: false }; }
 }
 
 export async function ensureCode(redis, RU, RT, email, rand) {
@@ -87,20 +87,72 @@ export async function refCharge(body, rpost, phonesOf, now = Date.now()) {
     if (was && was.order !== order) return { status: 200, json: { ok: true, skipped: "friend_counted" } };
     if (!was) await rpost(["HSET", REF_BY, friend, JSON.stringify({ from, order, at })]);
     const fb = parse(await rpost(["HGET", REF_BONUS, friend])) || {};
-    await rpost(["HSET", REF_BONUS, friend, JSON.stringify({ m: (Number(fb.m) || 0) + (fb.via ? 0 : 1), f: Number(fb.f) || 0, via: true })]);
+    await rpost(["HSET", REF_BONUS, friend, JSON.stringify({ ...fb, m: (Number(fb.m) || 0) + (fb.via ? 0 : 1), f: Number(fb.f) || 0, via: true })]);
     const cr = parse(await rpost(["HGET", REF_CREDIT, from])) || { friends: [] };
     if (!Array.isArray(cr.friends)) cr.friends = [];
     if (!cr.friends.some((x) => x && x.email === friend)) cr.friends.push({ email: friend, order, at });
     await rpost(["HSET", REF_CREDIT, from, JSON.stringify(cr)]);
     const mb = parse(await rpost(["HGET", REF_BONUS, from])) || {};
     const own = Math.min(REF_MAX_MONTHS, cr.friends.length);
-    await rpost(["HSET", REF_BONUS, from, JSON.stringify({ m: own + (mb.via ? 1 : 0), f: cr.friends.length, via: !!mb.via })]);
+    await rpost(["HSET", REF_BONUS, from, JSON.stringify({ ...mb, m: own + (mb.via ? 1 : 0), f: cr.friends.length, via: !!mb.via })]);
     return { status: 200, json: { ok: true, from, friend, months: own } };
   } catch (e) {
     // לא נשמר עד הסוף: משחררים את ההזמנה כדי שהניסיון הבא ייספר.
     try { await rpost(["HDEL", REF_ORDERS, order]); } catch (e2) {}
     return { status: 502, json: { ok: false, error: "save_failed" } };
   }
+}
+
+// **הטבת נובמבר 2026. v8.41.** רון, 2.11.2026: "28 יום נוספים לכל מי שקנתה סמארט מ-2.11 עד
+// 30.11 בחצות, לפי שעת התשלום." דף התשלום שולח כל קנייה של סמארט, עם שעת התשלום, ל-`?promocharge`.
+// הימים נשמרים כ-`pd` באותה רשומה של חברה מביאה חברה, ולכן השער קורא אותם באותה פנייה.
+// **פעם אחת לכל אישה**, גם אם קנתה פעמיים בחלון.
+export const PROMO_NOV26 = "promo:nov26";
+export const PROMO_DAYS = 28;
+// 02.11.2026 00:00 עד 30.11.2026 בחצות, שעון ישראל (חורף, UTC+2).
+export const PROMO_FROM = Date.UTC(2026, 10, 1, 22, 0, 0);
+export const PROMO_TO = Date.UTC(2026, 10, 30, 22, 0, 0);
+export async function promoCharge(body, rpost) {
+  const b = body && typeof body === "object" ? body : {};
+  const email = cleanEmail(b.email);
+  const order = String(b.orderId || b.order || "").trim();
+  const paid = Date.parse(String(b.paidAt || ""));
+  if (!email || !order || !Number.isFinite(paid)) return { status: 400, json: { ok: false, error: "bad_body" } };
+  if (paid < PROMO_FROM || paid >= PROMO_TO) return { status: 200, json: { ok: true, skipped: "outside_window" } };
+  if (Number(await rpost(["HSETNX", PROMO_NOV26, email, JSON.stringify({ order, paidAt: new Date(paid).toISOString() })])) !== 1) return { status: 200, json: { ok: true, already: true } };
+  try {
+    const fb = parse(await rpost(["HGET", REF_BONUS, email])) || {};
+    await rpost(["HSET", REF_BONUS, email, JSON.stringify({ ...fb, pd: (Number(fb.pd) || 0) + PROMO_DAYS })]);
+    return { status: 200, json: { ok: true, email, days: PROMO_DAYS } };
+  } catch (e) {
+    try { await rpost(["HDEL", PROMO_NOV26, email]); } catch (e2) {}
+    return { status: 502, json: { ok: false, error: "save_failed" } };
+  }
+}
+
+// **שיוך ידני של חברה למזמינה, מהמשרד. v8.41.** כשהקוד לא עבר בקנייה. `from` הוא הקוד של
+// המזמינה או המייל שלה. עובר באותו `refCharge` בדיוק, עם מספר הזמנה ידני, ולכן כל הכללים חלים:
+// הזמנה עצמית אינה נספרת, חברה נספרת פעם אחת, והתקרה של 3 חודשים.
+export async function refLink(fromRaw, friendRaw, rpost, phonesOf, now = Date.now()) {
+  const friend = cleanEmail(friendRaw);
+  const raw = String(fromRaw || "").trim();
+  if (!friend || !raw) return { status: 400, json: { ok: false, error: "bad_body" } };
+  let code = "";
+  if (raw.includes("@")) {
+    const from = cleanEmail(raw);
+    code = String((await rpost(["HGET", REF_MINE, from])) || "");
+    if (!code) {
+      for (let i = 0; i < 5 && !code; i++) {
+        const c = makeCode();
+        if (Number(await rpost(["HSETNX", REF_CODE, c, from])) === 1) {
+          await rpost(["HSETNX", REF_MINE, from, c]);
+          code = String((await rpost(["HGET", REF_MINE, from])) || c);
+        }
+      }
+    }
+  } else code = cleanCode(raw);
+  if (!code) return { status: 400, json: { ok: false, error: "bad_ref" } };
+  return refCharge({ ref: code, email: friend, orderId: "manual:" + friend }, rpost, phonesOf, now);
 }
 
 export function refKeyOk(req) {

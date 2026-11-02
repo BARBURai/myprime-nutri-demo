@@ -41,7 +41,7 @@ globalThis.fetch = async (url, opt) => {
   throw new Error("no net " + u);
 };
 
-const { refCharge, makeCode, cleanCode, REF_MAX_MONTHS } = await import("../api/_ref.js");
+const { refCharge, makeCode, cleanCode, REF_MAX_MONTHS, promoCharge, refLink, PROMO_DAYS } = await import("../api/_ref.js");
 const { decideAccess, end360 } = await import("../api/_product.js");
 const { default: access } = await import("../api/access.js");
 
@@ -89,6 +89,34 @@ const p2 = await refCharge({ ref: "MAYA22", email: "late@test.com", orderId: "40
 const crM = JSON.parse(H["ref:credit"]["maya@test.com"]);
 ck("**והניסיון הבא משלים בלי להכפיל**", p2.status === 200 && crM.friends.filter((x) => x.email === "late@test.com").length === 1 && JSON.parse(H["ref:bonus"]["late@test.com"]).m === 1, { p2, n: crM.friends.length });
 
+// ---------- הטבת נובמבר, v8.41 ----------
+console.log("\nהטבת נובמבר\n");
+const pc = (b) => promoCharge(b, rp);
+ck("בלי שעת תשלום: 400", (await pc({ email: "n@test.com", orderId: "p1" })).status === 400);
+ck("לפני 02.11 בחצות שעון ישראל: אין הטבה", (await pc({ email: "n@test.com", orderId: "p1", paidAt: "2026-11-01T21:59:00Z" })).json.skipped === "outside_window" && !(H["promo:nov26"] || {})["n@test.com"]);
+ck("אחרי 30.11 בחצות: אין הטבה", (await pc({ email: "n@test.com", orderId: "p1", paidAt: "2026-11-30T22:00:00Z" })).json.skipped === "outside_window");
+const pOk = await pc({ email: "N@test.com", orderId: "p2", paidAt: "2026-11-01T22:00:00Z" });
+ck(`**02.11 בחצות בדיוק: ${PROMO_DAYS} יום**`, pOk.status === 200 && JSON.parse(H["ref:bonus"]["n@test.com"]).pd === 28, pOk);
+ck("**פעם אחת לכל אישה**", (await pc({ email: "n@test.com", orderId: "p3", paidAt: "2026-11-15T10:00:00Z" })).json.already === true && JSON.parse(H["ref:bonus"]["n@test.com"]).pd === 28);
+await pc({ email: "dana@test.com", orderId: "p4", paidAt: "2026-11-30T21:59:00Z" });
+const dPromo = JSON.parse(H["ref:bonus"]["dana@test.com"]);
+ck("**הטבה לחברה שכבר קיבלה חודש: שניהם נשמרים**", dPromo.pd === 28 && dPromo.m === 2 && dPromo.via === true, dPromo);
+await charge({ ref: "DANA33", email: "zz2@test.com", orderId: "301" });
+ck("**ותשלום של חברה אחרי ההטבה אינו מוחק את הימים**", JSON.parse(H["ref:bonus"]["dana@test.com"]).pd === 28 && JSON.parse(H["ref:bonus"]["dana@test.com"]).f === 2);
+
+// ---------- שיוך ידני ----------
+console.log("\nשיוך ידני\n");
+const lk = (from, friend) => refLink(from, friend, rp, phonesOf, Date.UTC(2026, 10, 2));
+const l1 = await lk("MAYA22", "hand@test.com");
+ck("**שיוך לפי קוד: חודש לחברה**", l1.status === 200 && JSON.parse(H["ref:bonus"]["hand@test.com"]).m === 1 && JSON.parse(H["ref:by"]["hand@test.com"]).order === "manual:hand@test.com", l1);
+ck("שיוך שני של אותה חברה אינו מכפיל", (await lk("MAYA22", "hand@test.com")).json.already === true && JSON.parse(H["ref:bonus"]["hand@test.com"]).m === 1);
+ck("**חברה שכבר נספרה בקנייה אינה נספרת שוב ביד**", (await lk("MAYA22", "dana@test.com")).json.skipped === "friend_counted");
+const l2 = await lk("Noa@Test.com", "hand2@test.com");
+const noaCode = H["ref:mine"]["noa@test.com"];
+ck("**שיוך לפי מייל של מזמינה בלי קוד: נוצר לה קוד, ושתיהן מקבלות חודש**", l2.status === 200 && /^[A-Z0-9]{6}$/.test(noaCode || "") && H["ref:code"][noaCode] === "noa@test.com" && JSON.parse(H["ref:bonus"]["noa@test.com"]).m === 1 && JSON.parse(H["ref:bonus"]["hand2@test.com"]).m === 1, l2);
+ck("שיוך של אישה לעצמה אינו נספר", (await lk("noa@test.com", "noa@test.com")).json.skipped === "self");
+ck("קוד שאינו קיים: אין שינוי", (await lk("ZZZZ99", "hand3@test.com")).json.skipped === "unknown_ref" && !(H["ref:bonus"] || {})["hand3@test.com"]);
+
 // ---------- decideAccess ----------
 console.log("\nהחלון\n");
 const sun = new Date(Date.UTC(2026, 7, 2));
@@ -97,6 +125,10 @@ ck("סמארט בלי בונוס: נגמר ביום 70", decideAccess(base).end3
 const b1 = decideAccess({ ...base, bonusMonths: 1 });
 ck("**סמארט עם חודש: 70 יום ועוד חודש**", b1.end360 === "2026-11-11" && b1.allowed === true, b1.end360);
 ck("בונוס אפס או שלילי אינו משנה דבר", JSON.stringify(decideAccess({ ...base, bonusMonths: 0 })) === JSON.stringify(decideAccess(base)) && JSON.stringify(decideAccess({ ...base, bonusMonths: -2 })) === JSON.stringify(decideAccess(base)));
+const bd = decideAccess({ ...base, bonusDays: 28 });
+ck("**סמארט עם 28 יום: 70 ועוד 28**", bd.end360 === "2026-11-08", bd.end360);
+ck("חודש ועוד 28 יום יחד", decideAccess({ ...base, bonusMonths: 1, bonusDays: 28 }).end360 === "2026-12-09");
+ck("ימים על תאריך שהמשרד קבע", decideAccess({ ...base, clerkUntil: "2026-10-01", bonusDays: 28 }).allowed === true && decideAccess({ ...base, clerkUntil: "2026-10-01" }).allowed === false);
 const cl = decideAccess({ ...base, clerkUntil: "2026-10-12", bonusMonths: 1 });
 ck("ותאריך שהמשרד קבע מתארך גם הוא", cl.allowed === true);
 
@@ -111,6 +143,10 @@ ck("סמארט ביום 80 בלי בונוס: הגישה הסתיימה", s0.all
 hash("ref:bonus")["smart@test.com"] = JSON.stringify({ m: 1, f: 1, via: false });
 const s1 = await login("smart@test.com");
 ck("**סמארט עם חודש בונוס: נכנסת, ומקבלת קוד**", s1.allowed === true && s1.ref && /^[A-Z0-9]{6}$/.test(s1.ref.code) && s1.ref.friends === 1, s1);
+hash("ref:bonus")["smart@test.com"] = JSON.stringify({ pd: 28 });
+const sd = await login("smart@test.com");
+ck("**סמארט ביום 80 עם 28 יום של נובמבר: נכנסת**", sd.allowed === true, sd);
+hash("ref:bonus")["smart@test.com"] = JSON.stringify({ m: 1, f: 1, via: false });
 const s2 = await login("smart@test.com");
 ck("**הקוד קבוע בין כניסות**", s2.ref && s2.ref.code === s1.ref.code);
 ck("והקוד מוביל אליה", H["ref:code"][s1.ref.code] === "smart@test.com");

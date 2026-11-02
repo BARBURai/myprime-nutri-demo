@@ -45,6 +45,13 @@ export function endGlow(glowStartYmd, months) {
 function ymdOf(dt) { return dt ? dt.toISOString().slice(0, 10) : ""; }
 
 // חודשים על תאריך בכתיבה של yyyy-mm-dd. ריק נשאר ריק.
+export function addDaysYmd(ymd, days) {
+  const p = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!p || !(days > 0)) return String(ymd || "");
+  const d = new Date(Date.UTC(+p[1], +p[2] - 1, +p[3]));
+  d.setUTCDate(d.getUTCDate() + Math.floor(days));
+  return ymdOf(d);
+}
 export function addMonthsYmd(ymd, months) {
   const p = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!p || !(months > 0)) return String(ymd || "");
@@ -76,9 +83,12 @@ export function decideAccess(f) {
   // **חברה מביאה חברה. v8.39.** חודש לכל חברה שהצטרפה דרכה (עד 3), וחודש לחברה עצמה. הם
   // נוספים על סוף החלון, גם על תאריך שהמשרד קבע, ולעולם אינם מקצרים דבר.
   const bonus = Number.isFinite(f.bonusMonths) && f.bonusMonths > 0 ? Math.floor(f.bonusMonths) : 0;
+  // והימים של הטבת נובמבר (v8.41) נוספים באותה צורה, אחרי החודשים.
+  const bonusDays = Number.isFinite(f.bonusDays) && f.bonusDays > 0 ? Math.floor(f.bonusDays) : 0;
   const end360At = end360(startSunday, f.extraMonths, f.solo);
   if (end360At && bonus) end360At.setUTCMonth(end360At.getUTCMonth() + bonus);
-  const clerkUntil = f.clerkUntil ? addMonthsYmd(f.clerkUntil, bonus) : "";
+  if (end360At && bonusDays) end360At.setUTCDate(end360At.getUTCDate() + bonusDays);
+  const clerkUntil = f.clerkUntil ? addDaysYmd(addMonthsYmd(f.clerkUntil, bonus), bonusDays) : "";
   const expired360 = clerkUntil
     ? today > clerkUntil
     : !!(end360At && today > ymdOf(end360At));

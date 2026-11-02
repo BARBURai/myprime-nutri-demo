@@ -671,6 +671,7 @@ export default async function handler(req, res) {
     startSunday, cancelled, clerkBlocked, clerkUntil, freeze,
     extraMonths, solo, glowFull, glowPaid, glowSolo, glowMonths, subUntil,
     bonusMonths: ref ? ref.months : 0,
+    bonusDays: ref ? ref.days : 0,
     glowStart: "", today: israelDay(0),
   };
   let glowStart = "";
