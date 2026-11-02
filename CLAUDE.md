@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v8.38** · עודכן: 22 באוקטובר 2026
+**גרסה נוכחית: v8.39** · עודכן: 22 באוקטובר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -735,7 +735,7 @@ x-sub-key: <APP_SUB_KEY>
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs && node qa/glow-solo-benefit-check.mjs && node qa/ai-chat-rules-check.mjs && node qa/mc-sync-check.mjs && node qa/push-timeout-check.mjs && node qa/backup-content-check.mjs && node qa/wakelock-check.mjs && node qa/degraded-check.mjs && node qa/admin-gzip-check.mjs && node qa/namefix-check.mjs && node qa/tracks-check.mjs && node qa/freeze-end-check.mjs && node qa/webinar-date-check.mjs && node qa/weight-now-check.mjs && node qa/mic-device-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs && node qa/glow-solo-benefit-check.mjs && node qa/ai-chat-rules-check.mjs && node qa/mc-sync-check.mjs && node qa/push-timeout-check.mjs && node qa/backup-content-check.mjs && node qa/wakelock-check.mjs && node qa/degraded-check.mjs && node qa/admin-gzip-check.mjs && node qa/namefix-check.mjs && node qa/tracks-check.mjs && node qa/freeze-end-check.mjs && node qa/webinar-date-check.mjs && node qa/weight-now-check.mjs && node qa/mic-device-check.mjs && node qa/ref-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1363,6 +1363,20 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 ---
 
 ## 17. יומן שינויים אחרון
+
+**v8.39** - **חברה מביאה חברה, לנשות סמארט.** בדב בלבד. רון, 2.11.2026: אין הנחה. **גם המזמינה וגם החברה מקבלות חודש גישה נוסף**, עד 3 חודשים למזמינה. חברה שביטלה אינה לוקחת את החודש של המזמינה, והחברה מקבלת 70 יום ועוד חודש. **הנוסחים אושרו**: "מאשר את הנוסחים".
+
+| חלק | מה |
+|---|---|
+| **הקוד** | 6 תווים לכל אישת סמארט, נוצר בשער פעם אחת (`ensureCode` ב-`api/_ref.js`, `ref:mine` ו-`ref:code`). **רק לסמארט נוספות פניות ל-Upstash**, ובדיקה נועלת שלכל אישה אחרת אין אף פנייה ל-`ref:` |
+| **החלון** | `bonusMonths` ב-`decideAccess` (`api/_product.js`): נוסף על סוף החלון, גם על תאריך שהמשרד קבע. מסך הניהול מוסיף אותו באותה דרך ל-`until` |
+| **קליטת התשלום** | `POST /api/admin?refcharge`, כותרת `x-ref-key` מול `APP_REF_KEY`. **בלי המשתנה הכתובת סגורה.** גוף: `{ ref, email, phone, orderId }`. אותה הזמנה פעם אחת, חברה נספרת פעם אחת, הזמנה עצמית לפי מייל או טלפון אינה נספרת, ותקלה באמצע מחזירה 502 ומשחררת את ההזמנה |
+| **באפליקציה** | **מסך המדליה, פעם אחת, מהמדליה החמישית** (`REF_OFFER_SEEN_KEY`), ושורה קבועה "הזמיני חברה" בפרופיל (`RefCard`). הקישור `https://myprime.co.il/smart?ref=<קוד>`, שמעביר לדף המכירה ושומר את הקוד |
+| **מסך הניהול** | בקופסה "מה יש לה עכשיו": "הזמינה 2 חברות · +2 חודשים" או "הגיעה דרך [שם] · +1 חודש" |
+
+**מה שנשאר בצד של אחרים:** דף המכירה מוסיף `ref` לרשימת הפרמטרים שהוא מעביר, ודף התשלום שומר אותו ושולח לכאן אחרי תשלום מוצלח. **ורון מגדיר `APP_REF_KEY` בשני הפרויקטים בוורסל.** **ממתין לאישור נוסח:** כרטיס במסך ההמתנה לפני יום 1.
+
+**`qa/ref-check.mjs`, 24 בדיקות בלי רשת**, ובשכבה 3 תרחיש לשני הצדדים: עם קוד, כרטיס במדליה וקישור נכון ושורה בפרופיל; בלי קוד, מדליה רגילה ובלי שורה.
 
 **v8.38** - **ארבעה תיקונים, בדב בלבד.** רון: "א' בסדר ב' בסדר ג' בסדר וד' בסדר".
 

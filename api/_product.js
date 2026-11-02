@@ -44,6 +44,15 @@ export function endGlow(glowStartYmd, months) {
 
 function ymdOf(dt) { return dt ? dt.toISOString().slice(0, 10) : ""; }
 
+// חודשים על תאריך בכתיבה של yyyy-mm-dd. ריק נשאר ריק.
+export function addMonthsYmd(ymd, months) {
+  const p = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!p || !(months > 0)) return String(ymd || "");
+  const d = new Date(Date.UTC(+p[1], +p[2] - 1, +p[3]));
+  d.setUTCMonth(d.getUTCMonth() + Math.floor(months));
+  return ymdOf(d);
+}
+
 // ============================================================================
 // שני מוצרים, שתי שאלות, והמסך נגזר מהן.
 //
@@ -64,9 +73,14 @@ export function decideAccess(f) {
   // ביטול בגיליון וביטול בתהליך מהמשרד מסיימים את 360 באותה צורה בדיוק.
   const stopped360 = !!f.cancelled || !!f.clerkBlocked;
 
+  // **חברה מביאה חברה. v8.39.** חודש לכל חברה שהצטרפה דרכה (עד 3), וחודש לחברה עצמה. הם
+  // נוספים על סוף החלון, גם על תאריך שהמשרד קבע, ולעולם אינם מקצרים דבר.
+  const bonus = Number.isFinite(f.bonusMonths) && f.bonusMonths > 0 ? Math.floor(f.bonusMonths) : 0;
   const end360At = end360(startSunday, f.extraMonths, f.solo);
-  const expired360 = f.clerkUntil
-    ? today > f.clerkUntil
+  if (end360At && bonus) end360At.setUTCMonth(end360At.getUTCMonth() + bonus);
+  const clerkUntil = f.clerkUntil ? addMonthsYmd(f.clerkUntil, bonus) : "";
+  const expired360 = clerkUntil
+    ? today > clerkUntil
     : !!(end360At && today > ymdOf(end360At));
   const open360Base = has360 && !stopped360 && !frozenNow && !expired360;
   // **מנוי חודשי מדף התשלום. v8.10.** החלטות רון, 12 באוקטובר 2026: **המנוי פותח לה את

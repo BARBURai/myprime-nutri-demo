@@ -15,7 +15,8 @@
 //  B. 2-device limit (optional) - create a free Upstash Redis database, then set:
 //     UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Vercel env -> Redeploy.
 
-import { decideAccess } from "./_product.js";
+import { decideAccess, SOLO_10_WEEKS } from "./_product.js";
+import { readBonus, ensureCode } from "./_ref.js";
 import { fetchSheetText, findCols, SMART_COLS, accessEnd } from "./_sheet.js";
 import { MC_BYEMAIL, MC_DIFFS, mcShadowKey, diffFields } from "./_mcsync.js";
 import { SUB_HASH, parseRec as parseSubRec } from "./_sub.js";
@@ -640,6 +641,17 @@ export default async function handler(req, res) {
   }
   const startSunday = parseDateToSunday(clerkStart || startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
+  // **חברה מביאה חברה, לנשות סמארט בלבד. v8.39.** החודשים שצברה נוספים לחלון, והקוד האישי
+  // שלה נוצר פעם אחת. **רק כאן נוספות פניות ל-Upstash**, ולכן לכל אישה אחרת השער לא השתנה.
+  // תקלה מחזירה אפס חודשים ובלי קוד, כלומר בדיוק מה שהייתה מקבלת בלי המנגנון.
+  let ref = null;
+  if (solo === SOLO_10_WEEKS) {
+    const RUr = process.env.UPSTASH_REDIS_REST_URL, RTr = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (RUr && RTr && !redis.stalled()) {
+      const bn = await readBonus(redis, RUr, RTr, email);
+      ref = { ...bn, code: await ensureCode(redis, RUr, RTr, email) };
+    }
+  }
 
   // ============================================================================
   // שני מוצרים, שני חישובים נפרדים.
@@ -658,6 +670,7 @@ export default async function handler(req, res) {
   const facts = {
     startSunday, cancelled, clerkBlocked, clerkUntil, freeze,
     extraMonths, solo, glowFull, glowPaid, glowSolo, glowMonths, subUntil,
+    bonusMonths: ref ? ref.months : 0,
     glowStart: "", today: israelDay(0),
   };
   let glowStart = "";
@@ -787,5 +800,5 @@ export default async function handler(req, res) {
 
   // `freeze` travels on so the diary can leave the frozen days out of her day strip and
   // label the days before them for what they are. Nothing of hers is deleted.
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull: glowFullNow, glowSoon: decision.glowSoon, glowSoonSolo: !!decision.glowSoonSolo, product: glowOnly ? "glow" : "360", sub: decision.subOn ? { until: subUntil } : null, replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull: glowFullNow, glowSoon: decision.glowSoon, glowSoonSolo: !!decision.glowSoonSolo, product: glowOnly ? "glow" : "360", sub: decision.subOn ? { until: subUntil } : null, ref: ref && ref.code && !glowOnly ? { code: ref.code, friends: ref.friends, months: ref.months, via: ref.via, until: decision.end360 } : null, replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
 }

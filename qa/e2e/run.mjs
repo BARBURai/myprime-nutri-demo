@@ -248,6 +248,61 @@ const CHECKS = [
     },
   },
   {
+    // v8.39: חברה מביאה חברה. **שני הצדדים באותה הרצה:** אישת סמארט עם קוד, שסוגרת את היום
+    // ומגיעה למדליה החמישית, מקבלת את הכרטיס עם הקישור שלה, פעם אחת. בלי קוד אין כרטיס.
+    // ובפרופיל השורה "הזמיני חברה" קיימת רק כשיש קוד. השעון נעוץ ליום שני של שבוע 2.
+    name: "חברה מביאה חברה: הכרטיס במדליה החמישית, פעם אחת, והשורה בפרופיל",
+    async run(browser, device) {
+      const bad = [];
+      const T = "2026-11-02";
+      const seed = { stepsByDate: { [T]: 6000 }, checkins: { "2026-10-27": { _done: true }, "2026-10-28": { _done: true }, "2026-10-29": { _done: true }, "2026-10-30": { _done: true } } };
+      const REF = { code: "MAYA22", friends: 0, months: 0, via: false, until: "" };
+      const addFood = async (page) => {
+        await page.locator('[aria-label="הוספה"]').click(); await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click(); await page.waitForTimeout(500);
+        await page.locator("text=הזנה ידנית").first().click(); await page.waitForTimeout(400);
+        await page.locator('input[placeholder="לדוגמה: חטיף חלבון"]').fill("תפוח");
+        const nums = page.locator('input[inputmode="decimal"]');
+        const vals = ["150", "80", "0", "0", "20"];
+        for (let i = 0; i < Math.min(await nums.count(), vals.length); i++) await nums.nth(i).fill(vals[i]);
+        await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+        await page.waitForTimeout(1200);
+        // השאלה "לשמור למועדפים?" עולה מעל מסך המדליה.
+        await page.getByRole("button", { name: "לא תודה" }).first().click({ timeout: 2500 }).catch(() => {});
+        await page.waitForTimeout(400);
+      };
+      for (const withRef of [true, false]) {
+        const { context, page, errors } = await openApp(browser, device, { startDate: "2026-10-25", clock: T + "T08:00:00.000Z", seed, accessExtra: withRef ? { ref: REF } : null });
+        await addFood(page);
+        const offer = page.locator("[data-ref-offer]");
+        const has = await offer.count();
+        if (withRef) {
+          if (!has) bad.push("עם קוד: אין כרטיס במדליה");
+          else {
+            const href = await offer.locator("a").first().getAttribute("href");
+            const txt = decodeURIComponent(href || "");
+            if (!txt.includes("https://myprime.co.il/smart?ref=MAYA22")) bad.push("הקישור: " + txt.slice(0, 80));
+            if (!txt.includes("שתינו נקבל חודש נוסף")) bad.push("ההודעה בוואטסאפ חסרה");
+            await offer.locator("text=אולי אחר כך").click(); await page.waitForTimeout(300);
+          }
+          const seen = await page.evaluate(() => localStorage.getItem("mp_ref_offer_seen_v1"));
+          if (seen !== "1") bad.push("לא סומן שהוצג");
+          await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
+          if (!(await page.locator("[data-ref-card]").count())) bad.push("עם קוד: אין שורה בפרופיל");
+        } else {
+          if (has) bad.push("בלי קוד: הוצג כרטיס");
+          if (!(await page.locator("text=מדליה נכנסה לאוסף").count())) bad.push("בלי קוד: אין מסך מדליה, כלומר הבדיקה לא הגיעה ליעד");
+          await page.locator("text=יאללה, ממשיכות").first().click().catch(() => {}); await page.waitForTimeout(300);
+          await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
+          if (await page.locator("[data-ref-card]").count()) bad.push("בלי קוד: יש שורה בפרופיל");
+        }
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "עם קוד: כרטיס וקישור נכון, ושורה בפרופיל · בלי קוד: מדליה רגילה ובלי שורה" };
+    },
+  },
+  {
     // v8.38: תמונה מהגלריה שלא נקראה. עד כאן שום דבר לא קרה והמסך לא אמר כלום (lubazalkover).
     // **שני הצדדים:** קובץ ריק מציג את ההודעה ואינו פונה לבינה, ותמונה תקינה נשלחת לבינה כמו
     // היום. ובחירה חוזרת של אותו קובץ מפעילה שוב, כי השדה מתאפס.

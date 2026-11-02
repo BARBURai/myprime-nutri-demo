@@ -183,7 +183,9 @@ reset();
 let same = true, which = "";
 for (const em of Object.keys(before)) {
   const a = await gate(em);
-  if (JSON.stringify({ ...a, phone: 0 }) !== JSON.stringify({ ...before[em], phone: 0 })) { same = false; which += em + " "; }
+  // הקוד של חברה מביאה חברה נוצר באקראי אחרי כל איפוס, ולכן הוא לבדו אינו משווה. v8.39.
+  const noCode = (x) => ({ ...x, phone: 0, ref: x.ref ? { ...x.ref, code: "" } : x.ref });
+  if (JSON.stringify(noCode(a)) !== JSON.stringify(noCode(before[em]))) { same = false; which += em + " "; }
 }
 ok("**גיליון בלי העמודה: חמש נשים בלי ההטבה מקבלות תשובה זהה**", same, which);
 CSV = csvWith; reset();

@@ -1590,6 +1590,13 @@ function render(){
     // קונת הקורס לבדו אינה ב-360 בכלל, ולכן אין לה שורה של תוכנית.
     var lines = (!w.start && st.product === "glow") ? [] : [[prog, v360]];
     if (st.subOn && w.sub) lines.push(['מנוי חודשי', 'פעיל עד '+il(w.sub.paidUntil)]);
+    // חברה מביאה חברה, v8.39. נוסח שרון אישר. "דרך" מציג את השם של מי שהזמינה, או את המייל שלה.
+    if (w.ref && w.ref.friends) lines.push(['חברה מביאה חברה', 'הזמינה '+(w.ref.friends === 1 ? 'חברה אחת' : w.ref.friends+' חברות')+' · +'+Math.min(3, w.ref.friends)+(Math.min(3, w.ref.friends) === 1 ? ' חודש' : ' חודשים')]);
+    if (w.ref && w.ref.from) {
+      var rf = (DATA.women||[]).filter(function(x){ return x.email === w.ref.from; })[0];
+      var rn = rf ? (((rf.first||'')+' '+(rf.last||'')).trim() || rf.email) : w.ref.from;
+      lines.push(['חברה מביאה חברה', 'הגיעה דרך '+rn+' · +1 חודש']);
+    }
     // שיעורי הבונוס פתוחים כל עוד היא נכנסת לאפליקציה, ונסגרים יחד איתה.
     if (w.glow && st.allowed && st.product !== "glow") lines.push(['שיעורי הבונוס של Glow', 'עד '+il(end360Shown)]);
     if (w.glowFull || w.glowSolo) {

@@ -749,7 +749,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.38";
+const VERSION = "8.39";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2611,7 +2611,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail }) {
+function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, refInfo }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const [showLossStop, setShowLossStop] = useState(false);
@@ -2715,6 +2715,8 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
           {gateEmail && <div style={{ fontSize: 13.5, color: C.faint, direction: "ltr", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{gateEmail}</div>}
         </div>
       </div>
+
+      {refInfo && refInfo.code && <RefCard refInfo={refInfo} />}
 
       <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
         <div onClick={() => setBaseOpen(!baseOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
@@ -5776,7 +5778,7 @@ function FastLossSheet({ onClose }) {
   );
 }
 
-function CheckinCheer({ name, streak, onClose }) {
+function CheckinCheer({ name, streak, onClose, refCode }) {
   const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
   const cheer = cheerFor(streak, name);
   // "מדליה נכנסה לאוסף" can read as though the day is now sealed. Said once, the first
@@ -5802,8 +5804,48 @@ function CheckinCheer({ name, streak, onClose }) {
         <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{cheer.text}
           {firstEver && <div style={{ marginTop: 6 }}>אפשר תמיד להוסיף עוד עדכונים באפליקציה</div>}
           <div style={{ marginTop: 2 }}>ענת</div></div>
-        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>
+        {refCode ? (
+          // **פעם אחת, אחרי המדליה החמישית**, החלטת רון. המסך כבר סומן כנראה ברגע שנפתח.
+          <div data-ref-offer style={{ marginTop: 16, background: C.brandBg, borderRadius: 14, padding: "14px 12px" }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>את כבר בתנופה 💜</div>
+            <div style={{ fontSize: 14.5, color: C.sub, marginTop: 6, lineHeight: 1.55 }}>הכי כיף לעשות את זה עם חברה. שלחי לה את הקישור שלך, וכשהיא מצטרפת, שתיכן מקבלות חודש נוסף באפליקציה ובכל התכנים.</div>
+            <a href={refWhatsApp(refCode)} target="_blank" rel="noopener" onClick={onClose} style={{ display: "block", marginTop: 12, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
+            <div onClick={onClose} style={{ marginTop: 10, fontSize: 14.5, color: C.brandD, cursor: "pointer" }}>אולי אחר כך</div>
+          </div>
+        ) : <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>}
       </div>
+    </div>
+  );
+}
+
+// **חברה מביאה חברה, לנשות סמארט. v8.39.** הקישור לדף המכירה עם הקוד האישי שלה, וההודעה
+// שנפתחת לה בוואטסאפ. **הנוסחים אושרו על ידי רון**, 2 בנובמבר 2026. ראה `api/_ref.js`.
+const REF_PAGE_URL = "https://myprime.co.il/smart";
+const REF_OFFER_SEEN_KEY = "mp_ref_offer_seen_v1";
+function refLink(code) { return `${REF_PAGE_URL}?ref=${encodeURIComponent(code)}`; }
+function refWhatsApp(code) {
+  const text = `היי! אני בתוכנית SMART של מיי פריים, עם ענת הראל, וממש נהנית 💜\nאם תצטרפי דרך הקישור שלי, שתינו נקבל חודש נוסף באפליקציה ובכל התכנים:\n${refLink(code)}`;
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
+// השורה הקבועה בפרופיל, קול המערכת. הנוסחים אושרו על ידי רון. v8.39.
+function RefCard({ refInfo }) {
+  const [copied, setCopied] = useState(false);
+  const n = Number(refInfo.friends) || 0;
+  const dmy = (y) => { const p = String(y || "").match(/^(\d{4})-(\d{2})-(\d{2})$/); return p ? `${p[3]}.${p[2]}.${p[1]}` : ""; };
+  const copy = () => {
+    try { navigator.clipboard.writeText(refLink(refInfo.code)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); } catch (e) {}
+  };
+  return (
+    <div data-ref-card style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
+      <div style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>הזמיני חברה</div>
+      <div style={{ fontSize: 14.5, color: C.sub, marginTop: 6, lineHeight: 1.55 }}>על כל חברה שמצטרפת דרך הקישור שלך, שתיכן מקבלות חודש גישה נוסף. אפשר לצבור עד 3 חודשים.</div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <a href={refWhatsApp(refInfo.code)} target="_blank" rel="noopener" style={{ flex: 1, textAlign: "center", background: C.brand, color: "#fff", borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
+        <button onClick={copy} style={{ flex: 1, background: C.panel, color: C.brandD, border: `1px solid ${C.line}`, borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{copied ? "הועתק ✓" : "העתקת הקישור"}</button>
+      </div>
+      {n > 0 && <div data-ref-status style={{ fontSize: 14.5, color: C.ink, marginTop: 12, fontWeight: 600 }}>{n === 1 ? "חברה אחת הצטרפה דרכך" : `${n} חברות הצטרפו דרכך`}{refInfo.until ? ` · הגישה שלך הוארכה עד ${dmy(refInfo.until)}` : ""}</div>}
+      {refInfo.via && <div style={{ fontSize: 14.5, color: C.ink, marginTop: 10 }}>הצטרפת דרך חברה, ולכן קיבלת חודש גישה נוסף.</div>}
     </div>
   );
 }
@@ -7181,6 +7223,7 @@ export default function App() {
   const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
   const [checkins, setCheckins] = useState(saved?.checkins || {});
   const celebRef = useRef({ mounted: false, trophies: 0, golds: 0 });
+  const [refOfferNow, setRefOfferNow] = useState("");
   const [cheerTrophyWeek, setCheerTrophyWeek] = useState(1);
   const [cheerTrophyLevel, setCheerTrophyLevel] = useState("gold");
   const [goalAckWeek, setGoalAckWeek] = useState(saved?.goalAckWeek || 0);
@@ -7320,6 +7363,8 @@ export default function App() {
   }, [gate, gateEmail, checkins, glowSeen]);
 
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
+  // חברה מביאה חברה: הקוד, כמה חברות, כמה חודשים. מהשער, ונכתב מחדש בכל כניסה. v8.39.
+  const [refInfo, setRefInfo] = useState(() => { try { return JSON.parse(localStorage.getItem("myprime_ref") || "null"); } catch (e) { return null; } });
   const [freeze, setFreeze] = useState(() => { try { return JSON.parse(localStorage.getItem("myprime_freeze") || "null"); } catch (e) { return null; } });
   const [gateBack, setGateBack] = useState("");
   const gatePhone = (() => { try { return localStorage.getItem("myprime_phone") || ""; } catch (e) { return ""; } })();
@@ -7452,6 +7497,11 @@ export default function App() {
           else localStorage.removeItem("myprime_freeze");
         } catch (e) {}
         setFreeze(d.freeze || null);
+        try {
+          if (d.ref && d.ref.code) localStorage.setItem("myprime_ref", JSON.stringify(d.ref));
+          else localStorage.removeItem("myprime_ref");
+        } catch (e) {}
+        setRefInfo(d.ref && d.ref.code ? d.ref : null);
         setGateReason(""); setGate("ok");
       } else {
         const rsn = d.reason || "not_registered";
@@ -8019,7 +8069,20 @@ export default function App() {
     if (newTrophy) { celebRef.current.trophies = tcount; celebRef.current.golds = gcount; }
     if (!profile.hideRewards) {
       if (newTrophy) { setCheerTrophyWeek(maxW); setCheerTrophyLevel(maxLevel); setSheet("trophyCheer"); }
-      else if (celebrate) setSheet("checkinCheer");
+      else if (celebrate) {
+        // **חברה מביאה חברה: פעם אחת, מהמדליה החמישית.** החלטת רון. נקבע כאן, ברגע שהמסך
+        // נפתח, ולא בציור, כדי שהסימון "כבר הוצג" לא יעלים את הכרטיס מתחת לאצבע. v8.39.
+        let offer = "";
+        try {
+          const medals = Object.values(next).filter((x) => x && x._done).length;
+          if (refInfo && refInfo.code && medals >= 5 && !localStorage.getItem(REF_OFFER_SEEN_KEY)) {
+            offer = refInfo.code;
+            localStorage.setItem(REF_OFFER_SEEN_KEY, "1");
+          }
+        } catch (e) { offer = ""; }
+        setRefOfferNow(offer);
+        setSheet("checkinCheer");
+      }
     }
   }, [checkins, log, stepsByDate, waterByDate, activityLog, targets, profile.startDate, profile.keepShabbat, profile.hideRewards, today]);
   // Intermittent-fasting intro bubble: once, on the day screen, from week 8 day 4 (Wednesday) onward.
@@ -8352,7 +8415,7 @@ export default function App() {
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} glowSoon={glowSoon} glowSoonSolo={glowSoonSolo} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} weightNow={curWeight} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow && !glowFull} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={curWeight} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} refInfo={refInfo} />}
             </div>
             {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
                 stayed tappable, rode up with the keyboard eating the space above it, and
@@ -8409,7 +8472,7 @@ export default function App() {
             {sheet === "fastLoss" && <FastLossSheet onClose={() => setSheet(null)} />}
             {sheet === "rateCap" && <RateCapSheet onClose={() => setSheet(null)} />}
             {sheet === "resumeOffer" && <ResumeOfferSheet onResume={() => { resumeLoss(); setSheet(null); }} onLater={() => setSheet(null)} />}
-            {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
+            {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} refCode={refOfferNow} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} level={cheerTrophyLevel} days={weekDayCounts(checkins, profile.startDate, cheerTrophyWeek, today)} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}
