@@ -749,7 +749,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.34";
+const VERSION = "8.37";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -868,6 +868,17 @@ function bkUnpack(plaintext) {
 // לתשובה: הבדיקה שרצה מאחורי מסך הפתיחה, וזו שעוצרת בסיום ההרשמה. **בלי תפוגה,
 // שרת שלא עונה משאיר אותה על "טוען..." בלי דרך להתקדם**, ובסיום ההרשמה זה בדיוק
 // הרגע הכי רגיש שיש. בלי הפרמטר ההתנהגות זהה למה שהייתה, כלומר בלי תפוגה.
+// הבקשה לשער בפתיחה, עם תקרת זמן. **20 שניות, החלטת רון ב-22.10.2026**: השער עונה
+// בדרך כלל בכשנייה, ובקריאה הראשונה אחרי העלאה נמדדו פעם אחת 11.3 שניות.
+// `mp_access_timeout` במכשיר מקצר אותה, לבדיקות בלבד.
+const ACCESS_TIMEOUT_MS = (() => { try { const v = +localStorage.getItem("mp_access_timeout"); return v > 0 ? v : 20000; } catch (e) { return 20000; } })();
+async function fetchAccessOnce(url) {
+  const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => { try { ctl.abort(); } catch (e) {} }, ACCESS_TIMEOUT_MS) : null;
+  // גם קריאת הגוף בתוך התקרה, כי חיבור יכול להיתקע גם אחרי שהכותרות הגיעו.
+  try { const r = await fetch(url, ctl ? { signal: ctl.signal } : undefined); return await r.json(); }
+  finally { if (timer) clearTimeout(timer); }
+}
 async function bkFetch(email, timeoutMs) {
   let timer = null;
   try {
@@ -2214,6 +2225,8 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
   const lastWUpdate = `${lastWDate.getUTCDate()}.${lastWDate.getUTCMonth() + 1}.${lastWDate.getUTCFullYear()}`;
   const calByDate = {};
   log.forEach((e) => { calByDate[e.date] = (calByDate[e.date] || 0) + e.kcal; });
+  const protByDate = {};
+  log.forEach((e) => { protByDate[e.date] = (protByDate[e.date] || 0) + (e.p || 0); });
   const goalKcal = targets.targetKcal;
   // כל יום נמדד מול היעד של אותו יום, בדיוק כמו ביומן. עד כאן הדוח השווה את כל שבעת
   // הימים ליעד הבסיסי, ולכן ביום שהיא התאמנה הוא סימן אותה כחורגת בזמן שהיומן הראה
@@ -2229,7 +2242,7 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
   const calSeries = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(TODAY, i - 6);
     const dd = parseDay(d);
-    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0), goal: Math.round(goalOn(d)) };
+    return { label: `${dd.getUTCDate()}/${dd.getUTCMonth() + 1}`, kcal: Math.round(calByDate[d] || 0), goal: Math.round(goalOn(d)), p: protByDate[d] || 0 };
   });
   const loggedDays = calSeries.filter((x) => x.kcal > 0);
   // מתי יום נחשב "עמדה ביעד". החלטה של רון, 22 באוגוסט 2026, אחרי שהוא שאל:
@@ -2255,6 +2268,11 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
   const calBelow = (kc, g) => g > 0 && kc > 0 && kc < metFloor(g);
   const metDays = loggedDays.filter((x) => calMet(x.kcal, x.goal)).length;
   const daysOnTarget = `${metDays}/${loggedDays.length}`;
+  // בכרטיס "יעד חלבון" נספרים ימי חלבון, ולא ימי קלוריות. עד v8.36 הוא הציג את
+  // daysOnTarget, ומשתתפת שהגיעה לחלבון בכל יום ראתה 0/6 מתחת לכותרת של חלבון.
+  // אותו סף של autoStatusFor, שמסמן את משימת החלבון ביומן המעקב: 95 אחוז מהיעד.
+  const proteinMetDays = loggedDays.filter((x) => targets.protein > 0 && x.p >= targets.protein * 0.95).length;
+  const proteinOnTarget = `${proteinMetDays}/${loggedDays.length}`;
   const maxCal = Math.max(goalKcal, ...calSeries.map((x) => Math.max(x.kcal, x.goal)));
   // The protein task opens on week 3 DAY 4, not on day 1 of week 3. Reading the week alone
   // turned protein on three days early, while the tracker itself already used the exact
@@ -2388,7 +2406,7 @@ function ReportScreen({ weights, addWeight, log, targets, onMaintain, programWee
               <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>היעד היומי שלך לחלבון</div>
             </div>
             <div style={{ flex: 1, borderInlineStart: `1px solid ${C.line}`, paddingInlineStart: 14 }}>
-              <div style={{ fontSize: 29, fontWeight: 700, color: C.ink }}>{daysOnTarget}</div>
+              <div data-protein-days style={{ fontSize: 29, fontWeight: 700, color: C.ink }}>{proteinOnTarget}</div>
               <div style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>ימים ביעד</div>
             </div>
           </div>
@@ -7350,8 +7368,13 @@ export default function App() {
     setGate("checking"); setGateMsg("");
     lastAccessRef.current = Date.now();
     try {
-      const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}${isLogin ? "&login=1" : ""}`);
-      const d = await r.json();
+      const url = `${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}${isLogin ? "&login=1" : ""}`;
+      // **תקרת זמן וניסיון חוזר אחד, v8.37.** יפית קלנר: "היא נתקעת ולא נפתחת. הפתרון
+      // סגירה ופתיחה מחדש". בקשה שלא ענתה השאירה את המסך על "טוען" לנצח. עכשיו אחרי
+      // ACCESS_TIMEOUT_MS נשלחת בקשה חדשה פעם אחת, ואם גם היא לא עונה מגיעה ההודעה
+      // הקיימת "תקלת תקשורת". **אינה נספרת ככניסה שנכשלה**: רק not_registered נספר.
+      let d;
+      try { d = await fetchAccessOnce(url); } catch (e1) { d = await fetchAccessOnce(url); }
       if (d.allowed) {
         try { localStorage.setItem("myprime_access_email", em); if (nm) localStorage.setItem("myprime_access_name", nm); } catch (e) {}
         if (d.startDate) { setGateStartDate(d.startDate); try { localStorage.setItem("myprime_start_date", d.startDate); } catch (e) {} }
@@ -7429,8 +7452,9 @@ export default function App() {
       if (!em) return;
       busy = true; lastAccessRef.current = Date.now();
       try {
-        const r = await fetch(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
-        const d = await r.json();
+        // אותה תקרת זמן, בלי ניסיון חוזר. בלעדיה בקשה תקועה השאירה את `busy` דלוק,
+        // וכל בדיקה חוזרת אחריה דולגה עד הטעינה הבאה. v8.37.
+        const d = await fetchAccessOnce(`${ACCESS_ENDPOINT}?email=${encodeURIComponent(em)}&device=${encodeURIComponent(getDeviceId())}`);
         // **v7.77: לא על תשובה שניתנה בלי סימוני המשרד** (`degraded`). בתקלה ב-Upstash
         // השער מחליט לפי הגיליון לבד, ואישה שהמשרד האריך לה הייתה יוצאת באמצע. בטעינה
         // הבאה, כשהתקלה עברה, היא נבדקת שוב כרגיל.

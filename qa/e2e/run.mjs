@@ -118,7 +118,7 @@ async function addFromQty(page) {
   }
 }
 
-async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null, ilFood = null, accessExtra = null } = {}) {
+async function openApp(browser, device, { day = 10, startDate: fixedStart = null, seed = {}, neverAskedNotify = false, glow = false, glowFull = false, product = "360", clock = null, replies = null, aiAnswer = null, catalog = null, ilFood = null, accessExtra = null, beforeLoad = null } = {}) {
   // `day` is the convenient form and is fine wherever the day of the week does not matter.
   // Pass `startDate` instead when it does, and build it with sundayWeeksAgo.
   const startDate = fixedStart || startForDay(day);
@@ -155,6 +155,8 @@ async function openApp(browser, device, { day = 10, startDate: fixedStart = null
     if (neverAsked) state.profile.tipsSeen = state.profile.tipsSeen.filter((k) => k !== "notifyAsked");
     localStorage.setItem("myprime_demo_state_v1", JSON.stringify(state));
   }, [startDate, seed, neverAskedNotify]);
+  // v8.37: מה שחייב לחול כבר בטעינה הראשונה, כמו שער שאינו עונה.
+  if (beforeLoad) await beforeLoad(context);
   const page = await context.newPage();
   lastPage = page;
   const errors = [];
@@ -347,6 +349,31 @@ const CHECKS = [
     },
   },
   {
+    // v8.36. לירון, 22.10.2026: "יעד חלבון 115 ג׳ · ימים ביעד 0/6", כי המספר בכרטיס
+    // החלבון ספר ימים ביעד הקלורי. שני הצדדים באותה הרצה: ימים עם הרבה חלבון ומעט
+    // קלוריות נספרים בכרטיס החלבון, ואינם נספרים בכרטיס הקלורי.
+    name: "כרטיס יעד חלבון סופר ימי חלבון ולא ימי קלוריות",
+    async run(browser, device) {
+      const start = sundayWeeksAgo(4);
+      const d = (k) => new Date(Date.parse(TODAY + "T00:00:00Z") - k * 86400000).toISOString().slice(0, 10);
+      const e = (id, date, kcal, p) => ({ id, date, meal: "צהריים", name: "חזה עוף", g: 300, unit: "g", source: "verified", kcal, p, f: 5, c: 0 });
+      // 1.6 × 72 = 115. שלושה ימים מעל 95 אחוז ממנו, ויום אחד מתחת. כולם ב-600 קק״ל, מתחת לטווח הקלורי
+      const log = [e("a", d(0), 600, 130), e("b", d(1), 600, 120), e("c", d(2), 600, 110), e("x", d(3), 600, 50)];
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 65, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: null, stepBaseline: null, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: false, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done", lossStopAt: null };
+      const { context, page, errors } = await openApp(browser, device, { startDate: start, seed: { profile: prof, log, weights: [{ date: start, kg: 72 }] } });
+      await page.locator("text=דוח").last().click();
+      await page.waitForTimeout(600);
+      const bad = [];
+      const prot = (await page.locator("[data-protein-days]").first().innerText().catch(() => "")).trim();
+      if (prot !== "3/4") bad.push("כרטיס החלבון " + (prot || "חסר"));
+      const body = await page.locator("body").innerText();
+      if (!body.includes("115")) bad.push("יעד החלבון אינו 115");
+      if (!body.includes("0 מתוך 4")) bad.push("כרטיס הקלורי השתנה");
+      await context.close();
+      return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `חלבון ${prot} · קלורי 0 מתוך 4` };
+    },
+  },
+  {
     // The whole journey in one scenario, because the halves are meaningless apart: a rule
     // that only ever fires looks exactly like a rule that never fires. She crosses the line
     // on a weight she reports, gets the screen, lands in maintenance with the rate list
@@ -493,6 +520,42 @@ const CHECKS = [
       const fab = await page.locator('[aria-label="הוספה"]').isVisible().catch(() => false);
       await context.close();
       return { ok: bar && fab && !errors.length, detail: `סרגל תחתון ${bar}, כפתור הוספה ${fab}, שגיאות ${errors.length ? errors[0].slice(0, 90) : "אין"}` };
+    },
+  },
+  {
+    // v8.37: בקשה לשער שאינה עונה. עד כאן המסך נשאר על "טוען" לנצח, והדרך היחידה הייתה
+    // לסגור ולפתוח. **שני הצדדים:** בקשה אחת תקועה והשנייה עונה, והיא בפנים · שתיהן
+    // תקועות, והיא מקבלת "תקלת תקשורת" ולא מסך תקוע. התקרה מקוצרת ל-1.5 שניות.
+    name: "שער שאינו עונה בפתיחה: ניסיון חוזר אחד, ואז הודעת תקלה ולא מסך תקוע",
+    async run(browser, device) {
+      const bad = [];
+      for (const hangs of [1, 2]) {
+        let calls = 0;
+        const { context, page, errors } = await openApp(browser, device, {
+          beforeLoad: async (ctx) => {
+            await ctx.addInitScript(() => localStorage.setItem("mp_access_timeout", "1500"));
+            await ctx.route("**/api/access**", (route) => {
+              calls++;
+              if (calls <= hangs) return; // לעולם אינה עונה
+              return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ allowed: true, name: "בדיקה", startDate: startForDay(10) }) });
+            });
+          },
+        });
+        await page.waitForTimeout(2500);
+        const inApp = (await page.locator('[aria-label="הוספה"]').count()) > 0;
+        const txt = await page.evaluate(() => document.body.innerText);
+        if (hangs === 1) {
+          if (!inApp) bad.push("בקשה אחת תקועה: לא נכנסה אחרי הניסיון החוזר");
+          if (calls !== 2) bad.push(`בקשה אחת תקועה: ${calls} פניות ולא 2`);
+        } else {
+          if (inApp) bad.push("שתי בקשות תקועות: נכנסה");
+          if (!txt.includes("תקלת תקשורת")) bad.push("שתי בקשות תקועות: אין הודעת תקלה");
+          if (calls !== 2) bad.push(`שתי בקשות תקועות: ${calls} פניות ולא 2`);
+        }
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.length ? bad.join(" · ") : "תקועה אחת: נכנסה בניסיון השני · שתיים: תקלת תקשורת, בדיוק שתי פניות" };
     },
   },
   {
