@@ -1441,7 +1441,7 @@ function render(){
   if(searching){
     var qIsPhone = isPhoneQ(q), qPhone = phoneKey(q);
     list = DATA.women.filter(function(w){
-      if((w.first+" "+w.last+" "+(w.sheetFirst||"")+" "+(w.sheetLast||"")+" "+w.email+" "+w.phone).toLowerCase().indexOf(q) !== -1) return true;
+      if((w.first+" "+w.last+" "+(w.sheetFirst||"")+" "+(w.sheetLast||"")+" "+w.email+" "+w.phone+" "+(w.refCode||"")).toLowerCase().indexOf(q) !== -1) return true;
       return qIsPhone && phoneKey(w.phone).indexOf(qPhone) !== -1;
     });
   } else {
@@ -1597,6 +1597,8 @@ function render(){
       var rn = rf ? (((rf.first||'')+' '+(rf.last||'')).trim() || rf.email) : w.ref.from;
       lines.push(['חברה מביאה חברה', 'הגיעה דרך '+rn+' · +1 חודש']);
     }
+    // הטבת נובמבר 2026, v8.41.
+    if (w.ref && w.ref.days) lines.push(['הטבת נובמבר', '+'+w.ref.days+' יום']);
     // שיעורי הבונוס פתוחים כל עוד היא נכנסת לאפליקציה, ונסגרים יחד איתה.
     if (w.glow && st.allowed && st.product !== "glow") lines.push(['שיעורי הבונוס של Glow', 'עד '+il(end360Shown)]);
     if (w.glowFull || w.glowSolo) {
@@ -1670,6 +1672,21 @@ function render(){
 
   // **המנוי החודשי מדף התשלום. v8.10.** שלוש השורות בנוסח של רון, והכפתור רק כשהמנוי פעיל.
   // **ביטול לא מוריד את הגישה**: היא נשארת עד התאריך ששולם, ואז המנוי מסתיים לבד.
+  // **חברה מביאה חברה בכרטיס. v8.41.** הקוד שלה, ושיוך ידני למי שהזמינה אותה כשהקוד לא עבר בקנייה.
+  function refBox(w){
+    if(w.solo!==10) return '';
+    var code = w.refCode ? '<b dir="ltr">'+esc(w.refCode)+'</b> <button class="btn sm" data-copy="'+esc(w.refCode)+'">העתקה</button>' : '<b>ייווצר בכניסה הבאה שלה לאפליקציה</b>';
+    var linked = w.ref && w.ref.from;
+    return '<div class="statebox">'+
+      '<div class="sthead">חברה מביאה חברה</div>'+
+      '<div class="stline"><span>הקוד שלה</span>'+code+'</div>'+
+      (linked ? '' :
+        '<div class="sthead2">הגיעה דרך חברה והקוד לא עבר בקנייה?</div>'+
+        '<input id="rl_'+esc(w.email)+'" placeholder="הקוד או המייל של מי שהזמינה אותה" style="width:100%;margin:4px 0 6px">'+
+        '<button class="btn" data-reflink="'+esc(w.email)+'">שיוך</button>')+
+    '</div>';
+  }
+
   function subBox(w){
     var s = w.sub;
     if(!s) return '';
@@ -1763,6 +1780,8 @@ function render(){
       if(L.field === "sub") return pre + 'חיוב במנוי החודשי'+(L.n?' מספר '+esc(L.n):'')+' · גישה עד '+esc(il(L.to));
       if(L.field === "sub_cancel") return pre + 'ביטלה את המנוי החודשי · גישה עד '+esc(il(L.to));
       if(L.field === "sub_end") return pre + 'המנוי החודשי הסתיים';
+      if(L.field === "refby") return pre + 'שייכה אותה לחברה שהזמינה אותה, '+esc(L.to);
+      if(L.field === "reffriend") return pre + 'שייכה אליה חברה שהגיעה דרכה, '+esc(L.to);
       if(L.field === "name") return pre + (L.to ? 'תיקנה את השם ל-'+esc(L.to)+(L.from?' (היה '+esc(L.from)+')':'') : 'החזירה את השם לזה שבגיליון'+(L.from?' (היה '+esc(L.from)+')':''));
       if(L.field === "start") return pre + (L.to ? 'העבירה אותה למחזור של '+il(L.to)+(L.from?' (הייתה ב-'+il(L.from)+')':'') : 'החזירה את תאריך ההתחלה לערך שבגיליון'+(L.from?' (היה '+il(L.from)+')':''));
       if(L.field === "group") return pre + (L.to ? 'שינתה את הקבוצה מ-'+(L.from?esc(L.from):"ללא קבוצה")+' ל-'+esc(L.to) : 'החזירה את הקבוצה לערך שבגיליון'+(L.from?' (הייתה '+esc(L.from)+')':''));
@@ -2257,6 +2276,7 @@ function render(){
         dupBox(w)+
         stateBox(w)+
         subBox(w)+
+        refBox(w)+
         aiBox(w)+
         histBox(w)+
         quickActs(w)+
@@ -2825,6 +2845,29 @@ function render(){
       else mcWarn(r);
       FREEZING=""; delete MC[em]; return load().then(function(){ render(); mcLoad(em); });
     }).catch(function(){ alert("השמירה נכשלה. נסי שוב."); el.disabled=false; el.textContent="שמירה"; });
+  }; });
+  app.querySelectorAll("[data-reflink]").forEach(function(el){ el.onclick=function(){
+    var em=el.getAttribute("data-reflink"), box=document.getElementById("rl_"+em);
+    var from=(box?box.value:"").trim();
+    if(!from){ alert("צריך להקליד את הקוד או את המייל של מי שהזמינה אותה."); return; }
+    if(!confirm("לשייך אותה לחברה שהזמינה אותה ("+from+")?\n\nשתיהן יקבלו חודש גישה נוסף. אי אפשר לבטל את זה מהמסך.")) return;
+    el.disabled=true; el.textContent="משייכת...";
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({refLink:em, refFrom:from, by:WHO})})
+      .then(function(r){ return r.json().catch(function(){ return null; }); })
+      .then(function(d){
+        var why = !d ? "השיוך נכשל. אפשר לנסות שוב בעוד רגע."
+          : d.skipped === "unknown_ref" ? "לא נמצאה מזמינה עם הקוד הזה."
+          : d.skipped === "self" ? "זו היא עצמה. אישה אינה יכולה להזמין את עצמה."
+          : d.skipped === "friend_counted" ? "היא כבר משויכת לחברה אחרת."
+          : d.already ? "היא כבר משויכת."
+          : d.ok ? "שויכה. שתיהן קיבלו חודש גישה נוסף."
+          : d.error === "bad_ref" ? "הקוד לא תקין."
+          : "השיוך נכשל. אפשר לנסות שוב בעוד רגע.";
+        alert(why);
+        if(d && d.ok) return load().then(render);
+        el.disabled=false; el.textContent="שיוך";
+      }).catch(function(){ alert("השיוך נכשל. אפשר לנסות שוב בעוד רגע."); el.disabled=false; el.textContent="שיוך"; });
   }; });
   app.querySelectorAll("[data-subcancel]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-subcancel"), until=el.getAttribute("data-subuntil");

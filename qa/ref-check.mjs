@@ -156,5 +156,21 @@ hash("ref:bonus")["reg@test.com"] = JSON.stringify({ m: 3, f: 3 });
 const r2 = await login("reg@test.com");
 ck("ובונוס שרשום לה אינו משנה את התשובה שלה", JSON.stringify(r2) === JSON.stringify(r1), r2);
 
+// ---------- מסך הניהול, v8.41 ----------
+console.log("\nמסך הניהול\n");
+process.env.ADMIN_KEY = "adminkey"; process.env.APP_REF_KEY = "refkey";
+const { default: admin } = await import("../api/admin.js");
+const call = async (req) => { const r = { code: 0, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; }, setHeader() {}, end() { return this; } }; await admin({ headers: {}, body: null, method: "GET", ...req }, r); return r; };
+const pr0 = await call({ method: "POST", query: { promocharge: "" }, body: { email: "w@test.com", orderId: "x1", paidAt: "2026-11-05T10:00:00Z" } });
+ck("הטבת נובמבר בלי מפתח: 401", pr0.code === 401 && !(H["promo:nov26"] || {})["w@test.com"], pr0.code);
+const pr1 = await call({ method: "POST", query: { promocharge: "" }, headers: { "x-ref-key": "refkey" }, body: { email: "w@test.com", orderId: "x1", paidAt: "2026-11-05T10:00:00Z" } });
+ck("**הטבת נובמבר עם מפתח: נשמרת**", pr1.code === 200 && JSON.parse(H["ref:bonus"]["w@test.com"]).pd === 28, pr1.body);
+const lk0 = await call({ method: "POST", query: { key: "wrong" }, body: { refLink: "w2@test.com", refFrom: "MAYA22" } });
+ck("שיוך ידני עם מפתח שגוי: נדחה ואינו נוגע בדבר", lk0.code >= 400 && !(H["ref:by"] || {})["w2@test.com"], lk0.code);
+const lk1 = await call({ method: "POST", query: { key: "adminkey" }, body: { refLink: "w2@test.com", refFrom: "MAYA22", by: "טלי" } });
+const ovW2 = JSON.parse((H["admin:overrides"] || {})["w2@test.com"] || "{}");
+const ovM = JSON.parse((H["admin:overrides"] || {})["maya@test.com"] || "{}");
+ck("**שיוך ידני מהמסך: חודש לחברה, ושורה ביומן של שתיהן**", lk1.code === 200 && JSON.parse(H["ref:bonus"]["w2@test.com"]).m === 1 && (ovW2.log || [])[0]?.field === "refby" && (ovM.log || [])[0]?.field === "reffriend", { b: lk1.body, ovW2 });
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);
