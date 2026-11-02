@@ -15,6 +15,7 @@ import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
 import { GLOW_STARTED_KEY, hasGlow, glowStarted } from "./content/glow";
 import { labelName } from "../lib/catfilter.js";
+import { sunsetUTC } from "../api/_hebcal.js";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -664,6 +665,17 @@ function taskDone(task, answers, auto) {
   if (task.type === "number") return v != null && v > 0;
   return v === true;
 }
+// v8.40. רון, 2.11.2026: "מאשר, 35 דקות אחרי השקיעה". אצל שומרת שבת, השבת נפתחת להזנה
+// 35 דקות אחרי השקיעה ביום עצמו, ושבת שעברה פתוחה תמיד. **המשימות לא נגעו**: לשבת אין
+// משימות אצלה, ולכן אין מדליה ושום חישוב של גביע או רצף לא זז. נפתח רק היומן עצמו.
+const SHABBAT_OUT_MIN = 35;
+function shabbatOutAt(iso) { return sunsetUTC(iso).getTime() + SHABBAT_OUT_MIN * 60000; }
+function shabbatLocked(keepShabbat, iso, today, nowMs) {
+  if (!keepShabbat || parseDay(iso).getUTCDay() !== 6) return false;
+  if (iso < today) return false;
+  if (iso > today) return true;
+  return nowMs < shabbatOutAt(iso);
+}
 // Tasks shown for a given date. Saturday (dow 0): rest for Shabbat-keepers (none),
 // otherwise the same daily tasks as the Friday before it (activeTasks for dow 6).
 function tasksForDate(startDate, date, keepShabbat, fasting) {
@@ -749,7 +761,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.37";
+const VERSION = "8.41";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1936,7 +1948,16 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const cupMlD = profile.cupMl || DEFAULT_CUP_ML;
   const dow = dowOf(date);
   const progDay = programDayNumber(profile.startDate, date);
-  const isShabbatRest = profile.keepShabbat && dow === 0;
+  // רינדור מחדש ברגע שהשבת יוצאת, כדי שמי שהאפליקציה פתוחה אצלה לא תצטרך לצאת ולחזור.
+  const [, setShabbatTick] = useState(0);
+  const isShabbatRest = profile.keepShabbat && dow === 0 && shabbatLocked(true, date, today, nowDate().getTime());
+  useEffect(() => {
+    if (!isShabbatRest || date !== today) return;
+    const ms = shabbatOutAt(date) - nowDate().getTime();
+    if (ms <= 0 || ms > 86400000) return;
+    const t = setTimeout(() => setShabbatTick((x) => x + 1), ms + 1000);
+    return () => clearTimeout(t);
+  }, [isShabbatRest, date, today]);
   const isIntro = progDay === 1;
   // Day 2 introduces the steps task and nothing else - calories, the tracker and
   // the plus button all belong to day 3.
@@ -1991,7 +2012,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const goDay = (delta) => {
     const minT = new Date(stripFrom).getTime(), maxT = new Date(today).getTime();
     let d = addDays(date, delta);
-    if (profile.keepShabbat && parseDay(d).getUTCDay() === 6) d = addDays(d, delta);
+    if (shabbatLocked(profile.keepShabbat, d, today, nowDate().getTime())) d = addDays(d, delta);
     // Step straight over the frozen stretch, so swiping never lands on a day she was away.
     let guard = 0;
     while (inFreeze(d) && guard++ < 400) d = addDays(d, delta);
@@ -2011,7 +2032,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       <div style={{ position: "relative" }}>
       <div data-tut="daystrip" className="no-textscale" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
-          const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = parseDay(d); const isRest = profile.keepShabbat && dd.getUTCDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
+          const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = parseDay(d); const isRest = shabbatLocked(profile.keepShabbat, d, today, nowDate().getTime()); const off = isFuture || isRest; const pct = dayProgress(d);
           return (
             <button key={d} ref={sel ? selRef : null} disabled={off} onClick={() => { if (!off) setDate(d); }} title={isRest ? "שבת - יום מנוחה" : (isFuture ? "יום עתידי - ייפתח בתאריך הזה" : undefined)} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, overflow: "hidden", padding: 0, background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: off ? C.faint : (sel ? "#fff" : C.ink), cursor: off ? "default" : "pointer", opacity: off ? 0.4 : 1, textAlign: "center" }}>
               {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
@@ -2611,7 +2632,7 @@ function RecipeAddModal({ recipe, editEntry, onSave, onClose, onDelete }) {
   );
 }
 
-function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail }) {
+function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, onResumeLoss, onLossAck, onBaseWeight, userName, stepsByDate, programWeek, onOpenFaq, onOpenBackup, onOpenInstall, maxStart, gateEmail, refInfo }) {
   const [edit, setEdit] = useState(null); // { key, label, type, value, step, min, suffix }
   const [pendingWeight, setPendingWeight] = useState(null); // { key, value } awaiting confirm
   const [showLossStop, setShowLossStop] = useState(false);
@@ -2643,7 +2664,11 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
-  const commit = () => { const k = edit.key; if (k === "weightKg" || k === "goalWeightKg") { setPendingWeight({ key: k, value: edit.value }); setEdit(null); return; } setProfile({ ...profile, [k]: edit.value }); setEdit(null); };
+  const commit = () => { const k = edit.key;
+    // **השם, v8.38.** נשמר בפרופיל, ומשם מגיע לכל המסכים ולגיבוי. שם ריק אינו נשמר. ונכתב גם
+    // לשם שהשער זוכר במכשיר, כדי שבכניסה הבאה לא יחזור הישן.
+    if (k === "name") { const v = String(edit.value || "").trim(); if (v) { setProfile({ ...profile, name: v }); try { localStorage.setItem("myprime_access_name", v); } catch (e) {} } setEdit(null); return; }
+    if (k === "weightKg" || k === "goalWeightKg") { setPendingWeight({ key: k, value: edit.value }); setEdit(null); return; } setProfile({ ...profile, [k]: edit.value }); setEdit(null); };
   // **המצב, ולא המשקל של הרגע.** נעילת המסכים חייבת להישען על "העברנו אותה
   // לשמירה" ולא על "היא מתחת לקו עכשיו", אחרת בטווח שבין שני הקווים הרשימה
   // נפתחת והיא יכולה לבחור 250 לבד, וכל מנגנון ההגנה מפני תנודה מתבטל.
@@ -2712,6 +2737,8 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         </div>
       </div>
 
+      {refInfo && refInfo.code && <RefCard refInfo={refInfo} />}
+
       <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
         <div onClick={() => setBaseOpen(!baseOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
           <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>נתוני בסיס</span>
@@ -2719,6 +2746,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         </div>
         {baseOpen && (
           <div style={{ paddingBottom: 4 }}>
+            <EditRow label="שם" display={profile.name || userName || ""} onClick={() => open({ key: "name", label: "שם", type: "text", init: profile.name || userName || "" })} />
             <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
             <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
             <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: 35, suffix: "ק״ג", init: profile.weightKg })} />
@@ -2900,6 +2928,12 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
               <button onClick={() => setEdit(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
             </div>
 
+            {edit.type === "text" && (
+              <div style={{ marginBottom: 18 }}>
+                <input data-name-field value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} maxLength={40} autoComplete="off" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+              </div>
+            )}
+
             {(edit.type === "num") && (
               <>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: edit.hint ? 8 : 18 }}>
@@ -3051,6 +3085,9 @@ function parseMealOptions(text) {
 
 // Gentle photo-budget nudges (the HARD 70 cap is enforced server-side in api/ai.js).
 const PHOTO_HEADSUP_MSG = "הערה קטנה ממני אלייך 💜 שימי לב שכמות התמונות שניתן להעלות במהלך תוכנית הליווי מוגבלת ל-70 תמונות. לאחר מכן תמיד אפשר לתאר לי בטקסט מה אכלת.";
+// **תמונה שבחרה ולא נקראה. v8.38**, קול המערכת, נוסח שרון אישר. עד כאן שום דבר לא קרה והמסך
+// לא אמר כלום. lubazalkover, 02.11.2026, תמונה מ-Google Photos שכנראה שמורה רק בענן.
+const PHOTO_UNREAD_MSG = "התמונה לא נטענה. אם היא שמורה רק בענן, למשל ב-Google Photos, אפשר לשמור אותה קודם בטלפון ולנסות שוב, או לצלם ישירות מהמצלמה.";
 const PHOTO_END_MSG = "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים.";
 function bumpPhotosToday() {
   try {
@@ -3883,13 +3920,24 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [photoState, setPhotoState] = useState("capture");
   const [photoResult, setPhotoResult] = useState(null);
   const onPhoto = (e) => {
-    const file = e.target.files && e.target.files[0];
+    const input = e.target;
+    const file = input.files && input.files[0];
+    // **השדה מתאפס אחרי כל בחירה**, אחרת בחירה חוזרת של אותה תמונה אינה מפעילה כלום. v8.38.
+    try { input.value = ""; } catch (err) {}
+    // בלי קובץ בכלל לא אומרים דבר: כך נראה גם ביטול של הבחירה, ואין דרך להבדיל ביניהם.
     if (!file) return;
+    const unread = () => { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_UNREAD_MSG }]); };
+    if (!file.size) { unread(); return; }
     downscaleImage(file, 1024, 0.82)
       .then(({ base64, mediaType }) => sendAiImage(base64, mediaType))
       .catch(() => {
         const reader = new FileReader();
-        reader.onload = () => sendAiImage(String(reader.result).split(",")[1], file.type || "image/jpeg");
+        reader.onload = () => {
+          const b64 = String(reader.result || "").split(",")[1];
+          if (!b64) { unread(); return; }
+          sendAiImage(b64, file.type || "image/jpeg");
+        };
+        reader.onerror = unread;
         reader.readAsDataURL(file);
       });
   };
@@ -5741,7 +5789,7 @@ function FastLossSheet({ onClose }) {
   );
 }
 
-function CheckinCheer({ name, streak, onClose }) {
+function CheckinCheer({ name, streak, onClose, refCode }) {
   const colors = [C.brand, C.amber, C.info, "#F4C04A", C.macroC];
   const cheer = cheerFor(streak, name);
   // "מדליה נכנסה לאוסף" can read as though the day is now sealed. Said once, the first
@@ -5767,8 +5815,48 @@ function CheckinCheer({ name, streak, onClose }) {
         <div style={{ fontSize: 15.5, color: C.sub, marginTop: 8, lineHeight: 1.55 }}>{cheer.text}
           {firstEver && <div style={{ marginTop: 6 }}>אפשר תמיד להוסיף עוד עדכונים באפליקציה</div>}
           <div style={{ marginTop: 2 }}>ענת</div></div>
-        <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>
+        {refCode ? (
+          // **פעם אחת, אחרי המדליה החמישית**, החלטת רון. המסך כבר סומן כנראה ברגע שנפתח.
+          <div data-ref-offer style={{ marginTop: 16, background: C.brandBg, borderRadius: 14, padding: "14px 12px" }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: C.ink }}>את כבר בתנופה 💜</div>
+            <div style={{ fontSize: 14.5, color: C.sub, marginTop: 6, lineHeight: 1.55 }}>הכי כיף לעשות את זה עם חברה. שלחי לה את הקישור שלך, וכשהיא מצטרפת, שתיכן מקבלות חודש נוסף באפליקציה ובכל התכנים.</div>
+            <a href={refWhatsApp(refCode)} target="_blank" rel="noopener" onClick={onClose} style={{ display: "block", marginTop: 12, background: C.brand, color: "#fff", borderRadius: 12, padding: 12, fontSize: 16, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
+            <div onClick={onClose} style={{ marginTop: 10, fontSize: 14.5, color: C.brandD, cursor: "pointer" }}>אולי אחר כך</div>
+          </div>
+        ) : <div style={{ marginTop: 18 }}><Btn onClick={onClose}>יאללה, ממשיכות 💜</Btn></div>}
       </div>
+    </div>
+  );
+}
+
+// **חברה מביאה חברה, לנשות סמארט. v8.39.** הקישור לדף המכירה עם הקוד האישי שלה, וההודעה
+// שנפתחת לה בוואטסאפ. **הנוסחים אושרו על ידי רון**, 2 בנובמבר 2026. ראה `api/_ref.js`.
+const REF_PAGE_URL = "https://myprime.co.il/smart";
+const REF_OFFER_SEEN_KEY = "mp_ref_offer_seen_v1";
+function refLink(code) { return `${REF_PAGE_URL}?ref=${encodeURIComponent(code)}`; }
+function refWhatsApp(code) {
+  const text = `היי! אני בתוכנית SMART של מיי פריים, עם ענת הראל, וממש נהנית 💜\nאם תצטרפי דרך הקישור שלי, שתינו נקבל חודש נוסף באפליקציה ובכל התכנים:\n${refLink(code)}`;
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
+// השורה הקבועה בפרופיל, קול המערכת. הנוסחים אושרו על ידי רון. v8.39.
+function RefCard({ refInfo }) {
+  const [copied, setCopied] = useState(false);
+  const n = Number(refInfo.friends) || 0;
+  const dmy = (y) => { const p = String(y || "").match(/^(\d{4})-(\d{2})-(\d{2})$/); return p ? `${p[3]}.${p[2]}.${p[1]}` : ""; };
+  const copy = () => {
+    try { navigator.clipboard.writeText(refLink(refInfo.code)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); } catch (e) {}
+  };
+  return (
+    <div data-ref-card style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
+      <div style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>הזמיני חברה</div>
+      <div style={{ fontSize: 14.5, color: C.sub, marginTop: 6, lineHeight: 1.55 }}>על כל חברה שמצטרפת דרך הקישור שלך, שתיכן מקבלות חודש גישה נוסף. אפשר לצבור עד 3 חודשים.</div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <a href={refWhatsApp(refInfo.code)} target="_blank" rel="noopener" style={{ flex: 1, textAlign: "center", background: C.brand, color: "#fff", borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
+        <button onClick={copy} style={{ flex: 1, background: C.panel, color: C.brandD, border: `1px solid ${C.line}`, borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{copied ? "הועתק ✓" : "העתקת הקישור"}</button>
+      </div>
+      {n > 0 && <div data-ref-status style={{ fontSize: 14.5, color: C.ink, marginTop: 12, fontWeight: 600 }}>{n === 1 ? "חברה אחת הצטרפה דרכך" : `${n} חברות הצטרפו דרכך`}{refInfo.until ? ` · הגישה שלך הוארכה עד ${dmy(refInfo.until)}` : ""}</div>}
+      {refInfo.via && <div style={{ fontSize: 14.5, color: C.ink, marginTop: 10 }}>הצטרפת דרך חברה, ולכן קיבלת חודש גישה נוסף.</div>}
     </div>
   );
 }
@@ -7146,6 +7234,7 @@ export default function App() {
   const [stepsByDate, setStepsByDate] = useState(saved?.stepsByDate || {});
   const [checkins, setCheckins] = useState(saved?.checkins || {});
   const celebRef = useRef({ mounted: false, trophies: 0, golds: 0 });
+  const [refOfferNow, setRefOfferNow] = useState("");
   const [cheerTrophyWeek, setCheerTrophyWeek] = useState(1);
   const [cheerTrophyLevel, setCheerTrophyLevel] = useState("gold");
   const [goalAckWeek, setGoalAckWeek] = useState(saved?.goalAckWeek || 0);
@@ -7285,6 +7374,8 @@ export default function App() {
   }, [gate, gateEmail, checkins, glowSeen]);
 
   const [gateStartDate, setGateStartDate] = useState(() => { try { return localStorage.getItem("myprime_start_date") || ""; } catch (e) { return ""; } });
+  // חברה מביאה חברה: הקוד, כמה חברות, כמה חודשים. מהשער, ונכתב מחדש בכל כניסה. v8.39.
+  const [refInfo, setRefInfo] = useState(() => { try { return JSON.parse(localStorage.getItem("myprime_ref") || "null"); } catch (e) { return null; } });
   const [freeze, setFreeze] = useState(() => { try { return JSON.parse(localStorage.getItem("myprime_freeze") || "null"); } catch (e) { return null; } });
   const [gateBack, setGateBack] = useState("");
   const gatePhone = (() => { try { return localStorage.getItem("myprime_phone") || ""; } catch (e) { return ""; } })();
@@ -7411,6 +7502,11 @@ export default function App() {
           else localStorage.removeItem("myprime_freeze");
         } catch (e) {}
         setFreeze(d.freeze || null);
+        try {
+          if (d.ref && d.ref.code) localStorage.setItem("myprime_ref", JSON.stringify(d.ref));
+          else localStorage.removeItem("myprime_ref");
+        } catch (e) {}
+        setRefInfo(d.ref && d.ref.code ? d.ref : null);
         setGateReason(""); setGate("ok");
       } else {
         const rsn = d.reason || "not_registered";
@@ -7978,7 +8074,20 @@ export default function App() {
     if (newTrophy) { celebRef.current.trophies = tcount; celebRef.current.golds = gcount; }
     if (!profile.hideRewards) {
       if (newTrophy) { setCheerTrophyWeek(maxW); setCheerTrophyLevel(maxLevel); setSheet("trophyCheer"); }
-      else if (celebrate) setSheet("checkinCheer");
+      else if (celebrate) {
+        // **חברה מביאה חברה: פעם אחת, מהמדליה החמישית.** החלטת רון. נקבע כאן, ברגע שהמסך
+        // נפתח, ולא בציור, כדי שהסימון "כבר הוצג" לא יעלים את הכרטיס מתחת לאצבע. v8.39.
+        let offer = "";
+        try {
+          const medals = Object.values(next).filter((x) => x && x._done).length;
+          if (refInfo && refInfo.code && medals >= 5 && !localStorage.getItem(REF_OFFER_SEEN_KEY)) {
+            offer = refInfo.code;
+            localStorage.setItem(REF_OFFER_SEEN_KEY, "1");
+          }
+        } catch (e) { offer = ""; }
+        setRefOfferNow(offer);
+        setSheet("checkinCheer");
+      }
     }
   }, [checkins, log, stepsByDate, waterByDate, activityLog, targets, profile.startDate, profile.keepShabbat, profile.hideRewards, today]);
   // Intermittent-fasting intro bubble: once, on the day screen, from week 8 day 4 (Wednesday) onward.
@@ -8311,7 +8420,7 @@ export default function App() {
               {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} glowSoon={glowSoon} glowSoonSolo={glowSoonSolo} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} weightNow={curWeight} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow && !glowFull} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={curWeight} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
-              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} />}
+              {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} refInfo={refInfo} />}
             </div>
             {/* The bottom bar sits ABOVE the sheets (z 38 vs 27), so while one is open it
                 stayed tappable, rode up with the keyboard eating the space above it, and
@@ -8368,7 +8477,7 @@ export default function App() {
             {sheet === "fastLoss" && <FastLossSheet onClose={() => setSheet(null)} />}
             {sheet === "rateCap" && <RateCapSheet onClose={() => setSheet(null)} />}
             {sheet === "resumeOffer" && <ResumeOfferSheet onResume={() => { resumeLoss(); setSheet(null); }} onLater={() => setSheet(null)} />}
-            {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
+            {sheet === "checkinCheer" && <CheckinCheer name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} refCode={refOfferNow} onClose={() => setSheet(null)} />}
             {sheet === "trophyCheer" && <TrophyCheer week={cheerTrophyWeek} level={cheerTrophyLevel} days={weekDayCounts(checkins, profile.startDate, cheerTrophyWeek, today)} name={profile.name || gateName} streak={doneStreak(checkins, profile.startDate, TODAY)} onClose={() => setSheet(null)} />}
             {sheet === "fastingIntro" && <FastingIntroModal onOptIn={() => { setProfile((p) => ({ ...p, fasting: true, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} onDismiss={() => { setProfile((p) => ({ ...p, tipsSeen: [...(p.tipsSeen || []), "fastingintro"] })); setSheet(null); }} />}
             {sheet === "weeklySummary" && <WeeklySummaryModal date={selectedDate} startDate={profile.startDate} today={today} checkins={checkins} log={log} stepsByDate={stepsByDate} waterByDate={waterByDate} targets={targets} cupMl={profile.cupMl || DEFAULT_CUP_ML} keepShabbat={profile.keepShabbat} name={profile.name || gateName} dailyTarget={dailyTarget} stepGoal={profile.stepGoal} fasting={!!profile.fasting} hideRewards={!!profile.hideRewards} activityLog={activityLog} onClose={() => setSheet(null)} />}

@@ -109,7 +109,8 @@ ok("אפס מוצג כאפס", ruth.includes("0 מתוך 30"));
 const unknown = aiBox({ newApp: true });
 ok("בלי נתון: 'לא ידוע' בשתי השורות, ולא אפס", (unknown.match(/לא ידוע/g) || []).length === 2 && !unknown.includes("מתוך"));
 ok("קג'אבי: אין קופסה בכלל", aiBox({ newApp: false, ai: { photos: 3, today: 1 } }) === "");
-ok("הקופסה מרונדרת בכרטיס, מתחת ל'מה יש לה עכשיו'", /stateBox\(w\)\+\s*aiBox\(w\)\+/.test(HTML));
+// מ-v8.10 קופסת חברה מביאה חברה. שתיהן ריקות למי שאין לה.
+ok("הקופסה מרונדרת בכרטיס, מתחת ל'מה יש לה עכשיו'", /stateBox\(w\)\+\s*(refBox\(w\)\+\s*)?aiBox\(w\)\+/.test(HTML));
 
 console.log(`\n${pass} מתוך ${pass + fail} עברו`);
 process.exit(fail ? 1 : 0);

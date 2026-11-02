@@ -957,6 +957,57 @@ CHECKS.push({
   },
 });
 
+// **חברה מביאה חברה בכרטיס. v8.41.** הקוד מוצג, חיפוש לפי קוד מוצא אותה, ושיוך ידני שולח
+// את המייל שלה ואת מה שהוקלד. ושני הצדדים: אישה שכבר הגיעה דרך חברה אינה מקבלת שדה שיוך,
+// ואישה שאינה בסמארט אינה מקבלת קופסה בכלל.
+CHECKS.push({
+  name: "חברה מביאה חברה: קוד, חיפוש ושיוך ידני",
+  async run(browser, device) {
+    const patch = (d) => {
+      d.women[0].solo = 10; d.women[0].refCode = "MAYA22";
+      d.women[0].ref = { friends: 0, months: 0, days: 28, from: "" };
+      return d;
+    };
+    const o = await open(browser, device, patch);
+    const alerts = [];
+    o.page.on("dialog", (dlg) => alerts.push(dlg.message()));
+    await o.ctx.route("**/api/**", (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      let b = {}; try { b = JSON.parse(route.request().postData() || "{}"); } catch (e) {}
+      if (!b.refLink) return route.fallback();
+      o.posts.push(b);
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, from: "noa@test.com", friend: b.refLink, months: 1 }) });
+    });
+    await o.page.fill("#q", "maya22");
+    await o.page.waitForTimeout(400);
+    const found = await o.page.locator('[data-open="lior5066@gmail.com"]').count();
+    await o.page.locator('[data-open="lior5066@gmail.com"]').first().click();
+    await o.page.waitForTimeout(400);
+    const card = await o.page.locator(".card.open").innerText();
+    await o.page.fill('.card.open input[id^="rl_"]', "noa@test.com");
+    await o.page.locator(".card.open [data-reflink]").first().click();
+    await o.page.waitForTimeout(500);
+    const post = o.posts.find((p) => p.refLink) || {};
+    await o.ctx.close();
+    // מי שכבר הגיעה דרך חברה: אין שדה שיוך. ומי שאינה בסמארט: אין קופסה.
+    const o2 = await open(browser, device, (d) => { d.women[0].solo = 10; d.women[0].refCode = "MAYA22"; d.women[0].ref = { friends: 0, months: 1, days: 0, from: "noa@test.com" }; return d; });
+    await o2.page.locator('[data-open="lior5066@gmail.com"]').first().click();
+    await o2.page.waitForTimeout(400);
+    const linkedField = await o2.page.locator(".card.open [data-reflink]").count();
+    await o2.page.goto(BASE, { waitUntil: "domcontentloaded" });
+    await o2.page.waitForTimeout(600);
+    await o2.page.locator('[data-open="ronit@test.com"]').first().click();
+    await o2.page.waitForTimeout(400);
+    const other = await o2.page.locator(".card.open").innerText();
+    await o2.ctx.close();
+    const ok = found >= 1 && card.includes("MAYA22") && card.includes("הטבת נובמבר") && card.includes("+28 יום")
+      && post.refLink === "lior5066@gmail.com" && post.refFrom === "noa@test.com"
+      && alerts.some((m) => m.startsWith("לשייך אותה")) && alerts.some((m) => m.includes("שויכה"))
+      && linkedField === 0 && !other.includes("הקוד שלה") && !o.errors.length && !o2.errors.length;
+    return { ok, detail: `חיפוש ${found} · קוד ${card.includes("MAYA22")} · נובמבר ${card.includes("+28 יום")} · נשלח ${JSON.stringify(post).slice(0, 80)} · הודעות ${alerts.length} · משויכת ${linkedField} · אחרת ${!other.includes("הקוד שלה")} · שגיאות ${o.errors[0] || o2.errors[0] || "אין"}` };
+  },
+});
+
 const browser = await chromium.launch({ executablePath: BROWSER });
 const ONLY = process.env.E2E_ONLY || "";
 const RUN = CHECKS.filter((c) => !ONLY || c.name.includes(ONLY));

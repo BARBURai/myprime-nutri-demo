@@ -15,7 +15,8 @@
 //  B. 2-device limit (optional) - create a free Upstash Redis database, then set:
 //     UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Vercel env -> Redeploy.
 
-import { decideAccess } from "./_product.js";
+import { decideAccess, SOLO_10_WEEKS } from "./_product.js";
+import { readBonus, ensureCode } from "./_ref.js";
 import { fetchSheetText, findCols, SMART_COLS, accessEnd } from "./_sheet.js";
 import { MC_BYEMAIL, MC_DIFFS, mcShadowKey, diffFields } from "./_mcsync.js";
 // ===== תקרת המתנה ל-Upstash, 3 שניות לפנייה. v7.45 =====
@@ -494,10 +495,16 @@ export default async function handler(req, res) {
     // על אישה אמיתית בהקפאה: הכתובת הישנה שלה הייתה נכנסת. v7.88.
     if (serverHits && serverHits.length && !hits.length) {
       const phones = serverHits.map((h) => h.phone).filter(Boolean);
+      // **רק שורה שיש בה מייל נחשבת. v8.38.** שורה בלי מייל אינה כתובת אחרת שצריך להגן עליה:
+      // אישה שנרשמה בוואטסאפ בלי מייל וקיבלה אותו אחר כך במניצ'ט קיבלה "לא רשומה" עד שמישהו
+      // הקליד אותו ביד בגיליון. נמצא ב-25.10.2026 על bet243.
+      const MAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
       const inSheet = phoneCol !== -1 && phones.length && lines.some((l, i) => {
         if (i === 0) return false;
         const c = parseCsvLine(l);
-        return phones.includes(String(c[phoneCol] || "").replace(/[^\d]/g, ""));
+        if (!phones.includes(String(c[phoneCol] || "").replace(/[^\d]/g, ""))) return false;
+        // אותו כלל של זיהוי המייל בשורה: התא, ואם הוא ריק, כל השורה.
+        return MAIL.test(l);
       });
       if (phones.length && !inSheet) serverOnly = serverHits;
     }
@@ -617,6 +624,17 @@ export default async function handler(req, res) {
   } catch (e) { /* fall through to the sheet */ }
   const startSunday = parseDateToSunday(clerkStart || startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
+  // **חברה מביאה חברה, לנשות סמארט בלבד. v8.39.** החודשים שצברה נוספים לחלון, והקוד האישי
+  // שלה נוצר פעם אחת. **רק כאן נוספות פניות ל-Upstash**, ולכן לכל אישה אחרת השער לא השתנה.
+  // תקלה מחזירה אפס חודשים ובלי קוד, כלומר בדיוק מה שהייתה מקבלת בלי המנגנון.
+  let ref = null;
+  if (solo === SOLO_10_WEEKS) {
+    const RUr = process.env.UPSTASH_REDIS_REST_URL, RTr = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (RUr && RTr && !redis.stalled()) {
+      const bn = await readBonus(redis, RUr, RTr, email);
+      ref = { ...bn, code: await ensureCode(redis, RUr, RTr, email) };
+    }
+  }
 
   // ============================================================================
   // שני מוצרים, שני חישובים נפרדים.
@@ -635,6 +653,8 @@ export default async function handler(req, res) {
   const facts = {
     startSunday, cancelled, clerkBlocked, clerkUntil, freeze,
     extraMonths, solo, glowFull, glowPaid, glowSolo, glowMonths,
+    bonusMonths: ref ? ref.months : 0,
+    bonusDays: ref ? ref.days : 0,
     glowStart: "", today: israelDay(0),
   };
   let glowStart = "";
@@ -762,5 +782,5 @@ export default async function handler(req, res) {
 
   // `freeze` travels on so the diary can leave the frozen days out of her day strip and
   // label the days before them for what they are. Nothing of hers is deleted.
-  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull: glowFullNow, glowSoon: decision.glowSoon, glowSoonSolo: !!decision.glowSoonSolo, product: glowOnly ? "glow" : "360", replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
+  return res.status(200).json({ allowed: true, reason: "ok", configured: true, startDate, phone, glow, glowFull: glowFullNow, glowSoon: decision.glowSoon, glowSoonSolo: !!decision.glowSoonSolo, product: glowOnly ? "glow" : "360", ref: ref && ref.code && !glowOnly ? { code: ref.code, friends: ref.friends, months: ref.months, via: ref.via, until: decision.end360 } : null, replies, freeze: freeze ? { from: freeze.from || "", back: freeze.back || "", origStart: freeze.origStart || "" } : null });
 }

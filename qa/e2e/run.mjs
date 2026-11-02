@@ -248,6 +248,132 @@ const CHECKS = [
     },
   },
   {
+    // v8.39: חברה מביאה חברה. **שני הצדדים באותה הרצה:** אישת סמארט עם קוד, שסוגרת את היום
+    // ומגיעה למדליה החמישית, מקבלת את הכרטיס עם הקישור שלה, פעם אחת. בלי קוד אין כרטיס.
+    // ובפרופיל השורה "הזמיני חברה" קיימת רק כשיש קוד. השעון נעוץ ליום שני של שבוע 2.
+    name: "חברה מביאה חברה: הכרטיס במדליה החמישית, פעם אחת, והשורה בפרופיל",
+    async run(browser, device) {
+      const bad = [];
+      const T = "2026-11-02";
+      const seed = { stepsByDate: { [T]: 6000 }, checkins: { "2026-10-27": { _done: true }, "2026-10-28": { _done: true }, "2026-10-29": { _done: true }, "2026-10-30": { _done: true } } };
+      const REF = { code: "MAYA22", friends: 0, months: 0, via: false, until: "" };
+      const addFood = async (page) => {
+        await page.locator('[aria-label="הוספה"]').click(); await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click(); await page.waitForTimeout(500);
+        await page.locator("text=הזנה ידנית").first().click(); await page.waitForTimeout(400);
+        await page.locator('input[placeholder="לדוגמה: חטיף חלבון"]').fill("תפוח");
+        const nums = page.locator('input[inputmode="decimal"]');
+        const vals = ["150", "80", "0", "0", "20"];
+        for (let i = 0; i < Math.min(await nums.count(), vals.length); i++) await nums.nth(i).fill(vals[i]);
+        await page.getByRole("button", { name: /הוסיפי ליומן/ }).first().click();
+        await page.waitForTimeout(1200);
+        // השאלה "לשמור למועדפים?" עולה מעל מסך המדליה.
+        await page.getByRole("button", { name: "לא תודה" }).first().click({ timeout: 2500 }).catch(() => {});
+        await page.waitForTimeout(400);
+      };
+      for (const withRef of [true, false]) {
+        const { context, page, errors } = await openApp(browser, device, { startDate: "2026-10-25", clock: T + "T08:00:00.000Z", seed, accessExtra: withRef ? { ref: REF } : null });
+        await addFood(page);
+        const offer = page.locator("[data-ref-offer]");
+        const has = await offer.count();
+        if (withRef) {
+          if (!has) bad.push("עם קוד: אין כרטיס במדליה");
+          else {
+            const href = await offer.locator("a").first().getAttribute("href");
+            const txt = decodeURIComponent(href || "");
+            if (!txt.includes("https://myprime.co.il/smart?ref=MAYA22")) bad.push("הקישור: " + txt.slice(0, 80));
+            if (!txt.includes("שתינו נקבל חודש נוסף")) bad.push("ההודעה בוואטסאפ חסרה");
+            await offer.locator("text=אולי אחר כך").click(); await page.waitForTimeout(300);
+          }
+          const seen = await page.evaluate(() => localStorage.getItem("mp_ref_offer_seen_v1"));
+          if (seen !== "1") bad.push("לא סומן שהוצג");
+          await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
+          if (!(await page.locator("[data-ref-card]").count())) bad.push("עם קוד: אין שורה בפרופיל");
+        } else {
+          if (has) bad.push("בלי קוד: הוצג כרטיס");
+          if (!(await page.locator("text=מדליה נכנסה לאוסף").count())) bad.push("בלי קוד: אין מסך מדליה, כלומר הבדיקה לא הגיעה ליעד");
+          await page.locator("text=יאללה, ממשיכות").first().click().catch(() => {}); await page.waitForTimeout(300);
+          await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
+          if (await page.locator("[data-ref-card]").count()) bad.push("בלי קוד: יש שורה בפרופיל");
+        }
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "עם קוד: כרטיס וקישור נכון, ושורה בפרופיל · בלי קוד: מדליה רגילה ובלי שורה" };
+    },
+  },
+  {
+    // v8.38: תמונה מהגלריה שלא נקראה. עד כאן שום דבר לא קרה והמסך לא אמר כלום (lubazalkover).
+    // **שני הצדדים:** קובץ ריק מציג את ההודעה ואינו פונה לבינה, ותמונה תקינה נשלחת לבינה כמו
+    // היום. ובחירה חוזרת של אותו קובץ מפעילה שוב, כי השדה מתאפס.
+    name: "צילום ארוחה: תמונה שלא נקראה מציגה הודעה, ותמונה תקינה נשלחת",
+    async run(browser, device) {
+      const bad = [];
+      const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+      const go = async (page) => {
+        await page.locator('[aria-label="הוספה"]').click(); await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click(); await page.waitForTimeout(500);
+        await page.locator("text=צילום ארוחה").first().click(); await page.waitForTimeout(400);
+      };
+      {
+        const { context, page, errors } = await openApp(browser, device);
+        let ai = 0; page.on("request", (rq) => { if (rq.url().includes("/api/ai")) ai++; });
+        await go(page);
+        const input = page.locator('input[type="file"]:not([capture])').first();
+        await input.setInputFiles({ name: "empty.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(0) });
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("התמונה לא נטענה")) bad.push("קובץ ריק: אין הודעה");
+        if (ai) bad.push(`קובץ ריק: ${ai} פניות לבינה`);
+        if (await input.count() && (await input.inputValue())) bad.push("השדה לא התאפס");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      {
+        const { context, page, errors } = await openApp(browser, device);
+        let ai = 0; page.on("request", (rq) => { if (rq.url().includes("/api/ai")) ai++; });
+        await go(page);
+        await page.locator('input[type="file"]:not([capture])').first().setInputFiles({ name: "meal.png", mimeType: "image/png", buffer: PNG });
+        await page.waitForTimeout(1500);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (t.includes("התמונה לא נטענה")) bad.push("תמונה תקינה: הוצגה הודעת שגיאה");
+        if (!t.includes("תמונת הארוחה")) bad.push("תמונה תקינה: לא נשלחה לשיחה");
+        if (!ai) bad.push("תמונה תקינה: לא נשלחה לבינה");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "ריק: הודעה ואפס פניות · תקינה: נשלחה" };
+    },
+  },
+  {
+    // v8.38: עריכת השם בפרופיל. bet243, שהמקלדת תיקנה לה "בטי" ל"בטח" בהרשמה.
+    name: "עריכת השם בפרופיל מתעדכנת בראש המסך ונשמרת",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const bad = [];
+      await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
+      await page.locator("text=נתוני בסיס").first().click(); await page.waitForTimeout(400);
+      const row = page.locator('div:has(> span:text-is("שם"))').first();
+      if (await row.count()) await row.click(); else bad.push("השורה לא נמצאה");
+      await page.waitForTimeout(400);
+      const f = page.locator("[data-name-field]");
+      if (!(await f.count())) bad.push("השדה לא נפתח");
+      else {
+        await f.fill("בטי");
+        await page.locator("text=שמור").last().click(); await page.waitForTimeout(500);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("בטי")) bad.push("השם לא מוצג");
+        const saved = await page.evaluate(() => { try { return JSON.parse(localStorage.getItem("myprime_demo_state_v1")).profile.name; } catch (e) { return null; } });
+        if (saved !== "בטי") bad.push(`נשמר "${saved}"`);
+        const gn = await page.evaluate(() => localStorage.getItem("myprime_access_name"));
+        if (gn !== "בטי") bad.push(`בשער "${gn}"`);
+      }
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "בטי מוצג ונשמר" };
+    },
+  },
+  {
     // משתתפת, 25 בספטמבר 2026: "בחלון של הוספת רגישויות ואלרגיות לא ניתן לרשום דבר."
     // מקלידים בשדה "רגישויות נוספות" בפרופיל כמו אישה, מקישים על הפלוס, ובודקים שהצ'יפ נוצר.
     name: "רגישויות נוספות בפרופיל: אפשר להקליד ולהוסיף",
@@ -1914,6 +2040,34 @@ const CHECKS = [
       if (!cab.includes("אם פספסת יום אחד, נכנס גביע כסף")) bad.push("שורת ההסבר אינה מופיעה בארון");
       await context.close();
       return { ok: bad.length === 0 && errors.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errors.length ? errors[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
+    // v8.40: אצל שומרת שבת, השבת נפתחת להזנה 35 דקות אחרי השקיעה. 31.10.2026, שקיעה בכ-14:50 UTC.
+    name: "שבת נפתחת להזנה 35 דקות אחרי השקיעה",
+    async run(browser, device) {
+      const start = "2026-10-18";
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: true, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      const bad = []; let errs = [];
+      const look = async (clock, keep) => {
+        const { context, page, errors } = await openApp(browser, device, { startDate: start, clock, seed: { profile: { ...prof, keepShabbat: keep }, weights: [{ date: start, kg: 72 }] } });
+        const body = await page.evaluate(() => document.body.innerText);
+        errs = errs.concat(errors);
+        await context.close();
+        return body;
+      };
+      const before = await look("2026-10-31T14:00:00.000Z", true);
+      if (!before.includes("שבת שלום")) bad.push("לפני צאת השבת המסך אינו נעול");
+      const justBefore = await look("2026-10-31T15:15:00.000Z", true);
+      if (!justBefore.includes("שבת שלום")) bad.push("ננעל רק עד השקיעה ולא עד 35 דקות אחריה");
+      const after = await look("2026-10-31T16:00:00.000Z", true);
+      if (after.includes("שבת שלום")) bad.push("אחרי צאת השבת המסך עדיין נעול");
+      if (!after.includes("מה שהוזן היום")) bad.push("אחרי צאת השבת היומן אינו מוצג");
+      const sunday = await look("2026-11-01T08:00:00.000Z", true);
+      if (sunday.includes("שבת שלום")) bad.push("ביום ראשון מוצג מסך שבת");
+      const nonKeeper = await look("2026-10-31T09:00:00.000Z", false);
+      if (nonKeeper.includes("שבת שלום")) bad.push("מי שאינה שומרת שבת קיבלה מסך שבת");
+      return { ok: bad.length === 0 && errs.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errs.length ? errs[0].slice(0, 40) : "אין"}` };
     },
   },
   {

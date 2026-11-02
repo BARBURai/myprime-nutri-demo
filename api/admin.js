@@ -28,6 +28,9 @@ import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus, importS
 import { readXlsx } from "./_xlsx.js";
 import { parseKey, driveDownload } from "./_gdrive.js";
 import { excelIndex, targets as nameTargets, run as nameRun, mailHtml as nameMail, CAP as NAME_CAP } from "./_namefix.js";
+import { REF_BONUS, REF_BY, REF_MINE, refCharge, refKeyOk, promoCharge, refLink } from "./_ref.js";
+import { addDaysYmd } from "./_product.js";
+import { addMonthsYmd } from "./_product.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -112,7 +115,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.37";
+const ADMIN_VERSION = "8.41";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -621,6 +624,34 @@ export default async function handler(req, res) {
       return res.status(out.status).json(out.json);
     } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
   }
+  // **חברה מביאה חברה. v8.39.** ראה `api/_ref.js`. מפתח משלו, `APP_REF_KEY` בכותרת `x-ref-key`.
+  // **בלי המשתנה הכתובת סגורה.** דף התשלום שולח לכאן אחרי תשלום מוצלח, עם הקוד מהקישור.
+  if (req.query.refcharge !== undefined) {
+    if (req.method !== "POST") return res.status(405).json({ ok: false });
+    if (!refKeyOk(req)) return res.status(401).json({ ok: false, error: "unauthorized" });
+    if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
+    try {
+      let body = req.body;
+      if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+      const out = await refCharge(body, (cmd) => redisPost(RU, RT, cmd), async (email) => {
+        const m = JSON.parse((await redisPost(RU, RT, ["HGET", "mc:byemail", email])) || "{}");
+        return Object.keys(m);
+      });
+      return res.status(out.status).json(out.json);
+    } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+  }
+  // **הטבת נובמבר 2026. v8.41.** דף התשלום שולח כל קנייה של סמארט עם שעת התשלום. אותו מפתח.
+  if (req.query.promocharge !== undefined) {
+    if (req.method !== "POST") return res.status(405).json({ ok: false });
+    if (!refKeyOk(req)) return res.status(401).json({ ok: false, error: "unauthorized" });
+    if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
+    try {
+      let body = req.body;
+      if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+      const out = await promoCharge(body, (cmd) => redisPost(RU, RT, cmd));
+      return res.status(out.status).json(out.json);
+    } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+  }
   // סוף הקפאה ביום החזרה, ותגית ההקפאה יורדת במניצ'ט. מוורסל בלבד. v8.20.
   if (req.query.freezesweep !== undefined) {
     const auth = req.headers.authorization || "";
@@ -768,6 +799,34 @@ export default async function handler(req, res) {
       const st = await mcStatus(RU, RT, days);
       return res.status(200).json({ ok: true, configured: !!process.env.MC_SYNC_SECRET, ...st });
     } catch (e) { return res.status(200).json({ ok: false, error: "read_failed" }); }
+  }
+
+  // **שיוך ידני של חברה למזמינה. v8.41.** כל מפתח של המשרד. `refLink` הוא המייל של החברה, ו-`refFrom`
+  // הקוד או המייל של המזמינה. עובר באותו `refCharge`, ושורה ביומן של שתיהן.
+  if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("refLink") : req.body.refLink)) {
+    let body = req.body;
+    if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+    if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+    const by = me.owner ? (String((body && body.by) || "").trim().slice(0, 40) || "מנהל") : me.name;
+    const rpost = (cmd) => redisPost(RU, RT, cmd);
+    const phonesOf = async (email) => Object.keys(JSON.parse((await redisPost(RU, RT, ["HGET", "mc:byemail", email])) || "{}"));
+    try {
+      const out = await refLink(body.refFrom, body.refLink, rpost, phonesOf);
+      if (out.status === 200 && out.json.from && out.json.friend) {
+        const note = async (email, entry) => {
+          let cur = {};
+          const old = await redis(RU, RT, "HGET", "admin:overrides", email);
+          if (old) cur = JSON.parse(old) || {};
+          const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
+          log.unshift({ at: new Date().toISOString(), by, ...entry });
+          cur.log = log.slice(0, 20);
+          await redisPost(RU, RT, ["HSET", "admin:overrides", email, JSON.stringify(cur)]);
+        };
+        try { await note(out.json.friend, { field: "refby", to: out.json.from }); await note(out.json.from, { field: "reffriend", to: out.json.friend }); } catch (e) {}
+        try { await bumpRev(RU, RT); } catch (e) {}
+      }
+      return res.status(out.status).json(out.json);
+    } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
   }
 
   // ייבוא הגיליון לשרת, פעם אחת. v7.66. **מנהל בלבד**, וכותב אך ורק ל-mc:.
@@ -1537,7 +1596,7 @@ JSON בלבד, בלי שום טקסט אחר:
 
   // Two HGETALLs for the whole cohort, not one lookup per woman: at 1,300 rows the
   // per-woman version would be 2,600 round trips and the screen would never load.
-  let overrides = {}, seen = {}, emailMap = {}, emailOld = {}, manual = {}, glowStart = {}, mcFlags = {};
+  let overrides = {}, seen = {}, emailMap = {}, emailOld = {}, manual = {}, glowStart = {}, mcFlags = {}, refBonus = {}, refBy = {}, refMine = {};
   const appEmails = new Set();
   if (RU && RT) {
     const flat = (v) => {
@@ -1555,6 +1614,10 @@ JSON בלבד, בלי שום טקסט אחר:
     // היום הראשון שבו נכנסה לקורס. **זה אינו תאריך הקנייה**, שאינו קיים אצלנו
     // בשום מקום, אלא הרגע שבו הקורס נפתח לה בפועל. נתפס ב-HSETNX בשער.
     try { glowStart = flat(await redis(RU, RT, "HGETALL", "glow:start")); } catch (e) {}
+    // חברה מביאה חברה, v8.39. **תקלה כאן משאירה את החלון בלי הבונוס**, כמו בשער.
+    try { refBonus = flat(await redisPost(RU, RT, ["HGETALL", REF_BONUS])); } catch (e) {}
+    try { refBy = flat(await redisPost(RU, RT, ["HGETALL", REF_BY])); } catch (e) {}
+    try { refMine = flat(await redisPost(RU, RT, ["HGETALL", REF_MINE])); } catch (e) {}
     // **מה שמניצ'ט אומר, גם כשהגיליון מפגר.** קורס האיפור המלא ואפליקציית תזונה, לפי
     // הטלפון. רק כשהחיבור למניצ'ט פעיל, בדיוק כמו בשער. תקלה כאן משאירה את הגיליון לבדו. v7.89.
     if (process.env.MC_SYNC_SECRET) { try { mcFlags = flat(await redis(RU, RT, "HGETALL", "mc:flags")); } catch (e) {} }
@@ -1657,7 +1720,11 @@ JSON בלבד, בלי שום טקסט אחר:
     const sheetEnd = ((ovr && ovr.start && start) || (start && solo !== w.solo))
       ? ymd(accessEnd(new Date(start + "T00:00:00Z"), w.months, solo))
       : (w.sheetEnd || "");
-    const until = (ovr && ovr.until) || sheetEnd || "";
+    // **החודשים מחברה מביאה חברה, כמו בשער: רק לסמארט, ועל כל תאריך סוף.** v8.39.
+    const refB = (() => { try { return solo === 10 && refBonus[w.email] ? JSON.parse(refBonus[w.email]) : null; } catch (e) { return null; } })();
+    const refMonths = refB ? Math.max(0, Number(refB.m) || 0) : 0;
+    const refDays = refB ? Math.max(0, Number(refB.pd) || 0) : 0;
+    const until = addDaysYmd(addMonthsYmd((ovr && ovr.until) || sheetEnd || "", refMonths), refDays);
     const blocked = !!(ovr && ovr.blocked === "1");
     // Frozen right now: she is on a freeze and either has no return date, or it has not
     // arrived. From the return date on she is simply a participant again, and the record is
@@ -1699,6 +1766,8 @@ JSON בלבד, בלי שום טקסט אחר:
       glowSolo: !!w.glowSolo,
       glowMonths: w.glowM,
       glowStart: glowStartAt,
+      bonusMonths: refMonths,
+      bonusDays: refDays,
       today,
     });
     return {
@@ -1760,6 +1829,9 @@ JSON בלבד, בלי שום טקסט אחר:
       },
       glowOverride: (ovr && ovr.glow) ? { glow: ovr.glow, by: ovr.by || "" } : null,
       until,
+      // חברה מביאה חברה: כמה הזמינה, כמה חודשים, ודרך מי הגיעה. v8.39.
+      refCode: solo === 10 ? (refMine[w.email] || "") : "",
+      ref: refB ? { friends: Number(refB.f) || 0, months: refMonths, days: refDays, from: (() => { try { return refBy[w.email] ? JSON.parse(refBy[w.email]).from || "" : ""; } catch (e) { return ""; } })() } : null,
       // `override` is only in force while it carries a date. The log survives a clearing, so
       // the office can always see what was done and by whom.
       override: (ovr && ovr.until) ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "" } : null,

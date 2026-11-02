@@ -315,13 +315,33 @@ export async function ingest(body, RU, RT, now = Date.now()) {
   if (!phone) return { status: 400, json: { ok: false, error: "no_phone" } };
   const prev = parseJson(await rpost(RU, RT, ["HGET", MC_ROWS, phone]), null);
   const cells = Object.assign({}, prev && prev.cells, inc);
-  // ליד אינו נשמר, ומה שכבר שמור עליה לא נוגע. v7.85.
+  // בנתונים המלאים כל התגיות מגיעות, ולכן תגית שהייתה ואינה עכשיו הוסרה במניצ'ט.
+  // **לפני בדיקת החברות, v8.38**, אחרת תגית קנייה שהוסרה הייתה ממשיכה להחשיב אותה חברה.
+  if (tags && prev && Array.isArray(prev.tags)) for (const t of prev.tags) if (!tags.includes(t)) cells[t] = "";
   if (!isMember(cells)) {
+    // ליד שאין לו שורה בשרת אינו נשמר, כמו מ-v7.85, ולכן הלידים שהוצאו ב-v7.86 אינם חוזרים.
+    // **ומי שהייתה חברה ונוקתה במניצ'ט יוצאת מהשרת. v8.38.** עד כאן הבקשה נבלעה, והשורה
+    // נשארה עם המייל והתאריך הישנים. נמצא ב-26.10.2026 על galitnn, שנרשמה עם טלפון שגוי.
+    // **קודם עותק ל-mc:pruned ורק אז הסרה**, כמו בייבוא.
+    if (prev) {
+      const oldE = emailOf(prev.cells);
+      await rpost(RU, RT, ["HSET", MC_PRUNED, phone, JSON.stringify(prev)]);
+      await rpost(RU, RT, ["HDEL", MC_ROWS, phone]);
+      try { await rpost(RU, RT, ["HDEL", MC_SLIM, phone]); } catch (e) {}
+      try { await rpost(RU, RT, ["HDEL", MC_FLAGS, phone]); } catch (e) {}
+      if (oldE) {
+        const map = parseJson(await rpost(RU, RT, ["HGET", MC_BYEMAIL, oldE]), {});
+        delete map[phone];
+        if (Object.keys(map).length) await rpost(RU, RT, ["HSET", MC_BYEMAIL, oldE, JSON.stringify(map)]);
+        else await rpost(RU, RT, ["HDEL", MC_BYEMAIL, oldE]);
+      }
+      try { await rpost(RU, RT, ["HINCRBY", MC_STATS, "removed", 1]); } catch (e) {}
+      await bumpRev(RU, RT);
+      return { status: 200, json: { ok: true, removed: "not_member", phone } };
+    }
     try { await rpost(RU, RT, ["HINCRBY", MC_STATS, "skipped", 1]); } catch (e) {}
     return { status: 200, json: { ok: true, skipped: "not_member", phone } };
   }
-  // בנתונים המלאים כל התגיות מגיעות, ולכן תגית שהייתה ואינה עכשיו הוסרה במניצ'ט.
-  if (tags && prev && Array.isArray(prev.tags)) for (const t of prev.tags) if (!tags.includes(t)) cells[t] = "";
   const oldEmail = prev ? emailOf(prev.cells) : "";
   const email = emailOf(cells);
   const rec = { cells, t: now, src: "mc" };
