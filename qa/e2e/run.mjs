@@ -248,6 +248,77 @@ const CHECKS = [
     },
   },
   {
+    // v8.38: תמונה מהגלריה שלא נקראה. עד כאן שום דבר לא קרה והמסך לא אמר כלום (lubazalkover).
+    // **שני הצדדים:** קובץ ריק מציג את ההודעה ואינו פונה לבינה, ותמונה תקינה נשלחת לבינה כמו
+    // היום. ובחירה חוזרת של אותו קובץ מפעילה שוב, כי השדה מתאפס.
+    name: "צילום ארוחה: תמונה שלא נקראה מציגה הודעה, ותמונה תקינה נשלחת",
+    async run(browser, device) {
+      const bad = [];
+      const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+      const go = async (page) => {
+        await page.locator('[aria-label="הוספה"]').click(); await page.waitForTimeout(400);
+        await page.locator("text=הוספת מזון").first().click(); await page.waitForTimeout(500);
+        await page.locator("text=צילום ארוחה").first().click(); await page.waitForTimeout(400);
+      };
+      {
+        const { context, page, errors } = await openApp(browser, device);
+        let ai = 0; page.on("request", (rq) => { if (rq.url().includes("/api/ai")) ai++; });
+        await go(page);
+        const input = page.locator('input[type="file"]:not([capture])').first();
+        await input.setInputFiles({ name: "empty.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(0) });
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("התמונה לא נטענה")) bad.push("קובץ ריק: אין הודעה");
+        if (ai) bad.push(`קובץ ריק: ${ai} פניות לבינה`);
+        if (await input.count() && (await input.inputValue())) bad.push("השדה לא התאפס");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      {
+        const { context, page, errors } = await openApp(browser, device);
+        let ai = 0; page.on("request", (rq) => { if (rq.url().includes("/api/ai")) ai++; });
+        await go(page);
+        await page.locator('input[type="file"]:not([capture])').first().setInputFiles({ name: "meal.png", mimeType: "image/png", buffer: PNG });
+        await page.waitForTimeout(1500);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (t.includes("התמונה לא נטענה")) bad.push("תמונה תקינה: הוצגה הודעת שגיאה");
+        if (!t.includes("תמונת הארוחה")) bad.push("תמונה תקינה: לא נשלחה לשיחה");
+        if (!ai) bad.push("תמונה תקינה: לא נשלחה לבינה");
+        if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "ריק: הודעה ואפס פניות · תקינה: נשלחה" };
+    },
+  },
+  {
+    // v8.38: עריכת השם בפרופיל. bet243, שהמקלדת תיקנה לה "בטי" ל"בטח" בהרשמה.
+    name: "עריכת השם בפרופיל מתעדכנת בראש המסך ונשמרת",
+    async run(browser, device) {
+      const { context, page, errors } = await openApp(browser, device);
+      const bad = [];
+      await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
+      await page.locator("text=נתוני בסיס").first().click(); await page.waitForTimeout(400);
+      const row = page.locator('div:has(> span:text-is("שם"))').first();
+      if (await row.count()) await row.click(); else bad.push("השורה לא נמצאה");
+      await page.waitForTimeout(400);
+      const f = page.locator("[data-name-field]");
+      if (!(await f.count())) bad.push("השדה לא נפתח");
+      else {
+        await f.fill("בטי");
+        await page.locator("text=שמור").last().click(); await page.waitForTimeout(500);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("בטי")) bad.push("השם לא מוצג");
+        const saved = await page.evaluate(() => { try { return JSON.parse(localStorage.getItem("myprime_demo_state_v1")).profile.name; } catch (e) { return null; } });
+        if (saved !== "בטי") bad.push(`נשמר "${saved}"`);
+        const gn = await page.evaluate(() => localStorage.getItem("myprime_access_name"));
+        if (gn !== "בטי") bad.push(`בשער "${gn}"`);
+      }
+      if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
+      await context.close();
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "בטי מוצג ונשמר" };
+    },
+  },
+  {
     // משתתפת, 25 בספטמבר 2026: "בחלון של הוספת רגישויות ואלרגיות לא ניתן לרשום דבר."
     // מקלידים בשדה "רגישויות נוספות" בפרופיל כמו אישה, מקישים על הפלוס, ובודקים שהצ'יפ נוצר.
     name: "רגישויות נוספות בפרופיל: אפשר להקליד ולהוסיף",

@@ -749,7 +749,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.37";
+const VERSION = "8.38";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2643,7 +2643,11 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
   const addSens = () => { const t = newSens.trim(); if (!t) return; if (!customSens.includes(t)) setProfile({ ...profile, dislikes: [...customSens, t].join(", ") }); setNewSens(""); };
   const removeSens = (t) => setProfile({ ...profile, dislikes: customSens.filter((x) => x !== t).join(", ") });
   const open = (cfg) => setEdit({ ...cfg, value: cfg.init });
-  const commit = () => { const k = edit.key; if (k === "weightKg" || k === "goalWeightKg") { setPendingWeight({ key: k, value: edit.value }); setEdit(null); return; } setProfile({ ...profile, [k]: edit.value }); setEdit(null); };
+  const commit = () => { const k = edit.key;
+    // **השם, v8.38.** נשמר בפרופיל, ומשם מגיע לכל המסכים ולגיבוי. שם ריק אינו נשמר. ונכתב גם
+    // לשם שהשער זוכר במכשיר, כדי שבכניסה הבאה לא יחזור הישן.
+    if (k === "name") { const v = String(edit.value || "").trim(); if (v) { setProfile({ ...profile, name: v }); try { localStorage.setItem("myprime_access_name", v); } catch (e) {} } setEdit(null); return; }
+    if (k === "weightKg" || k === "goalWeightKg") { setPendingWeight({ key: k, value: edit.value }); setEdit(null); return; } setProfile({ ...profile, [k]: edit.value }); setEdit(null); };
   // **המצב, ולא המשקל של הרגע.** נעילת המסכים חייבת להישען על "העברנו אותה
   // לשמירה" ולא על "היא מתחת לקו עכשיו", אחרת בטווח שבין שני הקווים הרשימה
   // נפתחת והיא יכולה לבחור 250 לבד, וכל מנגנון ההגנה מפני תנודה מתבטל.
@@ -2719,6 +2723,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         </div>
         {baseOpen && (
           <div style={{ paddingBottom: 4 }}>
+            <EditRow label="שם" display={profile.name || userName || ""} onClick={() => open({ key: "name", label: "שם", type: "text", init: profile.name || userName || "" })} />
             <EditRow label="גיל" display={profile.age} onClick={() => open({ key: "age", label: "גיל", type: "num", step: 1, min: 18, init: profile.age })} />
             <EditRow label="גובה" display={`${profile.heightCm} ס״מ`} onClick={() => open({ key: "heightCm", label: "גובה", type: "num", step: 1, min: 120, suffix: "ס״מ", init: profile.heightCm })} />
             <EditRow label="משקל התחלתי" display={`${profile.weightKg} ק״ג`} onClick={() => open({ key: "weightKg", label: "משקל התחלתי", type: "num", step: 0.5, min: 35, suffix: "ק״ג", init: profile.weightKg })} />
@@ -2900,6 +2905,12 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
               <button onClick={() => setEdit(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: C.faint }}><X size={20} /></button>
             </div>
 
+            {edit.type === "text" && (
+              <div style={{ marginBottom: 18 }}>
+                <input data-name-field value={edit.value} onChange={(e) => setEdit({ ...edit, value: e.target.value })} maxLength={40} autoComplete="off" style={{ width: "100%", boxSizing: "border-box", border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px 12px", fontSize: 16, fontFamily: fontStack, color: C.ink, background: C.panel, outline: "none" }} />
+              </div>
+            )}
+
             {(edit.type === "num") && (
               <>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: edit.hint ? 8 : 18 }}>
@@ -3051,6 +3062,9 @@ function parseMealOptions(text) {
 
 // Gentle photo-budget nudges (the HARD 70 cap is enforced server-side in api/ai.js).
 const PHOTO_HEADSUP_MSG = "הערה קטנה ממני אלייך 💜 שימי לב שכמות התמונות שניתן להעלות במהלך תוכנית הליווי מוגבלת ל-70 תמונות. לאחר מכן תמיד אפשר לתאר לי בטקסט מה אכלת.";
+// **תמונה שבחרה ולא נקראה. v8.38**, קול המערכת, נוסח שרון אישר. עד כאן שום דבר לא קרה והמסך
+// לא אמר כלום. lubazalkover, 02.11.2026, תמונה מ-Google Photos שכנראה שמורה רק בענן.
+const PHOTO_UNREAD_MSG = "התמונה לא נטענה. אם היא שמורה רק בענן, למשל ב-Google Photos, אפשר לשמור אותה קודם בטלפון ולנסות שוב, או לצלם ישירות מהמצלמה.";
 const PHOTO_END_MSG = "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים.";
 // **מנויה חודשית בתוקף מצלמת גם אחרי יום 70.** החלטת רון, 12 באוקטובר 2026. השער כותב את
 // סוף המנוי בכל כניסה, והתקרה של 30 בחודש נאכפת בשרת (api/ai.js). v8.10.
@@ -3890,13 +3904,24 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const [photoState, setPhotoState] = useState("capture");
   const [photoResult, setPhotoResult] = useState(null);
   const onPhoto = (e) => {
-    const file = e.target.files && e.target.files[0];
+    const input = e.target;
+    const file = input.files && input.files[0];
+    // **השדה מתאפס אחרי כל בחירה**, אחרת בחירה חוזרת של אותה תמונה אינה מפעילה כלום. v8.38.
+    try { input.value = ""; } catch (err) {}
+    // בלי קובץ בכלל לא אומרים דבר: כך נראה גם ביטול של הבחירה, ואין דרך להבדיל ביניהם.
     if (!file) return;
+    const unread = () => { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_UNREAD_MSG }]); };
+    if (!file.size) { unread(); return; }
     downscaleImage(file, 1024, 0.82)
       .then(({ base64, mediaType }) => sendAiImage(base64, mediaType))
       .catch(() => {
         const reader = new FileReader();
-        reader.onload = () => sendAiImage(String(reader.result).split(",")[1], file.type || "image/jpeg");
+        reader.onload = () => {
+          const b64 = String(reader.result || "").split(",")[1];
+          if (!b64) { unread(); return; }
+          sendAiImage(b64, file.type || "image/jpeg");
+        };
+        reader.onerror = unread;
         reader.readAsDataURL(file);
       });
   };

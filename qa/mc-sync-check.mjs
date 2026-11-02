@@ -467,6 +467,27 @@ async function stageA(sheetCells, serverCells, opts = {}) {
     ck("והחדשה נכנסת", newA.allowed === true, strip(newA));
     delete H["mc:byemail"]["oldaddr@test.com"];
   }
+  {
+    // **v8.38: הטלפון בגיליון רק בשורה בלי מייל.** המקרה של bet243: נרשמה בוואטסאפ בלי מייל,
+    // קיבלה אותו אחר כך במניצ'ט, והשרת התעדכן. עד כאן "לא רשומה" עד שהוקלד ביד בגיליון.
+    const cols = ["ID", "F_NAME", "CF_EMAIL", START, "ביטלה"];
+    SHEET = cols.join(",") + "\n" + ["972506700002", "ב", "", sunday + " 12:00:00", ""].join(",") + "\n";
+    delete S["sheet:csv:v1"];
+    const cells = { ID: "972506700002", CF_EMAIL: "nomail@test.com", [START]: sunday + " 12:00:00", SMART: "TRUE" };
+    H["mc:rows"]["972506700002"] = JSON.stringify({ cells, t: Date.now(), src: "mc" });
+    H["mc:byemail"]["nomail@test.com"] = JSON.stringify({ "972506700002": cells });
+    const nm = await login("nomail@test.com");
+    ck("**הטלפון בגיליון רק בשורה בלי מייל: נכנסת מהשרת. v8.38**", nm.allowed === true && nm.startDate === sunday, strip(nm));
+    // ועם מייל אחר באותה שורה, הכלל של v7.88 נשאר: כתובת ישנה, ואין לה סימון משרד, נכנסת
+    // לפי v8.03 רק דרך השורה של הגיליון ולא מהשרת לבד. כאן בודקים שהשורה עם מייל עדיין נחשבת.
+    SHEET = cols.join(",") + "\n" + ["972506700002", "ב", "other@test.com", sunday + " 12:00:00", ""].join(",") + "\n";
+    delete S["sheet:csv:v1"];
+    hash("admin:overrides")["other@test.com"] = JSON.stringify({ freeze: { since: sunday }, by: "טלי" });
+    const nm2 = await login("nomail@test.com");
+    delete H["admin:overrides"]["other@test.com"];
+    ck("**ושורה עם מייל אחר עדיין נחשבת: ההקפאה של הכתובת שבגיליון נאכפת**", nm2.allowed === false && nm2.reason === "frozen", strip(nm2));
+    delete H["mc:byemail"]["nomail@test.com"]; delete H["mc:rows"]["972506700002"];
+  }
   const strictOnly = await stageA(null, { [START]: "", "PERSONAL WEBINAR DATE AND TIME": sunday + " 20:00:00", "GLOW-FULL": "TRUE" });
   ck("**ושורה בשרת בלי תאריך התחלה אינה שולפת תאריך משדה אחר**", strictOnly.allowed === false && strictOnly.reason === "not_registered", strip(strictOnly));
   const startDiff = await stageA({}, { [START]: older + " 12:00:00" });
@@ -577,11 +598,21 @@ console.log("\nליד אינו נשמר בשרת. v7.85\n");
   }
   const member = await push({ ID: "972506100005", CF_EMAIL: "member@test.com", [START]: sunday + " 12:00:00" });
   ck("**מי שיש לה תאריך התחלה נשמרת**", !member.body.skipped && !!H["mc:rows"]["972506100005"], strip(member.body));
-  const kept = H["mc:rows"]["972506100005"];
-  const wipe = await push({ ID: "972506100005", [START]: "" });
-  ck("**בקשה שמרוקנת את התאריך אינה נוגעת בשורה הקיימת**", wipe.body.skipped === "not_member" && H["mc:rows"]["972506100005"] === kept, strip(wipe.body));
   const upd = await push({ ID: "972506100005", "קבוצה": "ב" });
   ck("ועדכון קבוצה של מי שכבר שמורה עובר, כי התאריך שלה שמור", !upd.body.skipped && JSON.parse(H["mc:rows"]["972506100005"]).cells["קבוצה"] === "ב", strip(upd.body));
+  // **v8.38: מי שנוקתה במניצ'ט יוצאת מהשרת, ועותק נשמר.** עד כאן הבקשה נבלעה והשורה נשארה
+  // עם המייל והתאריך הישנים, המקרה של galitnn מ-26.10.2026.
+  const kept = H["mc:rows"]["972506100005"];
+  const wipe = await push({ ID: "972506100005", [START]: "" });
+  const bm = H["mc:byemail"]["member@test.com"];
+  ck("**בקשה שמרוקנת את התאריך מוציאה אותה מהשרת. v8.38**", wipe.body.removed === "not_member" && !H["mc:rows"]["972506100005"], strip(wipe.body));
+  ck("**ועותק בית-בית נשמר ב-mc:pruned**", (H["mc:pruned"] || {})["972506100005"] === kept);
+  ck("**והמייל הישן כבר אינו מחזיק את הטלפון הזה**", !bm || !JSON.parse(bm)["972506100005"], bm);
+  ck("ויוצאת גם מהעותק הרזה", !(H["mc:slim"] || {})["972506100005"]);
+  const mg = await login("member@test.com");
+  ck("והשער אינו מכניס אותה מהשרת", mg && mg.allowed === false, strip(mg));
+  const again = await push({ ID: "972506100005", CF_EMAIL: "member@test.com" });
+  ck("**ובקשה נוספת בלי תאריך אינה מחזירה אותה**, כמו כל ליד", again.body.skipped === "not_member" && !H["mc:rows"]["972506100005"], strip(again.body));
   const lg = await login("lead@test.com");
   ck("והשער עונה על הליד כמו קודם", lg && lg.allowed === false, strip(lg));
 }

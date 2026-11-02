@@ -495,10 +495,16 @@ export default async function handler(req, res) {
     // על אישה אמיתית בהקפאה: הכתובת הישנה שלה הייתה נכנסת. v7.88.
     if (serverHits && serverHits.length && !hits.length) {
       const phones = serverHits.map((h) => h.phone).filter(Boolean);
+      // **רק שורה שיש בה מייל נחשבת. v8.38.** שורה בלי מייל אינה כתובת אחרת שצריך להגן עליה:
+      // אישה שנרשמה בוואטסאפ בלי מייל וקיבלה אותו אחר כך במניצ'ט קיבלה "לא רשומה" עד שמישהו
+      // הקליד אותו ביד בגיליון. נמצא ב-25.10.2026 על bet243.
+      const MAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
       const inSheet = phoneCol !== -1 && phones.length && lines.some((l, i) => {
         if (i === 0) return false;
         const c = parseCsvLine(l);
-        return phones.includes(String(c[phoneCol] || "").replace(/[^\d]/g, ""));
+        if (!phones.includes(String(c[phoneCol] || "").replace(/[^\d]/g, ""))) return false;
+        // אותו כלל של זיהוי המייל בשורה: התא, ואם הוא ריק, כל השורה.
+        return MAIL.test(l);
       });
       if (phones.length && !inSheet) serverOnly = serverHits;
     }
