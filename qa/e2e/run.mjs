@@ -2043,6 +2043,34 @@ const CHECKS = [
     },
   },
   {
+    // v8.40: אצל שומרת שבת, השבת נפתחת להזנה 35 דקות אחרי השקיעה. 31.10.2026, שקיעה בכ-14:50 UTC.
+    name: "שבת נפתחת להזנה 35 דקות אחרי השקיעה",
+    async run(browser, device) {
+      const start = "2026-10-18";
+      const prof = { age: 50, heightCm: 165, weightKg: 72, activity: "יושבני", weeklyRateG: 250, goalWeightKg: 66, returnPct: 50, startDate: start, calorieOverride: null, stepGoal: 8000, stepBaseline: 8000, tipsSeen: ["cal", "steps", "tracker", "cabinet", "trackerfill", "stepbaseline", "water", "protein", "weeklysummary", "notifyAsked", "appTour"], keepShabbat: true, fasting: false, cupMl: 250, diet: [], allergies: [], dislikes: "", name: "בדיקה", catchup: "done" };
+      const bad = []; let errs = [];
+      const look = async (clock, keep) => {
+        const { context, page, errors } = await openApp(browser, device, { startDate: start, clock, seed: { profile: { ...prof, keepShabbat: keep }, weights: [{ date: start, kg: 72 }] } });
+        const body = await page.evaluate(() => document.body.innerText);
+        errs = errs.concat(errors);
+        await context.close();
+        return body;
+      };
+      const before = await look("2026-10-31T14:00:00.000Z", true);
+      if (!before.includes("שבת שלום")) bad.push("לפני צאת השבת המסך אינו נעול");
+      const justBefore = await look("2026-10-31T15:15:00.000Z", true);
+      if (!justBefore.includes("שבת שלום")) bad.push("ננעל רק עד השקיעה ולא עד 35 דקות אחריה");
+      const after = await look("2026-10-31T16:00:00.000Z", true);
+      if (after.includes("שבת שלום")) bad.push("אחרי צאת השבת המסך עדיין נעול");
+      if (!after.includes("מה שהוזן היום")) bad.push("אחרי צאת השבת היומן אינו מוצג");
+      const sunday = await look("2026-11-01T08:00:00.000Z", true);
+      if (sunday.includes("שבת שלום")) bad.push("ביום ראשון מוצג מסך שבת");
+      const nonKeeper = await look("2026-10-31T09:00:00.000Z", false);
+      if (nonKeeper.includes("שבת שלום")) bad.push("מי שאינה שומרת שבת קיבלה מסך שבת");
+      return { ok: bad.length === 0 && errs.length === 0, detail: bad.length ? bad.join(" · ") : `שגיאות ${errs.length ? errs[0].slice(0, 40) : "אין"}` };
+    },
+  },
+  {
     // משתתפת: "יום שישי הזנתי בטעות את שבת." היא מילאה בשעה מאוחרת, עבר חצות
     // באמצע, והאפליקציה העבירה אותה ליום החדש מתחת לאצבע. השעון נעוץ ל-23:59:45
     // והזמן ממשיך משם, ולכן חצות עובר באמת בזמן שהתרחיש רץ.

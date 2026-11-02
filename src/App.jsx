@@ -15,6 +15,7 @@ import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
 import { GLOW_STARTED_KEY, hasGlow, glowStarted } from "./content/glow";
 import { labelName } from "../lib/catfilter.js";
+import { sunsetUTC } from "../api/_hebcal.js";
 
 // AI requests go through a server proxy that holds the API key (see /api/ai.js).
 const AI_ENDPOINT = import.meta.env.VITE_AI_ENDPOINT || "/api/ai";
@@ -664,6 +665,17 @@ function taskDone(task, answers, auto) {
   if (task.type === "number") return v != null && v > 0;
   return v === true;
 }
+// v8.40. רון, 2.11.2026: "מאשר, 35 דקות אחרי השקיעה". אצל שומרת שבת, השבת נפתחת להזנה
+// 35 דקות אחרי השקיעה ביום עצמו, ושבת שעברה פתוחה תמיד. **המשימות לא נגעו**: לשבת אין
+// משימות אצלה, ולכן אין מדליה ושום חישוב של גביע או רצף לא זז. נפתח רק היומן עצמו.
+const SHABBAT_OUT_MIN = 35;
+function shabbatOutAt(iso) { return sunsetUTC(iso).getTime() + SHABBAT_OUT_MIN * 60000; }
+function shabbatLocked(keepShabbat, iso, today, nowMs) {
+  if (!keepShabbat || parseDay(iso).getUTCDay() !== 6) return false;
+  if (iso < today) return false;
+  if (iso > today) return true;
+  return nowMs < shabbatOutAt(iso);
+}
 // Tasks shown for a given date. Saturday (dow 0): rest for Shabbat-keepers (none),
 // otherwise the same daily tasks as the Friday before it (activeTasks for dow 6).
 function tasksForDate(startDate, date, keepShabbat, fasting) {
@@ -749,7 +761,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.39";
+const VERSION = "8.40";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1936,7 +1948,16 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const cupMlD = profile.cupMl || DEFAULT_CUP_ML;
   const dow = dowOf(date);
   const progDay = programDayNumber(profile.startDate, date);
-  const isShabbatRest = profile.keepShabbat && dow === 0;
+  // רינדור מחדש ברגע שהשבת יוצאת, כדי שמי שהאפליקציה פתוחה אצלה לא תצטרך לצאת ולחזור.
+  const [, setShabbatTick] = useState(0);
+  const isShabbatRest = profile.keepShabbat && dow === 0 && shabbatLocked(true, date, today, nowDate().getTime());
+  useEffect(() => {
+    if (!isShabbatRest || date !== today) return;
+    const ms = shabbatOutAt(date) - nowDate().getTime();
+    if (ms <= 0 || ms > 86400000) return;
+    const t = setTimeout(() => setShabbatTick((x) => x + 1), ms + 1000);
+    return () => clearTimeout(t);
+  }, [isShabbatRest, date, today]);
   const isIntro = progDay === 1;
   // Day 2 introduces the steps task and nothing else - calories, the tracker and
   // the plus button all belong to day 3.
@@ -1991,7 +2012,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
   const goDay = (delta) => {
     const minT = new Date(stripFrom).getTime(), maxT = new Date(today).getTime();
     let d = addDays(date, delta);
-    if (profile.keepShabbat && parseDay(d).getUTCDay() === 6) d = addDays(d, delta);
+    if (shabbatLocked(profile.keepShabbat, d, today, nowDate().getTime())) d = addDays(d, delta);
     // Step straight over the frozen stretch, so swiping never lands on a day she was away.
     let guard = 0;
     while (inFreeze(d) && guard++ < 400) d = addDays(d, delta);
@@ -2011,7 +2032,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
       <div style={{ position: "relative" }}>
       <div data-tut="daystrip" className="no-textscale" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "8px 16px 4px" }}>
         {days.map((d) => {
-          const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = parseDay(d); const isRest = profile.keepShabbat && dd.getUTCDay() === 6; const off = isFuture || isRest; const pct = dayProgress(d);
+          const sel = d === date; const isToday = d === today; const isFuture = d > today; const dd = parseDay(d); const isRest = shabbatLocked(profile.keepShabbat, d, today, nowDate().getTime()); const off = isFuture || isRest; const pct = dayProgress(d);
           return (
             <button key={d} ref={sel ? selRef : null} disabled={off} onClick={() => { if (!off) setDate(d); }} title={isRest ? "שבת - יום מנוחה" : (isFuture ? "יום עתידי - ייפתח בתאריך הזה" : undefined)} style={{ flex: "0 0 auto", width: 50, border: isToday && !sel ? `2px solid ${C.brand}` : "2px solid transparent", borderRadius: 12, overflow: "hidden", padding: 0, background: sel ? C.brand : (isToday ? C.brandBg : C.bg), color: off ? C.faint : (sel ? "#fff" : C.ink), cursor: off ? "default" : "pointer", opacity: off ? 0.4 : 1, textAlign: "center" }}>
               {isToday && <div style={{ background: sel ? C.brandD : C.brand, color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 0", lineHeight: 1.3 }}>היום</div>}
