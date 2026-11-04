@@ -761,7 +761,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.44";
+const VERSION = "8.45";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -2068,7 +2068,7 @@ function DayScreen({ date, setDate, today = TODAY, log, targets, dailyTarget, pr
         <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ padding: "34px 20px 64px" }}>
           <div style={{ textAlign: "center", marginBottom: 22 }}>
             <img src={MEDAL_SRC} alt="" width={92} height={92} style={{ display: "block", margin: "0 auto 14px" }} />
-            <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>ברוכה הבאה למיי פריים 360 💜</div>
+            <div style={{ fontSize: 21, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>ברוכה הבאה למיי פריים 💜</div>
           </div>
           {progDay === 1 && (
             <div data-tut="onboardcard" onClick={onOpenOnboard} role="button" aria-label="הדרכה ראשונית"

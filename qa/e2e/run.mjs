@@ -2908,7 +2908,9 @@ const CHECKS = [
         await page.locator("text=שיעורי הבונוס שלך במיי פריים Glow").first().click().catch(() => {});
         await page.waitForTimeout(600);
         const t = await page.evaluate(() => document.body.innerText);
-        if (!t.includes("מיי פריים 360")) bad.push("הכפתור בסרגל אינו נקרא מיי פריים 360");
+        // v8.45: הכפתור נקרא "מיי פריים", בלי 360, כי גם נשות סמארט רואות אותו.
+        const tabTxt = ((await page.locator('[data-tut="content-tab-all"]').first().textContent().catch(() => "")) || "").trim();
+        if (tabTxt !== "מיי פריים") bad.push("הכפתור בסרגל אינו נקרא מיי פריים: " + tabTxt);
         if (!t.includes("בונוס: שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים")) bad.push("כותרת הבונוס חסרה");
         if (t.includes("להתחיל מהבסיס")) bad.push("הקורס המלא הוצג למי שיש לה רק בונוס");
         if (t.includes("שיעור 13 - סומק")) bad.push("שיעור מהקורס המלא הוצג למי שיש לה רק בונוס");
