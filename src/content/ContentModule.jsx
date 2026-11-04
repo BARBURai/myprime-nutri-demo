@@ -404,7 +404,7 @@ export function ContentModule({ week, dow, todayWeek, todayDow, C, font, onClose
   // להיות למעלה בסרגל העליון... בלי להוסיף עוד שורה." ולכן כפתור שלישי בתוך אותו
   // סרגל, ומוצג רק למי שיש לה גישה.
   function Segmented() {
-    const tabs = [["today", "היום"], ["all", "מיי פריים"]];
+    const tabs = [["today", "היום"], ["all", "תוכנית מיי פריים"]];
     if (showGlow) tabs.push(["glow", null]);   // null = הלוגו עצמו, ולא טקסט
     return (
       <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 12, padding: 4, marginBottom: 14 }}>

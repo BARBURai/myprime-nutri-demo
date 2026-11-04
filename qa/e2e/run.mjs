@@ -2910,7 +2910,11 @@ const CHECKS = [
         const t = await page.evaluate(() => document.body.innerText);
         // v8.45: הכפתור נקרא "מיי פריים", בלי 360, כי גם נשות סמארט רואות אותו.
         const tabTxt = ((await page.locator('[data-tut="content-tab-all"]').first().textContent().catch(() => "")) || "").trim();
-        if (tabTxt !== "מיי פריים") bad.push("הכפתור בסרגל אינו נקרא מיי פריים: " + tabTxt);
+        if (tabTxt !== "תוכנית מיי פריים") bad.push("הכפתור בסרגל אינו נקרא תוכנית מיי פריים: " + tabTxt);
+        // רון: "תבדוק רק שזה נכנס בכפתורים אם יש גם את GLOW". שלושת הכפתורים בשורה, בלי חיתוך.
+        const fit = await page.evaluate(() => [...document.querySelectorAll('[data-tut^="content-tab-"]')].map((b) => ({ id: b.dataset.tut, over: b.scrollWidth - b.clientWidth, right: b.getBoundingClientRect().right, left: b.getBoundingClientRect().left, vw: innerWidth })));
+        if (fit.length !== 3) bad.push("לא שלושה כפתורים: " + fit.length);
+        fit.forEach((f) => { if (f.over > 0 || f.left < 0 || f.right > f.vw) bad.push("הכפתור " + f.id + " אינו נכנס: " + JSON.stringify(f)); });
         if (!t.includes("בונוס: שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים")) bad.push("כותרת הבונוס חסרה");
         if (t.includes("להתחיל מהבסיס")) bad.push("הקורס המלא הוצג למי שיש לה רק בונוס");
         if (t.includes("שיעור 13 - סומק")) bad.push("שיעור מהקורס המלא הוצג למי שיש לה רק בונוס");
