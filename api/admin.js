@@ -116,7 +116,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.42";
+const ADMIN_VERSION = "8.43";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1052,6 +1052,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       found: true,
+      // v8.43: כפתור "מניצ'ט" פותח את השיחה איתה שם, לפי המזהה של איש הקשר.
+      id: String(sub.id || ""),
       group: (gf && gf.value) || "",
       start: (sf && sf.value) || "",
       tags: {

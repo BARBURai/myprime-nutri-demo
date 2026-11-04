@@ -2,6 +2,23 @@
 <html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
+    <!-- v8.43: מסך לבן בחזרה לאפליקציה. ורד פוקס, 4.11.2026: "כאשר האפליקציה פתוחה ברקע
+         ואני לוחצת על האייקון... עולה מסך לבן". הטלפון טוען מהזיכרון שלו את הדף מלפני העלאה,
+         והדף מבקש את קובץ הקוד הישן, שכבר אינו קיים בשרת (נבדק: 404). אם קובץ הקוד לא נטען,
+         טוענים מחדש פעם אחת, כמו הסגירה הכפויה שהיא עושה ביד. לא יותר מפעם בדקה, כדי שתקלה
+         אחרת לא תהפוך ללולאה. -->
+    <script>
+      window.addEventListener("error", function (e) {
+        var t = e && e.target;
+        if (!t || t.tagName !== "SCRIPT" || !/\/assets\//.test(t.src || "")) return;
+        try {
+          var k = "mp_stale_reload", last = +sessionStorage.getItem(k) || 0;
+          if (Date.now() - last < 60000) return;
+          sessionStorage.setItem(k, String(Date.now()));
+        } catch (x) { return; }
+        location.reload();
+      }, true);
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>מיי פריים 360 - אפליקציית הליווי</title>
     <link rel="icon" type="image/png" href="/icon-192.png" />
