@@ -712,6 +712,31 @@ CHECKS.push({
     return { ok: before === 0 && miss.length === 0 && errors.length === 0, detail: `לפני ${before} · חסר ${JSON.stringify(miss)} · "${t.slice(0, 160)}"${errors.length ? " · " + errors[0] : ""}` };
   },
 }, {
+  // v8.44: מבצע בלאק נובמבר בכרטיס, ב"מה יש לה עכשיו" וביומן. שני הצדדים: מי שקנתה במבצע
+  // רואה את השורה, ומי שלא, לא.
+  name: "מבצע בלאק נובמבר: שורה בכרטיס וביומן",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device, (d) => {
+      d.women[1].bf26 = { paidAt: "2026-11-05T10:00:00Z", order: "o1" };
+      d.women[1].log = [{ at: "2026-11-05T10:00:01Z", by: "מערכת", field: "bf26", to: "o1" }];
+      return d;
+    });
+    await page.locator('[data-open="ronit@test.com"]').first().click();
+    await page.waitForTimeout(400);
+    const card0 = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+    await page.locator('.card.open [data-tab="log"]').first().click();
+    await page.waitForTimeout(300);
+    const card = card0 + " | " + (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(600);
+    await page.locator('[data-open="lior5066@gmail.com"]').first().click();
+    await page.waitForTimeout(400);
+    const other = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+    await ctx.close();
+    const ok = card.includes("מבצע בלאק נובמבר 9 חודשים") && card.includes("מבצע בלאק נובמבר · 9 חודשים") && !other.includes("בלאק נובמבר") && errors.length === 0;
+    return { ok, detail: `שורה ${card.includes("מבצע בלאק נובמבר 9 חודשים")} · יומן ${card.includes("מבצע בלאק נובמבר · 9 חודשים")} · אחרת ${!other.includes("בלאק נובמבר")}${errors.length ? " · " + errors[0] : ""}` };
+  },
+}, {
   // v8.43: תג המסלול בשורת השם בתור המענה, בלי "פרטים", ו"מניצ'ט" במקום "וואטסאפ" בכל
   // המסך. שני הצדדים: נמצאה, ונפתחת השיחה שלה במניצ'ט · לא נמצאה, והחלון נסגר עם הודעה.
   name: "תור המענה: תג המסלול, וכפתור מניצ'ט שפותח את השיחה",

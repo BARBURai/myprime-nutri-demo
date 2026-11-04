@@ -6,7 +6,7 @@
 מ-v7.00 ואחורה. **סעיף 17 כאן נושא אינדקס של שורה אחת לכל אחת מהן, וכששורה באינדקס
 נוגעת למה שעובדים עליו, קוראים שם את הפירוט לפני שנוגעים בקוד.**
 
-**גרסה נוכחית: v8.43** · עודכן: 4 בנובמבר 2026
+**גרסה נוכחית: v8.44** · עודכן: 4 בנובמבר 2026
 בכל שחרור: עדכן את `VERSION` ב-`src/App.jsx` **וגם** את המספר כאן.
 
 ---
@@ -735,7 +735,7 @@ x-sub-key: <APP_SUB_KEY>
 
 **מה שכבר רץ בכל שינוי, בלי רשת ובלי עלות:**
 ```bash
-node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs && node qa/glow-solo-benefit-check.mjs && node qa/ai-chat-rules-check.mjs && node qa/mc-sync-check.mjs && node qa/push-timeout-check.mjs && node qa/backup-content-check.mjs && node qa/wakelock-check.mjs && node qa/degraded-check.mjs && node qa/admin-gzip-check.mjs && node qa/namefix-check.mjs && node qa/tracks-check.mjs && node qa/freeze-end-check.mjs && node qa/webinar-date-check.mjs && node qa/weight-now-check.mjs && node qa/mic-device-check.mjs && node qa/ref-check.mjs
+node qa/version-check.mjs && node qa/streak-check.mjs && node qa/glow-check.mjs && node qa/bunny-token-check.mjs && node qa/vercel-limits-check.mjs && node qa/notify-quiet-check.mjs && node qa/food-check.mjs && node qa/barcode-guard-check.mjs && node qa/salvage-check.mjs && node qa/catalog-barcode-check.mjs && node qa/prompt-sync-check.mjs && node qa/meal-options-check.mjs && node qa/notify-window-check.mjs && node qa/admin-check.mjs && node qa/bmi-check.mjs && node qa/bmi-journey.mjs && node qa/calmet-check.mjs && node qa/protein-check.mjs && node qa/diary-order-check.mjs && node qa/trophy-check.mjs && node qa/hist-search-check.mjs && node qa/addfood-check.mjs && node qa/help-screen-check.mjs && node qa/ratecap-check.mjs && node qa/usage-check.mjs && node qa/dayflip-check.mjs && node qa/update-reply-check.mjs && node qa/macro-strip-check.mjs && node qa/sound-note-check.mjs && node qa/admin-add-check.mjs && node qa/strength-fav-check.mjs && node qa/sleep-meal-check.mjs && node qa/dup-rows-check.mjs && node qa/assets-check.mjs && node qa/holiday-check.mjs && node qa/push-batch-check.mjs && node qa/backbtn-check.mjs && node qa/rec-ask-check.mjs && node qa/stated-values-check.mjs && node qa/glow-only-check.mjs && node qa/glow-after360-check.mjs && node qa/state-box-check.mjs && node qa/glowfull-toggle-check.mjs && node qa/labelfix-check.mjs && node qa/outside-note-check.mjs && node qa/backup-manual-check.mjs && node qa/autofill-check.mjs && node qa/push-log-check.mjs && node qa/gate-cache-check.mjs && node qa/ai-quota-check.mjs && node qa/push-audit-check.mjs && node qa/admin-ai-check.mjs && node qa/redis-stall-check.mjs && node qa/catalog-index-check.mjs && node qa/admin-speed-check.mjs && node qa/glow-solo-benefit-check.mjs && node qa/ai-chat-rules-check.mjs && node qa/mc-sync-check.mjs && node qa/push-timeout-check.mjs && node qa/backup-content-check.mjs && node qa/wakelock-check.mjs && node qa/degraded-check.mjs && node qa/admin-gzip-check.mjs && node qa/namefix-check.mjs && node qa/tracks-check.mjs && node qa/freeze-end-check.mjs && node qa/webinar-date-check.mjs && node qa/weight-now-check.mjs && node qa/mic-device-check.mjs && node qa/ref-check.mjs && node qa/promo360-check.mjs
 ```
 
 **ובנוסף, דורש רשת אל `data.gov.il`:** `node qa/tzameret-check.mjs` משווה את טבלת המזונות מול מאגר משרד הבריאות.
@@ -1365,7 +1365,19 @@ Google תומכת ב-PWA דרך **TWA (Trusted Web Activity)**, נארז עם Bu
 
 ## 17. יומן שינויים אחרון
 
-**v8.43** - **מסך לבן בחזרה לאפליקציה, ו"מניצ'ט" במקום "וואטסאפ" במסך הניהול.** בדב בלבד. רון: "מאשר את 1 ו-2, מניצ'ט בכל המקומות".
+**v8.44** - **מבצע בלאק נובמבר ל-360: 9 חודשי גישה, ושורה במסך הניהול.** בדב בלבד. הבקשה הגיעה מצ'אט דף התשלום בשם רון, ורון החליט: "א, דרך 2, מאשר את הנוסח. החודשים נספרים עם מועד ההתחלה... בפועל הראשוני", כלומר 70 יום ועוד 6 חודשים מתאריך ההתחלה הראשון, גם אם הועברה אחר כך.
+
+| חלק | מה |
+|---|---|
+| **קליטת הקנייה** | `POST /api/admin?promo360`, אותו `x-ref-key` של חברה מביאה חברה. גוף `{ email, orderId, paidAt }`. **רק תשלום מ-4.11.2026 14:12 UTC (ההדלקה) ועד 30.11.2026 23:59:59 שעון ישראל.** פעם אחת לכל אישה (`promo:bf26`). נשמר בסימוני המשרד (`admin:overrides`, שדה `bf26`) עם שורה ביומן, ולכן השער אינו מוסיף שום פנייה לאף אישה אחרת. תקלה בשמירה מחזירה 502 ומשחררת את הסימון. **דף התשלום שולח כל קנייה בדף smart-360** |
+| **השער** | רק אצל מי שיש לה `bf26`: התאריך הראשון נתפס פעם אחת ב-`promo:bf26start` (HSETNX), והחלון הוא 70 יום ועוד 6 חודשים ממנו. **רק מאריך**, ותאריך שהמשרד קבע גובר (`promoUntil` ב-`decideAccess`). תקלה מחשבת מהתאריך של עכשיו |
+| **מסך הניהול** | "מבצע בלאק נובמבר · 9 חודשים" ב"מה יש לה עכשיו" וביומן, ו"גישה עד" לפי אותו חישוב. הנוסח אושר |
+
+**מגבלה:** התאריך הראשון נתפס בכניסה הראשונה שלה לאפליקציה אחרי הקנייה. אם המשרד מעביר אותה לפני שנכנסה פעם אחת, נספר המחזור שאליו הועברה.
+
+**`qa/promo360-check.mjs`, 23 בדיקות בלי רשת**, מריצה את `api/_ref.js`, `api/_product.js`, `api/access.js` ו-`api/admin.js` האמיתיים: גבולות החלון בשנייה, פעם אחת, סימוני משרד קיימים נשמרים, תקלה ושחרור, **360 בלי המבצע בלי שום פנייה למבצע**, קנתה ונכנסת, הועברה והתאריך הראשון לא זז, ו-401 בלי מפתח. **ובשכבה 3 של מסך הניהול תרחיש לשני הצדדים.**
+
+**v8.43** - **מסך לבן בחזרה לאפליקציה, ו"מניצ'ט" במקום "וואטסאפ" במסך הניהול.** בדב בלבד, עלתה יחד עם v8.44. רון: "מאשר את 1 ו-2, מניצ'ט בכל המקומות".
 
 ### א. המסך הלבן
 **ורד פוקס, 4.11.2026:** "כאשר האפליקציה פתוחה ברקע ואני לוחצת על האייקון בכדי לפתוח שוב, עולה מסך לבן... סגירה כפויה ופתיחה מחדש פותרת". **האפליקציה היא קובץ קוד אחד ששמו משתנה בכל גרסה, ואחרי העלאה הקובץ הישן מחזיר 404 בייצור (נבדק).** הסבר סביר, שלא נמדד במכשיר שלה: הטלפון מחזיר מהזיכרון את הדף מלפני ההעלאה, והדף מבקש את הקובץ שנמחק. **בכל העלאה זה יכול לקרות למי שהאפליקציה פתוחה אצלה ברקע.**
