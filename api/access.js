@@ -15,8 +15,8 @@
 //  B. 2-device limit (optional) - create a free Upstash Redis database, then set:
 //     UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Vercel env -> Redeploy.
 
-import { decideAccess, SOLO_10_WEEKS } from "./_product.js";
-import { readBonus, ensureCode } from "./_ref.js";
+import { decideAccess, SOLO_10_WEEKS, end360 } from "./_product.js";
+import { readBonus, ensureCode, PROMO360_START, PROMO360_MONTHS } from "./_ref.js";
 import { fetchSheetText, findCols, SMART_COLS, accessEnd } from "./_sheet.js";
 import { MC_BYEMAIL, MC_DIFFS, mcShadowKey, diffFields } from "./_mcsync.js";
 // ===== תקרת המתנה ל-Upstash, 3 שניות לפנייה. v7.45 =====
@@ -588,6 +588,7 @@ export default async function handler(req, res) {
   // כזאת. **`null` הוא "אין לה סימון" ונחשב קריאה**, ו-`undefined` הוא תקלה או תשובת
   // שגיאה של Upstash, שמגיעה בלי `result`. הטעינה עצמה לא משתנה.
   let overridesRead = false;
+  let bf26 = false;
   try {
     let raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", email);
     if (raw === null && ovrFrom) raw = await redis(process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN, "HGET", "admin:overrides", ovrFrom);
@@ -609,6 +610,8 @@ export default async function handler(req, res) {
       // midnight to let her back in: the date passes, and this comparison answers
       // differently on her next load.
       if (ovr.freeze) freeze = ovr.freeze;
+      // מבצע בלאק נובמבר, v8.44. החלון עצמו מחושב למטה, אחרי שתאריך ההתחלה ידוע.
+      if (ovr.bf26) bf26 = true;
       // The Glow bonus, set from the office screen. "1" grants it and "0" takes it away even
       // when the sheet says TRUE; anything else leaves the sheet in charge. This is the fast
       // path: the sheet reaches us through Google's cache and lags by minutes.
@@ -624,6 +627,23 @@ export default async function handler(req, res) {
   } catch (e) { /* fall through to the sheet */ }
   const startSunday = parseDateToSunday(clerkStart || startStr);
   const startDate = startSunday ? ymd(startSunday) : null;
+  // **מבצע בלאק נובמבר. v8.44.** רון: "החודשים נספרים עם מועד ההתחלה... עם מועד ההתחלה בפועל
+  // הראשוני", גם אם הועברה אחר כך. התאריך הראשון נתפס פעם אחת ב-HSETNX, רק אצל מי שקנתה במבצע.
+  // **תקלה מחשבת מהתאריך של עכשיו**, ולעולם אינה סוגרת אותה.
+  let promoUntil = "";
+  if (bf26 && startDate) {
+    let first = startDate;
+    const RUp = process.env.UPSTASH_REDIS_REST_URL, RTp = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (RUp && RTp && !redis.stalled()) {
+      try {
+        await redis(RUp, RTp, "HSETNX", PROMO360_START, email, startDate);
+        const got = await redis(RUp, RTp, "HGET", PROMO360_START, email);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(String(got || ""))) first = String(got);
+      } catch (e) { first = startDate; }
+    }
+    const pe = end360(new Date(first + "T00:00:00Z"), PROMO360_MONTHS, 0);
+    promoUntil = pe ? ymd(pe) : "";
+  }
   // **חברה מביאה חברה, לנשות סמארט בלבד. v8.39.** החודשים שצברה נוספים לחלון, והקוד האישי
   // שלה נוצר פעם אחת. **רק כאן נוספות פניות ל-Upstash**, ולכן לכל אישה אחרת השער לא השתנה.
   // תקלה מחזירה אפס חודשים ובלי קוד, כלומר בדיוק מה שהייתה מקבלת בלי המנגנון.
@@ -655,6 +675,7 @@ export default async function handler(req, res) {
     extraMonths, solo, glowFull, glowPaid, glowSolo, glowMonths,
     bonusMonths: ref ? ref.months : 0,
     bonusDays: ref ? ref.days : 0,
+    promoUntil,
     glowStart: "", today: israelDay(0),
   };
   let glowStart = "";

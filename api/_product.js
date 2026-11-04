@@ -88,6 +88,12 @@ export function decideAccess(f) {
   const end360At = end360(startSunday, f.extraMonths, f.solo);
   if (end360At && bonus) end360At.setUTCMonth(end360At.getUTCMonth() + bonus);
   if (end360At && bonusDays) end360At.setUTCDate(end360At.getUTCDate() + bonusDays);
+  // **מבצע בלאק נובמבר. v8.44.** 70 יום ועוד 6 חודשים מתאריך ההתחלה הראשון, מחושב בשער. הוא רק
+  // מאריך ולעולם אינו מקצר, ותאריך שהמשרד קבע גובר עליו, כמו על כל חישוב אחר.
+  if (end360At && f.promoUntil && !f.clerkUntil && String(f.promoUntil) > ymdOf(end360At)) {
+    const pu = new Date(String(f.promoUntil) + "T00:00:00Z");
+    if (!isNaN(pu)) end360At.setTime(pu.getTime());
+  }
   const clerkUntil = f.clerkUntil ? addDaysYmd(addMonthsYmd(f.clerkUntil, bonus), bonusDays) : "";
   const expired360 = clerkUntil
     ? today > clerkUntil

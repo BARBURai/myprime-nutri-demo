@@ -712,6 +712,66 @@ CHECKS.push({
     return { ok: before === 0 && miss.length === 0 && errors.length === 0, detail: `לפני ${before} · חסר ${JSON.stringify(miss)} · "${t.slice(0, 160)}"${errors.length ? " · " + errors[0] : ""}` };
   },
 }, {
+  // v8.44: מבצע בלאק נובמבר בכרטיס, ב"מה יש לה עכשיו" וביומן. שני הצדדים: מי שקנתה במבצע
+  // רואה את השורה, ומי שלא, לא.
+  name: "מבצע בלאק נובמבר: שורה בכרטיס וביומן",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device, (d) => {
+      d.women[1].bf26 = { paidAt: "2026-11-05T10:00:00Z", order: "o1" };
+      d.women[1].log = [{ at: "2026-11-05T10:00:01Z", by: "מערכת", field: "bf26", to: "o1" }];
+      return d;
+    });
+    await page.locator('[data-open="ronit@test.com"]').first().click();
+    await page.waitForTimeout(400);
+    const card0 = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+    await page.locator('.card.open [data-tab="log"]').first().click();
+    await page.waitForTimeout(300);
+    const card = card0 + " | " + (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(600);
+    await page.locator('[data-open="lior5066@gmail.com"]').first().click();
+    await page.waitForTimeout(400);
+    const other = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+    await ctx.close();
+    const ok = card.includes("מבצע בלאק נובמבר +3 חודשים") && card.includes("מבצע בלאק נובמבר · +3 חודשים") && !other.includes("בלאק נובמבר") && errors.length === 0;
+    return { ok, detail: `שורה ${card.includes("מבצע בלאק נובמבר +3 חודשים")} · יומן ${card.includes("מבצע בלאק נובמבר · +3 חודשים")} · אחרת ${!other.includes("בלאק נובמבר")}${errors.length ? " · " + errors[0] : ""}` };
+  },
+}, {
+  // v8.43: תג המסלול בשורת השם בתור המענה, בלי "פרטים", ו"מניצ'ט" במקום "וואטסאפ" בכל
+  // המסך. שני הצדדים: נמצאה, ונפתחת השיחה שלה במניצ'ט · לא נמצאה, והחלון נסגר עם הודעה.
+  name: "תור המענה: תג המסלול, וכפתור מניצ'ט שפותח את השיחה",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device, (d) => {
+      d.women[1].solo = 10;
+      d.__queue = { "ronit@test.com": { notes: [{ id: "n1", at: "2026-08-25T10:00:00Z", text: "שאלה לבדיקה" }], replies: [] } };
+      return d;
+    });
+    let found = true;
+    await ctx.route("**/api/admin?*mc=*", (route) => route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify(found ? { ok: true, found: true, id: "123456789", tags: {} } : { ok: true, found: false }) }));
+    await ctx.route("https://app.manychat.com/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<p>mc</p>" }));
+    const alerts = [];
+    page.on("dialog", (dlg) => alerts.push(dlg.message()));
+    await page.locator('[data-v="notes"]').click();
+    await page.waitForTimeout(400);
+    const who = (await page.locator(".qitem .qwho").first().innerText()).replace(/\s+/g, " ");
+    const html = await page.content();
+    const btn = page.locator(".qitem [data-mcopen]").first();
+    const label = (await btn.innerText()).trim();
+    const [pop] = await Promise.all([page.waitForEvent("popup", { timeout: 5000 }), btn.click()]);
+    await pop.waitForURL(/manychat\.com/, { timeout: 5000 }).catch(() => {});
+    const popUrl = pop.url();
+    found = false;
+    const [pop2] = await Promise.all([page.waitForEvent("popup", { timeout: 5000 }), btn.click()]);
+    await page.waitForTimeout(800);
+    const closed = pop2.isClosed();
+    await ctx.close();
+    const ok = who.includes("SMART") && !html.includes("wa.me") && label === "מניצ'ט"
+      && popUrl === "https://app.manychat.com/fb111742985290180/chat/123456789"
+      && closed && alerts.some((m) => m.includes("לא נמצאה רשומה במניצ'ט")) && errors.length === 0;
+    return { ok, detail: `שורה "${who.slice(0, 60)}" · wa.me ${html.includes("wa.me")} · "${label}" · ${popUrl} · נסגר ${closed} · ${JSON.stringify(alerts)}${errors.length ? " · " + errors[0] : ""}` };
+  },
+}, {
   // שאלה שהגיעה בוואטסאפ או במייל. בודק את שני הצדדים באותה הרצה, כי טופס שנפתח
   // תמיד נראה בדיוק כמו טופס שאינו נפתח אף פעם, וכפתור שליחה שקיים תמיד נראה בדיוק
   // כמו אחד שמופיע רק אחרי זיהוי.

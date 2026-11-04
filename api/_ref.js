@@ -130,6 +130,36 @@ export async function promoCharge(body, rpost) {
   }
 }
 
+// **מבצע בלאק נובמבר ל-360. v8.44.** רון, 4.11.2026: מי שקונה 360 במבצע מקבלת 9 חודשי גישה,
+// כלומר 70 יום ועוד 6 חודשים, **מתאריך ההתחלה הראשון שלה, גם אם הועברה אחר כך.** דף התשלום
+// שולח כל קנייה בדף smart-360 עם שעת התשלום, באותו מפתח. הסימון נשמר בסימוני המשרד, שהשער
+// כבר קורא בכל כניסה, ולכן לכל אישה אחרת אין שום פנייה נוספת. פעם אחת לכל אישה.
+export const PROMO360_FROM = Date.UTC(2026, 10, 4, 14, 12, 0);
+export const PROMO360_TO = PROMO_TO;
+export const PROMO360_KEY = "promo:bf26";
+export const PROMO360_START = "promo:bf26start";
+export const PROMO360_MONTHS = 6;
+export async function promo360Charge(body, rpost) {
+  const b = body && typeof body === "object" ? body : {};
+  const email = cleanEmail(b.email);
+  const order = String(b.orderId || b.order || "").trim();
+  const paid = Date.parse(String(b.paidAt || ""));
+  if (!email || !order || !Number.isFinite(paid)) return { status: 400, json: { ok: false, error: "bad_body" } };
+  if (paid < PROMO360_FROM || paid >= PROMO360_TO) return { status: 200, json: { ok: true, skipped: "outside_window" } };
+  const rec = { order, paidAt: new Date(paid).toISOString() };
+  if (Number(await rpost(["HSETNX", PROMO360_KEY, email, JSON.stringify(rec)])) !== 1) return { status: 200, json: { ok: true, already: true } };
+  try {
+    const cur = parse(await rpost(["HGET", "admin:overrides", email])) || {};
+    const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
+    log.unshift({ at: new Date().toISOString(), by: "מערכת", field: "bf26", to: rec.order });
+    await rpost(["HSET", "admin:overrides", email, JSON.stringify({ ...cur, bf26: rec, log: log.slice(0, 20) })]);
+    return { status: 200, json: { ok: true, email, months: PROMO360_MONTHS } };
+  } catch (e) {
+    try { await rpost(["HDEL", PROMO360_KEY, email]); } catch (e2) {}
+    return { status: 502, json: { ok: false, error: "save_failed" } };
+  }
+}
+
 // **שיוך ידני של חברה למזמינה, מהמשרד. v8.41.** כשהקוד לא עבר בקנייה. `from` הוא הקוד של
 // המזמינה או המייל שלה. עובר באותו `refCharge` בדיוק, עם מספר הזמנה ידני, ולכן כל הכללים חלים:
 // הזמנה עצמית אינה נספרת, חברה נספרת פעם אחת, והתקרה של 3 חודשים.

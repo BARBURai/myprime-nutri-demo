@@ -1301,6 +1301,33 @@ function progPill(w){
   return '<span class="grp p360pill">360</span>';
 }
 
+// v8.43: "מניצ'ט" במקום "וואטסאפ". רון: "אני לא יכול באמת לשלוח וואטסאפ דרך" המסך.
+// הלחיצה מוצאת אותה במניצ'ט לפי הטלפון (?mc=, קריאה בלבד) ופותחת את השיחה איתה שם.
+// החלון נפתח מיד בלחיצה, אחרת הדפדפן חוסם חלון שנפתח אחרי המתנה.
+var MC_CHAT = "https://app.manychat.com/fb111742985290180/chat/";
+function mcBtn(phone, cls){
+  return '<button class="'+(cls||"btn sm wa")+'" data-mcopen="'+esc(phone||"")+'">מניצ\'ט</button>';
+}
+function mcOpen(phone){
+  var win = null;
+  try { win = window.open("", "_blank"); } catch(e) {}
+  var fail = function(msg){ try { if(win) win.close(); } catch(e) {} alert(msg); };
+  fetch("/api/admin?key="+encodeURIComponent(KEY)+"&mc="+encodeURIComponent(phone))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d && d.off) return fail("החיבור למניצ'ט לא מוגדר.");
+      if(d && d.ok && d.found && d.id){
+        var url = MC_CHAT + encodeURIComponent(d.id);
+        if(win){ try { win.opener = null; } catch(e) {} win.location.href = url; }
+        else location.href = url;
+        return;
+      }
+      if(d && d.ok) return fail("לא נמצאה רשומה במניצ'ט לפי הטלפון הזה.");
+      fail("מניצ'ט לא ענה. אפשר לנסות שוב בעוד רגע.");
+    })
+    .catch(function(){ fail("מניצ'ט לא ענה. אפשר לנסות שוב בעוד רגע."); });
+}
+
 // קפיצה לשדה מתוך תפריט הפעולות המהירות: פותחת את הלשונית הנכונה, גוללת אליו
 // ומקיפה אותו במסגרת לשנייה.
 //
@@ -1599,6 +1626,8 @@ function render(){
     }
     // הטבת נובמבר 2026, v8.41.
     if (w.ref && w.ref.days) lines.push(['הטבת נובמבר', '+'+w.ref.days+' יום']);
+    // מבצע בלאק נובמבר ל-360, v8.44. הנוסח אושר על ידי רון.
+    if (w.bf26) lines.push(['מבצע בלאק נובמבר', '+3 חודשים']);
     // שיעורי הבונוס פתוחים כל עוד היא נכנסת לאפליקציה, ונסגרים יחד איתה.
     if (w.glow && st.allowed && st.product !== "glow") lines.push(['שיעורי הבונוס של Glow', 'עד '+il(end360Shown)]);
     if (w.glowFull || w.glowSolo) {
@@ -1745,6 +1774,7 @@ function render(){
       if(L.field === "freeze") return pre + freezeLogText(L);
       if(L.field === "freezeEnd") return pre + freezeEndText(L);
       if(L.field === "email") return pre + 'שינתה לה את כתובת המייל מ-'+esc(L.from)+' ל-'+esc(L.to);
+      if(L.field === "bf26") return pre + 'מבצע בלאק נובמבר · +3 חודשים';
       if(L.field === "refby") return pre + 'שייכה אותה לחברה שהזמינה אותה, '+esc(L.to);
       if(L.field === "reffriend") return pre + 'שייכה אליה חברה שהגיעה דרכה, '+esc(L.to);
       if(L.field === "name") return pre + (L.to ? 'תיקנה את השם ל-'+esc(L.to)+(L.from?' (היה '+esc(L.from)+')':'') : 'החזירה את השם לזה שבגיליון'+(L.from?' (היה '+esc(L.from)+')':''));
@@ -1984,7 +2014,7 @@ function render(){
         '<div class="qinfo">'+
           '<div><span class="flabel">טלפון</span> <span class="mono">'+esc(w.phone||"אין")+'</span>'+
             (w.phone?' <button class="btn sm" data-copy="'+esc(w.phone)+'">העתקה</button>'+
-              ' <a class="btn sm wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+'</div>'+
+              ' '+mcBtn(w.phone):'')+'</div>'+
           '<div><span class="flabel">מייל</span> <span class="mono">'+esc(w.email)+'</span>'+
             ' <button class="btn sm" data-copy="'+esc(w.email)+'">העתקה</button></div>'+
           '<div><span class="flabel">מחזור</span> '+esc(il(w.start||""))+' · '+esc(dayInProgram(w))+'</div>'+
@@ -2009,7 +2039,7 @@ function render(){
             '<b>'+esc(name || "בלי שם")+'</b>'+
             '<span class="mono">'+esc(r.phone)+'</span>'+
             '<button class="btn sm" data-copy="'+esc(r.phone)+'">העתקה</button>'+
-            '<a class="btn sm wa" href="https://wa.me/'+esc(r.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>'+
+            mcBtn(r.phone)+
             groupPill(r)+
           '</div>'+
           '<div class="qinfo">'+
@@ -2131,9 +2161,10 @@ function render(){
               '<button class="lnk" data-open="'+esc(em)+'">'+esc(((w.first||"")+" "+(w.last||"")).trim() || em)+'</button>'+
               // מתי היא כתבה, על השורה של השם ולפני שפותחים כלום: זה מה שאומר מי קדמה למי.
               '<span class="qwhen">'+esc(noteWhen(n))+'</span>'+
+              progPill(w)+
               groupPill(w)+
               '<button class="btn sm" data-qinfo="'+esc(em)+'">'+(QINFO[em]?"סגירת הפרטים":"פרטים")+'</button>'+
-              (w.phone?'<a class="btn sm wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">וואטסאפ</a>':'')+
+              (w.phone?mcBtn(w.phone):'')+
             '</div>'+
             (QINFO[em] ? '<div class="qinfo">'+
               '<div><span class="flabel">טלפון</span> <span class="mono">'+esc(w.phone||"אין")+'</span>'+
@@ -2188,7 +2219,7 @@ function render(){
         '<option value="">פעולות מהירות ⌄</option>'+
         opts.map(function(o){ return '<option value="'+o[0]+'">'+o[1]+'</option>'; }).join("")+
       '</select>'+
-      (w.phone?'<a class="qa wa" href="https://wa.me/'+esc(w.phone)+'" target="_blank" rel="noopener">'+I_WA+'וואטסאפ</a>':'')+
+      (w.phone?mcBtn(w.phone,"qa wa"):'')+
     '</div>';
   }
 
@@ -2342,6 +2373,8 @@ function render(){
   app.querySelectorAll("[data-v]").forEach(function(el){ el.onclick=function(){
     var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; SEL=""; EDITING=""; render(); }; });
   app.querySelectorAll("[data-frzhelp]").forEach(function(el){ el.onclick=function(e){ if(el.classList.contains("frzpop") && e.target!==el) return; var em=el.getAttribute("data-frzhelp"); FRZHELP = (em && FRZHELP!==em) ? em : ""; render(); }; });
+  app.querySelectorAll("[data-mcopen]").forEach(function(el){ el.onclick=function(e){
+    if(e) e.stopPropagation(); mcOpen(el.getAttribute("data-mcopen")); }; });
   app.querySelectorAll("[data-copy]").forEach(function(el){ el.onclick=function(){
     copyText(el.getAttribute("data-copy"), el); }; });
 
