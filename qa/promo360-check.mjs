@@ -55,9 +55,9 @@ ck("בלי מייל או הזמנה או תאריך: 400", (await c({ email: "",
 const pre = await c({ email: "early@t.com", orderId: "o0", paidAt: "2026-11-04T14:11:59Z" });
 ck("**לפני ההדלקה, 4.11 14:11:59 UTC: אינה נכנסת**", pre.status === 200 && pre.json.skipped === "outside_window" && !(H[PROMO360_KEY] || {})["early@t.com"], pre);
 const first = await c({ email: "First@T.com", orderId: "o1", paidAt: "2026-11-04T14:12:00Z" });
-ck("**ברגע ההדלקה: נכנסת, ובמייל באותיות קטנות**", first.status === 200 && first.json.months === 9 && !!H[PROMO360_KEY]["first@t.com"], first);
+ck("**ברגע ההדלקה: נכנסת, ובמייל באותיות קטנות**", first.status === 200 && first.json.months === 6 && !!H[PROMO360_KEY]["first@t.com"], first);
 const last = await c({ email: "last@t.com", orderId: "o2", paidAt: "2026-11-30T21:59:59Z" });
-ck("30.11 23:59:59 שעון ישראל: נכנסת", last.status === 200 && last.json.months === 9, last);
+ck("30.11 23:59:59 שעון ישראל: נכנסת", last.status === 200 && last.json.months === 6, last);
 const after = await c({ email: "late@t.com", orderId: "o3", paidAt: "2026-11-30T22:00:00Z" });
 ck("1.12 00:00 שעון ישראל: אינה נכנסת", after.json.skipped === "outside_window", after);
 const again = await c({ email: "first@t.com", orderId: "o9", paidAt: "2026-11-10T10:00:00Z" });
@@ -71,7 +71,7 @@ const broke = await c({ email: "broke@t.com", orderId: "o5", paidAt: "2026-11-06
 failHset = false;
 ck("תקלה בשמירה: 502, והסימון משתחרר לניסיון הבא", broke.status === 502 && !(H[PROMO360_KEY] || {})["broke@t.com"], broke);
 const retry = await c({ email: "broke@t.com", orderId: "o5", paidAt: "2026-11-06T08:00:00Z" });
-ck("והניסיון הבא נקלט", retry.status === 200 && retry.json.months === 9, retry);
+ck("והניסיון הבא נקלט", retry.status === 200 && retry.json.months === 6, retry);
 
 // ---------- ההכרעה ----------
 console.log("\nההכרעה\n");
@@ -121,7 +121,7 @@ const call = async (req) => { const r = { code: 0, body: null, status(c) { this.
 const a0 = await call({ method: "POST", query: { promo360: "" }, body: { email: "w@test.com", orderId: "x1", paidAt: "2026-11-05T10:00:00Z" } });
 ck("בלי מפתח: 401 ואינו נוגע בדבר", a0.code === 401 && !(H[PROMO360_KEY] || {})["w@test.com"], a0.code);
 const a1 = await call({ method: "POST", query: { promo360: "" }, headers: { "x-ref-key": "refkey" }, body: { email: "w@test.com", orderId: "x1", paidAt: "2026-11-05T10:00:00Z" } });
-ck("**עם מפתח: נשמר**", a1.code === 200 && a1.body.months === 9 && JSON.parse(H["admin:overrides"]["w@test.com"]).bf26.order === "x1", a1.body);
+ck("**עם מפתח: נשמר**", a1.code === 200 && a1.body.months === 6 && JSON.parse(H["admin:overrides"]["w@test.com"]).bf26.order === "x1", a1.body);
 const a2 = await call({ method: "GET", query: { promo360: "" }, headers: { "x-ref-key": "refkey" } });
 ck("רק POST", a2.code === 405, a2.code);
 

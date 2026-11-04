@@ -1627,7 +1627,7 @@ function render(){
     // הטבת נובמבר 2026, v8.41.
     if (w.ref && w.ref.days) lines.push(['הטבת נובמבר', '+'+w.ref.days+' יום']);
     // מבצע בלאק נובמבר ל-360, v8.44. הנוסח אושר על ידי רון.
-    if (w.bf26) lines.push(['מבצע בלאק נובמבר', '9 חודשים']);
+    if (w.bf26) lines.push(['מבצע בלאק נובמבר', '+3 חודשים']);
     // שיעורי הבונוס פתוחים כל עוד היא נכנסת לאפליקציה, ונסגרים יחד איתה.
     if (w.glow && st.allowed && st.product !== "glow") lines.push(['שיעורי הבונוס של Glow', 'עד '+il(end360Shown)]);
     if (w.glowFull || w.glowSolo) {
@@ -1809,7 +1809,7 @@ function render(){
       if(L.field === "sub") return pre + 'חיוב במנוי החודשי'+(L.n?' מספר '+esc(L.n):'')+' · גישה עד '+esc(il(L.to));
       if(L.field === "sub_cancel") return pre + 'ביטלה את המנוי החודשי · גישה עד '+esc(il(L.to));
       if(L.field === "sub_end") return pre + 'המנוי החודשי הסתיים';
-      if(L.field === "bf26") return pre + 'מבצע בלאק נובמבר · 9 חודשים';
+      if(L.field === "bf26") return pre + 'מבצע בלאק נובמבר · +3 חודשים';
       if(L.field === "refby") return pre + 'שייכה אותה לחברה שהזמינה אותה, '+esc(L.to);
       if(L.field === "reffriend") return pre + 'שייכה אליה חברה שהגיעה דרכה, '+esc(L.to);
       if(L.field === "name") return pre + (L.to ? 'תיקנה את השם ל-'+esc(L.to)+(L.from?' (היה '+esc(L.from)+')':'') : 'החזירה את השם לזה שבגיליון'+(L.from?' (היה '+esc(L.from)+')':''));

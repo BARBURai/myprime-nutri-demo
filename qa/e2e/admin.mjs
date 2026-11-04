@@ -733,8 +733,8 @@ CHECKS.push({
     await page.waitForTimeout(400);
     const other = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
     await ctx.close();
-    const ok = card.includes("מבצע בלאק נובמבר 9 חודשים") && card.includes("מבצע בלאק נובמבר · 9 חודשים") && !other.includes("בלאק נובמבר") && errors.length === 0;
-    return { ok, detail: `שורה ${card.includes("מבצע בלאק נובמבר 9 חודשים")} · יומן ${card.includes("מבצע בלאק נובמבר · 9 חודשים")} · אחרת ${!other.includes("בלאק נובמבר")}${errors.length ? " · " + errors[0] : ""}` };
+    const ok = card.includes("מבצע בלאק נובמבר +3 חודשים") && card.includes("מבצע בלאק נובמבר · +3 חודשים") && !other.includes("בלאק נובמבר") && errors.length === 0;
+    return { ok, detail: `שורה ${card.includes("מבצע בלאק נובמבר +3 חודשים")} · יומן ${card.includes("מבצע בלאק נובמבר · +3 חודשים")} · אחרת ${!other.includes("בלאק נובמבר")}${errors.length ? " · " + errors[0] : ""}` };
   },
 }, {
   // v8.43: תג המסלול בשורת השם בתור המענה, בלי "פרטים", ו"מניצ'ט" במקום "וואטסאפ" בכל

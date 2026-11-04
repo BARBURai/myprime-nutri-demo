@@ -153,7 +153,7 @@ export async function promo360Charge(body, rpost) {
     const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
     log.unshift({ at: new Date().toISOString(), by: "מערכת", field: "bf26", to: rec.order });
     await rpost(["HSET", "admin:overrides", email, JSON.stringify({ ...cur, bf26: rec, log: log.slice(0, 20) })]);
-    return { status: 200, json: { ok: true, email, months: 9 } };
+    return { status: 200, json: { ok: true, email, months: PROMO360_MONTHS } };
   } catch (e) {
     try { await rpost(["HDEL", PROMO360_KEY, email]); } catch (e2) {}
     return { status: 502, json: { ok: false, error: "save_failed" } };
