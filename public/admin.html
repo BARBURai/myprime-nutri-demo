@@ -523,6 +523,31 @@ function dateSync(em){
   }
   var d=parseInt(ds.value,10);
   document.getElementById("d_"+em).value = y+"-"+(m<10?"0":"")+m+"-"+(d<10?"0":"")+d;
+  untilAddRefresh(em);
+}
+// **מה יתווסף לתאריך שהמשרד מקליד. v8.46.** השער מוסיף לו את חודשי חברה מביאה חברה ואת
+// ימי הטבת נובמבר (`api/_product.js`), והשדה לא אמר את זה. החשבון כאן זהה לשם: קודם
+// חודשים לפי לוח השנה, ואחר כך ימים.
+function untilAddText(iso, m, d){
+  var parts = [];
+  if(m > 0) parts.push((m === 1 ? "חודש אחד" : m+" חודשים")+" של חברה מביאה חברה");
+  if(d > 0) parts.push(d+" יום של הטבת נובמבר");
+  if(!parts.length || !/^\d{4}-\d{2}-\d{2}$/.test(String(iso||""))) return "";
+  var p = String(iso).split("-");
+  var x = new Date(Date.UTC(+p[0], +p[1]-1, +p[2]));
+  if(m > 0) x.setUTCMonth(x.getUTCMonth()+m);
+  if(d > 0) x.setUTCDate(x.getUTCDate()+d);
+  return "לתאריך הזה יתווספו "+parts.join(" ו-")+". הגישה בפועל: עד "+il(x.toISOString().slice(0,10))+".";
+}
+function untilAddNote(w, iso){
+  var m = (w.ref && w.ref.months) || 0, d = (w.ref && w.ref.days) || 0;
+  if(!(m > 0 || d > 0)) return "";
+  return '<div class="note" id="ua_'+esc(w.email)+'" data-m="'+m+'" data-d="'+d+'">'+esc(untilAddText(iso, m, d))+'</div>';
+}
+function untilAddRefresh(em){
+  var el = document.getElementById("ua_"+em), inp = document.getElementById("d_"+em);
+  if(!el || !inp) return;
+  el.textContent = untilAddText(inp.value, parseInt(el.getAttribute("data-m"),10)||0, parseInt(el.getAttribute("data-d"),10)||0);
 }
 function dateSet(em, iso){
   var p = String(iso).split("-");
@@ -1949,7 +1974,7 @@ function render(){
     (w.newApp
       ? (UNTILING === w.email
         ? '<div class="edit" id="fld-until"><span>גישה עד</span>'+
-            dateBox(w.email, w.until || DATA.today)+
+            dateBox(w.email, w.untilBase || w.until || DATA.today)+
             '<span class="adds">הוסיפי '+
               '<input class="field sm" style="width:70px" type="number" min="1" id="n_'+esc(w.email)+'" value="1">'+
               '<select class="field sm" style="width:100px" id="u_'+esc(w.email)+'"><option value="d">ימים</option><option value="w">שבועות</option><option value="m">חודשים</option></select>'+
@@ -1957,7 +1982,7 @@ function render(){
             '</span>'+
             '<button class="btn p" data-save="'+esc(w.email)+'">שמירה</button>'+
             '<button class="btn ghost" data-nountil="1">ביטול</button>'+
-          '</div>'
+          '</div>'+untilAddNote(w, w.untilBase || w.until || DATA.today)
         : '<div class="fld" id="fld-until"><span class="flabel">גישה עד</span><span class="fval">'+
             '<b'+(w.expired?' class="expired"':'')+'>'+(w.until?il(w.until):"לא ידוע")+'</b>'+(w.expired?' (הסתיימה)':'')+
             '<button class="btn sm" data-edituntil="'+esc(w.email)+'">✎ שינוי</button>'+
