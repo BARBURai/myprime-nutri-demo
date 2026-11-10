@@ -116,7 +116,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.45";
+const ADMIN_VERSION = "8.46";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1641,7 +1641,11 @@ JSON בלבד, בלי שום טקסט אחר:
       // Marking her as cancelling also takes the new app away from her, by Ron's decision.
       // It is one field, reversible by the same switch, and it is what api/access.js reads.
       const blocked = tag === "cancelproc" ? (on ? "1" : "") : (cur.blocked || "");
+      // **`...cur` קודם, כדי ששדה שהמסך הזה אינו מכיר לא יימחק בשמירה.** עד v8.46 הרשומה
+      // נבנתה מחדש משדות ידועים בלבד, ולכן כל שמירה של המשרד הייתה מוחקת את `bf26`
+      // (מבצע בלאק נובמבר, נכתב ב-`api/_ref.js`). נבדק בייצור: עוד אין אף רשומה כזאת.
       const rec = JSON.stringify({
+        ...cur,
         blocked,
         freeze,
         until: hasUntil ? until : (cur.until || ""),
@@ -1968,6 +1972,11 @@ JSON בלבד, בלי שום טקסט אחר:
       ref: refB ? { friends: Number(refB.f) || 0, months: refMonths, days: refDays, from: (() => { try { return refBy[w.email] ? JSON.parse(refBy[w.email]).from || "" : ""; } catch (e) { return ""; } })() } : null,
       // `override` is only in force while it carries a date. The log survives a clearing, so
       // the office can always see what was done and by whom.
+      // **התאריך שהמשרד מקליד, לפני התוספות. v8.46.** חודשי חברה מביאה חברה וימי הטבת
+      // נובמבר נוספים על התאריך שהמשרד קובע, ולכן שדה העריכה נפתח עליו ולא על `until`.
+      // עד כאן הוא נפתח על `until`, ושמירה בלי שינוי הוסיפה את התוספות פעם שנייה.
+      // בלי תוספות הוא `until` עצמו, כולל מבצע 360, שאינו נוסף על תאריך של המשרד.
+      untilBase: (ovr && ovr.until) || ((refMonths || refDays) ? sheetEnd : until),
       override: (ovr && ovr.until) ? { until: ovr.until, by: ovr.by || "", at: ovr.at || "" } : null,
       log: (ovr && Array.isArray(ovr.log)) ? ovr.log : [],
       // **עד מתי היא באמת נכנסת**, כולל המנוי החודשי. `until` נשאר מה שהמשרד והגיליון אומרים,
