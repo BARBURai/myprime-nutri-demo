@@ -180,6 +180,10 @@ export function decideAccess(f) {
     glowSource: !hasGlow ? "" : soloBenefit ? "benefit" : (!has360 ? "solo" : (f.glowPaid ? "paid" : "gift")),
     hasGlow,
     end360: ymdOf(end360At),
+    // **סוף הגישה בפועל: תאריך שהמשרד קבע, ואם אין, החלון המחושב. v8.47.** צילום הארוחה פתוח
+    // עד התאריך הזה ולא רק עד יום 70, החלטת רון 10.11.2026. התקרה של 70 צילומים לתוכנית
+    // נאכפת בשרת (api/ai.js) ואינה תלויה בו.
+    accessEnd: clerkUntil || ymdOf(end360At),
     endGlow: ymdOf(endGlowAt),
     allowed, reason,
     product: glowOnly ? "glow" : "360",

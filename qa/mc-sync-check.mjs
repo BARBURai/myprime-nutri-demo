@@ -437,7 +437,9 @@ async function stageA(sheetCells, serverCells, opts = {}) {
   ck("ביטול בשניהם נועל", both.allowed === false && both.reason === "cancelled", strip(both));
   const months = await stageA({ "חודשי גישה נוספים": "3" }, { "חודשי גישה נוספים": "6" });
   const months0 = await stageA({ "חודשי גישה נוספים": "3" }, null);
-  ck("חודשים נוספים: הגבוה מבין השניים", months.allowed === true && strip(months) === strip(months0), strip(months));
+  // מ-v8.47 התשובה נושאת את סוף הגישה (photoUntil), ולכן רואים בה שה-6 של השרת גבר על ה-3.
+  const noPU = (r) => { const { photoUntil, ...o } = r; return strip(o); };
+  ck("חודשים נוספים: הגבוה מבין השניים", months.allowed === true && noPU(months) === noPU(months0) && months.photoUntil > months0.photoUntil, strip(months));
   const smartSheet = await stageA({ SOLO10WEEK: "TRUE" }, {});
   ck("SMART בגיליון בלבד, בשבוע 3: נכנסת", smartSheet.allowed === true, strip(smartSheet));
   const noServer = await stageA({ "GLOW-FULL": "TRUE" }, null);

@@ -761,7 +761,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.46";
+const VERSION = "8.47";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3089,6 +3089,13 @@ const PHOTO_HEADSUP_MSG = "הערה קטנה ממני אלייך 💜 שימי �
 // לא אמר כלום. lubazalkover, 02.11.2026, תמונה מ-Google Photos שכנראה שמורה רק בענן.
 const PHOTO_UNREAD_MSG = "התמונה לא נטענה. אם היא שמורה רק בענן, למשל ב-Google Photos, אפשר לשמור אותה קודם בטלפון ולנסות שוב, או לצלם ישירות מהמצלמה.";
 const PHOTO_END_MSG = "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים.";
+// **ומ-v8.47 הצילום פתוח כל עוד הגישה פתוחה**, ולא נסגר ביום 70. החלטת רון, 10.11.2026. השער
+// כותב את סוף הגישה בכל כניסה. **התקרה של 70 צילומים לכל התוכנית נשארת**, ונאכפת בשרת.
+function photoEnded(startDate) {
+  if (programDayNumber(startDate, TODAY) <= 70) return false;
+  try { const pu = localStorage.getItem("myprime_photo_until") || ""; if (pu && TODAY <= pu) return false; } catch (e) {}
+  return true;
+}
 function bumpPhotosToday() {
   try {
     let o = {};
@@ -4004,7 +4011,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
   const sendAiImage = async (base64, mediaType) => {
     if (aiLoading) return;
     // Meal photos are available only during the 10-week program (days 1-70). After that: text only.
-    if (programDayNumber(startDate, TODAY) > 70) {
+    if (photoEnded(startDate)) {
       setStep("ai");
       setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]);
       return;
@@ -4231,7 +4238,7 @@ function AddModal({ state, close, commit, removeAndClose, favorites, recents, on
         {step === "method" && (
           <>
             {[{ ic: Mic, t: "ספרי לי מה אכלת", s: "בדיבור או בכתיבה (AI)", bg: C.infoBg, color: C.info, tut: "method-ai", go: () => { usageBump("ai"); setStep("ai"); onTourEvent && onTourEvent("pickai"); } },
-              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { usageBump("photo"); if (programDayNumber(startDate, TODAY) > 70) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
+              { ic: Camera, t: "צילום ארוחה", s: "זיהוי אוטומטי (AI)", bg: C.amberBg, color: C.amber, go: () => { usageBump("photo"); if (photoEnded(startDate)) { setStep("ai"); setAiMsgs((m) => [...m, { role: "assistant", text: PHOTO_END_MSG }]); } else setStep("photo"); } },
               { ic: Barcode, t: "סריקת ברקוד", s: "המדויק ביותר", bg: C.brandBg, color: C.brand, go: () => { usageBump("barcode"); setStep("barcode"); } },
               { ic: Clock, t: "האחרונים והמועדפים שלי", s: "מוצרים שכבר הוספת - בהקשה אחת", bg: C.waterBg, color: C.water, tut: "method-history", go: () => { usageBump("history"); setHistQ(""); setStep("history"); } },
               { ic: Search, t: "חיפוש מזון", s: "מהמאגר הישראלי ו-Open Food Facts", bg: "#E8F3EC", color: "#4E9E76", go: () => { usageBump("search"); setStep("list"); } },
@@ -7500,6 +7507,13 @@ export default function App() {
         // בלי שום צעד ידני.
         setProduct(d.product === "glow" ? "glow" : "360");
         try { localStorage.setItem("myprime_product", d.product === "glow" ? "glow" : "360"); } catch (e) {}
+        try {
+        } catch (e) {}
+        // סוף הגישה, שעד אליו צילום הארוחה פתוח. נכתב מחדש בכל כניסה ונמחק כשאין. v8.47.
+        try {
+          if (d.photoUntil) localStorage.setItem("myprime_photo_until", String(d.photoUntil));
+          else localStorage.removeItem("myprime_photo_until");
+        } catch (e) {}
         // Answers the office wrote to notes she left, that she has not read yet. They light
         // the dot on the notes bubble and sit at the top of it until she taps "תודה, הבנתי".
         setReplies(Array.isArray(d.replies) ? d.replies : []);
