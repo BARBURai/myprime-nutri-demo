@@ -761,7 +761,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.46";
+const VERSION = "8.47";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3091,8 +3091,11 @@ const PHOTO_UNREAD_MSG = "התמונה לא נטענה. אם היא שמורה �
 const PHOTO_END_MSG = "סיימת את צילומי הארוחה לתקופת הליווי 💜 מכאן תמיד אפשר לתאר לי בטקסט מה אכלת ואני אעריך עבורך את הערכים.";
 // **מנויה חודשית בתוקף מצלמת גם אחרי יום 70.** החלטת רון, 12 באוקטובר 2026. השער כותב את
 // סוף המנוי בכל כניסה, והתקרה של 30 בחודש נאכפת בשרת (api/ai.js). v8.10.
+// **ומ-v8.47 הצילום פתוח כל עוד הגישה פתוחה**, ולא נסגר ביום 70. החלטת רון, 10.11.2026. השער
+// כותב את סוף הגישה בכל כניסה. **התקרה של 70 צילומים לכל התוכנית נשארת**, ונאכפת בשרת.
 function photoEnded(startDate) {
   if (programDayNumber(startDate, TODAY) <= 70) return false;
+  try { const pu = localStorage.getItem("myprime_photo_until") || ""; if (pu && TODAY <= pu) return false; } catch (e) {}
   try { const u = localStorage.getItem("myprime_sub_until") || ""; if (u && TODAY <= u) return false; } catch (e) {}
   return true;
 }
@@ -7515,6 +7518,11 @@ export default function App() {
         try {
           if (d.sub && d.sub.until) localStorage.setItem("myprime_sub_until", String(d.sub.until));
           else localStorage.removeItem("myprime_sub_until");
+        } catch (e) {}
+        // סוף הגישה, שעד אליו צילום הארוחה פתוח. נכתב מחדש בכל כניסה ונמחק כשאין. v8.47.
+        try {
+          if (d.photoUntil) localStorage.setItem("myprime_photo_until", String(d.photoUntil));
+          else localStorage.removeItem("myprime_photo_until");
         } catch (e) {}
         // Answers the office wrote to notes she left, that she has not read yet. They light
         // the dot on the notes bubble and sit at the top of it until she taps "תודה, הבנתי".
