@@ -109,6 +109,42 @@ async function mailCode(RU, RT, email, code) {
   } catch (e) { return false; }
 }
 
+// **שלושה עותקים אחורה, ומונה שימוש. v8.49, משימה 1 בתוכנית הסקייל, באישור רון:
+// "מאשר את 1 ו-2, תבנה בדב".**
+//
+// הכתובת הזאת פתוחה לכל מי שיודע מייל רשום, ולכן כל אחד יכול לדרוס גיבוי בזבל. לגיבוי
+// היה עותק אחד בלבד, כלומר דריסה כזאת, ואחריה טלפון שנמחק, היו מוחקות לה את הכל.
+//
+// **לפני כל שמירה הגיבוי הקודם נדחף לרשימה `bk:hist:<מייל>`**, שלושת האחרונים, 14 יום.
+// גיבוי זהה לקודם אינו נדחף, כדי שגיבוי אוטומטי שחוזר על עצמו לא ידחוק החוצה את הישן.
+// **הרשימה נכתבת לפני השמירה**: אם היא נכשלת השמירה ממשיכה בדיוק כמו קודם, ואם השמירה
+// נכשלת אחריה, הגיבוי המקורי עדיין במקומו. **שום תקלה כאן אינה מכשילה גיבוי.**
+//
+// **המונה, `bk:use:<יום>`, סופר בלבד ואינו חוסם אף אחת.** החלטת רון: שבוע של ספירה,
+// ורק אחרי שרואים את המספרים קובעים תקרה, כדי שלא תיקבע תקרה שחוסמת משתתפת אמיתית.
+// כלל 2 בסעיף 31. 30 יום. אין בו שום תוכן, רק מספרים לפי מייל.
+const HIST_KEEP = 3;
+const HIST_TTL = 14 * 24 * 3600;
+const USE_TTL = 30 * 24 * 3600;
+const israelDay = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem" }).format(new Date());
+async function keepHistory(RU, RT, email, next) {
+  try {
+    const prev = await redisCmd(RU, RT, ["GET", `bk:${email}`]);
+    if (!prev || prev === next) return;
+    const h = `bk:hist:${email}`;
+    await redisCmd(RU, RT, ["LPUSH", h, prev]);
+    await redisCmd(RU, RT, ["LTRIM", h, "0", String(HIST_KEEP - 1)]);
+    await redisCmd(RU, RT, ["EXPIRE", h, String(HIST_TTL)]);
+  } catch (e) { /* the save goes ahead exactly as before */ }
+}
+async function countUse(RU, RT, kind, email) {
+  try {
+    const k = `bk:use:${israelDay()}`;
+    await redisCmd(RU, RT, ["HINCRBY", k, `${kind}:${email}`, "1"]);
+    await redisCmd(RU, RT, ["EXPIRE", k, String(USE_TTL)]);
+  } catch (e) { /* counting never blocks a backup */ }
+}
+
 export default async function handler(req, res) {
   const RU = process.env.UPSTASH_REDIS_REST_URL;
   const RT = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -124,7 +160,10 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const blob = body.blob;
       if (!blob || !blob.ct || !blob.salt || !blob.iv) return res.status(200).json({ ok: false, reason: "no_blob" });
-      await redisCmd(RU, RT, ["SET", key, JSON.stringify(blob)]);
+      const next = JSON.stringify(blob);
+      await keepHistory(RU, RT, email, next);
+      await countUse(RU, RT, "post", email);
+      await redisCmd(RU, RT, ["SET", key, next]);
       // The backup itself is saved first and its success never depends on the email.
       // A mail provider having a bad minute must not cost her a backup.
       let mailed = false;
@@ -133,6 +172,7 @@ export default async function handler(req, res) {
       }
       return res.status(200).json({ ok: true, mailed });
     }
+    await countUse(RU, RT, "get", email);
     const raw = await redisCmd(RU, RT, ["GET", key]);
     if (!raw) return res.status(200).json({ ok: true, exists: false });
     let blob = null;

@@ -47,7 +47,7 @@ const intList = (v, len, max) => {
 };
 // רשימה סגורה של שמות. שם שאינו ברשימה פשוט נזרק, כדי שהשדה לא יוכל לגדול
 // למשהו אחר ממה שהוסכם עליו.
-const FEAT_KEYS = ["ai", "photo", "barcode", "history", "search", "manual", "recommend", "summary", "cabinet", "weighIn", "tab_day", "tab_report", "tab_recipes", "tab_profile"];
+const FEAT_KEYS = ["ai", "photo", "barcode", "history", "search", "manual", "recommend", "summary", "cabinet", "weighIn", "tab_day", "tab_report", "tab_recipes", "tab_profile", "ref_shown", "ref_wa_cheer", "ref_wa_profile", "ref_copy"];
 const featMap = (v) => {
   const out = {};
   if (!v || typeof v !== "object") return out;
@@ -157,6 +157,8 @@ export default async function handler(req, res) {
     hours: intList(body && body.hours, 24, 99999),
     feat: featMap(body && body.feat),
     dayClosed: bitString(body && body.dayClosed, MAX_DAYS),
+    // חברה מביאה חברה, v8.48: היום שבו כרטיס ההזמנה הוצג לה. תאריך בלבד.
+    refShown: /^\d{4}-\d{2}-\d{2}$/.test(String(body && body.refShown || "")) ? body.refShown : "",
     tasksAgg: pairMap(body && body.tasksAgg, MAX_DAYS),
     standalone: num(body && body.standalone, 1),
     notif: ["granted", "denied", "default"].includes(body && body.notif) ? body.notif : "",

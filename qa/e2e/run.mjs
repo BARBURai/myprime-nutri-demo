@@ -297,17 +297,34 @@ const CHECKS = [
           await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
           if (!(await page.locator("[data-ref-card]").count())) bad.push("עם קוד: אין שורה בפרופיל");
           else if ((await page.locator("[data-ref-card] [data-ref-gift]").first().textContent().catch(() => "")) !== "חודש נוסף במתנה") bad.push("בפרופיל אין 'חודש נוסף במתנה' מודגש");
+          // v8.48: שלושת המונים. הכפתורים עובדים כמו קודם, והספירה נרשמת.
+          await context.grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => {});
+          await page.locator("[data-ref-card] button", { hasText: "העתקת הקישור" }).click(); await page.waitForTimeout(400);
+          if (!(await page.locator("[data-ref-card] button", { hasText: "הועתק ✓" }).count())) bad.push("העתקה: לא הופיע 'הועתק ✓'");
+          const clip = await page.evaluate(() => navigator.clipboard.readText().catch(() => "")).catch(() => "");
+          if (clip !== "https://myprime.co.il/smart?ref=MAYA22") bad.push("העתקה: הועתק " + String(clip).slice(0, 60));
+          const pop = context.waitForEvent("page", { timeout: 4000 }).catch(() => null);
+          await page.locator("[data-ref-card] a", { hasText: "שליחה לחברה בוואטסאפ" }).click();
+          const wa = await pop; if (!wa) bad.push("וואטסאפ בפרופיל: לא נפתח"); else await wa.close().catch(() => {});
+          const u = await page.evaluate(() => JSON.parse(localStorage.getItem("mp_usage_v1") || "{}"));
+          const f = u.feat || {};
+          if (f.ref_shown !== 1) bad.push("ref_shown " + f.ref_shown);
+          if (f.ref_copy !== 1) bad.push("ref_copy " + f.ref_copy);
+          if (f.ref_wa_profile !== 1) bad.push("ref_wa_profile " + f.ref_wa_profile);
+          if (u.refShown !== T) bad.push("refShown " + u.refShown);
         } else {
           if (has) bad.push("בלי קוד: הוצג כרטיס");
           if (!(await page.locator("text=מדליה נכנסה לאוסף").count())) bad.push("בלי קוד: אין מסך מדליה, כלומר הבדיקה לא הגיעה ליעד");
           await page.locator("text=יאללה, ממשיכות").first().click().catch(() => {}); await page.waitForTimeout(300);
           await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
           if (await page.locator("[data-ref-card]").count()) bad.push("בלי קוד: יש שורה בפרופיל");
+          const u = await page.evaluate(() => JSON.parse(localStorage.getItem("mp_usage_v1") || "{}"));
+          if (Object.keys(u.feat || {}).some((k) => k.startsWith("ref_")) || u.refShown) bad.push("בלי קוד: נרשם מונה של הזמנה");
         }
         if (errors.length) bad.push("שגיאה: " + errors[0].slice(0, 60));
         await context.close();
       }
-      return { ok: bad.length === 0, detail: bad.join(" · ") || "עם קוד: כרטיס וקישור נכון, ושורה בפרופיל · בלי קוד: מדליה רגילה ובלי שורה" };
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "עם קוד: כרטיס וקישור נכון, שורה בפרופיל, העתקה ווואטסאפ עובדים ושלושת המונים נרשמו · בלי קוד: מדליה רגילה, בלי שורה ובלי מונה" };
     },
   },
   {

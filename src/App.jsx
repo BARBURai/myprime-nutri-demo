@@ -562,6 +562,12 @@ function usageBump(key) {
   u.feat[key] = Math.min(99999, (u.feat[key] || 0) + 1);
   usageSave(u);
 }
+// חברה מביאה חברה: היום שבו כרטיס ההזמנה הוצג לה במסך המדליה. v8.48, באישור רון.
+function usageRefShown(day) {
+  const u = usageLoad();
+  if (!u.refShown) u.refShown = day;
+  usageSave(u);
+}
    // starts on day 3 of week 1
 const CHECKIN_REVEAL_HOUR = 0;                // 0 = daily report available all day (set to 19 to lock until 19:00)
 const MEDAL_SRC = "/medal.png";
@@ -761,7 +767,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.47";
+const VERSION = "8.49";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -5830,7 +5836,7 @@ function CheckinCheer({ name, streak, onClose, refCode }) {
           <div data-ref-offer style={{ marginTop: 16, background: C.brandBg, border: `2px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px" }}>
             <div style={{ fontSize: 19, fontWeight: 700, color: C.brandD }}>את כבר בתנופה 💜</div>
             <div style={{ fontSize: 15.5, color: C.ink, marginTop: 8, lineHeight: 1.6 }}>הכי כיף לעשות את זה עם חברה. שלחי לה את הקישור שלך, וכשהיא מצטרפת, שתיכן מקבלות <b data-ref-gift style={{ color: C.brandD, fontWeight: 800 }}>חודש נוסף במתנה</b> באפליקציה ובכל התכנים.</div>
-            <a href={refWhatsApp(refCode)} target="_blank" rel="noopener" onClick={onClose} style={{ display: "block", marginTop: 14, background: C.brand, color: "#fff", borderRadius: 12, padding: 13, fontSize: 16.5, fontWeight: 700, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
+            <a href={refWhatsApp(refCode)} target="_blank" rel="noopener" onClick={() => { usageBump("ref_wa_cheer"); onClose(); }} style={{ display: "block", marginTop: 14, background: C.brand, color: "#fff", borderRadius: 12, padding: 13, fontSize: 16.5, fontWeight: 700, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
             <div data-ref-later onClick={() => setRefLater(true)} style={{ marginTop: 10, fontSize: 14.5, color: C.brandD, cursor: "pointer" }}>אולי אחר כך</div>
           </div>
         ) : refCode && refLater ? (
@@ -5861,6 +5867,7 @@ function RefCard({ refInfo }) {
   const n = Number(refInfo.friends) || 0;
   const dmy = (y) => { const p = String(y || "").match(/^(\d{4})-(\d{2})-(\d{2})$/); return p ? `${p[3]}.${p[2]}.${p[1]}` : ""; };
   const copy = () => {
+    usageBump("ref_copy");
     try { navigator.clipboard.writeText(refLink(refInfo.code)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); } catch (e) {}
   };
   return (
@@ -5868,7 +5875,7 @@ function RefCard({ refInfo }) {
       <div style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>הזמיני חברה</div>
       <div style={{ fontSize: 14.5, color: C.sub, marginTop: 6, lineHeight: 1.55 }}>על כל חברה שמצטרפת דרך הקישור שלך, שתיכן מקבלות <b data-ref-gift style={{ color: C.brandD, fontWeight: 800 }}>חודש נוסף במתנה</b>. אפשר לצבור עד 3 חודשים.</div>
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-        <a href={refWhatsApp(refInfo.code)} target="_blank" rel="noopener" style={{ flex: 1, textAlign: "center", background: C.brand, color: "#fff", borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
+        <a href={refWhatsApp(refInfo.code)} target="_blank" rel="noopener" onClick={() => usageBump("ref_wa_profile")} style={{ flex: 1, textAlign: "center", background: C.brand, color: "#fff", borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
         <button onClick={copy} style={{ flex: 1, background: C.panel, color: C.brandD, border: `1px solid ${C.line}`, borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{copied ? "הועתק ✓" : "העתקת הקישור"}</button>
       </div>
       {n > 0 && <div data-ref-status style={{ fontSize: 14.5, color: C.ink, marginTop: 12, fontWeight: 600 }}>{n === 1 ? "חברה אחת הצטרפה דרכך" : `${n} חברות הצטרפו דרכך`}{refInfo.until ? ` · הגישה שלך הוארכה עד ${dmy(refInfo.until)}` : ""}</div>}
@@ -7381,7 +7388,7 @@ export default function App() {
       } catch (e) {}
       payload = {
         email: em, ...u, trackerDays, day: TODAY, doneToday, phone: ph,
-        opens: usg.opens || {}, mins: usg.mins || {}, hours: usg.hours || [], feat: usg.feat || {},
+        opens: usg.opens || {}, mins: usg.mins || {}, hours: usg.hours || [], feat: usg.feat || {}, refShown: usg.refShown || "",
         dayClosed, tasksAgg, standalone, notif, dev: device.dev || "", br: device.br || "",
       };
     } catch (e) { return; }
@@ -8106,6 +8113,7 @@ export default function App() {
           if (refInfo && refInfo.code && medals >= 5 && !localStorage.getItem(REF_OFFER_SEEN_KEY)) {
             offer = refInfo.code;
             localStorage.setItem(REF_OFFER_SEEN_KEY, "1");
+            usageBump("ref_shown"); usageRefShown(today);
           }
         } catch (e) { offer = ""; }
         setRefOfferNow(offer);
