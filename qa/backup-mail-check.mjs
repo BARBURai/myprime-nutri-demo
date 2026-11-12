@@ -44,7 +44,8 @@ console.log("\nומה נשמר אצלנו, וזו ההבטחה עצמה\n");
 // כל כתיבה ל-Redis בקובץ, וכל אחת מהן חייבת להיות מוסברת
 const writes = api.match(/redisCmd\([^)]*\[\s*"SET"[^\]]*\]/g) || [];
 check("יש בדיוק שתי כתיבות: הגיבוי המוצפן, וסימון שהמייל יצא", writes.length === 2, "נמצאו " + writes.length);
-check("הגיבוי נשמר כטקסט מוצפן", writes.some((w) => /JSON\.stringify\(blob\)/.test(w)));
+// v8.49: הגיבוי נכתב דרך המשתנה next, שהוא בדיוק JSON.stringify(blob), כדי שהעותק הקודם יושווה אליו.
+check("הגיבוי נשמר כטקסט מוצפן", writes.some((w) => /JSON\.stringify\(blob\)/.test(w)) || (/const next = JSON\.stringify\(blob\);/.test(api) && writes.some((w) => /\[\s*"SET",\s*key,\s*next\s*\]/.test(w))));
 check("והסימון מחזיק חותמת זמן ולא את הקוד",
   writes.some((w) => /bkmail:\$\{email\}`, String\(Date\.now\(\)\)/.test(w)));
 check("הקוד עצמו לעולם אינו נכתב ל-Redis",
