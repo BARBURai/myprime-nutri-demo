@@ -1166,7 +1166,7 @@ function paidBlock(){
   L.forEach(function(w){
     h += '<div class="note pu-row" style="border-top:1px solid #f3c1bd;padding-top:6px">'+
       (w.name ? '<b>'+esc(w.name)+'</b> · ' : '')+esc(w.email)+(w.phone ? ' · '+esc(w.phone) : '')+
-      ' · שילמה ב-'+esc(paidLabelHe(w.paidAt))+
+      ' · שילמה '+(w.product ? 'על '+esc(w.product)+' ' : '')+'ב-'+esc(paidLabelHe(w.paidAt))+
       (w.phone ? ' <button class="btn" data-mcopen="'+esc(w.phone)+'">מניצ\'ט</button>' : '')+
       '</div>';
   });

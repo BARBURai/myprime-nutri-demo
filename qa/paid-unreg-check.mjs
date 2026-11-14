@@ -65,6 +65,7 @@ const base = () => store({
   ok(!em.includes("old@x.com"), "יותר משבועיים: לא ברשימה");
   ok(em.length === 2, "בדיוק שתיים ברשימה");
   const lead = list.find((w) => w.email === "lead@x.com");
+  ok(list.find((w) => w.email === "manual@x.com") === undefined && list.every((w) => "product" in w), "כל שורה נושאת את המוצר");
   ok(lead.name === "דנה כהן" && lead.phone === "972501111111", "שם וטלפון נלקחים מהשורה בשרת כשדף התשלום לא שלח");
   ok(!s.calls.some((c) => c[0] === "HDEL" || c[0] === "HSET"), "בלי clean אין שום כתיבה");
   ok(Object.keys(s.h[PAY_LOG]).length === 6, "הרשומות נשארו");
@@ -89,6 +90,10 @@ const base = () => store({
   ok(m.subject === "שילמה ולא נרשמה: moran_atlas@yahoo.com", "נושא המייל בנוסח שאושר");
   ok(m.text === "שילמה ב-13.11 בשעה 22:25, ועד עכשיו אין לה תאריך התחלה במניצ'ט, ולכן היא לא יכולה להיכנס לאפליקציה.", "גוף המייל בנוסח שאושר, בשעון ישראל: " + m.text);
   ok(m.html.includes("chat/1"), "הקישור לשיחה במניצ'ט");
+  const m2 = alertMail({ email: "a@x.com", paidAt: "2026-11-14T17:05:22.548Z", product: "SMART" }, "");
+  ok(m2.text === "שילמה על SMART ב-14.11 בשעה 19:05, ועד עכשיו אין לה תאריך התחלה במניצ'ט, ולכן היא לא יכולה להיכנס לאפליקציה.", "המוצר במייל, v8.51: " + m2.text);
+  ok(alertMail({ email: "a@x.com", paidAt: "2026-11-14T17:05:22.548Z", product: "360" }, "").text.startsWith("שילמה על 360 ב-14.11"), "360 במייל");
+  ok(m2.subject === "שילמה ולא נרשמה: a@x.com", "הנושא לא השתנה");
   ok(!/[–—]/.test(m.subject + m.html), "בלי מקף ארוך");
 }
 {
@@ -123,8 +128,9 @@ const pw = admin.slice(admin.indexOf("req.query.paywatch !== undefined"), admin.
 ok(pw.includes("CRON_SECRET"), "הריצה המתוזמנת מוורסל בלבד");
 ok(vercel.crons.some((c) => c.path === "/api/admin?paywatch" && c.schedule === "*/5 * * * *"), "משימה מתוזמנת כל 5 דקות");
 ok(admin.includes("paidUnreg,") && admin.includes("paidUnreg = null"), "הרשימה נשלחת למסך, ותקלה היא null");
-ok(html.includes("שילמו ולא נרשמו (") && html.includes("' · שילמה ב-'") && html.includes("data-mcopen"), "האריח בנוסח שאושר, עם כפתור מניצ'ט");
+ok(html.includes("שילמו ולא נרשמו (") && html.includes("' · שילמה '") && html.includes("data-mcopen"), "האריח בנוסח שאושר, עם כפתור מניצ'ט");
 ok(html.includes("paidBlock()+"), "האריח מוצג בראש המסך");
+ok(html.includes("' · שילמה '+(w.product ? 'על '+esc(w.product)+' ' : '')+'ב-'"), "המוצר באריח, v8.51");
 
 console.log(`${pass}/${pass + fail}`);
 process.exit(fail ? 1 : 0);

@@ -170,8 +170,8 @@ const CHECKS = [
     name: "שילמו ולא נרשמו: אריח אדום בראש המסך",
     run: async (browser, device) => {
       const o = await open(browser, device, (d) => ({ ...d, paidUnreg: [
-        { email: "moran_atlas@yahoo.com", paidAt: "2026-11-13T20:25:25.790Z", name: "מורן שקל", phone: "972507000000" },
-        { email: "x@y.com", paidAt: "2026-11-14T08:00:00.000Z", name: "", phone: "" },
+        { email: "moran_atlas@yahoo.com", paidAt: "2026-11-13T20:25:25.790Z", product: "SMART", name: "מורן שקל", phone: "972507000000" },
+        { email: "x@y.com", paidAt: "2026-11-14T08:00:00.000Z", product: "360", name: "", phone: "" },
       ] }));
       const box = o.page.locator(".paidunreg");
       const has = await box.count();
@@ -186,7 +186,7 @@ const CHECKS = [
       const nul = await o3.page.locator(".paidunreg").count();
       await o3.ctx.close();
       const ok = t.includes("שילמו ולא נרשמו (2)") && t.includes("מורן שקל") && t.includes("moran_atlas@yahoo.com")
-        && t.includes("972507000000") && t.includes("שילמה ב-13.11 22:25") && t.includes("שילמה ב-14.11 10:00")
+        && t.includes("972507000000") && t.includes("שילמה על SMART ב-13.11 22:25") && t.includes("שילמה על 360 ב-14.11 10:00")
         && btns === 1 && top < 300 && none === 0 && nul === 0 && !o.errors.length && !o2.errors.length && !o3.errors.length;
       return { ok, detail: `טקסט ${t.slice(0, 160)} · כפתורים ${btns} · גובה ${Math.round(top)} · ריק ${none} · null ${nul} · שגיאות ${o.errors[0] || o2.errors[0] || o3.errors[0] || "אין"}` };
     },

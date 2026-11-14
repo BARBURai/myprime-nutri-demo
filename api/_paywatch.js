@@ -99,7 +99,9 @@ const escHtml = (s) => String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;"
 export function alertMail(w, chatUrl) {
   const t = paidLabel(w.paidAt);
   const subject = `שילמה ולא נרשמה: ${w.email}`;
-  const line = `שילמה ב-${t.date} בשעה ${t.time}, ועד עכשיו אין לה תאריך התחלה במניצ'ט, ולכן היא לא יכולה להיכנס לאפליקציה.`;
+  // המוצר לפני התאריך, v8.51. רון: "אני לא רואה מה היא רכשה".
+  const what = w.product ? `על ${w.product} ` : "";
+  const line = `שילמה ${what}ב-${t.date} בשעה ${t.time}, ועד עכשיו אין לה תאריך התחלה במניצ'ט, ולכן היא לא יכולה להיכנס לאפליקציה.`;
   const who = [w.name, w.email, w.phone].filter(Boolean).map(escHtml).join(" · ");
   const html = `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6">` +
     `<p><b>${who}</b></p><p>${escHtml(line)}</p>` +
