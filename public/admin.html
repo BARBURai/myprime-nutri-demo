@@ -1147,6 +1147,31 @@ function mcSyncBlock(){
   }
   return h+'</div>';
 }
+// **"שילמו ולא נרשמו". v8.50.** רון, 14.11.2026, בנוסח שאישר. מי ששילמה לפני 20 דקות
+// לפחות ואין לה שורה בשרת, כלומר האפליקציה עונה לה "לא רשומה". מוצג רק כשיש כאלה,
+// ויוצאת מהרשימה לבד ברגע שמניצ'ט רושם אותה. החישוב בשרת, `api/_paywatch.js`.
+function paidLabelHe(iso){
+  var d = new Date(iso);
+  if(isNaN(d)) return "";
+  var p = {};
+  new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jerusalem", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })
+    .formatToParts(d).forEach(function(x){ p[x.type] = x.value; });
+  return p.day+"."+p.month+" "+p.hour+":"+p.minute;
+}
+function paidBlock(){
+  var L = DATA && DATA.paidUnreg;
+  if(!L || !L.length) return "";
+  var h = '<div class="card paidunreg" style="border:2px solid #c62828;background:#fdecea">'+
+    '<div class="note" style="color:#b71c1c;font-size:16px"><b>שילמו ולא נרשמו ('+L.length+')</b></div>';
+  L.forEach(function(w){
+    h += '<div class="note pu-row" style="border-top:1px solid #f3c1bd;padding-top:6px">'+
+      (w.name ? '<b>'+esc(w.name)+'</b> · ' : '')+esc(w.email)+(w.phone ? ' · '+esc(w.phone) : '')+
+      ' · שילמה ב-'+esc(paidLabelHe(w.paidAt))+
+      (w.phone ? ' <button class="btn" data-mcopen="'+esc(w.phone)+'">מניצ\'ט</button>' : '')+
+      '</div>';
+  });
+  return h+'</div>';
+}
 function teamBlock(){
   if(!DATA.owner) return "";
   if(!CODESOPEN) return '<div class="chips"><span class="chip" data-team="1">👥 צוות המשרד</span></div>';
@@ -1522,6 +1547,7 @@ function render(){
       '<span class="cnt">'+list.length+' משתתפות'+(DATA.version?' · v'+esc(DATA.version):'')+'</span>'+
       '<span class="who">'+esc(DATA.me||WHO||"?")+(DATA.owner?" · מנהל":"")+'</span>'+
     '</div>'+
+    paidBlock()+
     mcSyncBlock()+
     teamBlock()+
     nameFixBlock()+

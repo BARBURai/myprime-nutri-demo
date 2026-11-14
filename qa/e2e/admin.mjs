@@ -165,6 +165,33 @@ const ACTIONS = [
 
 const CHECKS = [
   {
+    // v8.50: "שילמו ולא נרשמו". שני הצדדים באותה הרצה: עם רשימה האריח מוצג בנוסח שאושר,
+    // ובלי רשימה, וגם כשהשרת מחזיר null בתקלה, אין אריח בכלל.
+    name: "שילמו ולא נרשמו: אריח אדום בראש המסך",
+    run: async (browser, device) => {
+      const o = await open(browser, device, (d) => ({ ...d, paidUnreg: [
+        { email: "moran_atlas@yahoo.com", paidAt: "2026-11-13T20:25:25.790Z", name: "מורן שקל", phone: "972507000000" },
+        { email: "x@y.com", paidAt: "2026-11-14T08:00:00.000Z", name: "", phone: "" },
+      ] }));
+      const box = o.page.locator(".paidunreg");
+      const has = await box.count();
+      const t = has ? (await box.innerText()).replace(/\s+/g, " ") : "";
+      const btns = has ? await box.locator("[data-mcopen]").count() : 0;
+      const top = has ? await box.evaluate((el) => el.getBoundingClientRect().top) : 9999;
+      await o.ctx.close();
+      const o2 = await open(browser, device, (d) => ({ ...d, paidUnreg: [] }));
+      const none = await o2.page.locator(".paidunreg").count();
+      await o2.ctx.close();
+      const o3 = await open(browser, device, (d) => ({ ...d, paidUnreg: null }));
+      const nul = await o3.page.locator(".paidunreg").count();
+      await o3.ctx.close();
+      const ok = t.includes("שילמו ולא נרשמו (2)") && t.includes("מורן שקל") && t.includes("moran_atlas@yahoo.com")
+        && t.includes("972507000000") && t.includes("שילמה ב-13.11 22:25") && t.includes("שילמה ב-14.11 10:00")
+        && btns === 1 && top < 300 && none === 0 && nul === 0 && !o.errors.length && !o2.errors.length && !o3.errors.length;
+      return { ok, detail: `טקסט ${t.slice(0, 160)} · כפתורים ${btns} · גובה ${Math.round(top)} · ריק ${none} · null ${nul} · שגיאות ${o.errors[0] || o2.errors[0] || o3.errors[0] || "אין"}` };
+    },
+  },
+  {
     // v8.20: הקפאה שתאריך החזרה שלה עבר מוצגת כמה שהייתה, בלי "בהקפאה" ובלי כפתור "סיום
     // ההקפאה", ובשני המצבים כתוב ממתי ההקפאה. שני הצדדים באותה הרצה, כי כרטיס שתמיד אומר
     // "בהקפאה" נראה בדיוק כמו כרטיס שעובד, אם בודקים רק אישה שעדיין מוקפאת.
