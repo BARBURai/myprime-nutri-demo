@@ -29,6 +29,7 @@ import { readXlsx } from "./_xlsx.js";
 import { parseKey, driveDownload } from "./_gdrive.js";
 import { excelIndex, targets as nameTargets, run as nameRun, mailHtml as nameMail, CAP as NAME_CAP } from "./_namefix.js";
 import { REF_BONUS, REF_BY, REF_MINE, refCharge, refKeyOk, promoCharge, refLink, promo360Charge, PROMO360_START, PROMO360_MONTHS } from "./_ref.js";
+import { recordPurchase, paidUnregistered, payWatch } from "./_paywatch.js";
 import { addDaysYmd } from "./_product.js";
 import { addMonthsYmd } from "./_product.js";
 
@@ -115,7 +116,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.49";
+const ADMIN_VERSION = "8.50";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -648,6 +649,8 @@ export default async function handler(req, res) {
     try {
       let body = req.body;
       if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+      // "שילמו ולא נרשמו", v8.50: כל קנייה נרשמת, גם מחוץ לחלון של ההטבה.
+      await recordPurchase(body, "SMART", (cmd) => redisPost(RU, RT, cmd));
       const out = await promoCharge(body, (cmd) => redisPost(RU, RT, cmd));
       return res.status(out.status).json(out.json);
     } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
@@ -660,10 +663,30 @@ export default async function handler(req, res) {
     try {
       let body = req.body;
       if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+      await recordPurchase(body, "360", (cmd) => redisPost(RU, RT, cmd));
       const out = await promo360Charge(body, (cmd) => redisPost(RU, RT, cmd));
       if (out.status === 200 && out.json.months) { try { await bumpRev(RU, RT); } catch (e) {} }
       return res.status(out.status).json(out.json);
     } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+  }
+  // **"שילמו ולא נרשמו". v8.50.** כל 5 דקות, מוורסל בלבד. ראה `api/_paywatch.js`.
+  // מייל אחד לכל אישה ששילמה לפני 20 דקות ואין לה שורה בשרת.
+  if (req.query.paywatch !== undefined) {
+    const auth = req.headers.authorization || "";
+    if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) return res.status(401).json({ ok: false, error: "unauthorized" });
+    if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
+    try {
+      const chatOf = async (phone) => {
+        const p = String(phone || "").replace(/[^\d]/g, "");
+        if (!p || !process.env.MANYCHAT_TOKEN) return "";
+        const f = await mc(`/fb/subscriber/findByCustomField?field_id=${MC_WA_PHONE_FIELD}&field_value=${encodeURIComponent(p)}`);
+        const d = f && f.ok && f.j && f.j.data;
+        const sub = Array.isArray(d) ? d[0] : d;
+        return sub && sub.id ? `https://app.manychat.com/fb111742985290180/chat/${sub.id}` : "";
+      };
+      const out = await payWatch((cmd) => redisPost(RU, RT, cmd), { send: sendReport, chatOf });
+      return res.status(200).json({ ok: true, ...out });
+    } catch (e) { return res.status(500).json({ ok: false, error: "watch_failed" }); }
   }
   // סוף הקפאה ביום החזרה, ותגית ההקפאה יורדת במניצ'ט. מוורסל בלבד. v8.20.
   if (req.query.freezesweep !== undefined) {
@@ -1980,7 +2003,10 @@ JSON בלבד, בלי שום טקסט אחר:
   women.forEach((w) => { if (w.dupRows > 1 || (w.dupPhone && w.dupPhone.length)) markIgnore("dup", w.email, w); });
   noEmail.forEach((r) => markIgnore("mail", r.phone, r));
 
-  const listBody = { ok: true, today, version: ADMIN_VERSION, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, aiLimits: { photos: PHOTO_LIMIT, day: DAILY_LIMIT }, women, notesTotal, notesOff, noEmail, source, rev };
+  // "שילמו ולא נרשמו", v8.50. קריאה בלבד, ותקלה מחזירה `null` ולא רשימה ריקה שנראית תקינה.
+  let paidUnreg = null;
+  if (RU && RT) { try { paidUnreg = await paidUnregistered((cmd) => redisPost(RU, RT, cmd)); } catch (e) { paidUnreg = null; } }
+  const listBody = { ok: true, today, version: ADMIN_VERSION, paidUnreg, owner: !!me.owner, me: me.name || "", headers: sheet.headers, skipped: sheet.skipped, sheetNewAppRows: sheet.sheetNewAppRows, rawHeaders: sheet.rawHeaders, aiLimits: { photos: PHOTO_LIMIT, day: DAILY_LIMIT }, women, notesTotal, notesOff, noEmail, source, rev };
   return sendList(req, res, listBody);
 }
 
