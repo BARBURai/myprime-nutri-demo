@@ -30,6 +30,7 @@ import { parseKey, driveDownload } from "./_gdrive.js";
 import { excelIndex, targets as nameTargets, run as nameRun, mailHtml as nameMail, CAP as NAME_CAP } from "./_namefix.js";
 import { REF_BONUS, REF_BY, REF_MINE, refCharge, refKeyOk, promoCharge, refLink, promo360Charge, PROMO360_START, PROMO360_MONTHS } from "./_ref.js";
 import { recordPurchase, paidUnregistered, payWatch } from "./_paywatch.js";
+import { giftEvent, giftRetry, GIFT_TAG, GIFT_DATE_FIELD } from "./_gift.js";
 import { addDaysYmd } from "./_product.js";
 import { addMonthsYmd } from "./_product.js";
 import { SUB_HASH, SUB_TAG_ID, SUB_PHOTO_LIMIT, secretOk as subSecretOk, handleCharge as subCharge, sweep as subSweep, cancelSub, payRecurringUrl, parseRec as parseSubRec, subStatus, subPhotoKey } from "./_sub.js";
@@ -117,7 +118,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.51";
+const ADMIN_VERSION = "8.52";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -207,6 +208,14 @@ async function mc(path, body) {
   // answer. Not checking this is exactly what made a rejected write look like a success.
   const said = j && typeof j.status === "string" ? j.status : "";
   return { ok: r.ok && said !== "error", status: r.status, j, error: (j && (j.message || j.details)) || "" };
+}
+
+// דף המתנה, v8.52: תגית ושדה תאריך לפי מזהה איש הקשר. שתיהן חייבות לעבור.
+async function giftTag(u, atIso) {
+  const a = await mc("/fb/subscriber/addTagByName", { subscriber_id: Number(u), tag_name: GIFT_TAG });
+  if (a.off || !a.ok) return false;
+  const b = await mc("/fb/subscriber/setCustomFieldByName", { subscriber_id: Number(u), field_name: GIFT_DATE_FIELD, field_value: atIso });
+  return !b.off && !!b.ok;
 }
 
 async function mcFind(phone) {
@@ -743,6 +752,21 @@ export default async function handler(req, res) {
       return res.status(out.status).json(out.json);
     } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
   }
+  // **דף המתנה בכנס: תיעוד הצהרת הבריאות. v8.52.** ראה `api/_gift.js`. פתוח בלי מפתח, כי
+  // הדף ציבורי, ומגיע מ-sendBeacon כטקסט. **בדב אין שום כתיבה למניצ'ט.**
+  if (req.query.gift !== undefined) {
+    if (req.method !== "POST") return res.status(405).json({ ok: false });
+    if (!RU || !RT) return res.status(503).json({ ok: false, error: "no_store" });
+    try {
+      const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || String(req.headers["x-real-ip"] || "");
+      const out = await giftEvent(req.body, ip, req.headers.origin || "", {
+        redis: (cmd) => redisPost(RU, RT, cmd),
+        tag: giftTag,
+        writeMc: !!process.env.MANYCHAT_TOKEN && process.env.VERCEL_ENV !== "preview",
+      });
+      return res.status(out.status).json(out.json);
+    } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
+  }
   // **"שילמו ולא נרשמו". v8.50.** כל 5 דקות, מוורסל בלבד. ראה `api/_paywatch.js`.
   // מייל אחד לכל אישה ששילמה לפני 20 דקות ואין לה שורה בשרת.
   if (req.query.paywatch !== undefined) {
@@ -759,7 +783,12 @@ export default async function handler(req, res) {
         return sub && sub.id ? `https://app.manychat.com/fb111742985290180/chat/${sub.id}` : "";
       };
       const out = await payWatch((cmd) => redisPost(RU, RT, cmd), { send: sendReport, chatOf });
-      return res.status(200).json({ ok: true, ...out });
+      // דף המתנה, v8.52: תגיות שמניצ'ט דחה בזמן האישור. תקלה כאן אינה נוגעת בשאר.
+      let gift = null;
+      if (process.env.MANYCHAT_TOKEN && process.env.VERCEL_ENV !== "preview") {
+        try { gift = await giftRetry({ redis: (cmd) => redisPost(RU, RT, cmd), tag: giftTag }); } catch (e) { gift = { error: true }; }
+      }
+      return res.status(200).json({ ok: true, ...out, gift });
     } catch (e) { return res.status(500).json({ ok: false, error: "watch_failed" }); }
   }
   // הסריקה היומית שמורידה את התגית כשהמנוי הסתיים. מוורסל בלבד.
