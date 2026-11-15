@@ -1804,6 +1804,25 @@ export const CONTENT_DAYS = [
   }
 ];
 
+// v8.53, זמני: שבוע 2 יום 3 בסדר חדש, רק למי שהמחזור שלה מתחיל מ-15.11.2026.
+// הווים נשמרים לפי המקום ברשימה, ולכן אצל מי שהתחילה קודם לא זז כלום.
+// ההחלטה נעשית כאן בלבד, על האובייקט עצמו, וכל מקום שקורא את היום מקבל אותה.
+// כשכל המחזורים שלפני 15.11 יסיימו, מוחקים את הישן ומשאירים רק את החדש.
+export const W2D3_NEW_FROM = "2026-11-15";
+const W2D3 = CONTENT_DAYS.find((d) => d.week === 2 && d.day === 3);
+const W2D3_OLD = W2D3 ? { theme: W2D3.theme, lessons: W2D3.lessons.slice() } : null;
+const W2D3_NEW = W2D3 ? {
+  theme: "הדרכת הכנה לאימונים + הסבר על התאמת דרגת הקושי + אימון 1",
+  lessons: [W2D3.lessons[2], W2D3.lessons[0], W2D3.lessons[1]],
+} : null;
+export function applyContentOrder(startDate) {
+  if (!W2D3) return;
+  const src = (typeof startDate === "string" && startDate >= W2D3_NEW_FROM) ? W2D3_NEW : W2D3_OLD;
+  if (W2D3.lessons[0] === src.lessons[0] && W2D3.theme === src.theme) return;
+  W2D3.theme = src.theme;
+  W2D3.lessons = src.lessons.slice();
+}
+
 // Find the content for a given program week+day (null if none).
 export function contentForDay(week, day) {
   return CONTENT_DAYS.find((d) => d.week === week && d.day === day) || null;
