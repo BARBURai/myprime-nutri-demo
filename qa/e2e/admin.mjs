@@ -192,6 +192,29 @@ const CHECKS = [
     },
   },
   {
+    // v8.54: מי ששילמה ולא נרשמה נמצאת בחיפוש, לפי מייל ולפי טלפון בכל צורה, ומי שאינה
+    // ברשימה אינה מוצגת. שני הצדדים באותה הרצה, כי קופסה שתמיד מוצגת נראית כמו קופסה שעובדת.
+    name: "חיפוש: מוצא גם את מי ששילמה ולא נרשמה",
+    run: async (browser, device) => {
+      const o = await open(browser, device, (d) => ({ ...d, paidUnreg: [
+        { email: "moran_atlas@yahoo.com", paidAt: "2026-11-13T20:25:25.790Z", product: "SMART", name: "מורן שקל", phone: "972507000000" },
+      ] }));
+      const q = o.page.locator("#q");
+      const hits = async (v) => { await q.fill(v); await o.page.waitForTimeout(500); const b = o.page.locator(".paidhits"); return (await b.count()) ? (await b.innerText()).replace(/\s+/g, " ") : ""; };
+      const byMail = await hits("moran_atlas");
+      const btn = await o.page.locator(".paidhits [data-mcopen]").count();
+      const byPhone = await hits("050-700-0000");
+      const byName = await hits("מורן");
+      const other = await hits("lior5066@gmail.com");
+      await q.fill(""); await o.page.waitForTimeout(500);
+      const cleared = await o.page.locator(".paidhits").count();
+      await o.ctx.close();
+      const ok = byMail.includes("שילמה ולא נרשמה") && byMail.includes("שילמה על SMART ב-13.11 22:25") && btn === 1
+        && byPhone.includes("moran_atlas@yahoo.com") && byName.includes("מורן שקל") && other === "" && cleared === 0 && !o.errors.length;
+      return { ok, detail: `מייל ${byMail.slice(0, 90)} · כפתור ${btn} · טלפון ${byPhone ? "כן" : "לא"} · שם ${byName ? "כן" : "לא"} · אחרת ${other ? "מוצגת" : "לא"} · ריק ${cleared} · שגיאות ${o.errors[0] || "אין"}` };
+    },
+  },
+  {
     // v8.20: הקפאה שתאריך החזרה שלה עבר מוצגת כמה שהייתה, בלי "בהקפאה" ובלי כפתור "סיום
     // ההקפאה", ובשני המצבים כתוב ממתי ההקפאה. שני הצדדים באותה הרצה, כי כרטיס שתמיד אומר
     // "בהקפאה" נראה בדיוק כמו כרטיס שעובד, אם בודקים רק אישה שעדיין מוקפאת.

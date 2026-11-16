@@ -1163,14 +1163,32 @@ function paidBlock(){
   if(!L || !L.length) return "";
   var h = '<div class="card paidunreg" style="border:2px solid #c62828;background:#fdecea">'+
     '<div class="note" style="color:#b71c1c;font-size:16px"><b>שילמו ולא נרשמו ('+L.length+')</b></div>';
-  L.forEach(function(w){
-    h += '<div class="note pu-row" style="border-top:1px solid #f3c1bd;padding-top:6px">'+
-      (w.name ? '<b>'+esc(w.name)+'</b> · ' : '')+esc(w.email)+(w.phone ? ' · '+esc(w.phone) : '')+
-      ' · שילמה '+(w.product ? 'על '+esc(w.product)+' ' : '')+'ב-'+esc(paidLabelHe(w.paidAt))+
-      (w.phone ? ' <button class="btn" data-mcopen="'+esc(w.phone)+'">מניצ\'ט</button>' : '')+
-      '</div>';
-  });
+  L.forEach(function(w){ h += paidRow(w); });
   return h+'</div>';
+}
+function paidRow(w){
+  return '<div class="note pu-row" style="border-top:1px solid #f3c1bd;padding-top:6px">'+
+    (w.name ? '<b>'+esc(w.name)+'</b> · ' : '')+esc(w.email)+(w.phone ? ' · '+esc(w.phone) : '')+
+    ' · שילמה '+(w.product ? 'על '+esc(w.product)+' ' : '')+'ב-'+esc(paidLabelHe(w.paidAt))+
+    (w.phone ? ' <button class="btn" data-mcopen="'+esc(w.phone)+'">מניצ\'ט</button>' : '')+
+    '</div>';
+}
+// v8.54: מי ששילמה ולא נרשמה אינה ב-DATA.women, ולכן החיפוש לא מצא אותה. רון, 16.11.2026:
+// "כן, גם בחיפוש". אותו כלל חיפוש של הרשימה: שם, מייל, וטלפון בכל צורה.
+function paidHits(q){
+  var L = (DATA && DATA.paidUnreg) || [];
+  if(!q || !L.length) return [];
+  var pIsPhone = isPhoneQ(q), pPhone = phoneKey(q);
+  return L.filter(function(w){
+    if(((w.name||"")+" "+(w.email||"")+" "+(w.phone||"")).toLowerCase().indexOf(q) !== -1) return true;
+    return pIsPhone && phoneKey(w.phone).indexOf(pPhone) !== -1;
+  });
+}
+function paidHitsBlock(q){
+  var H = paidHits(q);
+  if(!H.length) return "";
+  return '<div class="paidhits" style="border:2px solid #c62828;background:#fdecea;border-radius:12px;margin:10px;padding:4px 10px 8px">'+
+    '<div class="note" style="color:#b71c1c"><b>שילמה ולא נרשמה</b></div>'+H.map(paidRow).join("")+'</div>';
 }
 function teamBlock(){
   if(!DATA.owner) return "";
@@ -2418,6 +2436,7 @@ function render(){
 
   html += '<div class="split'+(sel?" haspick":"")+'">'+
     '<div class="pane list">'+
+      (searching ? paidHitsBlock(q) : '')+
       '<div class="phead"><span>'+list.length+' משתתפות</span><span>ממוינות לפי שם</span></div>'+
       (list.length
         // תקרה על הציור בלבד, כי הרשימה נבנית מחדש בכל הקשה בחיפוש. מה שנחתך נאמר
