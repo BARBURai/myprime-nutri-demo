@@ -1511,6 +1511,34 @@ const CHECKS = [
     },
   },
   {
+    // v8.53: שבוע 2 יום 3 בסדר חדש רק ממחזור 15.11.2026. מי שהתחילה קודם רואה את הסדר
+    // הישן, והווי שסימנה נשאר על אותו סרטון. שני הצדדים באותה הרצה.
+    name: "שבוע 2 יום 3: סדר חדש ממחזור 15.11, והישנות נשארות כמו שהיו",
+    async run(browser, device) {
+      const rowsOf = async (page) => {
+        await page.locator('[data-tut="contentcard"]').first().click();
+        await page.waitForTimeout(700);
+        return page.evaluate(() => {
+          const want = ["דרגת הקושי", "מבוא לאימוני הכוח", "אימון מס' 1"];
+          const rows = [...document.querySelectorAll('div[role="button"]')];
+          return want.map((w) => {
+            const r = rows.find((el) => el.textContent.includes(w));
+            return r ? { w, top: r.getBoundingClientRect().top, done: !!r.querySelector("svg.lucide-check") } : { w, top: -1, done: false };
+          });
+        });
+      };
+      const seedDone = (done) => async (ctx) => ctx.addInitScript((d) => localStorage.setItem("mp_content_done_v1", JSON.stringify(d)), done);
+      const o = await openApp(browser, device, { startDate: "2026-11-08", clock: "2026-11-17T08:00:00Z", beforeLoad: seedDone({ "W2D3-0": 1 }) });
+      const old = await rowsOf(o.page); const oErr = o.errors.filter((e) => !/favicon|manifest/i.test(e)); await o.context.close();
+      const n = await openApp(browser, device, { startDate: "2026-11-15", clock: "2026-11-24T08:00:00Z", beforeLoad: seedDone({ "W2D3-1": 1 }) });
+      const nu = await rowsOf(n.page); const nErr = n.errors.filter((e) => !/favicon|manifest/i.test(e)); await n.context.close();
+      const order = (rs) => rs.slice().filter((r) => r.top >= 0).sort((a, b) => a.top - b.top).map((r) => r.w).join(" > ");
+      const oOk = order(old) === "מבוא לאימוני הכוח > אימון מס' 1 > דרגת הקושי" && old.find((r) => r.w === "מבוא לאימוני הכוח").done && !old.find((r) => r.w === "דרגת הקושי").done;
+      const nOk = order(nu) === "דרגת הקושי > מבוא לאימוני הכוח > אימון מס' 1" && nu.find((r) => r.w === "מבוא לאימוני הכוח").done && !nu.find((r) => r.w === "דרגת הקושי").done;
+      return { ok: oOk && nOk && !oErr.length && !nErr.length, detail: `ישנה: ${order(old)} · חדשה: ${order(nu)}` };
+    },
+  },
+  {
     // Same fault one screen over: back from inside a lesson used to shut the whole content
     // screen. The tab strip only exists in the list views, so its absence is what says a
     // lesson is open, and the close button says we are still inside the content screen.

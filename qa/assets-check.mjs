@@ -31,7 +31,9 @@ if (base !== "/pdf/") {
   process.exit(1);
 }
 
-const days = JSON.parse(src.slice(src.indexOf("["), src.lastIndexOf("]") + 1));
+// סוף הרשימה הוא "]" בתחילת שורה, ולא ה-"]" האחרון בקובץ, כי אחריה יש קוד (v8.53).
+const daysStart = src.indexOf("[");
+const days = JSON.parse(src.slice(daysStart, src.indexOf("\n]", daysStart) + 2));
 
 const wanted = new Map(); // filename -> where it came from
 const isAsset = (s) => /\.(jpg|jpeg|png|pdf)$/i.test(s);

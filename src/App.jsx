@@ -14,6 +14,7 @@ import IosInstallWalk from "./features/IosInstallWalk";
 import { CHECKIN_GROUPS, CHECKIN_TASKS, activeTasks } from "./checkins";
 import { ContentDayCard, ContentModule, contentForDay, usageSummary } from "./content/ContentModule";
 import { GLOW_STARTED_KEY, hasGlow, glowStarted } from "./content/glow";
+import { applyContentOrder } from "./content/data";
 import { labelName } from "../lib/catfilter.js";
 import { sunsetUTC } from "../api/_hebcal.js";
 
@@ -767,7 +768,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.52";
+const VERSION = "8.54";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -7250,6 +7251,7 @@ export default function App() {
   const [onboarded, setOnboarded] = useState(saved ? !!saved.onboarded : false);
   const [tab, setTab] = useState("day");
   const [profile, setProfile] = useState(saved?.profile || DEFAULT_PROFILE);
+  applyContentOrder(profile.startDate); // v8.53: סדר שבוע 2 יום 3 לפי המחזור, לפני שכל מסך קורא אותו
   const [log, setLog] = useState(saved?.log || (DEV ? INITIAL_LOG : []));
   const [weights, setWeights] = useState(saved?.weights || initWeights(DEFAULT_PROFILE.weightKg, DEFAULT_PROFILE.startDate));
   const [activityLog, setActivityLog] = useState(saved?.activityLog || []);
