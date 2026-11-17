@@ -244,7 +244,8 @@ console.log("\nמה שהמסך מציג");
 {
   const html = readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
   // שני סוגי הבעיות בקובץ יושבים בכפתור אחד מ-v6.78, לפי בקשת רון.
-  check('יש כפתור אחד, "בעיות בגיליון"', /data-v="probs"/.test(html) && html.indexOf("בעיות בגיליון (") !== -1);
+  // מ-v8.56 הכפתור בתפריט ☰, והמספר בתג אדום לידו ולא בסוגריים.
+  check('יש כפתור אחד, "בעיות בגיליון"', (html.match(/data-v="probs"/g) || []).length === 1 && html.indexOf('data-v="probs">בעיות בגיליון\'+(probsN?') !== -1);
   check("והמספר שלו הוא סכום השניים", /probsN = noMailOn\.length \+ dupOn\.length/.test(html));
   check("ושני הכפתורים הישנים ירדו", !/data-v="nomail"/.test(html) && !/data-v="dup"/.test(html));
   check("המסך מציג את שני החלקים", /probsScreen\(noMailOn, dupOn\)/.test(html) &&

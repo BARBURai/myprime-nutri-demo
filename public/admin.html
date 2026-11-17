@@ -62,6 +62,23 @@
   .zone.work{background:var(--card-2); border:1px solid var(--line); box-shadow:inset 3px 0 0 var(--pink)}
   .zone.work.calm{box-shadow:inset 3px 0 0 var(--line-2)}
   .qhint{font-size:12.5px;color:var(--ink-3);margin:6px 2px 0}
+  .burger{position:relative;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:var(--bar-ink);border-radius:10px;padding:5px 12px;font-weight:700;cursor:pointer}
+  .burger.on{background:rgba(255,255,255,.24)}
+  .bdot{position:absolute;top:-7px;inset-inline-start:-7px;background:var(--danger);color:#fff;font-size:11px;line-height:1;border-radius:999px;padding:3px 6px}
+  .menu{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh2);margin:-6px 0 14px;overflow:hidden}
+  .mi{display:flex;align-items:center;gap:8px;width:100%;text-align:start;background:none;border:0;border-bottom:1px solid var(--line);padding:12px 16px;font-weight:600;cursor:pointer}
+  .mi:last-child{border-bottom:0}
+  .mi:hover,.mi.on{background:var(--card-2)}
+  .mb{margin-inline-start:auto;background:var(--dangerbg);color:var(--danger);border:1px solid var(--danger-line);border-radius:999px;font-size:12px;padding:0 8px}
+  .urg{display:flex;gap:6px;margin-top:10px}
+  .ub{flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid transparent;border-radius:10px;padding:8px 6px;font-size:14px;font-weight:700;color:#fff;white-space:nowrap;cursor:pointer;min-height:40px}
+  .ub span{background:#fff;border-radius:999px;padding:0 7px;font-size:13px;line-height:1.5}
+  .ub.red{background:var(--danger)} .ub.red span{color:var(--danger)}
+  .ub.off{background:#e4e5ec;color:var(--ink-3)} .ub.off span{color:var(--ink-3)}
+  .ub.pk{background:var(--pink)} .ub.pk span{color:var(--pink)}
+  .ub.wn{background:var(--warnbg);color:var(--warn);border-color:var(--warn-line)} .ub.wn span{color:var(--warn);border:1px solid var(--warn-line)}
+  .ub.on{box-shadow:0 0 0 3px rgba(18,16,26,.18)}
+  .chips.todo{margin-top:8px}
   .zone.filt{border:1px solid var(--line);display:flex;flex-direction:column;gap:8px;align-items:stretch}
   .zone.filt > .chips{margin:0}
   /* שלוש רשימות נפתחות בשורה אחת. כל אחת מתכווצת ונשברת לשורה משלה בטלפון,
@@ -1031,6 +1048,9 @@ function appGap(){
 }
 
 var CODES = null, CODESOPEN = false, FREEZING = "", FRZHELP = "", VIEW = "";
+// **תפריט ☰ ושורת שלושת הכפתורים. v8.56.** רון, 16.11.2026: "כל הדבר הזה... בואו נשים את זה
+// בהמבורגר. הדבר היחידי שבאמת חשוב זה הערות ממתינות". הדמו והנוסחים אושרו 17.11.2026.
+var MENU = false, MCSHOW = false, WORKOPEN = false;
 // אילו מהחלקים במסך "בעיות בגיליון" מציגים גם את המוסתרות. לסשן הזה בלבד.
 var IGNOPEN = { mail: false, dup: false };
 var NAMING = "";   // הכרטיס שבו שדה השם פתוח לעריכה
@@ -1133,9 +1153,10 @@ function loadMc(){
 function nf(n){ return Number(n||0).toLocaleString("en-US"); }
 function hhmm(t){ return new Date(t).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"Asia/Jerusalem"}); }
 function mcSyncBlock(){
-  if(!MCST || !MCST.ok) return "";
+  if(!MCSHOW) return "";
+  if(!MCST || !MCST.ok) return '<div class="card"><div class="row1"><span class="nm">עדכון ממניצ\'ט וייבוא</span><button class="lnk" data-mcshow="0">סגירה</button></div><div class="note">'+(MCST && MCST.ok === false ? "החיבור למניצ'ט לא מוגדר." : "טוענת...")+'</div></div>';
   var d = (MCST.days && MCST.days[0]) || {};
-  var h = '<div class="card"><div class="note"><b>עדכון ישיר ממניצ\'ט</b> · התקבלו '+nf(MCST.fromMc)+' נשים'+
+  var h = '<div class="card"><div class="row1"><span class="nm">עדכון ממניצ\'ט וייבוא</span><button class="lnk" data-mcshow="0">סגירה</button></div><div class="note"><b>עדכון ישיר ממניצ\'ט</b> · התקבלו '+nf(MCST.fromMc)+' נשים'+
     (MCST.last ? ' · עדכון אחרון '+hhmm(MCST.last) : '')+'</div>'+
     '<div class="note"><b>היום:</b> '+nf(d.same)+' זהות · '+nf(d.diff)+' פערים · '+nf(d.onlySheet)+' חסרות במניצ\'ט · '+nf(d.onlyMc)+' רק במניצ\'ט</div>';
   if(DATA.owner){
@@ -1192,7 +1213,7 @@ function paidHitsBlock(q){
 }
 function teamBlock(){
   if(!DATA.owner) return "";
-  if(!CODESOPEN) return '<div class="chips"><span class="chip" data-team="1">👥 צוות המשרד</span></div>';
+  if(!CODESOPEN) return "";
   var rows = (CODES||[]).map(function(c){
     return '<div class="edit"><span><b>'+esc(c.name||"בלי שם")+'</b></span>'+
       '<span style="direction:ltr;unicode-bidi:isolate;font-weight:700">'+esc(c.code)+'</span>'+
@@ -1295,7 +1316,7 @@ function nfRunAll(){
   })();
 }
 function nameFixBlock(){
-  if(!NFOPEN) return '<div class="chips"><span class="chip" data-nfopen="1">תיקון שמות מהאקסל</span></div>';
+  if(!NFOPEN) return "";
   var h = '<div class="card"><div class="row1"><span class="nm">תיקון שמות מהאקסל</span>'+
     '<button class="lnk" data-nfopen="0">סגירה</button></div>';
   if(NFERR) return h+'<div class="note">לא הצלחתי לטעון את הנתונים. נסי לרענן.</div></div>';
@@ -1560,35 +1581,41 @@ function render(){
 
   // הפס הכהה, אחר כך סרגל אחד שבתוכו שני אזורים נפרדים: מה שדורש טיפול, ומה שרק מצמצם
   // את הרשימה. הם חולקים סרגל אבל לא נראים אותו דבר, כדי שאף אחת לא תחשוב שזה סינון.
-  var nWork = missing.length + noDate.length + backSoon.length + probsN;
+  var nPaid = ((DATA && DATA.paidUnreg) || []).length;
+  var nTodo = missing.length + noDate.length + backSoon.length;
+  var workOpen = WORKOPEN || MISSING || VIEW==="nodate" || VIEW==="backsoon";
   var html = '<div class="topbar"><h1>ניהול משתתפות</h1>'+
       '<span class="cnt">'+list.length+' משתתפות'+(DATA.version?' · v'+esc(DATA.version):'')+'</span>'+
       '<span class="who">'+esc(DATA.me||WHO||"?")+(DATA.owner?" · מנהל":"")+'</span>'+
+      '<button class="burger'+(MENU?" on":"")+'" data-menu="1" aria-expanded="'+(MENU?"true":"false")+'">☰ תפריט'+(probsN?'<span class="bdot">'+probsN+'</span>':'')+'</button>'+
     '</div>'+
-    paidBlock()+
+    // הכלים שאינם עבודה יומית. כל פריט פותח את המסך שלו, כמו הכפתורים שהיו כאן קודם.
+    (MENU ? '<div class="menu">'+
+      '<button class="mi" data-mcshow="1">עדכון ממניצ\'ט וייבוא</button>'+
+      (DATA.owner ? '<button class="mi" data-team="1">צוות המשרד</button>' : '')+
+      '<button class="mi" data-nfopen="1">תיקון שמות מהאקסל</button>'+
+      '<button class="mi'+(VIEW==="probs"?" on":"")+'" data-v="probs">בעיות בגיליון'+(probsN?'<span class="mb">'+probsN+'</span>':'')+'</button>'+
+      '<button class="mi'+(VIEW==="add"?" on":"")+'" data-v="add">הוספת משתתפת</button>'+
+    '</div>' : '')+
     mcSyncBlock()+
     teamBlock()+
     nameFixBlock()+
     '<div class="toolbar'+(SEL?" picked":"")+'">'+
     '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(qRaw)+'">'+
-    '<div class="qhint">אפשר להדביק מספר טלפון בכל צורה, עם + עם רווחים או עם מקפים.</div>'+
     (searching ? '<div class="note">תוצאות חיפוש מכל הרשומות בגיליון, בלי סינון לפי מחזור, קבוצה או אפליקציה.</div>' :
-      '<div class="zone work'+(nWork?"":" calm")+'"><span class="zlab">לטיפול</span>'+
-      '<div class="chips"><span class="chip'+(missing.length?" warn":"")+(MISSING?" on":"")+'" data-m="1">'+
-        (missing.length?"⚠ ":"")+'חסרות קבוצה ('+missing.length+')</span>'+
+      '<div class="urg">'+
+        '<button class="ub '+(nPaid?"red":"off")+(VIEW==="paid"?" on":"")+'" data-v="paid">שילמו ולא נרשמו <span>'+nPaid+'</span></button>'+
+        '<button class="ub pk'+(VIEW==="notes"?" on":"")+'" data-v="notes">הערות <span>'+notesCount+'</span></button>'+
+        '<button class="ub wn'+(workOpen?" on":"")+'" data-work="1" aria-expanded="'+(workOpen?"true":"false")+'">לטיפול <span>'+nTodo+'</span></button>'+
+      '</div>'+
+      (workOpen ? '<div class="chips todo">'+
+        '<span class="chip'+(missing.length?" warn":"")+(MISSING?" on":"")+'" data-m="1">חסרות קבוצה ('+missing.length+')</span>'+
         // Two work lists the freeze creates: who has no return date and must be chased, and
         // who comes back this week and has to be put in the right WhatsApp group.
-        '<span class="chip'+(noDate.length?" warn":"")+(VIEW==="nodate"?" on":"")+'" data-v="nodate">'+
-          (noDate.length?"⚠ ":"")+'הקפאה להשלמה ('+noDate.length+')</span>'+
+        '<span class="chip'+(noDate.length?" warn":"")+(VIEW==="nodate"?" on":"")+'" data-v="nodate">הקפאה להשלמה ('+noDate.length+')</span>'+
         '<span class="chip'+(VIEW==="backsoon"?" on":"")+'" data-v="backsoon">חוזרות מהקפאה השבוע ('+backSoon.length+')</span>'+
-        '<span class="chip'+(notesWaiting.length?" warn":"")+(VIEW==="notes"?" on":"")+'" data-v="notes">'+
-          (notesCount?"⚠ ":"")+'הערות ממתינות ('+notesCount+')</span>'+
-        // שני סוגי בעיות בקובץ, בכפתור אחד. רון, 4 בספטמבר 2026: "אי אפשר לצרף
-        // כבר את אלה שחסרות מייל לאותו כפתור של כל הבעיות בקובץ?"
-        '<span class="chip'+(probsN?" warn":"")+(VIEW==="probs"?" on":"")+'" data-v="probs">'+
-          (probsN?"⚠ ":"")+'בעיות בגיליון ('+probsN+')</span>'+
-        '<span class="chip'+(VIEW==="add"?" on":"")+'" data-v="add">הוספת משתתפת</span>'+
-      '</div>'+
+      '</div>' : '')+
+      '<div>'+
       // Say what the list covers, so a woman who is missing from it does not read as a bug.
       (MISSING ? '<div class="note">מוצגות רק נשים ללא אות קבוצה במחזור של השבוע ובמחזור של השבוע הבא, <b>ובאפליקציה שנבחרה בסינון</b>. כברירת מחדל זו האפליקציה החדשה בלבד, ו"כל האפליקציות" מציג גם את קג\'אבי.</div>' : '')+
       (VIEW==="nodate" ? '<div class="note">מוקפאות שחסר להן תאריך חזרה, שבוע חזרה או שניהם. <b>הן לא נכנסות לאפליקציה עד שיושלם.</b></div>' : '')+
@@ -2419,6 +2446,13 @@ function render(){
     return;
   }
 
+  if(VIEW === "paid" && !searching){
+    html += (nPaid ? paidBlock() : '<div class="card"><div class="note">אין כרגע אף אחת ששילמה ולא נרשמה.</div></div>');
+    app.innerHTML = html;
+    wire();
+    return;
+  }
+
   if(VIEW === "add" && !searching){
     html += addScreen();
     app.innerHTML = html;
@@ -2459,8 +2493,21 @@ function render(){
   var qEl = document.getElementById("q");
   qEl.oninput = function(){ var v=this.selectionStart; render(); var n=document.getElementById("q"); n.focus(); n.setSelectionRange(v,v); };
 
+  // התפריט נסגר בכל בחירה בתוכו, ובכל לחיצה על ☰ שוב.
+  app.querySelectorAll("[data-menu]").forEach(function(el){ el.onclick=function(){ MENU = !MENU; render(); }; });
+  var menuEl = app.querySelector(".menu");
+  if(menuEl) menuEl.addEventListener("click", function(){ if(MENU){ MENU = false; render(); } });
+  app.querySelectorAll("[data-work]").forEach(function(el){ el.onclick=function(){
+    var open = WORKOPEN || MISSING || VIEW==="nodate" || VIEW==="backsoon";
+    WORKOPEN = !open;
+    if(open){ MISSING = false; if(VIEW==="nodate"||VIEW==="backsoon") VIEW = ""; GROUP = ""; MONTH = null; }
+    render(); }; });
+  app.querySelectorAll("[data-mcshow]").forEach(function(el){ el.onclick=function(){
+    MCSHOW = el.getAttribute("data-mcshow")==="1";
+    if(MCSHOW && MCST===null){ MCST = {}; loadMc().then(render); }
+    render(); }; });
   app.querySelectorAll("[data-m]").forEach(function(el){ el.onclick=function(){
-    MISSING=!MISSING; EDITING=""; VIEW=""; SEL="";
+    MISSING=!MISSING; EDITING=""; VIEW=""; SEL=""; WORKOPEN = true;
     // Turning it on opens every cohort and preselects "ללא קבוצה", so what is on screen
     // matches what the chip promises without the clerk setting three filters by hand.
     YEAR = null; MONTH = MISSING ? "" : null; COHORT = ""; GROUP = MISSING ? "-" : "";
@@ -2477,7 +2524,9 @@ function render(){
     APP = "new"; PROG = ""; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-v]").forEach(function(el){ el.onclick=function(){
-    var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; SEL=""; EDITING=""; render(); }; });
+    var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; SEL=""; EDITING="";
+    if(v==="nodate"||v==="backsoon") WORKOPEN = true;
+    render(); }; });
   app.querySelectorAll("[data-frzhelp]").forEach(function(el){ el.onclick=function(e){ if(el.classList.contains("frzpop") && e.target!==el) return; var em=el.getAttribute("data-frzhelp"); FRZHELP = (em && FRZHELP!==em) ? em : ""; render(); }; });
   app.querySelectorAll("[data-mcopen]").forEach(function(el){ el.onclick=function(e){
     if(e) e.stopPropagation(); mcOpen(el.getAttribute("data-mcopen")); }; });

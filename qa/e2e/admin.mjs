@@ -100,6 +100,10 @@ const record = (device, name, ok, detail, skip) => {
 };
 
 // `patch` נותן לתרחיש לשנות את הנתונים שהמסך מקבל, בלי לגעת בשאר התרחישים.
+// v8.56: הכלים עברו לתפריט ☰, ו"חסרות קבוצה" מאחורי "לטיפול". פותחים לפני שלוחצים.
+async function menu(page) { if (!(await page.locator(".menu").count())) { await page.locator("[data-menu]").click(); await page.waitForTimeout(200); } }
+async function work(page) { if (!(await page.locator("[data-m]").count())) { await page.locator("[data-work]").click(); await page.waitForTimeout(200); } }
+
 async function open(browser, device, patch) {
   const DATA0 = patch ? patch(JSON.parse(JSON.stringify(DATA))) : DATA;
   const ctx = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
@@ -167,28 +171,40 @@ const CHECKS = [
   {
     // v8.50: "שילמו ולא נרשמו". שני הצדדים באותה הרצה: עם רשימה האריח מוצג בנוסח שאושר,
     // ובלי רשימה, וגם כשהשרת מחזיר null בתקלה, אין אריח בכלל.
-    name: "שילמו ולא נרשמו: אריח אדום בראש המסך",
+    name: "שילמו ולא נרשמו: כפתור בשורת הדחופים, והרשימה במסך משלה",
     run: async (browser, device) => {
       const o = await open(browser, device, (d) => ({ ...d, paidUnreg: [
         { email: "moran_atlas@yahoo.com", paidAt: "2026-11-13T20:25:25.790Z", product: "SMART", name: "מורן שקל", phone: "972507000000" },
         { email: "x@y.com", paidAt: "2026-11-14T08:00:00.000Z", product: "360", name: "", phone: "" },
       ] }));
+      const ub = o.page.locator('.ub[data-v="paid"]');
+      const ubTxt = (await ub.innerText()).replace(/\s+/g, " ").trim();
+      const red = await ub.evaluate((el) => el.classList.contains("red"));
+      const top = await ub.evaluate((el) => el.getBoundingClientRect().top);
+      const before = await o.page.locator(".paidunreg").count();
+      await ub.click();
+      await o.page.waitForTimeout(300);
       const box = o.page.locator(".paidunreg");
       const has = await box.count();
       const t = has ? (await box.innerText()).replace(/\s+/g, " ") : "";
       const btns = has ? await box.locator("[data-mcopen]").count() : 0;
-      const top = has ? await box.evaluate((el) => el.getBoundingClientRect().top) : 9999;
       await o.ctx.close();
-      const o2 = await open(browser, device, (d) => ({ ...d, paidUnreg: [] }));
-      const none = await o2.page.locator(".paidunreg").count();
-      await o2.ctx.close();
-      const o3 = await open(browser, device, (d) => ({ ...d, paidUnreg: null }));
-      const nul = await o3.page.locator(".paidunreg").count();
-      await o3.ctx.close();
-      const ok = t.includes("שילמו ולא נרשמו (2)") && t.includes("מורן שקל") && t.includes("moran_atlas@yahoo.com")
-        && t.includes("972507000000") && t.includes("שילמה על SMART ב-13.11 22:25") && t.includes("שילמה על 360 ב-14.11 10:00")
-        && btns === 1 && top < 300 && none === 0 && nul === 0 && !o.errors.length && !o2.errors.length && !o3.errors.length;
-      return { ok, detail: `טקסט ${t.slice(0, 160)} · כפתורים ${btns} · גובה ${Math.round(top)} · ריק ${none} · null ${nul} · שגיאות ${o.errors[0] || o2.errors[0] || o3.errors[0] || "אין"}` };
+      const grey = async (patch) => {
+        const x = await open(browser, device, patch);
+        const b = x.page.locator('.ub[data-v="paid"]');
+        const r = { txt: (await b.innerText()).replace(/\s+/g, " ").trim(), off: await b.evaluate((el) => el.classList.contains("off")) };
+        await b.click(); await x.page.waitForTimeout(300);
+        r.empty = (await x.page.locator("body").innerText()).includes("אין כרגע אף אחת ששילמה ולא נרשמה.");
+        r.box = await x.page.locator(".paidunreg").count();
+        r.errors = x.errors; await x.ctx.close(); return r;
+      };
+      const none = await grey((d) => ({ ...d, paidUnreg: [] }));
+      const nul = await grey((d) => ({ ...d, paidUnreg: null }));
+      const ok = ubTxt === "שילמו ולא נרשמו 2" && red && top < 300 && before === 0 && t.includes("שילמו ולא נרשמו (2)") && t.includes("מורן שקל") && t.includes("moran_atlas@yahoo.com")
+        && t.includes("972507000000") && t.includes("שילמה על SMART ב-13.11 22:25") && t.includes("שילמה על 360 ב-14.11 10:00") && btns === 1
+        && none.txt === "שילמו ולא נרשמו 0" && none.off && none.empty && none.box === 0 && nul.off && nul.empty && nul.box === 0
+        && !o.errors.length && !none.errors.length && !nul.errors.length;
+      return { ok, detail: `כפתור "${ubTxt}" אדום ${red} גובה ${Math.round(top)} · לפני ${before} · טקסט ${t.slice(0, 120)} · מניצ'ט ${btns} · ריק ${JSON.stringify(none)} · null ${nul.off}/${nul.empty} · שגיאות ${o.errors[0] || "אין"}` };
     },
   },
   {
@@ -565,13 +581,14 @@ CHECKS.push(
       const { ctx, page, errors } = await open(browser, device);
       const txt = await page.locator('[data-v="notes"]').first().innerText();
       await ctx.close();
-      return { ok: /\(5\)/.test(txt) && errors.length === 0, detail: `האריח אומר "${txt.trim()}"` };
+      return { ok: /^הערות\s*5$/.test(txt.trim()) && errors.length === 0, detail: `האריח אומר "${txt.trim()}"` };
     },
   },
   {
     name: "חלק חסר המייל נפתח, והשמירה שולחת את הטלפון והכתובת",
     async run(browser, device) {
       const { ctx, page, errors, posts } = await open(browser, device);
+      await menu(page);
       await page.locator('[data-v="probs"]').first().click();
       await page.waitForTimeout(400);
       const rows = await page.locator("[data-fixmail]").count();
@@ -593,6 +610,7 @@ CHECKS.push(
     name: "הוספת משתתפת שולחת בדיוק את מה שהוזן",
     async run(browser, device) {
       const { ctx, page, errors, posts } = await open(browser, device);
+      await menu(page);
       await page.locator('[data-v="add"]').first().click();
       await page.waitForTimeout(400);
       await page.locator("#ad_first").fill("דנה");
@@ -622,6 +640,7 @@ CHECKS.push({
   name: "חסרות קבוצה מסונן לאפליקציה החדשה, ואפשר להחזיר את השאר",
   async run(browser, device) {
     const { ctx, page, errors } = await open(browser, device);
+    await work(page);
     const tile = () => page.locator('[data-m="1"]').first().innerText();
     const before = await tile();
     await page.locator('[data-m="1"]').first().click();
@@ -647,7 +666,8 @@ CHECKS.push({
   name: "בעיות בגיליון מסונן לאפליקציה החדשה, ואפשר להחזיר את השאר",
   async run(browser, device) {
     const { ctx, page, errors } = await open(browser, device);
-    const tile = await page.locator('[data-v="probs"]').first().innerText();
+    await menu(page);
+    const tile = (await page.locator('[data-v="probs"]').first().innerText()).replace(/\s+/g, " ").replace(/(\d+)$/, "($1)");
     await page.locator('[data-v="probs"]').first().click();
     await page.waitForTimeout(400);
     const at = async () => [await page.locator("[data-fixmail]").count(), await page.locator(".qitem [data-open]").count()];
@@ -680,7 +700,8 @@ CHECKS.push({
       return d;
     });
     // המספר על הכפתור סופר את המוצגות בלבד: אחת מוסתרת, ולכן 3 במקום 4.
-    const label = (await page.locator('[data-v="probs"]').first().innerText()).trim();
+    await menu(page);
+    const label = (await page.locator('[data-v="probs"]').first().innerText()).replace(/\s+/g, " ").trim().replace(/(\d+)$/, "($1)");
     await page.locator('[data-v="probs"]').first().click();
     await page.waitForTimeout(400);
     const shown = await page.locator(".qitem [data-open]").count();
@@ -712,8 +733,9 @@ CHECKS.push({
   name: "בעיות בגיליון: שני החלקים במסך אחד, וכל כפילות אומרת מה כפול",
   async run(browser, device) {
     const { ctx, page, errors } = await open(browser, device);
+    await menu(page);
     const chip = page.locator('[data-v="probs"]').first();
-    const label = (await chip.innerText()).trim();
+    const label = (await chip.innerText()).replace(/\s+/g, " ").trim().replace(/(\d+)$/, "($1)");
     await chip.click();
     await page.waitForTimeout(400);
     const secs = await page.locator(".psec").allInnerTexts();
@@ -896,6 +918,9 @@ CHECKS.push({
     const MC = { ok: true, fromMc: 1240, last: Date.now(), days: [{ same: 830, diff: 3, onlySheet: 12, onlyMc: 0 }] };
     const o = await open(browser, device, (d) => Object.assign(d, { __mc: MC }));
     await o.page.waitForTimeout(500);
+    await menu(o.page);
+    await o.page.locator('[data-mcshow="1"]').click();
+    await o.page.waitForTimeout(300);
     const txt = await o.page.locator("body").innerText();
     const line = txt.includes("עדכון ישיר ממניצ'ט · התקבלו 1,240 נשים") && txt.includes("היום: 830 זהות · 3 פערים · 12 חסרות במניצ'ט · 0 רק במניצ'ט");
     const btn = o.page.locator("[data-mcimport]");
@@ -906,6 +931,9 @@ CHECKS.push({
     await o.ctx.close();
     const c = await open(browser, device, (d) => Object.assign(d, { owner: false, __mc: MC }));
     await c.page.waitForTimeout(500);
+    await menu(c.page);
+    await c.page.locator('[data-mcshow="1"]').click();
+    await c.page.waitForTimeout(300);
     const clerkLine = (await c.page.locator("body").innerText()).includes("התקבלו 1,240 נשים");
     const clerkBtn = await c.page.locator("[data-mcimport]").count();
     await c.ctx.close();
@@ -942,6 +970,7 @@ CHECKS.push({
       return json({ ok: true });
     });
     const p = o.page;
+    await menu(p);
     await p.locator('[data-nfopen="1"]').click();
     await p.waitForTimeout(600);
     const txt = () => p.locator("body").innerText();
@@ -966,6 +995,7 @@ CHECKS.push({
     const saved = posts.some((b) => b.setName && b.setName.phone === "5" && b.setName.first === "שרה" && b.setName.last === "אבן-חן");
     await o.ctx.close();
     const c = await open(browser, device, (d) => Object.assign(d, { owner: false }));
+    await menu(c.page);
     const clerk = await c.page.locator("[data-nfopen]").count();
     await c.ctx.close();
     const errs = o.errors.concat(c.errors);
@@ -998,6 +1028,7 @@ CHECKS.push({
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
     });
     const p = o.page;
+    await menu(p);
     await p.locator('[data-nfopen="1"]').click();
     await p.waitForTimeout(500);
     const txt = () => p.locator("body").innerText();
@@ -1049,6 +1080,7 @@ CHECKS.push({
     const alerts = [];
     o.page.on("dialog", (d) => { alerts.push(d.message()); });
     const p = o.page;
+    await menu(p);
     await p.locator('[data-nfopen="1"]').click();
     await p.waitForTimeout(500);
     await p.locator('[data-nfsave="5"]').click();
@@ -1199,6 +1231,42 @@ CHECKS.push({
 });
 
 const browser = await chromium.launch({ executablePath: BROWSER });
+// v8.56: תפריט ☰ ושורה אחת נמוכה לשלושת הדחופים. רון אישר את הדמו, 17.11.2026.
+// שני הצדדים: מנהל רואה חמישה פריטים ופקידה ארבעה, "לטיפול" נפתח ונסגר, והתפריט נסגר בבחירה.
+CHECKS.push({
+  name: "תפריט ☰ ושורת הדחופים",
+  async run(browser, device) {
+    const o = await open(browser, device);
+    const p = o.page;
+    const closed0 = await p.locator(".menu").count();
+    const hint = await p.locator(".qhint").count();
+    const dot = (await p.locator(".bdot").innerText().catch(() => "")).trim();
+    const tops = await p.locator(".urg .ub").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    const h = await p.locator(".urg").evaluate((el) => el.getBoundingClientRect().height);
+    const work0 = await p.locator("[data-m]").count();
+    await p.locator("[data-work]").click(); await p.waitForTimeout(200);
+    const workOpen = (await p.locator(".chips.todo .chip").allInnerTexts()).map((x) => x.replace(/\s*\(\d+\)$/, ""));
+    await p.locator("[data-work]").click(); await p.waitForTimeout(200);
+    const work1 = await p.locator("[data-m]").count();
+    await p.locator("[data-menu]").click(); await p.waitForTimeout(200);
+    const items = (await p.locator(".menu .mi").allInnerTexts()).map((x) => x.replace(/\d+/g, "").trim());
+    await p.locator('.menu [data-v="add"]').click(); await p.waitForTimeout(300);
+    const closedAfter = await p.locator(".menu").count();
+    const addOpen = await p.locator("#ad_first").count();
+    await o.ctx.close();
+    const c = await open(browser, device, (d) => Object.assign(d, { owner: false }));
+    await c.page.locator("[data-menu]").click(); await c.page.waitForTimeout(200);
+    const clerkItems = await c.page.locator(".menu .mi").count();
+    await c.ctx.close();
+    const errs = o.errors.concat(c.errors);
+    const ok = closed0 === 0 && hint === 0 && dot === "4" && tops.length === 3 && new Set(tops).size === 1 && h < 50
+      && work0 === 0 && workOpen.join("|") === "חסרות קבוצה|הקפאה להשלמה|חוזרות מהקפאה השבוע" && work1 === 0
+      && items.join("|") === "עדכון ממניצ'ט וייבוא|צוות המשרד|תיקון שמות מהאקסל|בעיות בגיליון|הוספת משתתפת"
+      && closedAfter === 0 && addOpen === 1 && clerkItems === 4 && !errs.length;
+    return { ok, detail: `סגור ${closed0} · הסבר ${hint} · נקודה "${dot}" · שורות ${tops} גובה ${Math.round(h)} · לטיפול ${work0}/${workOpen.join(",")}/${work1} · תפריט ${items.join(",")} · נסגר ${closedAfter} · הוספה ${addOpen} · פקידה ${clerkItems} · שגיאות ${errs[0] || "אין"}` };
+  },
+});
+
 const ONLY = process.env.E2E_ONLY || "";
 const RUN = CHECKS.filter((c) => !ONLY || c.name.includes(ONLY));
 console.log(`\n  MyPrime QA שכבה 3 · מסך הניהול - ${RUN.length} בדיקות × ${DEVICES.length} מכשירים\n`);
