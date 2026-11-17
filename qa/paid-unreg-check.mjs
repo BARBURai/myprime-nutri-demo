@@ -129,7 +129,8 @@ ok(pw.includes("CRON_SECRET"), "הריצה המתוזמנת מוורסל בלב�
 ok(vercel.crons.some((c) => c.path === "/api/admin?paywatch" && c.schedule === "*/5 * * * *"), "משימה מתוזמנת כל 5 דקות");
 ok(admin.includes("paidUnreg,") && admin.includes("paidUnreg = null"), "הרשימה נשלחת למסך, ותקלה היא null");
 ok(html.includes("שילמו ולא נרשמו (") && html.includes("' · שילמה '") && html.includes("data-mcopen"), "האריח בנוסח שאושר, עם כפתור מניצ'ט");
-ok(html.includes("paidBlock()+"), "האריח מוצג בראש המסך");
+// v8.56: הרשימה עברה למסך משלה, מאחורי כפתור בשורת הדחופים. רון אישר את הדמו, 17.11.2026.
+ok(html.includes('data-v="paid">שילמו ולא נרשמו <span>') && html.includes('VIEW === "paid" && !searching') && html.includes("? paidBlock() :"), "הכפתור בשורת הדחופים פותח את הרשימה, v8.56");
 ok(html.includes("' · שילמה '+(w.product ? 'על '+esc(w.product)+' ' : '')+'ב-'"), "המוצר באריח, v8.51");
 
 console.log(`${pass}/${pass + fail}`);
