@@ -859,6 +859,63 @@ const CHECKS = [
     },
   },
   {
+    // v8.58, מסך ההמתנה החדש. שני הצדדים באותה הרצה, כי כרטיס שמוצג תמיד נראה בדיוק
+    // כמו כרטיס שמסונן נכון: עם קוד הזמנה מופיע כרטיס החברה, "אולי בהמשך" מעיף אותו
+    // גם אחרי טעינה מחדש, ובלי קוד אין כרטיס. בטלפון בדפדפן מופיעה הקופסה הכתומה
+    // והכפתור פותח את מסך ההתקנה, ומהאייקון (מותקנת) מופיע ההסבר איך חוזרים.
+    name: "מסך ההמתנה: כרטיס החברה, ההתקנה, ונכנס בגובה של טלפון",
+    async run(browser, device) {
+      const future = new Date(Date.parse(TODAY + "T00:00:00Z") + 3 * 86400000).toISOString().slice(0, 10);
+      const REF = { code: "MAYA22", friends: 0, months: 0, via: false, until: "" };
+      const bad = [];
+      // א. עם קוד, בדפדפן
+      {
+        const { context, page, errors } = await openApp(browser, device, { startDate: future, accessExtra: { ref: REF } });
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("רוצה לעשות את זה יחד עם חברה?")) bad.push("עם קוד: אין כרטיס חברה");
+        if (!t.includes("ניתן לצרף חברה בכל זמן. הקישור נמצא תמיד בפרופיל.")) bad.push("עם קוד: חסר המשפט על הפרופיל");
+        const href = await page.locator("[data-prestart-ref] a").first().getAttribute("href").catch(() => "");
+        if (!/MAYA22/.test(decodeURIComponent(href || ""))) bad.push("הקישור בלי הקוד");
+        if (t.includes("הכי קל: הוסיפי")) bad.push("נשאר 'הכי קל'");
+        if (device.isMobile) {
+          if (!t.includes("האפליקציה עדיין לא מותקנת בטלפון שלך")) bad.push("בדפדפן: אין קופסת התקנה");
+          if (t.includes("כדי לחזור")) bad.push("בדפדפן: מוצג ההסבר של מותקנת");
+          const h = await page.evaluate(() => { const el = document.querySelector("[data-prestart]"); return el ? [el.scrollHeight, el.clientHeight] : [0, 0]; });
+          if (device.viewport.height >= 800 && h[0] > h[1] + 2) bad.push(`גלילה: ${h[0]} מול ${h[1]}`);
+          await page.locator("text=איך מתקינים").first().click();
+          await page.waitForTimeout(500);
+          if (!(await page.locator("[data-prestart-install-screen]").count())) bad.push("מסך ההתקנה לא נפתח");
+          await page.locator("[data-install-close]").first().click();
+          await page.waitForTimeout(400);
+          if (await page.locator("[data-prestart-install-screen]").count()) bad.push("סגירה לא סגרה");
+        }
+        await page.locator("[data-prestart-ref-later]").first().click();
+        await page.waitForTimeout(300);
+        if (await page.locator("[data-prestart-ref]").count()) bad.push("'אולי בהמשך' לא העיף");
+        await page.reload(); await page.waitForTimeout(900);
+        if (await page.locator("[data-prestart-ref]").count()) bad.push("הכרטיס חזר אחרי טעינה");
+        if (errors.length) bad.push("שגיאה " + errors[0].slice(0, 40));
+        await context.close();
+      }
+      // ב. בלי קוד, מותקנת
+      {
+        const standalone = async (ctx) => ctx.addInitScript(() => { const mm = window.matchMedia.bind(window); window.matchMedia = (q) => (/standalone/.test(q) ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : mm(q)); });
+        const { context, page } = await openApp(browser, device, { startDate: future, beforeLoad: standalone });
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (t.includes("רוצה לעשות את זה יחד עם חברה?")) bad.push("בלי קוד: הופיע כרטיס חברה");
+        if (!t.includes("התוכנית שלך מתחילה ביום")) bad.push("בלי קוד: אין מסך המתנה");
+        if (device.isMobile) {
+          if (t.includes("האפליקציה עדיין לא מותקנת")) bad.push("מותקנת: הופיעה קופסת התקנה");
+          if (!t.includes("כדי לחזור")) bad.push("מותקנת: אין הסבר איך חוזרים");
+        }
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "שני הצדדים תקינים" };
+    },
+  },
+  {
     // משתתפת דיווחה: "כשנכנסים לאוכל בקטגוריה של אחרונים, לחיצה על back מחזירה
     // למסך הראשי במקום למסך הקודם." חלון ההוספה היה שכבה אחת בעיני כפתור החזרה,
     // ולכן לחיצה מתוך מסך הכמות סגרה את כולו. שלוש הלחיצות כאן הן שלוש השכבות.

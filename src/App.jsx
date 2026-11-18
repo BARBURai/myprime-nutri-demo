@@ -768,7 +768,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.57";
+const VERSION = "8.58";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1401,7 +1401,7 @@ function InstallVideo({ videoId }) {
   );
 }
 
-function InstallGate({ onSkip }) {
+function InstallGate({ onSkip, onClose }) {
   const [confirmBrowser, setConfirmBrowser] = useState(false);
   const isIOS = /iphone|ipad|ipod/i.test((typeof navigator !== "undefined" && navigator.userAgent) || "");
   // Chrome finishes the install silently: the notification it posts is not always shown, and
@@ -1481,7 +1481,8 @@ function InstallGate({ onSkip }) {
         {/* "אמשיך בדפדפן בינתיים" ישב בסרגל קבוע בתחתית המסך, כלומר מול העיניים שלה כל
             הזמן, וזה הופך דרך מילוט לאפשרות שקולה. הוא יושב עכשיו בסוף התוכן, אחרי
             ההנחיות ואחרי הוואטסאפ, ומי שרוצה אותו מגיעה אליו בגלילה. */}
-        <button onClick={() => setConfirmBrowser(true)} style={{ width: "100%", border: `1.5px solid ${C.line}`, background: "transparent", color: C.faint, borderRadius: 12, padding: "13px", fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", marginTop: 10 }}>אמשיך בדפדפן בינתיים</button>
+        {/* מתוך מסך ההמתנה (v8.58) היא כבר בפנים, ולכן במקום "אמשיך בדפדפן" יש סגירה. */}
+        <button data-install-close={onClose ? "1" : undefined} onClick={() => (onClose ? onClose() : setConfirmBrowser(true))} style={{ width: "100%", border: `1.5px solid ${C.line}`, background: "transparent", color: C.faint, borderRadius: 12, padding: "13px", fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer", marginTop: 10 }}>{onClose ? "סגירה" : "אמשיך בדפדפן בינתיים"}</button>
       </div>
       {confirmBrowser && (
         <div style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.5)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -1855,31 +1856,73 @@ function Onboarding({ onFinish, name, email, fixedStart, onRestore }) {
 }
 // Shown when a participant has finished signing up but her programme starts on a
 // later Sunday. Day 1 (and everything with it) unlocks at midnight on that date.
-function PreStartScreen({ name, startDate, glow = false, glowSoon = false, glowSoonSolo = false, onOpenGlow }) {
+// מפתח של "אולי בהמשך" בכרטיס החברה במסך ההמתנה. רון, 18.11.2026: "אם היא לחצה אולי
+// בהמשך אז תעיף את זה, אם היא לא לחצה תשאיר את זה". כלומר הכרטיס חוזר בכל כניסה עד
+// שהיא דוחה אותו פעם אחת, ואז לא חוזר. v8.58.
+const PRESTART_REF_LATER_KEY = "mp_prestart_ref_later_v1";
+
+function PreStartScreen({ name, startDate, glow = false, glowSoon = false, glowSoonSolo = false, onOpenGlow, refInfo = null }) {
   // Phone only: on a desktop there is no home screen to put the icon on.
   const isPhone = typeof navigator !== "undefined" && /iphone|ipad|ipod|android/i.test(navigator.userAgent || "");
+  // אותו זיהוי של השורה "התקנת האפליקציה על הטלפון" בפרופיל. בדפדפן היא רואה קופסה
+  // שאומרת שהאפליקציה עוד לא מותקנת וכפתור להנחיות, ומהאייקון את ההסבר איך חוזרים. v8.58.
+  const installedApp = (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || (typeof navigator !== "undefined" && navigator.standalone === true);
+  const [showInstall, setShowInstall] = useState(false);
+  const [refLater, setRefLater] = useState(() => { try { return localStorage.getItem(PRESTART_REF_LATER_KEY) === "1"; } catch (e) { return false; } });
+  const dismissRef = () => { setRefLater(true); try { localStorage.setItem(PRESTART_REF_LATER_KEY, "1"); } catch (e) {} };
   const start = new Date(startDate);
   const daysLeft = Math.max(0, Math.ceil((start - new Date(TODAY)) / 86400000));
   const dateStr = start.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" });
   const dayName = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"][start.getDay()];
+  // **המסך כולו נכנס בגובה של טלפון אחד**, רון 18.11.2026: "שהוא כולו נכנס במסך אחד".
+  // לכן המרווחים קטנים, התאריך והספירה בשתי שורות, וענת בשורה אחת עם החתימה.
+  const box = { borderRadius: 14, padding: "11px 12px", margin: "10px 0 0", textAlign: "right" };
+  const btn = { flex: 1, textAlign: "center", background: C.brand, color: "#fff", border: 0, borderRadius: 11, padding: 9, fontSize: 15, fontWeight: 700, fontFamily: fontStack, cursor: "pointer", textDecoration: "none" };
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "24px 24px 40px", textAlign: "center", fontFamily: fontStack }}>
-      <img src={MEDAL_SRC} alt="" width={64} height={64} style={{ display: "block", margin: "0 auto 12px" }} />
-      <div style={{ fontSize: 23, fontWeight: 700, color: C.ink, lineHeight: 1.4 }}>הכל מוכן{name && name.trim() ? `, ${name.trim()}` : ""} 💜</div>
-      <div style={{ background: C.brandBg, borderRadius: 16, padding: "18px 16px", margin: "20px 0 18px" }}>
-        <div style={{ fontSize: 16, color: C.brandD, lineHeight: 1.6 }}>התוכנית שלך מתחילה ביום {dayName}</div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: C.brandD, margin: "6px 0 10px" }}>{dateStr}</div>
-        <div style={{ fontSize: 17, fontWeight: 600, color: C.brand }}>{daysLeft === 0 ? "מתחילות מחר!" : daysLeft === 1 ? "נשאר יום אחד" : `נשארו ${daysLeft} ימים`}</div>
-      </div>
-      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸</p>
-      <p style={{ fontSize: 16.5, color: C.sub, lineHeight: 1.75, margin: 0 }}>ענת</p>
+    <div data-prestart style={{ flex: 1, overflowY: "auto", padding: "18px 16px 16px", textAlign: "center", fontFamily: fontStack }}>
+      <img src={MEDAL_SRC} alt="" width={48} height={48} style={{ display: "block", margin: "0 auto 6px" }} />
+      <div style={{ fontSize: 22, fontWeight: 700, color: C.ink, lineHeight: 1.35 }}>הכל מוכן{name && name.trim() ? `, ${name.trim()}` : ""} 💜</div>
+      <div style={{ fontSize: 15.5, color: C.brandD, lineHeight: 1.45, marginTop: 6 }}>התוכנית שלך מתחילה ביום {dayName}, <b style={{ color: C.brand }}>{dateStr}</b></div>
+      <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brand, lineHeight: 1.45 }}>{daysLeft === 0 ? "מתחילות מחר!" : daysLeft === 1 ? "נשאר יום אחד" : `נשארו ${daysLeft} ימים`}</div>
+      <p style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.5, margin: "8px 0 0" }}>נתראה כאן ביום הראשון, ומשם יוצאות לדרך יחד 🌸 ענת</p>
+      {/* **חברה מביאה חברה, רק למי שיש לה קוד** (סמארט, v8.39). הנוסח של רון, 18.11.2026.
+          "יותר כיף" ולא "קל יותר להתמיד": רון, "כשאתה אומר למישהי שהיא צריכה חברה בשביל
+          זה אתה מוריד מהאפליקציה". קול המערכת, בלי חתימה. */}
+      {refInfo && refInfo.code && !refLater && (
+        <div data-prestart-ref style={{ ...box, background: C.panel, border: `1.5px solid ${C.brand}` }}>
+          <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.5 }}>רוצה לעשות את זה יחד עם חברה? 💜</div>
+          <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5, marginTop: 3 }}>הכי כיף לעבור את התוכנית עם מישהי קרובה, ולחגוג יחד את ההצלחות, את ההתקדמות ואת התוצאות. אם היא מצטרפת דרך הקישור שלך, שתיכן מקבלות <b style={{ color: C.brandD, fontWeight: 800 }}>חודש נוסף במתנה</b>.</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+            <a href={refWhatsApp(refInfo.code)} target="_blank" rel="noopener" onClick={() => usageBump("ref_wa_prestart")} style={btn}>שליחה לחברה בוואטסאפ</a>
+            <div data-prestart-ref-later onClick={dismissRef} style={{ fontSize: 14, color: C.brandD, padding: "0 6px", cursor: "pointer" }}>אולי בהמשך</div>
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.brandD, lineHeight: 1.5, marginTop: 8 }}>ניתן לצרף חברה בכל זמן. הקישור נמצא תמיד בפרופיל.</div>
+        </div>
+      )}
+      {/* בטלפון בלבד. **בדפדפן:** קופסה כתומה שאומרת שהאפליקציה עוד לא מותקנת, וכפתור
+          שפותח את מסך ההתקנה עם ההנחיות של הטלפון שלה. **מהאייקון:** איך חוזרים.
+          "הכי קל: הוסיפי למסך הבית" ירד, כי הופיע גם למי שכבר התקינה. רון, 18.11.2026. */}
+      {isPhone && !installedApp && (
+        <div data-prestart-install style={{ ...box, background: C.amberBg, border: `1.5px solid ${C.amber}` }}>
+          <div style={{ fontSize: 15.5, fontWeight: 700, color: "#8a4c06", lineHeight: 1.5 }}>📲 האפליקציה עדיין לא מותקנת בטלפון שלך</div>
+          <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5, marginTop: 3 }}>כרגע את בדפדפן. כדי שיהיה לך קל לחזור אליה, כדאי להוסיף אותה למסך הבית. זה לוקח דקה.</div>
+          <div style={{ display: "flex", marginTop: 8 }}><button onClick={() => setShowInstall(true)} style={{ ...btn, background: C.amber }}>איך מתקינים</button></div>
+        </div>
+      )}
+      {isPhone && installedApp && (
+        <div data-prestart-return style={{ ...box, background: C.brandBg, display: "flex", gap: 10, alignItems: "center" }}>
+          <img src="/icon-192.png" alt="" width={44} height={44} style={{ borderRadius: 10, flexShrink: 0 }} />
+          <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5 }}>אפשר לסגור את האפליקציה. <b>כדי לחזור</b>, לוחצים על האייקון <b>מיי פריים 360</b>. לא מוצאת? חפשי "מיי פריים" בטלפון.</div>
+        </div>
+      )}
       {/* Only for a woman who is marked for the bonus. It opens straight onto the bonus
           list rather than the content screen: before her start date nothing at all is
-          unlocked, so the ordinary screen would be empty and read as broken. */}
+          unlocked, so the ordinary screen would be empty and read as broken.
+          **בתחתית מ-v8.58**, רון: "את הבונוס תשים למטה". */}
       {glow && hasGlow() && (
-        <div style={{ background: C.panel, border: `1px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
-          <div style={{ fontSize: 17, fontWeight: 700, color: C.brandD, lineHeight: 1.5 }}>💄 בונוס שמחכה לך כבר עכשיו</div>
-          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, margin: "8px 0 14px" }}>שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים Glow, עם ורד ספיבק.</div>
+        <div style={{ ...box, background: C.panel, border: `1px solid ${C.brand}` }}>
+          <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.5 }}>💄 בונוס שמחכה לך כבר עכשיו</div>
+          <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5, margin: "3px 0 8px" }}>שלושה שיעורי איפור וטיפוח מתוך תוכנית מיי פריים Glow, עם ורד ספיבק.</div>
           <Btn onClick={onOpenGlow}>לצפייה בשיעורים</Btn>
         </div>
       )}
@@ -1887,31 +1930,25 @@ function PreStartScreen({ name, startDate, glow = false, glowSoon = false, glowS
           ללחוץ.** הקופי הוא של רון, 15 בספטמבר 2026. מוצג למתנה בלבד: קורס
           שנקנה בכסף פתוח לה מיד וגם בתקופת ההמתנה. */}
       {glowSoon && (
-        <div style={{ background: C.panel, border: `1px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
-          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>💄 קורס הביוטי Glow המלא במתנה יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים של תוכנית הליווי.</div>
+        <div style={{ ...box, background: C.panel, border: `1px solid ${C.brand}` }}>
+          <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5 }}>💄 קורס הביוטי Glow המלא במתנה יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים של תוכנית הליווי.</div>
         </div>
       )}
       {/* **הטבת סולו: היא שילמה על הקורס, ובסולו אין ליווי**, ולכן בלי "במתנה" ובלי
           "תוכנית הליווי". נוסח של רון, 27 בספטמבר 2026. v7.55. */}
       {glowSoonSolo && (
-        <div style={{ background: C.panel, border: `1px solid ${C.brand}`, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
-          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>💄 קורס הביוטי Glow המלא יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים שלך.</div>
+        <div style={{ ...box, background: C.panel, border: `1px solid ${C.brand}` }}>
+          <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5 }}>💄 קורס הביוטי Glow המלא יפתח באפליקציה ביום הראשון של התוכנית, יחד עם כל התכנים שלך.</div>
         </div>
       )}
-      {isPhone && (
-        <div style={{ background: C.brandBg, borderRadius: 16, padding: "16px 14px", margin: "18px 0 0", textAlign: "right" }}>
-          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7 }}>אפשר לסגור את האפליקציה.</div>
-          <div style={{ fontSize: 15.5, color: C.ink, lineHeight: 1.7, marginTop: 10 }}><b>כדי לחזור לאפליקציה</b>, פשוט לוחצים על האייקון:</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "12px 0" }}>
-            <img src="/icon-192.png" alt="" width={56} height={56} style={{ borderRadius: 13, flexShrink: 0 }} />
-            <div style={{ fontSize: 16.5, fontWeight: 700, color: C.ink }}>מיי פריים 360</div>
-          </div>
-          <div style={{ fontSize: 15.5, color: C.sub, lineHeight: 1.7 }}><b>לא מוצאת את האפליקציה?</b> אפשר לחפש "מיי פריים" בחיפוש של אפליקציות הטלפון.</div>
-          <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.7, marginTop: 10 }}>הכי קל: הוסיפי את האפליקציה למסך הבית של הטלפון.</div>
+      <div style={{ fontSize: 13, color: C.faint, lineHeight: 1.5, marginTop: 10 }}>אפשר לעדכן את הפרטים שלך בכל רגע דרך הפרופיל.</div>
+      {/* מסך ההתקנה המלא, עם ההנחיות של הטלפון שלה בלבד: באייפון ההדרכה המונפשת,
+          באנדרואיד הסרטון והשלבים של כרום. "כמו שצריך", רון 18.11.2026. */}
+      {showInstall && (
+        <div data-prestart-install-screen style={{ position: "fixed", inset: 0, zIndex: 80, background: C.bg, display: "flex", flexDirection: "column" }}>
+          <InstallGate onClose={() => setShowInstall(false)} />
         </div>
       )}
-      <div style={{ fontSize: 14, color: C.faint, lineHeight: 1.6, marginTop: 22 }}>הערה: אם תרצי, אפשר לעדכן את הפרטים שלך בכל רגע דרך הפרופיל.</div>
-      <div style={{ textAlign: "center", fontSize: 12.5, color: C.faint, marginTop: 26 }}>MyPrime · v{VERSION}</div>
     </div>
   );
 }
@@ -8460,7 +8497,7 @@ export default function App() {
         ) : (
           <>
             <div className={profile.textSize === "large" ? "txt-large" : ""} style={{ flex: 1, overflowY: "auto" }}>
-              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} glow={glow} glowSoon={glowSoon} glowSoonSolo={glowSoonSolo} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} weightNow={curWeight} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow && !glowFull} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
+              {tab === "day" && preStart ? <PreStartScreen name={profile.name || gateName} startDate={profile.startDate} refInfo={refInfo} glow={glow} glowSoon={glowSoon} glowSoonSolo={glowSoonSolo} onOpenGlow={() => { setGlowDirect(true); setSheet("content"); }} /> : tab === "day" && <DayScreen date={selectedDate} setDate={setSelectedDate} today={today} log={log} targets={targets} dailyTarget={dailyTarget} profile={profile} weightNow={curWeight} activityLog={activityLog} waterByDate={waterByDate} setWaterForDate={setWaterForDate} onWater={() => setSheet("water")} stepsByDate={stepsByDate} onEditSteps={() => { setSheet("steps"); tourEvent("opensteps"); }} editEntry={editEntry} deleteEntry={deleteEntry} onRecommend={() => { usageBump("recommend"); setSheet("recommend"); }} onAddCalorie={() => { setSheet("caloriemenu"); tourEvent("addcalorie"); }} checkins={checkins} onOpenCheckin={() => setSheet("checkin")} onOpenCollection={() => { usageBump("cabinet"); setSheet("collection"); }} onOpenSummary={() => { usageBump("summary"); setSheet("weeklySummary"); }} stepAction={stepAction} onStepSetup={() => setSheet("stepSetup")} onStartTour={startTour} onStepsHelp={startStepsHelp} onOpenContent={() => setSheet("content")} onOpenOnboard={() => setSheet("onboard")} catchupDue={profile.catchup === "due"} onOpenCatchup={() => setSheet("catchup")} tipsSeen={profile.tipsSeen} onTipsSeen={(keys) => setProfile({ ...profile, tipsSeen: [...(profile.tipsSeen || []), ...keys] })} introLock={introLock} glow={glow && !glowFull} freeze={freeze} overlayOpen={!!(sheet || modal || showIntro)} />}
               {tab === "report" && <ReportScreen weights={weights} addWeight={reportAddWeight} log={log} targets={targets} onMaintain={lossStopped || profile.weeklyRateG === 0} programWeek={programWeek} stepsByDate={stepsByDate} activityLog={activityLog} weightKg={curWeight} startDate={profile.startDate} stepGoalStored={profile.stepGoal} stepsOpen={stepsOpenToday} today={today} onEditSteps={() => setSheet("steps")} />}
               {tab === "recipes" && <RecipesScreen addRecipe={addRecipe} sweetsOpen={sweetsOpen} selected={recipeSel} setSelected={setRecipeSel} />}
               {tab === "profile" && <ProfileScreen profile={profile} setProfile={setProfile} targets={targets} curWeight={curWeight} latestIsBase={latestIsBase} onResumeLoss={resumeLoss} onLossAck={ackLossStop} onBaseWeight={setBaseWeight} userName={profile.name || gateName} stepsByDate={stepsByDate} programWeek={programWeek} onOpenFaq={() => setSheet("faq")} onOpenBackup={() => setSheet("backup")} onOpenInstall={() => setSheet("install")} maxStart={DEV ? null : gateStartDate} gateEmail={gateEmail} refInfo={refInfo} />}
