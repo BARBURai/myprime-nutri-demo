@@ -768,7 +768,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.58";
+const VERSION = "8.59";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1893,7 +1893,7 @@ function PreStartScreen({ name, startDate, glow = false, glowSoon = false, glowS
           <div style={{ fontSize: 15.5, fontWeight: 700, color: C.brandD, lineHeight: 1.5 }}>רוצה לעשות את זה יחד עם חברה? 💜</div>
           <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5, marginTop: 3 }}>הכי כיף לעבור את התוכנית עם מישהי קרובה, ולחגוג יחד את ההצלחות, את ההתקדמות ואת התוצאות. אם היא מצטרפת דרך הקישור שלך, שתיכן מקבלות <b style={{ color: C.brandD, fontWeight: 800 }}>חודש נוסף במתנה</b>.</div>
           <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
-            <a href={refWhatsApp(refInfo.code)} target="_blank" rel="noopener" onClick={() => usageBump("ref_wa_prestart")} style={btn}>שליחה לחברה בוואטסאפ</a>
+            <a href={refWhatsApp(refInfo.code, startDate)} target="_blank" rel="noopener" onClick={() => usageBump("ref_wa_prestart")} style={btn}>שליחה לחברה בוואטסאפ</a>
             <div data-prestart-ref-later onClick={dismissRef} style={{ fontSize: 14, color: C.brandD, padding: "0 6px", cursor: "pointer" }}>אולי בהמשך</div>
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: C.brandD, lineHeight: 1.5, marginTop: 8 }}>ניתן לצרף חברה בכל זמן. הקישור נמצא תמיד בפרופיל.</div>
@@ -2781,7 +2781,7 @@ function ProfileScreen({ profile, setProfile, targets, curWeight, latestIsBase, 
         </div>
       </div>
 
-      {refInfo && refInfo.code && <RefCard refInfo={refInfo} />}
+      {refInfo && refInfo.code && <RefCard refInfo={refInfo} startDate={profile.startDate} />}
 
       <div style={{ background: C.bg, borderRadius: 14, padding: 14, marginBottom: 8 }}>
         <div onClick={() => setBaseOpen(!baseOpen)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
@@ -5900,13 +5900,22 @@ function CheckinCheer({ name, streak, onClose, refCode }) {
 const REF_PAGE_URL = "https://myprime.co.il/smart";
 const REF_OFFER_SEEN_KEY = "mp_ref_offer_seen_v1";
 function refLink(code) { return `${REF_PAGE_URL}?ref=${encodeURIComponent(code)}`; }
-function refWhatsApp(code) {
-  const text = `היי! אני בתוכנית SMART של מיי פריים, עם ענת הראל, וממש נהנית 💜\nאם תצטרפי דרך הקישור שלי, שתינו נקבל חודש נוסף באפליקציה ובכל התכנים:\n${refLink(code)}`;
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+// **ההודעה נבחרת לפי התאריך שלה, ולא לפי המקום שממנו היא שולחת.** לפני יום 1 היא עוד
+// לא יכולה לכתוב "וממש נהנית", ולכן "נרשמתי... ומתחילה ב-". מיום 1 ההודעה הקיימת.
+// הנוסח והכלל של רון, 18.11.2026: "מאשר את הנוסח ואת הכלל". v8.59.
+function refWhatsAppText(code, startDate, today = TODAY) {
+  const p = String(startDate || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (p && programDayNumber(startDate, today) < 1) {
+    return `היי! נרשמתי לתוכנית SMART של מיי פריים עם ענת הראל, ומתחילה ב-${p[3]}.${p[2]}.${p[1]}. בא לך להצטרף ולעשות את זה יחד? אם נרשמים דרך הקישור שלי, שתינו מקבלות חודש נוסף:\n${refLink(code)}`;
+  }
+  return `היי! אני בתוכנית SMART של מיי פריים, עם ענת הראל, וממש נהנית 💜\nאם תצטרפי דרך הקישור שלי, שתינו נקבל חודש נוסף באפליקציה ובכל התכנים:\n${refLink(code)}`;
+}
+function refWhatsApp(code, startDate) {
+  return `https://wa.me/?text=${encodeURIComponent(refWhatsAppText(code, startDate))}`;
 }
 
 // השורה הקבועה בפרופיל, קול המערכת. הנוסחים אושרו על ידי רון. v8.39.
-function RefCard({ refInfo }) {
+function RefCard({ refInfo, startDate = "" }) {
   const [copied, setCopied] = useState(false);
   const n = Number(refInfo.friends) || 0;
   const dmy = (y) => { const p = String(y || "").match(/^(\d{4})-(\d{2})-(\d{2})$/); return p ? `${p[3]}.${p[2]}.${p[1]}` : ""; };
@@ -5919,7 +5928,7 @@ function RefCard({ refInfo }) {
       <div style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>הזמיני חברה</div>
       <div style={{ fontSize: 14.5, color: C.sub, marginTop: 6, lineHeight: 1.55 }}>על כל חברה שמצטרפת דרך הקישור שלך, שתיכן מקבלות <b data-ref-gift style={{ color: C.brandD, fontWeight: 800 }}>חודש נוסף במתנה</b>. אפשר לצבור עד 3 חודשים.</div>
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-        <a href={refWhatsApp(refInfo.code)} target="_blank" rel="noopener" onClick={() => usageBump("ref_wa_profile")} style={{ flex: 1, textAlign: "center", background: C.brand, color: "#fff", borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
+        <a href={refWhatsApp(refInfo.code, startDate)} target="_blank" rel="noopener" onClick={() => usageBump("ref_wa_profile")} style={{ flex: 1, textAlign: "center", background: C.brand, color: "#fff", borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, textDecoration: "none" }}>שליחה לחברה בוואטסאפ</a>
         <button onClick={copy} style={{ flex: 1, background: C.panel, color: C.brandD, border: `1px solid ${C.line}`, borderRadius: 12, padding: 11, fontSize: 15, fontWeight: 600, fontFamily: fontStack, cursor: "pointer" }}>{copied ? "הועתק ✓" : "העתקת הקישור"}</button>
       </div>
       {n > 0 && <div data-ref-status style={{ fontSize: 14.5, color: C.ink, marginTop: 12, fontWeight: 600 }}>{n === 1 ? "חברה אחת הצטרפה דרכך" : `${n} חברות הצטרפו דרכך`}{refInfo.until ? ` · הגישה שלך הוארכה עד ${dmy(refInfo.until)}` : ""}</div>}

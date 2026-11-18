@@ -297,6 +297,9 @@ const CHECKS = [
           await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
           if (!(await page.locator("[data-ref-card]").count())) bad.push("עם קוד: אין שורה בפרופיל");
           else if ((await page.locator("[data-ref-card] [data-ref-gift]").first().textContent().catch(() => "")) !== "חודש נוסף במתנה") bad.push("בפרופיל אין 'חודש נוסף במתנה' מודגש");
+          // v8.59: אחרי יום 1, גם מהפרופיל, ההודעה הקיימת ולא "ומתחילה ב-".
+          { const ph = decodeURIComponent((await page.locator('[data-ref-card] a[href*="wa.me"]').first().getAttribute("href").catch(() => "")) || "");
+            if (!ph.includes("ממש נהנית") || ph.includes("ומתחילה ב-")) bad.push("בפרופיל אחרי יום 1: לא ההודעה הקיימת"); }
           // v8.48: שלושת המונים. הכפתורים עובדים כמו קודם, והספירה נרשמת.
           await context.grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => {});
           await page.locator("[data-ref-card] button", { hasText: "העתקת הקישור" }).click(); await page.waitForTimeout(400);
@@ -877,6 +880,11 @@ const CHECKS = [
         if (!t.includes("ניתן לצרף חברה בכל זמן. הקישור נמצא תמיד בפרופיל.")) bad.push("עם קוד: חסר המשפט על הפרופיל");
         const href = await page.locator("[data-prestart-ref] a").first().getAttribute("href").catch(() => "");
         if (!/MAYA22/.test(decodeURIComponent(href || ""))) bad.push("הקישור בלי הקוד");
+        // v8.59: לפני יום 1 ההודעה לחברה היא "נרשמתי... ומתחילה ב-", עם התאריך שלה.
+        const msg = decodeURIComponent(href || "");
+        const [yy, mm, dd] = future.split("-");
+        if (!msg.includes(`ומתחילה ב-${dd}.${mm}.${yy}`)) bad.push("לפני יום 1: אין 'ומתחילה ב-' עם התאריך");
+        if (msg.includes("ממש נהנית")) bad.push("לפני יום 1: 'ממש נהנית'");
         if (t.includes("הכי קל: הוסיפי")) bad.push("נשאר 'הכי קל'");
         if (device.isMobile) {
           if (!t.includes("האפליקציה עדיין לא מותקנת בטלפון שלך")) bad.push("בדפדפן: אין קופסת התקנה");
@@ -889,6 +897,15 @@ const CHECKS = [
           await page.locator("[data-install-close]").first().click();
           await page.waitForTimeout(400);
           if (await page.locator("[data-prestart-install-screen]").count()) bad.push("סגירה לא סגרה");
+        }
+        {
+          await page.locator("text=פרופיל").last().click({ timeout: 4000 }).catch(() => {});
+          await page.waitForTimeout(600);
+          const ph = await page.locator('a[href*="wa.me/?text"]').first().getAttribute("href").catch(() => "");
+          const pm = decodeURIComponent(ph || "");
+          if (!pm.includes("ומתחילה ב-")) bad.push("בפרופיל לפני יום 1: לא ההודעה החדשה");
+          await page.locator("text=יומן").last().click({ timeout: 4000 }).catch(() => {});
+          await page.waitForTimeout(600);
         }
         await page.locator("[data-prestart-ref-later]").first().click();
         await page.waitForTimeout(300);
