@@ -297,6 +297,9 @@ const CHECKS = [
           await page.locator("text=פרופיל").last().click(); await page.waitForTimeout(700);
           if (!(await page.locator("[data-ref-card]").count())) bad.push("עם קוד: אין שורה בפרופיל");
           else if ((await page.locator("[data-ref-card] [data-ref-gift]").first().textContent().catch(() => "")) !== "חודש נוסף במתנה") bad.push("בפרופיל אין 'חודש נוסף במתנה' מודגש");
+          // v8.59: אחרי יום 1, גם מהפרופיל, ההודעה הקיימת ולא "ומתחילה ב-".
+          { const ph = decodeURIComponent((await page.locator('[data-ref-card] a[href*="wa.me"]').first().getAttribute("href").catch(() => "")) || "");
+            if (!ph.includes("ממש נהנית") || ph.includes("ומתחילה ב-")) bad.push("בפרופיל אחרי יום 1: לא ההודעה הקיימת"); }
           // v8.48: שלושת המונים. הכפתורים עובדים כמו קודם, והספירה נרשמת.
           await context.grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => {});
           await page.locator("[data-ref-card] button", { hasText: "העתקת הקישור" }).click(); await page.waitForTimeout(400);
@@ -856,6 +859,77 @@ const CHECKS = [
       const waiting = await page.locator("text=התוכנית שלך מתחילה ביום").count();
       await context.close();
       return { ok: card === 0 && waiting > 0, detail: `כרטיס ${card} (מצופה 0) · מסך המתנה ${waiting}` };
+    },
+  },
+  {
+    // v8.58, מסך ההמתנה החדש. שני הצדדים באותה הרצה, כי כרטיס שמוצג תמיד נראה בדיוק
+    // כמו כרטיס שמסונן נכון: עם קוד הזמנה מופיע כרטיס החברה, "אולי בהמשך" מעיף אותו
+    // גם אחרי טעינה מחדש, ובלי קוד אין כרטיס. בטלפון בדפדפן מופיעה הקופסה הכתומה
+    // והכפתור פותח את מסך ההתקנה, ומהאייקון (מותקנת) מופיע ההסבר איך חוזרים.
+    name: "מסך ההמתנה: כרטיס החברה, ההתקנה, ונכנס בגובה של טלפון",
+    async run(browser, device) {
+      const future = new Date(Date.parse(TODAY + "T00:00:00Z") + 3 * 86400000).toISOString().slice(0, 10);
+      const REF = { code: "MAYA22", friends: 0, months: 0, via: false, until: "" };
+      const bad = [];
+      // א. עם קוד, בדפדפן
+      {
+        const { context, page, errors } = await openApp(browser, device, { startDate: future, accessExtra: { ref: REF } });
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (!t.includes("רוצה לעשות את זה יחד עם חברה?")) bad.push("עם קוד: אין כרטיס חברה");
+        if (!t.includes("ניתן לצרף חברה בכל זמן. הקישור נמצא תמיד בפרופיל.")) bad.push("עם קוד: חסר המשפט על הפרופיל");
+        const href = await page.locator("[data-prestart-ref] a").first().getAttribute("href").catch(() => "");
+        if (!/MAYA22/.test(decodeURIComponent(href || ""))) bad.push("הקישור בלי הקוד");
+        // v8.59: לפני יום 1 ההודעה לחברה היא "נרשמתי... ומתחילה ב-", עם התאריך שלה.
+        const msg = decodeURIComponent(href || "");
+        const [yy, mm, dd] = future.split("-");
+        if (!msg.includes(`ומתחילה ב-${dd}.${mm}.${yy}`)) bad.push("לפני יום 1: אין 'ומתחילה ב-' עם התאריך");
+        if (msg.includes("ממש נהנית")) bad.push("לפני יום 1: 'ממש נהנית'");
+        if (t.includes("הכי קל: הוסיפי")) bad.push("נשאר 'הכי קל'");
+        if (device.isMobile) {
+          if (!t.includes("האפליקציה עדיין לא מותקנת בטלפון שלך")) bad.push("בדפדפן: אין קופסת התקנה");
+          if (t.includes("כדי לחזור")) bad.push("בדפדפן: מוצג ההסבר של מותקנת");
+          const h = await page.evaluate(() => { const el = document.querySelector("[data-prestart]"); return el ? [el.scrollHeight, el.clientHeight] : [0, 0]; });
+          if (device.viewport.height >= 800 && h[0] > h[1] + 2) bad.push(`גלילה: ${h[0]} מול ${h[1]}`);
+          await page.locator("text=איך מתקינים").first().click();
+          await page.waitForTimeout(500);
+          if (!(await page.locator("[data-prestart-install-screen]").count())) bad.push("מסך ההתקנה לא נפתח");
+          await page.locator("[data-install-close]").first().click();
+          await page.waitForTimeout(400);
+          if (await page.locator("[data-prestart-install-screen]").count()) bad.push("סגירה לא סגרה");
+        }
+        {
+          await page.locator("text=פרופיל").last().click({ timeout: 4000 }).catch(() => {});
+          await page.waitForTimeout(600);
+          const ph = await page.locator('a[href*="wa.me/?text"]').first().getAttribute("href").catch(() => "");
+          const pm = decodeURIComponent(ph || "");
+          if (!pm.includes("ומתחילה ב-")) bad.push("בפרופיל לפני יום 1: לא ההודעה החדשה");
+          await page.locator("text=יומן").last().click({ timeout: 4000 }).catch(() => {});
+          await page.waitForTimeout(600);
+        }
+        await page.locator("[data-prestart-ref-later]").first().click();
+        await page.waitForTimeout(300);
+        if (await page.locator("[data-prestart-ref]").count()) bad.push("'אולי בהמשך' לא העיף");
+        await page.reload(); await page.waitForTimeout(900);
+        if (await page.locator("[data-prestart-ref]").count()) bad.push("הכרטיס חזר אחרי טעינה");
+        if (errors.length) bad.push("שגיאה " + errors[0].slice(0, 40));
+        await context.close();
+      }
+      // ב. בלי קוד, מותקנת
+      {
+        const standalone = async (ctx) => ctx.addInitScript(() => { const mm = window.matchMedia.bind(window); window.matchMedia = (q) => (/standalone/.test(q) ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : mm(q)); });
+        const { context, page } = await openApp(browser, device, { startDate: future, beforeLoad: standalone });
+        await page.waitForTimeout(700);
+        const t = await page.evaluate(() => document.body.innerText);
+        if (t.includes("רוצה לעשות את זה יחד עם חברה?")) bad.push("בלי קוד: הופיע כרטיס חברה");
+        if (!t.includes("התוכנית שלך מתחילה ביום")) bad.push("בלי קוד: אין מסך המתנה");
+        if (device.isMobile) {
+          if (t.includes("האפליקציה עדיין לא מותקנת")) bad.push("מותקנת: הופיעה קופסת התקנה");
+          if (!t.includes("כדי לחזור")) bad.push("מותקנת: אין הסבר איך חוזרים");
+        }
+        await context.close();
+      }
+      return { ok: bad.length === 0, detail: bad.join(" · ") || "שני הצדדים תקינים" };
     },
   },
   {

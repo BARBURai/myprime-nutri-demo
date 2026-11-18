@@ -47,7 +47,7 @@ const intList = (v, len, max) => {
 };
 // רשימה סגורה של שמות. שם שאינו ברשימה פשוט נזרק, כדי שהשדה לא יוכל לגדול
 // למשהו אחר ממה שהוסכם עליו.
-const FEAT_KEYS = ["ai", "photo", "barcode", "history", "search", "manual", "recommend", "summary", "cabinet", "weighIn", "tab_day", "tab_report", "tab_recipes", "tab_profile", "ref_shown", "ref_wa_cheer", "ref_wa_profile", "ref_copy"];
+const FEAT_KEYS = ["ai", "photo", "barcode", "history", "search", "manual", "recommend", "summary", "cabinet", "weighIn", "tab_day", "tab_report", "tab_recipes", "tab_profile", "ref_shown", "ref_wa_cheer", "ref_wa_profile", "ref_copy", "ref_wa_prestart"];
 const featMap = (v) => {
   const out = {};
   if (!v || typeof v !== "object") return out;
