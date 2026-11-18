@@ -768,7 +768,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.60";
+const VERSION = "8.61";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -3727,7 +3727,7 @@ function IntroOverlay({ onClose, name }) {
   );
 }
 
-function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, onReadReply }) {
+function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, onReadReply, aboveBar = false }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [copied, setCopied] = useState(false);
@@ -3777,7 +3777,10 @@ function NotesFab({ notes, setNotes, screen, userName, email, phone, replies, on
   };
   return (
     <>
-      <button data-tut="notesfab" onClick={() => setOpen(true)} style={{ position: "absolute", bottom: 420, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
+      {/* v8.61: מעל הסרגל התחתון, בפינה מעל "פרופיל". בגובה 420 היא ישבה באמצע המסך
+          ועל כרטיסי היעד בפרופיל, שם אין גלילה ואי אפשר להזיז אותה. בהרשמה אין סרגל,
+          ולכן שם היא נשארת במקום הישן ולא יורדת על כפתורי "המשך". */}
+      <button data-tut="notesfab" onClick={() => setOpen(true)} style={{ position: "absolute", bottom: aboveBar ? "calc(84px + env(safe-area-inset-bottom, 0px))" : 420, insetInlineEnd: 14, width: 40, height: 40, borderRadius: "50%", background: C.panel, color: C.brand, border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(168,66,92,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 13 }}>
         <MessageCircle size={20} />
         {(notes.length + (replies || []).length) > 0 && (
           <span style={{
@@ -8619,7 +8622,7 @@ export default function App() {
             is not rendered anywhere, so nothing can ever set showIntro back to false, and
             keeping the condition would hide the bubble from every woman for the whole of
             her first session. The condition is dropped until IntroOverlay comes back. */}
-        {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} email={gateEmail} phone={gatePhone} replies={replies} onReadReply={readReply} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
+        {gate === "ok" && <NotesFab notes={notes} setNotes={setNotes} userName={profile.name || gateName} email={gateEmail} phone={gatePhone} replies={replies} onReadReply={readReply} aboveBar={onboarded} screen={onboarded ? (tabs.find((t) => t.id === tab)?.label || "") : "אונבורדינג"} />}
         {favPrompt && (
           <div onClick={() => { setFavPrompt(null); setFavName(""); }} style={{ position: "absolute", inset: 0, background: "rgba(58,43,48,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, zIndex: 58 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ background: C.panel, borderRadius: 18, padding: "20px 18px", width: "100%", maxWidth: 320, textAlign: "center", fontFamily: fontStack }}>
