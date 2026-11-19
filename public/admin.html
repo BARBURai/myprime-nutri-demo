@@ -1236,8 +1236,24 @@ function teamBlock(){
 // רון, 18.11.2026: לראות בטלפון איך נראית התראת בוקר באורכים שונים, לפני שענת כותבת אותן.
 // השרת שולח רק למכשירים שרשומים למייל שהוקלד. מעל התקרה הוא אינו שולח בכלל ואומר את זה.
 var TP = { open:false, email:"", title:"", text:"", busy:false, msg:"" };
-var TP_FILL = "משפט {n} של טקסט הבדיקה. ";
-function tpFill(len){ var s="", n=1; while(s.length < len){ s += TP_FILL.replace("{n}", n++); } return s.slice(0, len); }
+// v8.63: כל מספר אומר כמה תווים יש מתחילת ההודעה ועד סופו, כולל רווחים. רון: "איך אני
+// יודע כמה אותיות יש". כך המספר האחרון שנראה בטלפון לפני החיתוך הוא כמה נכנסו.
+function tpFill(len){
+  var s = "";
+  for(;;){
+    var pre = (s ? s + " · " : "") + "עד כאן ";
+    var n = pre.length + 1;
+    while((pre + n).length !== n) n = (pre + n).length;
+    var next = pre + n;
+    if(next.length > len) break;
+    s = next;
+  }
+  // הסוף: המספר הכולל צמוד לתו האחרון, כדי שגם מי שרואה את כל ההודעה יודע את האורך שלה.
+  var tail = " " + len, gap = len - s.length - tail.length;
+  if(gap >= 0) s += ".".repeat(gap) + tail;
+  while(s.length < len) s += ".";
+  return s.slice(0, len);
+}
 var TP_PRESETS = {
   rec:  { title: tpFill(30),  text: tpFill(100) },
   long: { title: tpFill(60),  text: tpFill(250) },

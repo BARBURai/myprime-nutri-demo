@@ -205,7 +205,7 @@ const CHECKS = [
       const errs = o.errors.concat(c.errors);
       const ok = shown === 1 && recN[0] === "30 תווים" && recN[1] === "100 תווים" && mailKept === "ron@test.com"
         && msgOk === "נשלחה ל-2 מכשירים." && sentBody.email === "ron@test.com" && sentBody.title.length === 30 && sentBody.text.length === 100
-        && maxN === "1,800 תווים"
+        && maxN === "1,800 תווים" && /^עד כאן 8 · עד כאן 20/.test(sentBody.text) && sentBody.text.endsWith(" 100")
         && msgLong === "ההודעה ארוכה מדי ולא נשלחה. שירות ההתראות לא מקבל הודעה באורך הזה."
         && msgNone === "לא נמצא מכשיר שרשום להתראות עם המייל הזה." && typedN === "4 תווים"
         && clerk === 0 && !errs.length;
