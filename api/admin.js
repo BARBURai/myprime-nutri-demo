@@ -19,6 +19,7 @@
 // POST /api/admin?key=<ADMIN_KEY>              -> { email, until, by }   ("" clears it)
 
 import { gzipSync } from "node:zlib";
+import webpush from "web-push";
 import { decideAccess } from "./_product.js";
 import { loadSheet, israelDay, accessEnd, ymd, fetchSheetText, parseCsvLine, cachedSheetText, sheetFromText, sheetFromServer } from "./_sheet.js";
 import { KB } from "./_kb.js";
@@ -28,7 +29,7 @@ import { ingest as mcIngest, secretOk as mcSecretOk, status as mcStatus, importS
 import { readXlsx } from "./_xlsx.js";
 import { parseKey, driveDownload } from "./_gdrive.js";
 import { excelIndex, targets as nameTargets, run as nameRun, mailHtml as nameMail, CAP as NAME_CAP } from "./_namefix.js";
-import { REF_BONUS, REF_BY, REF_MINE, refCharge, refKeyOk, promoCharge, refLink, promo360Charge, PROMO360_START, PROMO360_MONTHS } from "./_ref.js";
+import { REF_BONUS, REF_BY, REF_MINE, REF_CODE, REF_CREDIT, PROMO_NOV26, PROMO360_KEY, refCharge, refKeyOk, promoCharge, refLink, promo360Charge, PROMO360_START, PROMO360_MONTHS } from "./_ref.js";
 import { recordPurchase, paidUnregistered, payWatch } from "./_paywatch.js";
 import { giftEvent, giftRetry, GIFT_TAG, GIFT_DATE_FIELD } from "./_gift.js";
 import { addDaysYmd } from "./_product.js";
@@ -113,11 +114,19 @@ export async function serverSheet(RU, RT) {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// התראת ניסיון, v8.62: מעל זה שירותי ההתראות מסרבים, ולכן אינה נשלחת בכלל.
+const TEST_PUSH_MAX = 3900;
+const toObj = (raw) => {
+  const o = {};
+  if (Array.isArray(raw)) { for (let i = 0; i < raw.length; i += 2) o[raw[i]] = raw[i + 1]; }
+  else if (raw && typeof raw === "object") Object.assign(o, raw);
+  return o;
+};
 // The version this screen is served from. The office screen ships with the app, so without
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.59";
+const ADMIN_VERSION = "8.63";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -431,8 +440,11 @@ async function whoIs(key, RU, RT) {
 // diary itself is not here - it lives on her phone and is not keyed by address - so it
 // survives the change on the device she is already using.
 const MOVE_HASHES = ["admin:overrides", "admin:seen", "admin:usage"];
+// v8.62: מה שהשער והמשרד קוראים לפי המייל, ושאסור לדרוס אצל הכתובת החדשה.
+const MOVE_HASHES_NX = [REF_BONUS, REF_MINE, REF_CREDIT, REF_BY, PROMO_NOV26, PROMO360_KEY, PROMO360_START, "notes:replies", "notes:pending"];
+const MOVE_KEYS_NX = ["notes:", "bk:hist:", "ai:photos:", "bkmail:"];
 async function moveRecords(RU, RT, from, to) {
-  const moved = [];
+  const moved = [], kept = [];
   for (const h of MOVE_HASHES) {
     try {
       const v = await redis(RU, RT, "HGET", h, from);
@@ -452,6 +464,27 @@ async function moveRecords(RU, RT, from, to) {
       await redis(RU, RT, "DEL", pre + from);
       moved.push(pre);
     } catch (e) {}
+  }
+  // **ההטבות, החברות, ההערות והמונים עוברים גם הם. v8.62.** נמצא על משתתפת שהמייל שלה תוקן
+  // מ-gmail.con: הטבת נובמבר נשארה תחת הישנה, והשער נתן לה 70 יום בלבד. רון: "שהכל יעבור".
+  // **רשומה שכבר קיימת תחת הכתובת החדשה אינה נדרסת**, והישנה נשארת במקומה ונרשמת ב-`kept`.
+  for (const h of MOVE_HASHES_NX) {
+    try {
+      const v = await redis(RU, RT, "HGET", h, from);
+      if (v == null) continue;
+      if (Number(await redis(RU, RT, "HSETNX", h, to, v)) !== 1) { kept.push(h); continue; }
+      await redis(RU, RT, "HDEL", h, from);
+      moved.push(h);
+      // הקוד שלה ממשיך להצביע עליה, כדי שחברה שקונה דרך הקישור תזכה את הכתובת החדשה.
+      if (h === REF_MINE && v) await redis(RU, RT, "HSET", REF_CODE, String(v), to);
+    } catch (e) {}
+  }
+  // רשימות ומונים עם תפוגה: RENAMENX שומר את התפוגה ואינו דורס.
+  for (const pre of MOVE_KEYS_NX) {
+    try {
+      const r = Number(await redis(RU, RT, "RENAMENX", pre + from, pre + to));
+      if (r === 1) moved.push(pre); else if (r === 0) kept.push(pre);
+    } catch (e) { /* המפתח אינו קיים, ואין מה להעביר */ }
   }
   // **רשימת מי שפתחה את האפליקציה לפני v4.87 עוברת גם היא.** v7.53. בלי זה אישה שנכנסה
   // רק אז, והמשרד החליף לה כתובת, הייתה נספרת כקג'אבי תחת הכתובת החדשה.
@@ -479,7 +512,7 @@ async function moveRecords(RU, RT, from, to) {
       if (!moved.includes("push:subs")) moved.push("push:subs");
     }
   } catch (e) {}
-  return moved;
+  return { moved, kept };
 }
 
 // ===== תיקון השמות השבועי. v8.00 =====
@@ -909,6 +942,41 @@ export default async function handler(req, res) {
     } catch (e) { return res.status(500).json({ ok: false, error: "write_failed" }); }
   }
 
+  // **התראת ניסיון לטלפון אחד. v8.62. מנהל בלבד.** רון רוצה לראות בטלפון שלו איך נראית
+  // התראת בוקר באורכים שונים, לפני שענת כותבת אותן. נשלחת רק למכשירים שרשומים למייל
+  // שהוקלד, ולעולם לא לרשימה כולה. שום רישום של שליחה אינו נכתב.
+  if (req.method === "POST" && req.body && req.body.testPush) {
+    if (!me.owner) return res.status(403).json({ ok: false, error: "owner_only" });
+    if (!RU || !RT) return res.status(500).json({ ok: false, error: "no_store" });
+    const PUB = process.env.VAPID_PUBLIC, PRIV = process.env.VAPID_PRIVATE;
+    if (!PUB || !PRIV) return res.status(500).json({ ok: false, error: "no_vapid" });
+    const b = req.body;
+    const email = String(b.email || "").trim().toLowerCase();
+    const title = String(b.title || "").slice(0, 2000), text = String(b.text || "").slice(0, 20000);
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ ok: false, error: "bad_email" });
+    if (!title && !text) return res.status(400).json({ ok: false, error: "empty" });
+    const payload = JSON.stringify({ title, body: text, url: "/", tag: "test-push" });
+    const bytes = Buffer.byteLength(payload, "utf8");
+    // התקרה של שירותי ההתראות היא 4,096 בתים אחרי ההצפנה, וההצפנה מוסיפה בערך 100.
+    if (bytes > TEST_PUSH_MAX) return res.status(200).json({ ok: false, error: "too_long", bytes, max: TEST_PUSH_MAX });
+    let subs = [];
+    try {
+      const flat = toObj(await redis(RU, RT, "HGETALL", "push:subs"));
+      for (const k of Object.keys(flat)) {
+        try { const j = JSON.parse(flat[k]); if (j && j.sub && String(j.email || "").trim().toLowerCase() === email) subs.push(j.sub); } catch (e) {}
+      }
+    } catch (e) { return res.status(502).json({ ok: false, error: "store_failed" }); }
+    if (!subs.length) return res.status(200).json({ ok: false, error: "no_devices", bytes });
+    webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:hello@myprime.co.il", PUB, PRIV);
+    let sent = 0, tooLong = 0, failed = 0;
+    for (const s of subs) {
+      try { await webpush.sendNotification(s, payload, { timeout: 10000 }); sent++; }
+      catch (e) { if (e && (e.statusCode === 413 || /too large|payload/i.test(String(e.message || "")))) tooLong++; else failed++; }
+    }
+    if (!sent && tooLong) return res.status(200).json({ ok: false, error: "too_long", bytes, max: TEST_PUSH_MAX });
+    return res.status(200).json({ ok: sent > 0, sent, failed, tooLong, total: subs.length, bytes, max: TEST_PUSH_MAX, ...(sent ? {} : { error: "send_failed" }) });
+  }
+
   // The office codes. Only the owner key may see them or touch them, so a clerk cannot make
   // herself another code or take away someone else's.
   if (req.query.codes !== undefined || (req.method === "POST" && req.body && (req.body.newCode || req.body.dropCode))) {
@@ -1313,7 +1381,7 @@ JSON בלבד, בלי שום טקסט אחר:
     if (!process.env.MANYCHAT_TOKEN) return res.status(500).json({ ok: false, error: "mc_off" });
     const mcState = await mcPush({ phone, newEmail: to });
     if (String(mcState).indexOf("ok") !== 0) return res.status(200).json({ ok: false, mc: mcState });
-    const moved = await moveRecords(RU, RT, from, to);
+    const { moved, kept } = await moveRecords(RU, RT, from, to);
     // The bridge that carries her until the export catches up: the gate looks the new
     // address up here and searches the file for the old one. Cleared automatically the
     // moment the file itself carries the new address.
@@ -1327,12 +1395,12 @@ JSON בלבד, בלי שום טקסט אחר:
       const old = await redis(RU, RT, "HGET", "admin:overrides", to);
       if (old) cur = JSON.parse(old) || {};
       const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
-      log.unshift({ at: new Date().toISOString(), by, field: "email", from, to });
+      log.unshift({ at: new Date().toISOString(), by, field: "email", from, to, ...(kept.length ? { kept } : {}) });
       cur.log = log.slice(0, 20);
       await redis(RU, RT, "HSET", "admin:overrides", to, JSON.stringify(cur));
       await bumpRev(RU, RT); // מסכים פתוחים אחרים יתעדכנו. v7.95.
     } catch (e) {}
-    return res.status(200).json({ ok: true, mc: "ok", moved });
+    return res.status(200).json({ ok: true, mc: "ok", moved, kept });
   }
 
   if (req.method === "POST") {

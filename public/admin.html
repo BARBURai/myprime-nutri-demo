@@ -1232,6 +1232,61 @@ function teamBlock(){
   '</div>';
 }
 
+// ===== התראת ניסיון לטלפון, למנהל בלבד. v8.62 =====
+// רון, 18.11.2026: לראות בטלפון איך נראית התראת בוקר באורכים שונים, לפני שענת כותבת אותן.
+// השרת שולח רק למכשירים שרשומים למייל שהוקלד. מעל התקרה הוא אינו שולח בכלל ואומר את זה.
+var TP = { open:false, email:"", title:"", text:"", busy:false, msg:"" };
+// v8.63: כל מספר אומר כמה תווים יש מתחילת ההודעה ועד סופו, כולל רווחים. רון: "איך אני
+// יודע כמה אותיות יש". כך המספר האחרון שנראה בטלפון לפני החיתוך הוא כמה נכנסו.
+function tpFill(len){
+  var s = "";
+  for(;;){
+    var pre = (s ? s + " · " : "") + "עד כאן ";
+    var n = pre.length + 1;
+    while((pre + n).length !== n) n = (pre + n).length;
+    var next = pre + n;
+    if(next.length > len) break;
+    s = next;
+  }
+  // הסוף: המספר הכולל צמוד לתו האחרון, כדי שגם מי שרואה את כל ההודעה יודע את האורך שלה.
+  var tail = " " + len, gap = len - s.length - tail.length;
+  if(gap >= 0) s += ".".repeat(gap) + tail;
+  while(s.length < len) s += ".";
+  return s.slice(0, len);
+}
+var TP_PRESETS = {
+  rec:  { title: tpFill(30),  text: tpFill(100) },
+  long: { title: tpFill(60),  text: tpFill(250) },
+  max:  { title: tpFill(30),  text: tpFill(1800) },
+  over: { title: tpFill(30),  text: tpFill(2600) }
+};
+function tpCount(id){ return '<div class="note" id="'+id+'n">'+((id==="tpt"?TP.title:TP.text).length).toLocaleString("he-IL")+' תווים</div>'; }
+function testPushBlock(){
+  if(!DATA.owner || !TP.open) return "";
+  return '<div class="card">'+
+    '<div class="row1"><span class="nm">📲 התראת ניסיון לטלפון שלך</span>'+
+      '<button class="lnk" data-tpopen="0">סגירה</button></div>'+
+    '<div class="note">ההתראה נשלחת רק למכשירים שרשומים להתראות עם המייל הזה.</div>'+
+    '<div class="edit"><span>מייל:</span><input class="field sm" id="tpe" dir="ltr" style="max-width:260px" value="'+esc(TP.email)+'"></div>'+
+    '<div class="edit" style="flex-wrap:wrap;gap:6px">'+
+      '<button class="btn" data-tpset="rec">לפי ההמלצה</button>'+
+      '<button class="btn" data-tpset="long">ארוך</button>'+
+      '<button class="btn" data-tpset="max">מקסימום</button>'+
+      '<button class="btn" data-tpset="over">חריגה</button></div>'+
+    '<div class="edit" style="display:block"><div>כותרת:</div><input class="field" id="tpt" value="'+esc(TP.title)+'">'+tpCount("tpt")+'</div>'+
+    '<div class="edit" style="display:block"><div>גוף ההודעה:</div><textarea class="field" id="tpb" rows="5">'+esc(TP.text)+'</textarea>'+tpCount("tpb")+'</div>'+
+    '<div class="edit"><button class="btn p" data-tpsend="1"'+(TP.busy?" disabled":"")+'>'+(TP.busy?"שולחת...":"שליחה")+'</button></div>'+
+    (TP.msg ? '<div class="note" data-tpmsg="1"><b>'+esc(TP.msg)+'</b></div>' : '')+
+  '</div>';
+}
+function tpMessage(d){
+  if(d && d.ok) return "נשלחה ל-"+d.sent+" מכשירים.";
+  if(d && d.error==="no_devices") return "לא נמצא מכשיר שרשום להתראות עם המייל הזה.";
+  if(d && d.error==="too_long") return "ההודעה ארוכה מדי ולא נשלחה. שירות ההתראות לא מקבל הודעה באורך הזה.";
+  if(d && d.error==="bad_email") return "המייל לא תקין.";
+  return "השליחה נכשלה. אפשר לנסות שוב בעוד רגע.";
+}
+
 // ===== תיקון שמות מהאקסל, למנהל בלבד. v8.02 =====
 // רון, 11.10.2026: "איך אתה מתכוון שאני אעבור על כל האנשים האלה זה צריך להיות צ'יק צ'יק
 // צ'יק". הקופי אושר: "מאשר". **כל לחיצה היא אישה אחת**, והשם הישן נשמר בשרת לפני כל כתיבה.
@@ -1593,12 +1648,14 @@ function render(){
     (MENU ? '<div class="menu">'+
       '<button class="mi" data-mcshow="1">עדכון ממניצ\'ט וייבוא</button>'+
       (DATA.owner ? '<button class="mi" data-team="1">צוות המשרד</button>' : '')+
+      (DATA.owner ? '<button class="mi" data-tpopen="1">התראת ניסיון</button>' : '')+
       '<button class="mi" data-nfopen="1">תיקון שמות מהאקסל</button>'+
       '<button class="mi'+(VIEW==="probs"?" on":"")+'" data-v="probs">בעיות בגיליון'+(probsN?'<span class="mb">'+probsN+'</span>':'')+'</button>'+
       '<button class="mi'+(VIEW==="add"?" on":"")+'" data-v="add">הוספת משתתפת</button>'+
     '</div>' : '')+
     mcSyncBlock()+
     teamBlock()+
+    testPushBlock()+
     nameFixBlock()+
     '<div class="toolbar'+(SEL?" picked":"")+'">'+
     '<input class="field" id="q" dir="auto" placeholder="🔍 חיפוש לפי שם, טלפון או מייל" value="'+esc(qRaw)+'">'+
@@ -2834,6 +2891,29 @@ function render(){
     CODESOPEN = el.getAttribute("data-team")==="1";
     if(CODESOPEN && CODES === null){ render(); loadCodes().then(render); return; }
     render();
+  }; });
+  // התראת ניסיון. v8.62.
+  app.querySelectorAll("[data-tpopen]").forEach(function(el){ el.onclick=function(){ TP.open = el.getAttribute("data-tpopen")==="1"; TP.msg=""; render(); }; });
+  app.querySelectorAll("[data-tpset]").forEach(function(el){ el.onclick=function(){
+    var p = TP_PRESETS[el.getAttribute("data-tpset")]; if(!p) return;
+    TP.title = p.title; TP.text = p.text; TP.msg = ""; render();
+  }; });
+  [["tpe","email"],["tpt","title"],["tpb","text"]].forEach(function(x){
+    var el = document.getElementById(x[0]); if(!el) return;
+    el.oninput = function(){
+      TP[x[1]] = el.value;
+      var n = document.getElementById(x[0]+"n"); if(n) n.textContent = el.value.length.toLocaleString("he-IL")+" תווים";
+    };
+  });
+  app.querySelectorAll("[data-tpsend]").forEach(function(el){ el.onclick=function(){
+    if(TP.busy) return;
+    TP.busy = true; TP.msg = ""; render();
+    fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({testPush:true, email:TP.email.trim(), title:TP.title, text:TP.text})})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ TP.msg = tpMessage(d); })
+      .catch(function(){ TP.msg = tpMessage(null); })
+      .then(function(){ TP.busy = false; render(); });
   }; });
   // תיקון שמות מהאקסל. v8.02.
   app.querySelectorAll("[data-nfopen]").forEach(function(el){ el.onclick=function(){

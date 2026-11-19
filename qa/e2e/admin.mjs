@@ -119,6 +119,8 @@ async function open(browser, device, patch) {
       // בקשת ניסוח מקבלת תשובה כמו מהשרת. בלי זה אי אפשר לבדוק את המסך שמציג אותה,
       // והבדיקה הייתה נעצרת על תיבה ריקה בלי לדעת אם זה המסך או ה-mock.
       if (b && b.mcImport) return json({ ok: true, imported: 2485, keptMc: 0, total: 2485 });
+      // התראת ניסיון, v8.62: מעל 2,000 תווים כמו השרת, "ארוכה מדי".
+      if (b && b.testPush) return json(String(b.text || "").length > 2000 ? { ok: false, error: "too_long" } : b.email === "none@test.com" ? { ok: false, error: "no_devices" } : { ok: true, sent: 2 });
       if (b && b.draftFor) return json({ ok: true, answer: "תשובה מנוסחת לבדיקה", based: "kb", why: "לפי הבריף" });
       return json({ ok: true });
     }
@@ -168,6 +170,48 @@ const ACTIONS = [
 ];
 
 const CHECKS = [
+  {
+    // v8.62: התראת ניסיון. מנהל בלבד, ארבע דוגמאות, מונה תווים, ושלוש התשובות של השרת.
+    name: "התראת ניסיון: דוגמאות, מונה, ומה השרת ענה",
+    async run(browser, device) {
+      const o = await open(browser, device);
+      const p = o.page;
+      await menu(p);
+      await p.locator('[data-tpopen="1"]').click(); await p.waitForTimeout(250);
+      const shown = await p.locator('[data-tpsend]').count();
+      await p.locator("#tpe").fill("ron@test.com");
+      await p.locator('[data-tpset="rec"]').click(); await p.waitForTimeout(200);
+      const recN = [await p.locator("#tptn").innerText(), await p.locator("#tpbn").innerText()];
+      const mailKept = await p.locator("#tpe").inputValue();
+      await p.locator('[data-tpsend]').click(); await p.waitForTimeout(400);
+      const msgOk = await p.locator('[data-tpmsg]').innerText();
+      const sentBody = o.posts.find((x) => x.testPush) || {};
+      await p.locator('[data-tpset="max"]').click(); await p.waitForTimeout(200);
+      const maxN = await p.locator("#tpbn").innerText();
+      await p.locator('[data-tpset="over"]').click(); await p.waitForTimeout(200);
+      await p.locator('[data-tpsend]').click(); await p.waitForTimeout(400);
+      const msgLong = await p.locator('[data-tpmsg]').innerText();
+      await p.locator("#tpe").fill("none@test.com");
+      await p.locator('[data-tpset="rec"]').click(); await p.waitForTimeout(200);
+      await p.locator('[data-tpsend]').click(); await p.waitForTimeout(400);
+      const msgNone = await p.locator('[data-tpmsg]').innerText();
+      await p.locator("#tpb").fill("שלום");
+      const typedN = await p.locator("#tpbn").innerText();
+      await o.ctx.close();
+      const c = await open(browser, device, (d) => Object.assign(d, { owner: false }));
+      await menu(c.page);
+      const clerk = await c.page.locator('[data-tpopen="1"]').count();
+      await c.ctx.close();
+      const errs = o.errors.concat(c.errors);
+      const ok = shown === 1 && recN[0] === "30 תווים" && recN[1] === "100 תווים" && mailKept === "ron@test.com"
+        && msgOk === "נשלחה ל-2 מכשירים." && sentBody.email === "ron@test.com" && sentBody.title.length === 30 && sentBody.text.length === 100
+        && maxN === "1,800 תווים" && /^עד כאן 8 · עד כאן 20/.test(sentBody.text) && sentBody.text.endsWith(" 100")
+        && msgLong === "ההודעה ארוכה מדי ולא נשלחה. שירות ההתראות לא מקבל הודעה באורך הזה."
+        && msgNone === "לא נמצא מכשיר שרשום להתראות עם המייל הזה." && typedN === "4 תווים"
+        && clerk === 0 && !errs.length;
+      return { ok, detail: `מוצג ${shown} · ${recN} · מייל ${mailKept} · "${msgOk}" · מקסימום ${maxN} · "${msgLong}" · "${msgNone}" · הקלדה ${typedN} · פקידה ${clerk} · שגיאות ${errs[0] || "אין"}` };
+    },
+  },
   {
     // v8.50: "שילמו ולא נרשמו". שני הצדדים באותה הרצה: עם רשימה האריח מוצג בנוסח שאושר,
     // ובלי רשימה, וגם כשהשרת מחזיר null בתקלה, אין אריח בכלל.
@@ -1181,7 +1225,7 @@ CHECKS.push({
     const errs = o.errors.concat(c.errors);
     const ok = closed0 === 0 && hint === 0 && dot === "4" && tops.length === 3 && new Set(tops).size === 1 && h < 50
       && work0 === 0 && workOpen.join("|") === "חסרות קבוצה|הקפאה להשלמה|חוזרות מהקפאה השבוע" && work1 === 0
-      && items.join("|") === "עדכון ממניצ'ט וייבוא|צוות המשרד|תיקון שמות מהאקסל|בעיות בגיליון|הוספת משתתפת"
+      && items.join("|") === "עדכון ממניצ'ט וייבוא|צוות המשרד|התראת ניסיון|תיקון שמות מהאקסל|בעיות בגיליון|הוספת משתתפת"
       && closedAfter === 0 && addOpen === 1 && clerkItems === 4 && !errs.length;
     return { ok, detail: `סגור ${closed0} · הסבר ${hint} · נקודה "${dot}" · שורות ${tops} גובה ${Math.round(h)} · לטיפול ${work0}/${workOpen.join(",")}/${work1} · תפריט ${items.join(",")} · נסגר ${closedAfter} · הוספה ${addOpen} · פקידה ${clerkItems} · שגיאות ${errs[0] || "אין"}` };
   },
