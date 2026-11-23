@@ -114,7 +114,8 @@ ck("הכתובת סגורה בלי המשתנה, גם עם סיסמה", (await p
 process.env.MC_SYNC_SECRET = "s3cret-mc";
 
 console.log("\nהכתובת עצמה\n");
-const nonMc = () => JSON.stringify([Object.entries(H).filter(([k]) => !/^mc:/.test(k)), Object.entries(S).filter(([k]) => !/^mc:/.test(k))]);
+// v8.71: היומן בכרטיס (`admin:hist`) הוא הכתיבה היחידה שמותרת מחוץ ל-mc:, ואינו נקרא בשער.
+const nonMc = () => JSON.stringify([Object.entries(H).filter(([k]) => !/^mc:/.test(k) && k !== "admin:hist"), Object.entries(S).filter(([k]) => !/^mc:/.test(k))]);
 const before = nonMc();
 ck("סיסמה שגויה נדחית", (await push(row({}), "wrong-secre")).code === 401);
 ck("בלי סיסמה נדחית", (await push(row({}), "")).code === 401);

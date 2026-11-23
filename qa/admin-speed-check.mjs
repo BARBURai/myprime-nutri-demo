@@ -110,7 +110,8 @@ ok("**הרשימה אינה קוראת את admin:usage בכלל**", !log.some((
 ok("**ואינה נושאת נתוני שימוש לאף אישה**", r.body.women.every((w) => !("usage" in w)));
 r = await call({ usage: "seen@t.co" });
 ok("הכרטיס מקבל את נתוני השימוש של האישה", r.body.ok && r.body.usage && r.body.usage.trackerDays === 7, JSON.stringify(r.body));
-ok("בפקודה אחת בלבד", log.slice(-1)[0] === "HGET admin:usage");
+// v8.71: ועוד קריאה אחת ליומן בכרטיס, `admin:hist`, של אותה אישה בלבד.
+ok("בשתי קריאות של אישה אחת בלבד", log.slice(-2).join("|") === "HGET admin:usage|HGET admin:hist", log.slice(-2).join("|"));
 r = await call({ usage: "none1@t.co" });
 ok("אישה בלי נתונים: null ולא שגיאה", r.body.ok && r.body.usage === null);
 r = await call({ usage: "seen@t.co", key: "nope" });
