@@ -1,3 +1,4 @@
+// **v8.66: שנה אחורה (365 יום), המקסימום של דף התשלום. רון: "תשנה ל-365 יום".**
 // **v8.65: התשלומים של אישה אחת בקארדקום, ללשונית "תשלומים" בכרטיס במסך הניהול.**
 // רון, 23.11.2026: "מאשר, לשונית נפרדת, גם לפקידות, תבנה בדב".
 //
@@ -14,7 +15,7 @@
 export const PAY_STATS_URL = "https://pay.myprime.co.il/api/stats";
 // דף התשלום אמר 4 עד 10 שניות בקריאה הראשונה. **לא נמדד אצלנו**, ולכן מרווח גדול.
 export const PAY_STATS_TIMEOUT_MS = 25000;
-export const PAY_DAYS = 120;
+export const PAY_DAYS = 365;
 const MAX_ROWS = 200;
 
 const str = (v, n) => String(v == null ? "" : v).slice(0, n);

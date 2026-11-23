@@ -197,6 +197,7 @@ const CHECKS = [
       const rows = await p.locator(".payrow").allInnerTexts();
       const link = await p.locator('.payrow a').first().getAttribute("href").catch(() => "");
       const refRed = await p.locator(".payref").count();
+      const note = (await p.locator(".paynote").innerText().catch(() => "")).trim();
       const call = o.payCalls[0] || "";
       await p.locator('[data-tab="info"]').first().click(); await p.waitForTimeout(150);
       await p.locator('[data-tab="pay"]').first().click(); await p.waitForTimeout(300);
@@ -219,7 +220,7 @@ const CHECKS = [
         && link === "https://cardcom.test/doc/1001" && refRed === 1 && /זיכוי · \u200E?-49 ₪/.test(rows[1] || "")
         && call.includes("payments=lior5066%40gmail.com") && call.includes("phone=972501111111") && calls === 1
         && failTxt === "קארדקום לא ענה. אפשר לנסות שוב בעוד רגע."
-        && noneTxt === "לא נמצאו תשלומים ב-120 הימים האחרונים לפי הטלפון והמייל שלה. אם היא שילמה עם פרטים של מישהו אחר, התשלום לא יופיע כאן."
+        && note === "מוצגים התשלומים מהשנה האחרונה בלבד." && noneTxt === "לא נמצאו תשלומים בשנה האחרונה לפי הטלפון והמייל שלה. אם היא שילמה עם פרטים של מישהו אחר, התשלום לא יופיע כאן."
         && !errs.length;
       return { ok, detail: `לפני ${before} · לשונית ${tab} · טעינה ${loading} · "${r0}" | "${(rows[1]||"").trim()}" · קישור ${link} · פניות ${calls} · "${failTxt}" · "${noneTxt.slice(0,30)}" · שגיאות ${errs[0] || "אין"}` };
     },
