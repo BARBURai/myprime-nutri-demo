@@ -443,6 +443,11 @@
   .barfill{width:100%;background:var(--pink);border-radius:3px}
   .barlbl{font-size:10px;margin-top:2px;color:var(--ink-3)}
   .empty{text-align:center;color:var(--ink-3);padding:44px 0}
+  .payrow{padding:10px 2px;border-bottom:1px solid var(--line,#eee);font-size:14px;line-height:1.6}
+  .payrow a{color:inherit;text-decoration:underline}
+  .payref{color:var(--danger)}
+  .paynote{font-size:13px;padding:8px 2px 2px}
+  .paymore{padding:10px 2px 2px}
   .empty .note{max-width:560px;margin:10px auto 0;text-align:center}
   .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;direction:ltr;unicode-bidi:isolate}
   :focus-visible{outline:2px solid var(--pink);outline-offset:2px;border-radius:8px}
@@ -754,6 +759,7 @@ function mcWhy(d){
   if(e === "email_taken") return "הכתובת הזאת כבר רשומה על מישהי אחרת.";
   if(e === "row_gone")    return "לא מצאתי את השורה שלה בגיליון לפי הטלפון הזה.";
   if(e === "bad_email")   return "כתובת המייל לא תקינה.";
+  if(e === "same_email")  return "הכתובת החדשה זהה לכתובת הקיימת. לא שונה דבר.";
   if(e === "bad_phone")   return "מספר הטלפון לא תקין.";
   if(e === "mc_off")      return "החיבור למניצ'ט לא מוגדר.";
   if(e === "not_found")   return "לא נמצאה במניצ'ט רשומה לפי הטלפון הזה.";
@@ -850,6 +856,73 @@ function attachUsage(w){
   w.usageLoading = s.state === "loading";
   w.usageFailed = s.state === "failed";
   w.usage = s.state === "ok" ? s.u : null;
+}
+
+// **v8.65: התשלומים שלה בקארדקום, רק כשהלשונית נפתחת.** נשמר עד שהדף נטען מחדש, ותקלה
+// מנוסה שוב בכניסה הבאה ללשונית אחרי 15 שניות.
+// **v8.67: נפתח על 120 יום, ושנה אחורה רק בכפתור.** דף התשלום מדד 365 יום ב-27 שניות, ואחת
+// מהשלוש לא ענתה. לשנה השרת מחכה עד 60 שניות, ותקלה בה אינה מנוסה שוב לבד, רק בכפתור.
+// v8.68: תווים נסתרים במייל. אותה רשימה כמו `api/_email.js`.
+function cleanMail(s){ return String(s==null?"":s).replace(/[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g,"").trim().toLowerCase(); }
+var PAY = {};
+function payFetch(email, ph, year, done){
+  fetch("/api/admin?key="+encodeURIComponent(KEY)+"&payments="+encodeURIComponent(email)+(ph?"&phone="+encodeURIComponent(ph):"")+(year?"&year=1":""))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      done((d && d.ok) ? { state:"ok", tx:d.transactions||[], days:d.days||(year?365:120) }
+        : { state: (d && d.error==="off") ? "off" : "failed", t:Date.now() });
+    })
+    .catch(function(){ done({ state:"failed", t:Date.now() }); });
+}
+function payLoad(w){
+  var ph = phoneOf(w.email) || w.phone || "";
+  PAY[w.email] = { state:"loading", ph:ph };
+  payFetch(w.email, ph, false, function(r){ r.ph = ph; PAY[w.email] = r; render(); });
+}
+function payYear(email){
+  var s = PAY[email];
+  if(!s || (s.yr && s.yr.state === "loading")) return;
+  s.yr = { state:"loading" };
+  render();
+  payFetch(email, s.ph || "", true, function(r){ if(PAY[email] === s){ s.yr = r; render(); } });
+}
+function payStamp(at){
+  var m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(at||"");
+  if(!m) return esc(at||"");
+  return m[3]+"."+m[2]+"."+m[1]+(m[4]?" "+m[4]+":"+m[5]:"");
+}
+function payAmount(n){
+  var a = Math.abs(n), s = (a % 1 ? a.toFixed(2) : String(a)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (n < 0 ? "\u200E-" : "")+s+" ₪";
+}
+function payRows(tx){
+  return tx.map(function(t){
+    var parts = [payStamp(t.at)];
+    if(t.refund) parts.push('<b class="payref">זיכוי · '+payAmount(t.amount < 0 ? t.amount : -t.amount)+'</b>');
+    else parts.push(payAmount(t.amount));
+    parts.push(t.payments > 1 ? t.payments+" תשלומים" : "תשלום אחד");
+    if(t.last4) parts.push("כרטיס "+esc(t.last4));
+    if(t.docUrl) parts.push('<a href="'+esc(t.docUrl)+'" target="_blank" rel="noopener">חשבונית</a>');
+    return '<div class="payrow">'+parts.join(" · ")+'</div>';
+  }).join("");
+}
+function payPanel(w){
+  var s = PAY[w.email];
+  if(!s || (s.state === "failed" && Date.now() - s.t > 15000)){ payLoad(w); s = PAY[w.email]; }
+  if(s.state === "loading") return '<div class="empty" data-paystate="loading">טוען תשלומים מקארדקום...</div>';
+  if(s.state === "off") return '<div class="empty" data-paystate="off">החיבור לקארדקום לא מוגדר.</div>';
+  if(s.state === "failed") return '<div class="empty" data-paystate="failed">קארדקום לא ענה. אפשר לנסות שוב בעוד רגע.</div>';
+  var y = s.yr;
+  if(y && y.state === "ok"){
+    if(!y.tx.length) return '<div class="empty" data-paystate="yearnone">לא נמצאו תשלומים בשנה האחרונה לפי הטלפון והמייל שלה. אם היא שילמה עם פרטים של מישהו אחר, התשלום לא יופיע כאן.</div>';
+    return '<div data-paystate="year"><div class="paynote">מוצגים התשלומים מהשנה האחרונה בלבד.</div>'+payRows(y.tx)+'</div>';
+  }
+  var btn = (y && y.state === "loading")
+    ? '<div class="empty" data-paystate="yearloading">טוען שנה אחורה מקארדקום, זה יכול לקחת עד דקה...</div>'
+    : ((y && y.state === "failed") ? '<div class="empty" data-paystate="yearfailed">קארדקום לא ענה. אפשר לנסות שוב בעוד רגע.</div>' : '')
+      +'<div class="paymore"><button class="btn" data-payyear="'+esc(w.email)+'">הצג שנה אחורה</button></div>';
+  if(!s.tx.length) return '<div data-paystate="none"><div class="empty">לא נמצאו תשלומים ב-120 הימים האחרונים לפי הטלפון והמייל שלה. אם היא שילמה עם פרטים של מישהו אחר, התשלום לא יופיע כאן.</div>'+btn+'</div>';
+  return '<div data-paystate="ok"><div class="paynote">מוצגים התשלומים מ-120 הימים האחרונים.</div>'+payRows(s.tx)+btn+'</div>';
 }
 
 function mcLoad(email){
@@ -1732,7 +1805,7 @@ function render(){
   // הכרטיס המלא. הוא לא השתנה, הוא רק עבר לגור בצד במקום בתוך הרשימה.
   // הכרטיס: כותרת עם פעולות מהירות, ואז לשוניות. קודם הכל ישב בגלילה אחת ארוכה
   // מאחורי כפתור "עריכה", ולכן כדי לשנות קבוצה היה צריך לפתוח ולגלול דרך הכל.
-  var TABS = [["info","פרטים"],["cohort","מחזור וקבוצה"],["perm","הרשאות"],["notes","הערות"],["usage","שימוש"],["log","יומן"]];
+  var TABS = [["info","פרטים"],["cohort","מחזור וקבוצה"],["perm","הרשאות"],["notes","הערות"],["usage","שימוש"],["pay","תשלומים"],["log","יומן"]];
   var SV = function(d){ return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>'; };
   var I_CAL   = SV('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 11h18"/>');
   var I_USERS = SV('<circle cx="9" cy="9" r="3.2"/><path d="M3 20c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8"/><path d="M17 8.2a2.8 2.8 0 0 1 0 5.6M18.5 20c0-2-.7-3.3-2-4.2"/>');
@@ -1922,6 +1995,7 @@ function render(){
       if(L.field === "glow") return pre + (L.to === "1" ? 'נתנה גישה לשיעורי הבונוס' : L.to === "0" ? 'הסירה גישה לשיעורי הבונוס' : 'החזירה את שיעורי הבונוס לערך שבגיליון');
       if(L.field === "tag:full") return pre + (L.to === "1" ? 'סימנה שיש לה את קורס האיפור המלא' : 'הסירה את הסימון של קורס האיפור המלא');
       if(L.field === "glowfull") return pre + (L.to === "1" ? 'נתנה גישה לקורס האיפור המלא' : L.to === "0" ? 'הסירה את הגישה לקורס האיפור המלא' : 'החזירה את הקורס המלא לערך שבגיליון');
+      if(L.field === "mc:cancelproc") return pre + 'ביטול בתהליך הוסר';
       if(L.field === "tag:cancelproc") return pre + (L.to === "1" ? 'סימנה אותה כביטול בתהליך וחסמה לה את האפליקציה' : 'הסירה את הסימון של ביטול בתהליך והחזירה לה את הגישה');
       if(L.field === "tag:app") return pre + (L.to === "1" ? 'סימנה אותה כמי שבאפליקציה החדשה' : 'הסירה את הסימון של האפליקציה החדשה');
       if(L.field === "freeze") return pre + freezeLogText(L);
@@ -2408,6 +2482,7 @@ function render(){
              : TAB==="cohort" ? tabCohort(w)
              : TAB==="perm"   ? tabPerm(w)
              : TAB==="usage"  ? (w.newApp ? usagePanel(w) : '<div class="empty">היא מנוהלת בקג\'אבי, ואין לנו נתוני שימוש עליה.</div>')
+             : TAB==="pay"    ? payPanel(w)
              : TAB==="log"    ? logLines(w)
              : tabInfo(w);
     return '<div class="card open">'+
@@ -2543,6 +2618,7 @@ function render(){
   if(fp) fp.onchange = function(){ PROG = this.value; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); };
   app.querySelectorAll("[data-fclear]").forEach(function(el){ el.onclick=function(){
     APP = "new"; PROG = ""; COHORT = ""; GROUP = ""; SEL = ""; EDITING = ""; render(); }; });
+  app.querySelectorAll("[data-payyear]").forEach(function(el){ el.onclick=function(){ payYear(el.getAttribute("data-payyear")); }; });
   app.querySelectorAll("[data-c]").forEach(function(el){ el.onclick=function(){ SHOWCANCELLED=!SHOWCANCELLED; render(); }; });
   app.querySelectorAll("[data-v]").forEach(function(el){ el.onclick=function(){
     var v=el.getAttribute("data-v"); VIEW = (VIEW===v ? "" : v); MISSING=false; SEL=""; EDITING="";
@@ -2625,7 +2701,7 @@ function render(){
   app.querySelectorAll("[data-fixmail]").forEach(function(el){ el.onclick=function(){
     var ph = el.getAttribute("data-fixmail");
     var box = document.getElementById("nm_"+ph);
-    var mail = (box ? box.value : "").trim().toLowerCase();
+    var mail = cleanMail(box ? box.value : "");
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)){ alert("כתובת המייל לא נראית תקינה."); return; }
     if(!confirm("לשמור את "+mail+" בתור המייל שלה?\n\nהכתובת תיכתב למניצ'ט, ומשם היא תגיע לגיליון בייצוא הבא.")) return;
     el.disabled = true;
@@ -3067,9 +3143,10 @@ function render(){
   }; });
   app.querySelectorAll("[data-saveemail]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-saveemail"), box=document.getElementById("e_"+em);
-    var to=(box?box.value:"").trim().toLowerCase();
+    // v8.68: תו נסתר שהודבק עם הכתובת (U+200F ודומיו) נמחק לפני כל בדיקה.
+    var to=cleanMail(box?box.value:"");
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)){ alert("צריך להזין כתובת מייל תקינה"); return; }
-    if(to===em){ alert("זו אותה כתובת."); return; }
+    if(to===cleanMail(em)){ alert("הכתובת החדשה זהה לכתובת הקיימת. לא שונה דבר."); return; }
     if(!confirm("לשנות לה את כתובת המייל?\n\nמ: "+em+"\nל: "+to+"\n\nהכתובת תיכתב במניצ'ט, וכל מה ששמור אצלנו עליה יעבור לכתובת החדשה.\nמהכניסה הבאה היא נכנסת רק עם הכתובת החדשה.")) return;
     el.disabled=true; el.textContent="משנה...";
     fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
@@ -3078,6 +3155,7 @@ function render(){
       .then(function(d){
         if(d && d.ok){ alert("הכתובת שונתה. מעכשיו היא נכנסת עם "+to+" בלבד.\n\nהגיליון יתעדכן לבד בייצוא הבא של מניצ'ט, ועד אז הכרטיס יציג את שתי הכתובות."); EDITING=""; delete MC[em]; return load().then(render); }
         // Nothing was moved on our side when ManyChat refused, so the two never drift apart.
+        if(d && d.error === "same_email"){ alert("הכתובת החדשה זהה לכתובת הקיימת. לא שונה דבר."); el.disabled=false; el.textContent="שינוי כתובת"; return; }
         var why = d && d.error === "email_taken" ? "הכתובת הזאת כבר קיימת אצל מישהי אחרת בגיליון."
                 : d && d.error === "mc_off" ? "החיבור למניצ'ט אינו מוגדר, ולכן לא שיניתי כלום."
                 : d && String(d.mc||"").indexOf("emailfail:")===0 ? "מניצ'ט לא קיבל את השינוי: "+String(d.mc).slice(10)

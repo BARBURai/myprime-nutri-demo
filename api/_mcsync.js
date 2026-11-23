@@ -294,6 +294,17 @@ export async function tracks(RU, RT, only360 = false) {
 }
 
 // קליטת שורה אחת ממניצ'ט.
+// v8.69. התגית במניצ'ט היא "ביטול בתהליך ❌❌", והשוואה בלי אמוג'י ובלי סדר מילים.
+export const isCancelProcTag = (t) => aliasKey(t) === aliasKey("ביטול בתהליך");
+export async function clearCancelProc(RU, RT, email, now = Date.now()) {
+  const cur = parseJson(await rpost(RU, RT, ["HGET", "admin:overrides", email]), null);
+  if (!cur || cur.blocked !== "1") return false;
+  const log = Array.isArray(cur.log) ? cur.log.slice(0, 19) : [];
+  log.unshift({ at: new Date(now).toISOString(), by: "מניצ'ט", field: "mc:cancelproc", from: "1", to: "" });
+  await rpost(RU, RT, ["HSET", "admin:overrides", email, JSON.stringify({ ...cur, blocked: "", log })]);
+  return true;
+}
+
 export async function ingest(body, RU, RT, now = Date.now()) {
   let raw = body;
   if (typeof raw === "string") { try { raw = JSON.parse(raw); } catch (e) { return { status: 400, json: { ok: false, error: "bad_body" } }; } }
@@ -348,6 +359,14 @@ export async function ingest(body, RU, RT, now = Date.now()) {
   if (tags) rec.tags = tags;
   else if (prev && Array.isArray(prev.tags)) rec.tags = prev.tags;
   await rpost(RU, RT, ["HSET", MC_ROWS, phone, JSON.stringify(rec)]);
+  // **v8.69: "ביטול בתהליך" שהוסר במניצ'ט מסיר גם את סימון המשרד.** רון: "מאשר, תבנה בדב".
+  // הסימון שהפקידה שמה במסך הניהול נשמר ב-`admin:overrides` (`blocked`), והשער חוסם לפיו גם
+  // כשהתגית ירדה במניצ'ט, למשל באוטומציה שמחזירה קונת סמארט שביטלה בעבר. **רק כשהתגית הייתה
+  // בבקשה הקודמת ואינה בזו**, כלומר הוסרה באמת, ולא כשהכתיבה של המסך למניצ'ט מעולם לא הגיעה.
+  // תקלה כאן לעולם אינה מכשילה את הבקשה.
+  if (email && tags && prev && Array.isArray(prev.tags) && prev.tags.some(isCancelProcTag) && !tags.some(isCancelProcTag)) {
+    try { await clearCancelProc(RU, RT, email, now); } catch (e) { /* הסימון נשאר, והמשרד יכול להסיר ביד */ }
+  }
   try {
     const f = flagsOf(cells);
     await rpost(RU, RT, f ? ["HSET", MC_FLAGS, phone, f] : ["HDEL", MC_FLAGS, phone]);

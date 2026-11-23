@@ -16,6 +16,7 @@
 //     UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Vercel env -> Redeploy.
 
 import { decideAccess, SOLO_10_WEEKS, end360 } from "./_product.js";
+import { cleanEmail } from "./_email.js";
 import { readBonus, ensureCode, PROMO360_START, PROMO360_MONTHS } from "./_ref.js";
 import { fetchSheetText, findCols, SMART_COLS, accessEnd } from "./_sheet.js";
 import { MC_BYEMAIL, MC_DIFFS, mcShadowKey, diffFields } from "./_mcsync.js";
@@ -259,7 +260,7 @@ const MAX_DEVICES = 2;
 
 export default async function handler(req, res) {
   const redis = redisForLogin();
-  const email = String((req.query && req.query.email) || "").trim().toLowerCase();
+  const email = cleanEmail(req.query && req.query.email);
   const device = String((req.query && req.query.device) || "").trim();
   // Set when she actually typed her email, as opposed to the silent check every time the
   // app loads. An explicit sign-in always wins and pushes someone else out; a silent check
@@ -297,7 +298,7 @@ export default async function handler(req, res) {
       const gone = await redis(RUm, RTm, "HGET", "admin:emailold", email);
       if (gone) return res.status(200).json({ allowed: false, reason: "not_registered", configured: true });
       const was = await redis(RUm, RTm, "HGET", "admin:emailmap", email);
-      if (was) lookFor = String(was).trim().toLowerCase();
+      if (was) lookFor = cleanEmail(was);
     }
   } catch (e) { /* the map is a bridge, never a gate: a Redis hiccup falls back to the file */ }
 

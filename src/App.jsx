@@ -768,7 +768,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.63";
+const VERSION = "8.69";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -7681,7 +7681,9 @@ export default function App() {
     });
   }, [gate, onboarded, gateStartDate]);
   const submitGate = () => {
-    const e = gateEmail.trim().toLowerCase(); const n = gateName.trim();
+    // v8.68: תו נסתר שהודבק עם הכתובת (U+200F ודומיו) נמחק, וגם השדה מתעדכן לכתובת הנקייה.
+    const e = gateEmail.replace(/[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g, "").trim().toLowerCase(); const n = gateName.trim();
+    if (e !== gateEmail) setGateEmail(e);
     if (!n) { setGateMsg("נא להזין שם פרטי."); return; }
     if (!e || !e.includes("@")) { setGateMsg("נא להזין כתובת מייל תקינה."); return; }
     if (!gateAgree) { setGateMsg("יש לאשר את מדיניות הפרטיות כדי להמשיך."); return; }
