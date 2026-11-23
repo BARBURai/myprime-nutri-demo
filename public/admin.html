@@ -845,7 +845,7 @@ function usageLoad(email){
   USE[email] = { state:"loading" };
   fetch("/api/admin?key="+encodeURIComponent(KEY)+"&usage="+encodeURIComponent(email))
     .then(function(r){ return r.json(); })
-    .then(function(d){ USE[email] = (d && d.ok) ? { state:"ok", u:d.usage || null } : { state:"failed", t:Date.now() }; render(); })
+    .then(function(d){ USE[email] = (d && d.ok) ? { state:"ok", u:d.usage || null, h:Array.isArray(d.hist) ? d.hist : [] } : { state:"failed", t:Date.now() }; render(); })
     .catch(function(){ USE[email] = { state:"failed", t:Date.now() }; render(); });
 }
 // מצמיד לאישה את מה שנטען, כדי ש-usagePanel ו-entryOf ימשיכו לקרוא את w.usage כמו תמיד.
@@ -856,6 +856,7 @@ function attachUsage(w){
   w.usageLoading = s.state === "loading";
   w.usageFailed = s.state === "failed";
   w.usage = s.state === "ok" ? s.u : null;
+  w.mcHist = s.state === "ok" ? (s.h || []) : [];
 }
 
 // **v8.65: התשלומים שלה בקארדקום, רק כשהלשונית נפתחת.** נשמר עד שהדף נטען מחדש, ותקלה
@@ -1988,10 +1989,28 @@ function render(){
       '</div></details>';
   }
 
+  // v8.71: היומן של המשרד והיומן ממניצ'ט ומהקניות, יחד ולפי זמן, החדש למעלה.
+  function mcHistText(L){
+    var on = L.to === "1";
+    if(L.field === "mc:join") return 'נרשמה'+(L.to?', מחזור של '+il(L.to):'');
+    if(L.field === "mc:start") return 'תאריך ההתחלה שונה מ-'+il(L.from)+' ל-'+(L.to?il(L.to):'ללא תאריך');
+    if(L.field === "mc:smart") return on ? 'נרשמה לסמארט' : 'סמארט הוסר';
+    if(L.field === "mc:cancelled") return on ? 'סומנה כמבטלת 360' : 'הביטול של 360 הוסר';
+    if(L.field === "mc:cancelproc") return on ? 'סומנה כביטול בתהליך' : 'ביטול בתהליך הוסר';
+    if(L.field === "mc:glowfull") return on ? 'קיבלה את קורס האיפור המלא' : 'קורס האיפור המלא הוסר';
+    if(L.field === "mc:glowsolo") return on ? 'קיבלה את הטבת Glow' : 'הטבת Glow הוסרה';
+    if(L.field === "mc:freeze") return on ? 'נכנסה להקפאה' : 'ההקפאה הוסרה';
+    if(L.field === "mc:group") return 'הקבוצה שונתה מ-'+(L.from?esc(L.from):'ללא קבוצה')+' ל-'+(L.to?esc(L.to):'ללא קבוצה');
+    if(L.field === "buy") return L.to === "360" ? 'קנתה 360' : 'קנתה סמארט';
+    return null;
+  }
   function logLines(w){
-    if(!(w.log && w.log.length)) return '<div class="empty">עוד לא נעשה כאן שום שינוי.</div>';
-    return '<div class="log">'+w.log.map(function(L){
+    var all = (w.log||[]).concat((w.mcHist||[]).map(function(L){ var o={}; for(var k in L) o[k]=L[k]; o.by = L.by || "מניצ'ט"; o.hist = 1; return o; }));
+    all.sort(function(a,b){ return String(b.at||"").localeCompare(String(a.at||"")); });
+    if(!all.length) return '<div class="empty">עוד לא נעשה כאן שום שינוי.</div>';
+    return '<div class="log">'+all.map(function(L){
       var pre = esc(stamp(L.at))+' · '+esc(L.by||"לא ידוע")+' · ';
+      if(L.hist){ var t = mcHistText(L); if(t) return pre + t; }
       if(L.field === "glow") return pre + (L.to === "1" ? 'נתנה גישה לשיעורי הבונוס' : L.to === "0" ? 'הסירה גישה לשיעורי הבונוס' : 'החזירה את שיעורי הבונוס לערך שבגיליון');
       if(L.field === "tag:full") return pre + (L.to === "1" ? 'סימנה שיש לה את קורס האיפור המלא' : 'הסירה את הסימון של קורס האיפור המלא');
       if(L.field === "glowfull") return pre + (L.to === "1" ? 'נתנה גישה לקורס האיפור המלא' : L.to === "0" ? 'הסירה את הגישה לקורס האיפור המלא' : 'החזירה את הקורס המלא לערך שבגיליון');

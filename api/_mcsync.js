@@ -305,6 +305,72 @@ export async function clearCancelProc(RU, RT, email, now = Date.now()) {
   return true;
 }
 
+// **v8.71: יומן מלא בכרטיס.** רון: "שביומן יהיה רשום שם הכל כל מה שהיא עשתה לפי תאריכים",
+// ואישר את הנוסחים: "מאשר, תבנה בדב". כל בקשה ממניצ'ט משווה את השורה החדשה לקודמת, ומה
+// שהשתנה נרשם ב-`admin:hist` תחת המייל שלה. **נפרד מ-`admin:overrides`**, כי רשומה שם היא
+// סימון של המשרד שהשער קורא, ואסור שיומן ייצור אחת כזאת. נקרא רק בכרטיס, עם נתוני השימוש.
+// **רק עובדות משתנות, לא נוכחות:** שורה שלא הייתה לה קודמת נרשמת כהרשמה, ותגית נבדקת רק
+// כששתי הבקשות נשאו רשימת תגיות, אחרת תגית שלא הגיעה הייתה נקראת כהסרה.
+export const HIST_KEY = "admin:hist";
+export const HIST_MAX = 100;
+const colTrue = (cells, names) => {
+  const want = names.map(norm);
+  return Object.keys(cells || {}).some((k) => want.includes(norm(k)) && isTrueCell(cells[k]));
+};
+const colVal = (cells, name) => {
+  const k = Object.keys(cells || {}).find((x) => norm(x) === norm(name));
+  return k ? String(cells[k] == null ? "" : cells[k]).trim() : "";
+};
+const startOf = (cells) => {
+  const m = colVal(cells, START_KEY).match(DATE_IN);
+  const sun = m ? parseDateToSunday(m[0]) : null;
+  return sun ? ymd(sun) : "";
+};
+const hasTag = (tags, name) => (tags || []).some((t) => aliasKey(t) === aliasKey(name));
+const FLAG_HIST = [
+  ["smart", ["SMART", "SOLO10WEEK"]],
+  ["cancelled", ["ביטלה"]],
+  ["glowfull", ["GLOW-FULL"]],
+  ["glowsolo", ["GLOW-SOLO"]],
+];
+export function mcHistDiff(prev, cells, tags) {
+  const out = [];
+  const pc = prev && prev.cells;
+  const s1 = startOf(cells);
+  if (!pc) {
+    out.push({ field: "mc:join", to: s1 });
+    return out;
+  }
+  const s0 = startOf(pc);
+  if (s1 !== s0) out.push(s0 ? { field: "mc:start", from: s0, to: s1 } : { field: "mc:join", to: s1 });
+  for (const [f, cols] of FLAG_HIST) {
+    const a = colTrue(pc, cols), b = colTrue(cells, cols);
+    if (a !== b) out.push({ field: "mc:" + f, to: b ? "1" : "" });
+  }
+  const g0 = colVal(pc, "קבוצה"), g1 = colVal(cells, "קבוצה");
+  if (g0 !== g1) out.push({ field: "mc:group", from: g0, to: g1 });
+  if (Array.isArray(prev.tags) && Array.isArray(tags)) {
+    for (const [f, name] of [["cancelproc", "ביטול בתהליך"], ["freeze", "הקפאה"]]) {
+      const a = hasTag(prev.tags, name), b = hasTag(tags, name);
+      if (a !== b) out.push({ field: "mc:" + f, to: b ? "1" : "" });
+    }
+  }
+  return out;
+}
+// מוסיף שורות ליומן של אישה. **תקלה כאן לעולם אינה מכשילה את הבקשה**, ולכן הקורא עוטף.
+// `order` מונע כפילות של אותה קנייה כשדף התשלום שולח אותה פעמיים.
+export async function histAdd(rpost, email, entries, now = Date.now()) {
+  if (!email || !entries || !entries.length) return 0;
+  const cur = parseJson(await rpost(["HGET", HIST_KEY, email]), []);
+  const list = Array.isArray(cur) ? cur : [];
+  const at = new Date(now).toISOString();
+  const fresh = entries.filter((e) => !(e.order && list.some((x) => x.order === e.order && x.field === e.field)));
+  if (!fresh.length) return 0;
+  const next = fresh.map((e) => ({ at, ...e })).concat(list).slice(0, HIST_MAX);
+  await rpost(["HSET", HIST_KEY, email, JSON.stringify(next)]);
+  return fresh.length;
+}
+
 export async function ingest(body, RU, RT, now = Date.now()) {
   let raw = body;
   if (typeof raw === "string") { try { raw = JSON.parse(raw); } catch (e) { return { status: 400, json: { ok: false, error: "bad_body" } }; } }
@@ -364,8 +430,17 @@ export async function ingest(body, RU, RT, now = Date.now()) {
   // כשהתגית ירדה במניצ'ט, למשל באוטומציה שמחזירה קונת סמארט שביטלה בעבר. **רק כשהתגית הייתה
   // בבקשה הקודמת ואינה בזו**, כלומר הוסרה באמת, ולא כשהכתיבה של המסך למניצ'ט מעולם לא הגיעה.
   // תקלה כאן לעולם אינה מכשילה את הבקשה.
+  let clearedProc = false;
   if (email && tags && prev && Array.isArray(prev.tags) && prev.tags.some(isCancelProcTag) && !tags.some(isCancelProcTag)) {
-    try { await clearCancelProc(RU, RT, email, now); } catch (e) { /* הסימון נשאר, והמשרד יכול להסיר ביד */ }
+    try { clearedProc = await clearCancelProc(RU, RT, email, now); } catch (e) { /* הסימון נשאר, והמשרד יכול להסיר ביד */ }
+  }
+  // v8.71: היומן. כשהסימון של המשרד הוסר, השורה כבר נרשמה ביומן המשרד, ולא נרשמת פעמיים.
+  if (email) {
+    try {
+      let h = mcHistDiff(prev, cells, tags);
+      if (clearedProc) h = h.filter((e) => !(e.field === "mc:cancelproc" && !e.to));
+      await histAdd((cmd) => rpost(RU, RT, cmd), email, h, now);
+    } catch (e) { /* היומן לעולם אינו מכשיל את הבקשה */ }
   }
   try {
     const f = flagsOf(cells);

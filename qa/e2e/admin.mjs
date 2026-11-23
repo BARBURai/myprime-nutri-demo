@@ -136,7 +136,7 @@ async function open(browser, device, patch) {
     if (url.includes("usage=")) {
       usageCalls.push(decodeURIComponent(url.split("usage=")[1].split("&")[0]));
       if (DATA0.__usageFail) return json({ ok: false, error: "usage_failed" });
-      return json({ ok: true, usage: (DATA0.__usage || {})[usageCalls[usageCalls.length - 1]] || null });
+      return json({ ok: true, usage: (DATA0.__usage || {})[usageCalls[usageCalls.length - 1]] || null, hist: (DATA0.__hist || {})[usageCalls[usageCalls.length - 1]] || [] });
     }
     // לשונית "תשלומים", v8.65. `__pay` הוא מה שהשרת מחזיר, ו-`__payDelay` מעכב כדי לראות את הטעינה.
     if (url.includes("payments=")) {
@@ -923,6 +923,38 @@ CHECKS.push({
     await ctx.close();
     const ok = card.includes("מבצע בלאק נובמבר +3 חודשים") && card.includes("מבצע בלאק נובמבר · +3 חודשים") && !other.includes("בלאק נובמבר") && errors.length === 0;
     return { ok, detail: `שורה ${card.includes("מבצע בלאק נובמבר +3 חודשים")} · יומן ${card.includes("מבצע בלאק נובמבר · +3 חודשים")} · אחרת ${!other.includes("בלאק נובמבר")}${errors.length ? " · " + errors[0] : ""}` };
+  },
+}, {
+  // v8.71: היומן המלא. שורות ממניצ'ט ומהקניות ממוזגות עם יומן המשרד לפי זמן, החדש למעלה.
+  // שני הצדדים: אישה עם יומן רואה את השורות בסדר, ואחרת בלי יומן אינה רואה אף אחת.
+  name: "יומן מלא: שינויים ממניצ'ט וקניות, לפי זמן",
+  async run(browser, device) {
+    const { ctx, page, errors } = await open(browser, device, (d) => {
+      d.women[1].log = [{ at: "2026-11-20T10:00:00Z", by: "טלי", field: "group", from: "", to: "א" }];
+      d.__hist = { "ronit@test.com": [
+        { at: "2026-11-23T10:00:00Z", by: "מניצ'ט", field: "mc:cancelled", to: "" },
+        { at: "2026-11-22T10:00:00Z", by: "דף התשלום", field: "buy", to: "SMART", order: "o1" },
+        { at: "2026-11-01T10:00:00Z", field: "mc:join", to: "2026-11-01" },
+      ] };
+      return d;
+    });
+    await page.locator('[data-open="ronit@test.com"]').first().click();
+    await page.waitForTimeout(500);
+    await page.locator('.card.open [data-tab="log"]').first().click();
+    await page.waitForTimeout(300);
+    const card = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(600);
+    await page.locator('[data-open="lior5066@gmail.com"]').first().click();
+    await page.waitForTimeout(500);
+    await page.locator('.card.open [data-tab="log"]').first().click();
+    await page.waitForTimeout(300);
+    const other = (await page.locator(".card.open").innerText()).replace(/\s+/g, " ");
+    await ctx.close();
+    const a = card.indexOf("מניצ'ט · הביטול של 360 הוסר"), b = card.indexOf("דף התשלום · קנתה סמארט"),
+      c = card.indexOf("טלי · שינתה את הקבוצה"), e = card.indexOf("מניצ'ט · נרשמה, מחזור של 01.11.2026");
+    const ok = a >= 0 && b > a && c > b && e > c && !other.includes("קנתה סמארט") && errors.length === 0;
+    return { ok, detail: `סדר ${[a, b, c, e].join(",")} · אחרת ${!other.includes("קנתה סמארט")} · "${card.slice(0, 200)}"${errors.length ? " · " + errors[0] : ""}` };
   },
 }, {
   // v8.43: תג המסלול בשורת השם בתור המענה, בלי "פרטים", ו"מניצ'ט" במקום "וואטסאפ" בכל

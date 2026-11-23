@@ -31,6 +31,17 @@ import { parseKey, driveDownload } from "./_gdrive.js";
 import { excelIndex, targets as nameTargets, run as nameRun, mailHtml as nameMail, CAP as NAME_CAP } from "./_namefix.js";
 import { REF_BONUS, REF_BY, REF_MINE, REF_CODE, REF_CREDIT, PROMO_NOV26, PROMO360_KEY, refCharge, refKeyOk, promoCharge, refLink, promo360Charge, PROMO360_START, PROMO360_MONTHS } from "./_ref.js";
 import { recordPurchase, paidUnregistered, payWatch } from "./_paywatch.js";
+import { HIST_KEY, histAdd } from "./_mcsync.js";
+// v8.71: קנייה שדף התשלום מדווח נרשמת ביומן שלה. פעם אחת לכל מספר הזמנה, ותקלה נבלעת.
+async function histBuy(body, product, rp) {
+  try {
+    const b = body && typeof body === "object" ? body : {};
+    const email = cleanEmail(b.email);
+    if (!email) return;
+    const order = String(b.orderId || b.order || "").slice(0, 80);
+    await histAdd(rp, email, [{ by: "דף התשלום", field: "buy", to: product, ...(order ? { order } : {}) }]);
+  } catch (e) { /* היומן לעולם אינו מכשיל קנייה */ }
+}
 import { giftEvent, giftRetry, GIFT_TAG, GIFT_DATE_FIELD } from "./_gift.js";
 import { addDaysYmd } from "./_product.js";
 import { addMonthsYmd } from "./_product.js";
@@ -128,7 +139,7 @@ const toObj = (raw) => {
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.69";
+const ADMIN_VERSION = "8.71";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -695,6 +706,7 @@ export default async function handler(req, res) {
       if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
       // "שילמו ולא נרשמו", v8.50: כל קנייה נרשמת, גם מחוץ לחלון של ההטבה.
       await recordPurchase(body, "SMART", (cmd) => redisPost(RU, RT, cmd));
+      await histBuy(body, "SMART", (cmd) => redisPost(RU, RT, cmd));
       const out = await promoCharge(body, (cmd) => redisPost(RU, RT, cmd));
       return res.status(out.status).json(out.json);
     } catch (e) { return res.status(500).json({ ok: false, error: "store_failed" }); }
@@ -708,6 +720,7 @@ export default async function handler(req, res) {
       let body = req.body;
       if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
       await recordPurchase(body, "360", (cmd) => redisPost(RU, RT, cmd));
+      await histBuy(body, "360", (cmd) => redisPost(RU, RT, cmd));
       const out = await promo360Charge(body, (cmd) => redisPost(RU, RT, cmd));
       if (out.status === 200 && out.json.months) { try { await bumpRev(RU, RT); } catch (e) {} }
       return res.status(out.status).json(out.json);
@@ -1073,7 +1086,10 @@ export default async function handler(req, res) {
       const raw = await redis(RU, RT, "HGET", "admin:usage", em);
       let usage = null;
       if (raw) { try { usage = JSON.parse(raw); } catch (e) {} }
-      return res.status(200).json({ ok: true, usage });
+      // v8.71: היומן ממניצ'ט ומהקניות, באותה פנייה. תקלה בו אינה מפילה את נתוני השימוש.
+      let hist = [];
+      try { const h = JSON.parse((await redis(RU, RT, "HGET", HIST_KEY, em)) || "[]"); if (Array.isArray(h)) hist = h; } catch (e) {}
+      return res.status(200).json({ ok: true, usage, hist });
     } catch (e) { return res.status(200).json({ ok: false, error: "usage_failed" }); }
   }
 
