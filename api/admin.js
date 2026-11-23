@@ -35,6 +35,7 @@ import { giftEvent, giftRetry, GIFT_TAG, GIFT_DATE_FIELD } from "./_gift.js";
 import { addDaysYmd } from "./_product.js";
 import { addMonthsYmd } from "./_product.js";
 import { SUB_HASH, SUB_TAG_ID, SUB_PHOTO_LIMIT, secretOk as subSecretOk, handleCharge as subCharge, sweep as subSweep, cancelSub, payRecurringUrl, parseRec as parseSubRec, subStatus, subPhotoKey } from "./_sub.js";
+import { fetchPayments } from "./_payments.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -127,7 +128,7 @@ const toObj = (raw) => {
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.64";
+const ADMIN_VERSION = "8.65";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1168,6 +1169,13 @@ export default async function handler(req, res) {
       if (raw) { try { usage = JSON.parse(raw); } catch (e) {} }
       return res.status(200).json({ ok: true, usage });
     } catch (e) { return res.status(200).json({ ok: false, error: "usage_failed" }); }
+  }
+
+  // **v8.65: התשלומים שלה בקארדקום, כשלשונית "תשלומים" נפתחת.** ראה `api/_payments.js`.
+  // **לכל קוד של המשרד**, החלטת רון. קריאה בלבד, ושום דבר לא נשמר אצלנו.
+  if (req.method === "GET" && req.query.payments !== undefined) {
+    const out = await fetchPayments({ phone: req.query.phone, email: req.query.payments });
+    return res.status(200).json(out);
   }
 
   // One woman's live state in ManyChat, read when the clerk opens her card. It is per-woman

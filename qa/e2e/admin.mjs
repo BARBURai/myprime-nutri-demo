@@ -109,6 +109,7 @@ async function open(browser, device, patch) {
   const ctx = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
   const posts = [];
   const usageCalls = [];
+  const payCalls = [];
   await ctx.route("**/api/**", (route) => {
     const url = route.request().url();
     const json = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
@@ -137,6 +138,13 @@ async function open(browser, device, patch) {
       if (DATA0.__usageFail) return json({ ok: false, error: "usage_failed" });
       return json({ ok: true, usage: (DATA0.__usage || {})[usageCalls[usageCalls.length - 1]] || null });
     }
+    // לשונית "תשלומים", v8.65. `__pay` הוא מה שהשרת מחזיר, ו-`__payDelay` מעכב כדי לראות את הטעינה.
+    if (url.includes("payments=")) {
+      payCalls.push(url);
+      const body = DATA0.__pay || { ok: true, days: 120, transactions: [] };
+      if (DATA0.__payDelay) return new Promise((r) => setTimeout(r, DATA0.__payDelay)).then(() => json(body));
+      return json(body);
+    }
     if (url.includes("codes=1")) return json({ ok: true, codes: [] });
     // שורת המצב של מניצ'ט, v7.66.
     if (url.includes("mcstatus=")) return json(DATA0.__mc || { ok: false });
@@ -155,7 +163,7 @@ async function open(browser, device, patch) {
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(700);
   await page.addStyleTag({ content: "*,*::before,*::after{animation:none!important;transition:none!important}" }).catch(() => {});
-  return { ctx, page, errors, posts, usageCalls };
+  return { ctx, page, errors, posts, usageCalls, payCalls };
 }
 
 // שבע האפשרויות בתפריט, ולאיזה שדה כל אחת אמורה לקפוץ.
@@ -170,6 +178,52 @@ const ACTIONS = [
 ];
 
 const CHECKS = [
+  {
+    // v8.65: לשונית "תשלומים". נטענת רק כשנפתחת, עם טעינה, שורות, זיכוי, ריק ותקלה. גם לפקידה.
+    name: "תשלומים: לשונית בכרטיס, נטענת רק כשנפתחת",
+    async run(browser, device) {
+      const TXS = [
+        { at: "2026-11-19T22:27:00", amount: 49, payments: 1, refund: false, dealType: "Debit", doc: "1001", docUrl: "https://cardcom.test/doc/1001", last4: "1234" },
+        { at: "2026-11-20T10:00:00", amount: -49, payments: 1, refund: true, dealType: "Credit", doc: "1002", docUrl: "", last4: "" },
+      ];
+      const o = await open(browser, device, (d) => Object.assign(d, { owner: false, __pay: { ok: true, days: 120, transactions: TXS }, __payDelay: 900 }));
+      const p = o.page;
+      await p.locator('[data-open="lior5066@gmail.com"]').first().click(); await p.waitForTimeout(300);
+      const before = o.payCalls.length;
+      const tab = await p.locator('[data-tab="pay"]').count();
+      await p.locator('[data-tab="pay"]').first().click(); await p.waitForTimeout(150);
+      const loading = await p.locator('[data-paystate="loading"]').count();
+      await p.waitForTimeout(1200);
+      const rows = await p.locator(".payrow").allInnerTexts();
+      const link = await p.locator('.payrow a').first().getAttribute("href").catch(() => "");
+      const refRed = await p.locator(".payref").count();
+      const call = o.payCalls[0] || "";
+      await p.locator('[data-tab="info"]').first().click(); await p.waitForTimeout(150);
+      await p.locator('[data-tab="pay"]').first().click(); await p.waitForTimeout(300);
+      const calls = o.payCalls.length;
+      await o.ctx.close();
+      const e = await open(browser, device, (d) => Object.assign(d, { __pay: { ok: false, error: "pay_failed" } }));
+      await e.page.locator('[data-open="lior5066@gmail.com"]').first().click(); await e.page.waitForTimeout(300);
+      await e.page.locator('[data-tab="pay"]').first().click(); await e.page.waitForTimeout(400);
+      const failTxt = (await e.page.locator('[data-paystate]').innerText()).trim();
+      await e.ctx.close();
+      const n = await open(browser, device);
+      await n.page.locator('[data-open="lior5066@gmail.com"]').first().click(); await n.page.waitForTimeout(300);
+      await n.page.locator('[data-tab="pay"]').first().click(); await n.page.waitForTimeout(400);
+      const noneTxt = (await n.page.locator('[data-paystate]').innerText()).trim();
+      await n.ctx.close();
+      const errs = o.errors.concat(e.errors, n.errors);
+      const r0 = (rows[0] || "").replace(/\s+/g, " ").trim();
+      const ok = before === 0 && tab === 1 && loading === 1 && rows.length === 2
+        && r0 === "19.11.2026 22:27 · 49 ₪ · תשלום אחד · כרטיס 1234 · חשבונית"
+        && link === "https://cardcom.test/doc/1001" && refRed === 1 && /זיכוי · \u200E?-49 ₪/.test(rows[1] || "")
+        && call.includes("payments=lior5066%40gmail.com") && call.includes("phone=972501111111") && calls === 1
+        && failTxt === "קארדקום לא ענה. אפשר לנסות שוב בעוד רגע."
+        && noneTxt === "לא נמצאו תשלומים ב-120 הימים האחרונים לפי הטלפון והמייל שלה. אם היא שילמה עם פרטים של מישהו אחר, התשלום לא יופיע כאן."
+        && !errs.length;
+      return { ok, detail: `לפני ${before} · לשונית ${tab} · טעינה ${loading} · "${r0}" | "${(rows[1]||"").trim()}" · קישור ${link} · פניות ${calls} · "${failTxt}" · "${noneTxt.slice(0,30)}" · שגיאות ${errs[0] || "אין"}` };
+    },
+  },
   {
     // v8.62: התראת ניסיון. מנהל בלבד, ארבע דוגמאות, מונה תווים, ושלוש התשובות של השרת.
     name: "התראת ניסיון: דוגמאות, מונה, ומה השרת ענה",
