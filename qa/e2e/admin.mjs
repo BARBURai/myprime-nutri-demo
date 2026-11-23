@@ -602,7 +602,7 @@ const CHECKS = [
     },
   },
   {
-    name: "כל שש הלשוניות נפתחות בלי שגיאה",
+    name: "כל שבע הלשוניות נפתחות בלי שגיאה",
     async run(browser, device) {
       const { ctx, page, errors } = await open(browser, device);
       await page.locator("[data-open]").first().click();
@@ -614,7 +614,7 @@ const CHECKS = [
       }
       const body = await page.locator(".tabwrap").count();
       await ctx.close();
-      return { ok: tabs === 6 && body === 1 && errors.length === 0, detail: `לשוניות ${tabs} · שגיאות ${errors[0] || "אין"}` };
+      return { ok: tabs === 7 && body === 1 && errors.length === 0, detail: `לשוניות ${tabs} · שגיאות ${errors[0] || "אין"}` };
     },
   },
   {
