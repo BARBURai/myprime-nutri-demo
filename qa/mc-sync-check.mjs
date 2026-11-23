@@ -856,5 +856,44 @@ console.log("\nמסך הניהול מהשרת, ומתעדכן לבד. v7.95\n");
   ck("ליד אינו נכנס לעותק הרזה", lead.code === 200 && !(H["mc:slim"] || {})["972508800099"], strip(lead.body));
 }
 
+// ============================================================
+console.log("\nv8.69: \"ביטול בתהליך\" שהוסר במניצ'ט מסיר גם את סימון המשרד\n");
+{
+  const CP = "ביטול בתהליך ❌❌";
+  const body = (tags) => ({ id: "5550001", first_name: "דנה", whatsapp_phone: "+972505550001",
+    custom_fields: { CF_EMAIL: "cp@test.com", [START]: sunday + " 12:00:00" }, tags: tags.map((name) => ({ name })) });
+  const ov = () => JSON.parse(hash("admin:overrides")["cp@test.com"] || "null");
+  hash("admin:overrides")["cp@test.com"] = JSON.stringify({ blocked: "1", until: "2027-01-01", log: [{ at: "x", by: "טלי", field: "tag:cancelproc", from: "", to: "1" }] });
+  await push(body([CP, "360 התקינה"]));
+  ck("התגית עדיין במניצ'ט: הסימון נשאר", ov().blocked === "1", strip(ov()));
+  await push(body(["360 התקינה"]));
+  const o = ov();
+  ck("**התגית הוסרה: הסימון של המשרד יורד**", o.blocked === "", strip(o));
+  ck("**ושורה ביומן: מניצ'ט · ביטול בתהליך הוסר**", o.log[0].by === "מניצ'ט" && o.log[0].field === "mc:cancelproc" && o.log.length === 2, strip(o.log));
+  ck("ושאר הסימונים של המשרד נשארים", o.until === "2027-01-01", strip(o));
+  const lg = await login("cp@test.com");
+  ck("**והיא נכנסת**", lg && lg.allowed === true, strip(lg));
+  // תגית שמעולם לא הגיעה למניצ'ט, כלומר הכתיבה של המסך נכשלה: הסימון של המשרד נשאר.
+  hash("admin:overrides")["cp2@test.com"] = JSON.stringify({ blocked: "1", log: [] });
+  const b2 = (tags) => ({ id: "5550002", whatsapp_phone: "+972505550002", custom_fields: { CF_EMAIL: "cp2@test.com", [START]: sunday + " 12:00:00" }, tags: tags.map((name) => ({ name })) });
+  await push(b2(["360 התקינה"]));
+  await push(b2(["360 התקינה"]));
+  ck("**תגית שלא הייתה בבקשה הקודמת: הסימון נשאר**", JSON.parse(hash("admin:overrides")["cp2@test.com"]).blocked === "1");
+  // בקשה בלי תגיות כלל (מניצ'ט לא ענה): לא נוגעים.
+  hash("admin:overrides")["cp@test.com"] = JSON.stringify({ blocked: "1", log: [] });
+  await push(body([CP]));
+  const saved = MCAPI.mode; MCAPI.mode = "500";
+  const nb = body([]); delete nb.tags;
+  await push(nb);
+  MCAPI.mode = saved;
+  ck("בקשה בלי תגיות: הסימון נשאר", JSON.parse(hash("admin:overrides")["cp@test.com"]).blocked === "1");
+  // תקלה בכתיבה לסימון אינה מכשילה את הבקשה.
+  const { clearCancelProc, isCancelProcTag } = await import(new URL("../api/_mcsync.js", import.meta.url));
+  ck("השם מזוהה בלי אמוג'י", isCancelProcTag("ביטול בתהליך ❌❌") && isCancelProcTag("ביטול בתהליך") && !isCancelProcTag("360 ביטלה ❌❌❌"));
+  ck("בלי סימון: אין מה להסיר", (await clearCancelProc("redis://r", "t", "nobody@test.com")) === false);
+  const html = (await import("node:fs")).readFileSync(new URL("../public/admin.html", import.meta.url), "utf8");
+  ck("**במסך: השורה בנוסח שאושר**", html.includes(`if(L.field === "mc:cancelproc") return pre + 'ביטול בתהליך הוסר';`));
+}
+
 console.log(`\n${pass} מתוך ${pass + fail} עברו.`);
 process.exit(fail ? 1 : 0);
