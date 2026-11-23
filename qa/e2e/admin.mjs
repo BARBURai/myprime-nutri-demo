@@ -141,7 +141,9 @@ async function open(browser, device, patch) {
     // לשונית "תשלומים", v8.65. `__pay` הוא מה שהשרת מחזיר, ו-`__payDelay` מעכב כדי לראות את הטעינה.
     if (url.includes("payments=")) {
       payCalls.push(url);
-      const body = DATA0.__pay || { ok: true, days: 120, transactions: [] };
+      const year = url.includes("year=1");
+      const body = (year ? DATA0.__payYear : DATA0.__pay) || { ok: true, days: year ? 365 : 120, transactions: [] };
+      if (year && DATA0.__payYearDelay) return new Promise((r) => setTimeout(r, DATA0.__payYearDelay)).then(() => json(body));
       if (DATA0.__payDelay) return new Promise((r) => setTimeout(r, DATA0.__payDelay)).then(() => json(body));
       return json(body);
     }
@@ -186,7 +188,8 @@ const CHECKS = [
         { at: "2026-11-19T22:27:00", amount: 49, payments: 1, refund: false, dealType: "Debit", doc: "1001", docUrl: "https://cardcom.test/doc/1001", last4: "1234" },
         { at: "2026-11-20T10:00:00", amount: -49, payments: 1, refund: true, dealType: "Credit", doc: "1002", docUrl: "", last4: "" },
       ];
-      const o = await open(browser, device, (d) => Object.assign(d, { owner: false, __pay: { ok: true, days: 120, transactions: TXS }, __payDelay: 900 }));
+      const YTX = TXS.concat([{ at: "2026-03-02T08:00:00", amount: 1490, payments: 10, refund: false, docUrl: "https://cardcom.test/doc/9", last4: "1234" }]);
+      const o = await open(browser, device, (d) => Object.assign(d, { owner: false, __pay: { ok: true, days: 120, transactions: TXS }, __payDelay: 900, __payYear: { ok: true, days: 365, transactions: YTX }, __payYearDelay: 900 }));
       const p = o.page;
       await p.locator('[data-open="lior5066@gmail.com"]').first().click(); await p.waitForTimeout(300);
       const before = o.payCalls.length;
@@ -199,9 +202,19 @@ const CHECKS = [
       const refRed = await p.locator(".payref").count();
       const note = (await p.locator(".paynote").innerText().catch(() => "")).trim();
       const call = o.payCalls[0] || "";
+      const btnAfter = await p.evaluate(() => { const b = document.querySelector("[data-payyear]"), r = [...document.querySelectorAll(".payrow")].pop(); return !!(b && r && (r.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)); });
       await p.locator('[data-tab="info"]').first().click(); await p.waitForTimeout(150);
       await p.locator('[data-tab="pay"]').first().click(); await p.waitForTimeout(300);
       const calls = o.payCalls.length;
+      await p.locator("[data-payyear]").first().click(); await p.waitForTimeout(200);
+      const yLoad = (await p.locator('[data-paystate="yearloading"]').innerText().catch(() => "")).trim();
+      const rowsDuring = await p.locator(".payrow").count();
+      await p.waitForTimeout(1300);
+      const yRows = await p.locator(".payrow").count();
+      const yNote = (await p.locator(".paynote").innerText().catch(() => "")).trim();
+      const yBtn = await p.locator("[data-payyear]").count();
+      const yCall = o.payCalls[1] || "";
+      const yCalls = o.payCalls.length;
       await o.ctx.close();
       const e = await open(browser, device, (d) => Object.assign(d, { __pay: { ok: false, error: "pay_failed" } }));
       await e.page.locator('[data-open="lior5066@gmail.com"]').first().click(); await e.page.waitForTimeout(300);
@@ -211,18 +224,22 @@ const CHECKS = [
       const n = await open(browser, device);
       await n.page.locator('[data-open="lior5066@gmail.com"]').first().click(); await n.page.waitForTimeout(300);
       await n.page.locator('[data-tab="pay"]').first().click(); await n.page.waitForTimeout(400);
-      const noneTxt = (await n.page.locator('[data-paystate]').innerText()).trim();
+      const noneTxt = (await n.page.locator('[data-paystate="none"] .empty').innerText().catch(() => "")).trim();
+      const noneBtn = await n.page.locator('[data-paystate="none"] [data-payyear]').count();
       await n.ctx.close();
       const errs = o.errors.concat(e.errors, n.errors);
       const r0 = (rows[0] || "").replace(/\s+/g, " ").trim();
       const ok = before === 0 && tab === 1 && loading === 1 && rows.length === 2
         && r0 === "19.11.2026 22:27 · 49 ₪ · תשלום אחד · כרטיס 1234 · חשבונית"
         && link === "https://cardcom.test/doc/1001" && refRed === 1 && /זיכוי · \u200E?-49 ₪/.test(rows[1] || "")
-        && call.includes("payments=lior5066%40gmail.com") && call.includes("phone=972501111111") && calls === 1
+        && call.includes("payments=lior5066%40gmail.com") && call.includes("phone=972501111111") && !call.includes("year=") && calls === 1
         && failTxt === "קארדקום לא ענה. אפשר לנסות שוב בעוד רגע."
-        && note === "מוצגים התשלומים מהשנה האחרונה בלבד." && noneTxt === "לא נמצאו תשלומים בשנה האחרונה לפי הטלפון והמייל שלה. אם היא שילמה עם פרטים של מישהו אחר, התשלום לא יופיע כאן."
+        && note === "מוצגים התשלומים מ-120 הימים האחרונים." && btnAfter
+        && yLoad === "טוען שנה אחורה מקארדקום, זה יכול לקחת עד דקה..." && rowsDuring === 2
+        && yRows === 3 && yNote === "מוצגים התשלומים מהשנה האחרונה בלבד." && yBtn === 0 && yCall.includes("year=1") && yCall.includes("phone=972501111111") && yCalls === 2
+        && noneTxt === "לא נמצאו תשלומים ב-120 הימים האחרונים לפי הטלפון והמייל שלה. אם היא שילמה עם פרטים של מישהו אחר, התשלום לא יופיע כאן." && noneBtn === 1
         && !errs.length;
-      return { ok, detail: `לפני ${before} · לשונית ${tab} · טעינה ${loading} · "${r0}" | "${(rows[1]||"").trim()}" · קישור ${link} · פניות ${calls} · "${failTxt}" · "${noneTxt.slice(0,30)}" · שגיאות ${errs[0] || "אין"}` };
+      return { ok, detail: `לפני ${before} · לשונית ${tab} · טעינה ${loading} · "${r0}" | "${(rows[1]||"").trim()}" · קישור ${link} · פניות ${calls} · כפתור אחרי ${btnAfter} · שנה "${yLoad}" ${rowsDuring}→${yRows} "${yNote}" כפתור ${yBtn} פניות ${yCalls} · "${failTxt}" · "${noneTxt.slice(0,30)}" · שגיאות ${errs[0] || "אין"}` };
     },
   },
   {

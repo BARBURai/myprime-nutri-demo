@@ -128,7 +128,7 @@ const toObj = (raw) => {
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.66";
+const ADMIN_VERSION = "8.67";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1174,7 +1174,7 @@ export default async function handler(req, res) {
   // **v8.65: התשלומים שלה בקארדקום, כשלשונית "תשלומים" נפתחת.** ראה `api/_payments.js`.
   // **לכל קוד של המשרד**, החלטת רון. קריאה בלבד, ושום דבר לא נשמר אצלנו.
   if (req.method === "GET" && req.query.payments !== undefined) {
-    const out = await fetchPayments({ phone: req.query.phone, email: req.query.payments });
+    const out = await fetchPayments({ phone: req.query.phone, email: req.query.payments, year: req.query.year === "1" });
     return res.status(200).json(out);
   }
 
