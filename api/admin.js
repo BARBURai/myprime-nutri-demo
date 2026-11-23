@@ -36,6 +36,7 @@ import { addDaysYmd } from "./_product.js";
 import { addMonthsYmd } from "./_product.js";
 import { SUB_HASH, SUB_TAG_ID, SUB_PHOTO_LIMIT, secretOk as subSecretOk, handleCharge as subCharge, sweep as subSweep, cancelSub, payRecurringUrl, parseRec as parseSubRec, subStatus, subPhotoKey } from "./_sub.js";
 import { fetchPayments } from "./_payments.js";
+import { cleanEmail } from "./_email.js";
 
 async function redis(base, token, ...args) {
   const r = await fetch(`${base}/${args.map(encodeURIComponent).join("/")}`, {
@@ -128,7 +129,7 @@ const toObj = (raw) => {
 // it on screen there is no way to tell whether what you are looking at is the new code, and
 // Ron reported a change as missing when it was simply not deployed yet. Kept in step with
 // src/App.jsx by qa/version-check.mjs, which fails on any drift.
-const ADMIN_VERSION = "8.67";
+const ADMIN_VERSION = "8.68";
 const GROUP_RE = /^[\u05d0-\u05ea]$/;   // one Hebrew letter: the cohort runs א through ה
 
 // ManyChat. The registration sheet is exported out of it, so it is the real source, and a
@@ -1360,7 +1361,7 @@ JSON בלבד, בלי שום טקסט אחר:
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
     const phone = String((body && body.phone) || "").replace(/[^\d]/g, "");
-    const to = String((body && body.fixEmail) || "").trim().toLowerCase();
+    const to = cleanEmail(body && body.fixEmail);
     const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;
     if (!phone || phone.length < 9) return res.status(400).json({ ok: false, error: "bad_phone" });
     if (!EMAIL_RE.test(to)) return res.status(400).json({ ok: false, error: "bad_email" });
@@ -1417,7 +1418,7 @@ JSON בלבד, בלי שום טקסט אחר:
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
     const a = (body && body.addWoman) || {};
-    const email = String(a.email || "").trim().toLowerCase();
+    const email = cleanEmail(a.email);
     const start = String(a.start || "").trim();
     const phone = String(a.phone || "").replace(/[^\d]/g, "");
     const first = String(a.first || "").trim().slice(0, 60);
@@ -1468,8 +1469,8 @@ JSON בלבד, בלי שום טקסט אחר:
   if (req.method === "POST" && req.body && (typeof req.body === "string" ? req.body.includes("newEmail") : req.body.newEmail)) {
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
-    const from = String((body && body.email) || "").trim().toLowerCase();
-    const to = String((body && body.newEmail) || "").trim().toLowerCase();
+    const from = cleanEmail(body && body.email);
+    const to = cleanEmail(body && body.newEmail);
     const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;
     const phone = String((body && body.phone) || "").replace(/[^\d]/g, "");
     if (!from || !EMAIL_RE.test(to)) return res.status(400).json({ ok: false, error: "bad_email" });
@@ -1509,7 +1510,7 @@ JSON בלבד, בלי שום טקסט אחר:
   if (req.method === "POST") {
     let body = req.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
-    const email = String((body && body.email) || "").trim().toLowerCase();
+    const email = cleanEmail(body && body.email);
     // With an issued code the name is the code's, not whatever was typed in the browser, so
     // the line in her card saying who did this cannot be faked.
     const by = me.owner ? String((body && body.by) || "").trim().slice(0, 40) : me.name;

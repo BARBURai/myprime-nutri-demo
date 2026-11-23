@@ -759,6 +759,7 @@ function mcWhy(d){
   if(e === "email_taken") return "הכתובת הזאת כבר רשומה על מישהי אחרת.";
   if(e === "row_gone")    return "לא מצאתי את השורה שלה בגיליון לפי הטלפון הזה.";
   if(e === "bad_email")   return "כתובת המייל לא תקינה.";
+  if(e === "same_email")  return "הכתובת החדשה זהה לכתובת הקיימת. לא שונה דבר.";
   if(e === "bad_phone")   return "מספר הטלפון לא תקין.";
   if(e === "mc_off")      return "החיבור למניצ'ט לא מוגדר.";
   if(e === "not_found")   return "לא נמצאה במניצ'ט רשומה לפי הטלפון הזה.";
@@ -861,6 +862,8 @@ function attachUsage(w){
 // מנוסה שוב בכניסה הבאה ללשונית אחרי 15 שניות.
 // **v8.67: נפתח על 120 יום, ושנה אחורה רק בכפתור.** דף התשלום מדד 365 יום ב-27 שניות, ואחת
 // מהשלוש לא ענתה. לשנה השרת מחכה עד 60 שניות, ותקלה בה אינה מנוסה שוב לבד, רק בכפתור.
+// v8.68: תווים נסתרים במייל. אותה רשימה כמו `api/_email.js`.
+function cleanMail(s){ return String(s==null?"":s).replace(/[\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g,"").trim().toLowerCase(); }
 var PAY = {};
 function payFetch(email, ph, year, done){
   fetch("/api/admin?key="+encodeURIComponent(KEY)+"&payments="+encodeURIComponent(email)+(ph?"&phone="+encodeURIComponent(ph):"")+(year?"&year=1":""))
@@ -2733,7 +2736,7 @@ function render(){
   app.querySelectorAll("[data-fixmail]").forEach(function(el){ el.onclick=function(){
     var ph = el.getAttribute("data-fixmail");
     var box = document.getElementById("nm_"+ph);
-    var mail = (box ? box.value : "").trim().toLowerCase();
+    var mail = cleanMail(box ? box.value : "");
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)){ alert("כתובת המייל לא נראית תקינה."); return; }
     if(!confirm("לשמור את "+mail+" בתור המייל שלה?\n\nהכתובת תיכתב למניצ'ט, ומשם היא תגיע לגיליון בייצוא הבא.")) return;
     el.disabled = true;
@@ -3194,9 +3197,10 @@ function render(){
   }; });
   app.querySelectorAll("[data-saveemail]").forEach(function(el){ el.onclick=function(){
     var em=el.getAttribute("data-saveemail"), box=document.getElementById("e_"+em);
-    var to=(box?box.value:"").trim().toLowerCase();
+    // v8.68: תו נסתר שהודבק עם הכתובת (U+200F ודומיו) נמחק לפני כל בדיקה.
+    var to=cleanMail(box?box.value:"");
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)){ alert("צריך להזין כתובת מייל תקינה"); return; }
-    if(to===em){ alert("זו אותה כתובת."); return; }
+    if(to===cleanMail(em)){ alert("הכתובת החדשה זהה לכתובת הקיימת. לא שונה דבר."); return; }
     if(!confirm("לשנות לה את כתובת המייל?\n\nמ: "+em+"\nל: "+to+"\n\nהכתובת תיכתב במניצ'ט, וכל מה ששמור אצלנו עליה יעבור לכתובת החדשה.\nמהכניסה הבאה היא נכנסת רק עם הכתובת החדשה.")) return;
     el.disabled=true; el.textContent="משנה...";
     fetch("/api/admin?key="+encodeURIComponent(KEY),{method:"POST",headers:{"content-type":"application/json"},
@@ -3205,6 +3209,7 @@ function render(){
       .then(function(d){
         if(d && d.ok){ alert("הכתובת שונתה. מעכשיו היא נכנסת עם "+to+" בלבד.\n\nהגיליון יתעדכן לבד בייצוא הבא של מניצ'ט, ועד אז הכרטיס יציג את שתי הכתובות."); EDITING=""; delete MC[em]; return load().then(render); }
         // Nothing was moved on our side when ManyChat refused, so the two never drift apart.
+        if(d && d.error === "same_email"){ alert("הכתובת החדשה זהה לכתובת הקיימת. לא שונה דבר."); el.disabled=false; el.textContent="שינוי כתובת"; return; }
         var why = d && d.error === "email_taken" ? "הכתובת הזאת כבר קיימת אצל מישהי אחרת בגיליון."
                 : d && d.error === "mc_off" ? "החיבור למניצ'ט אינו מוגדר, ולכן לא שיניתי כלום."
                 : d && String(d.mc||"").indexOf("emailfail:")===0 ? "מניצ'ט לא קיבל את השינוי: "+String(d.mc).slice(10)
