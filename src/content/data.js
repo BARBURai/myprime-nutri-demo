@@ -617,7 +617,7 @@ export const CONTENT_DAYS = [
           "אני איתך 🌸",
           "ענת"
         ],
-        "videoId": "c9a95cc2-0b74-4c5e-8427-cc8fc3273e88",
+        "videoId": "2536a7bf-9ee8-432c-b963-f287ddc5bc4b",
         "pdf": null
       },
       {
