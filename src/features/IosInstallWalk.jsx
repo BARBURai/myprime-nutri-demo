@@ -1,7 +1,7 @@
 // הדרכת ההתקנה לאייפון, כאנימציה בתוך המסך ולא כסרטון מבאני.
 //
 // הסיבה היחידה שזה לא סרטון: בשלב 2 יש שתי צורות לסרגל של ספארי, ואצל כל אישה רק אחת
-// מהן קיימת. סרטון מראה את שתיהן ברצף, ומי שיש לה אחת מתחילה לחפש את השנייה. רון:
+// מהן קיימת. מ-v8.76 שלוש צורות. סרטון מראה את שתיהן ברצף, ומי שיש לה אחת מתחילה לחפש את השנייה. רון:
 // "מי שעשתה ויש לה את שלב אחד היא מתחילה לחפש את האופציה השניה לא מבינה מה קורה".
 // כאן האנימציה עוצרת בשלב 2, היא מקישה על הסרגל שהיא רואה, וממשיך רק המסלול שלה.
 //
@@ -16,6 +16,10 @@ const DIR = "/guides/ios-walk/";
 const PH = { w: 1170, h: 2532 };
 const S2 = "גללי לתחתית המסך, לסרגל של ספארי. מה שאת רואה שם קובע:";
 const B2 = "ואם את רואה רק שלוש נקודות, הקישי עליהן ואז בחרי \"שיתוף\" (Share).";
+// הצורה השלישית של הסרגל, שורת כתובת עם שלושה קווים (≡). הגיעה מטלפונים של משתתפות,
+// ורון צילם אותה ב-26.11.2026. התפריט שנפתח שונה משל שלוש הנקודות, ולכן יש לה מסלול
+// משלה עד "שיתוף", ומשם אותו המשך. v8.76.
+const B3 = "ואם את רואה שלושה קווים (≡), הקישי עליהם ואז בחרי \"שיתוף\" (Share).";
 const S5 = "הקישי \"הוספה\" (Add) - והאייקון יופיע במסך הבית.";
 
 // tap הוא מיקום הכפתור בפיקסלים של הצילום המקורי. box הוא שורה בתפריט, שמסומנת
@@ -27,6 +31,8 @@ const SHOTS = {
   share: { num: 2, small: S2, big: "אם את רואה את הסרגל הזה, הקישי על הכפתור המסומן.", src: "safari-share.jpg", ...PH, tap: [584, 2441], r: 70, zoom: 2.0, ring: false, dur: 8.6 },
   dots: { num: 2, small: S2, big: B2, src: "safari-dots.jpg", ...PH, tap: [174, 2355], r: 75, zoom: 2.0, dur: 8.6 },
   dotsMenu: { num: 2, small: S2, big: B2, src: "dots-menu.jpg", ...PH, tap: [495, 1572], box: [560, 120], zoom: 1.7, dur: 8.2 },
+  menu: { num: 2, small: S2, big: B3, src: "safari-menu.jpg", ...PH, tap: [344, 2358], r: 70, zoom: 2.0, dur: 8.6 },
+  menuOpen: { num: 2, small: S2, big: B3, src: "menu-open.jpg", ...PH, tap: [614, 960], box: [560, 120], zoom: 1.7, dur: 8.2 },
   sheet: { num: 3, big: "הקישי על החץ שבפינה השמאלית התחתונה, \"הצגת עוד\", כדי לפתוח את כל הרשימה.", src: "share-sheet.jpg", ...PH, tap: [201, 2256], r: 110, zoom: 1.9, dur: 8.6 },
   more: { num: 4, big: "בחרי \"הוספה למסך הבית\" (Add to Home Screen).", src: "share-more.jpg", ...PH, tap: [818, 1827], box: [560, 120], zoom: 1.7, dur: 8.6 },
   add: { num: 5, big: S5, src: "add-screen.jpg", ...PH, tap: [168, 285], r: 100, zoom: 1.9, dur: 8.6 },
@@ -34,7 +40,7 @@ const SHOTS = {
 };
 const KEYS = Object.keys(SHOTS);
 const TAIL = ["sheet", "more", "add", "home"];
-const PATHS = { share: ["share", ...TAIL], dots: ["dots", "dotsMenu", ...TAIL] };
+const PATHS = { share: ["share", ...TAIL], dots: ["dots", "dotsMenu", ...TAIL], menu: ["menu", "menuOpen", ...TAIL] };
 
 // גובה האזור נבחר כך שכל הבלוק, כרטיס וצילום, נכנס במסך אחד של אייפון בלי לגלול. רון:
 // "נחתך לי או החלק העליון או החלק התחתון". ב-1440 הבלוק היה כ-760 פיקסלים.
@@ -199,7 +205,7 @@ export default function IosInstallWalk({ font }) {
 
   const card = { position: "relative", background: "#fff", border: `3px solid ${PINK}`, borderRadius: 18, padding: "24px 12px 12px", textAlign: "center", boxShadow: "0 6px 18px rgba(168,66,92,.18)", marginTop: 20 };
   const badge = { position: "absolute", top: -22, left: "50%", marginLeft: -22, width: 44, height: 44, borderRadius: "50%", background: PINK, color: "#fff", fontWeight: 700, fontSize: 26, display: "flex", alignItems: "center", justifyContent: "center", border: "3px solid #fff", boxSizing: "border-box" };
-  const optBtn = { display: "block", width: "100%", border: `2.5px solid ${PINK}`, background: "#fff", borderRadius: 16, padding: 8, marginBottom: 12, cursor: "pointer", fontFamily: font, boxShadow: "0 4px 12px rgba(168,66,92,.2)" };
+  const optBtn = { display: "block", width: "100%", border: `2.5px solid ${PINK}`, background: "#fff", borderRadius: 16, padding: 5, marginBottom: 6, cursor: "pointer", fontFamily: font, boxShadow: "0 4px 12px rgba(168,66,92,.2)" };
 
   return (
     <div data-walk="ios" style={{ maxWidth: 340, margin: "0 auto", fontFamily: font }}>
@@ -238,13 +244,13 @@ export default function IosInstallWalk({ font }) {
         {/* שני הכפתורים מתנפחים אחד אחרי השני, כדי שיהיה ברור שהם כפתורים ושצריך
             להקיש על אחד מהם. רון: "זה לא ברור שהיא צריכה ללחוץ על אחד מהכפתורים". */}
         <style>{`@keyframes mpWalkPulse{0%,50%,100%{transform:scale(1);box-shadow:0 4px 12px rgba(168,66,92,.2)}20%{transform:scale(1.06);box-shadow:0 8px 26px rgba(212,93,121,.55)}}
-          .mp-walk-pulse{animation:mpWalkPulse 2.4s ease-in-out infinite}.mp-walk-pulse2{animation-delay:1.2s}`}</style>
+          .mp-walk-pulse{animation:mpWalkPulse 2.4s ease-in-out infinite}.mp-walk-pulse2{animation-delay:.8s}.mp-walk-pulse3{animation-delay:1.6s}`}</style>
         {phase === "choice" && (
-          <div style={{ position: "absolute", inset: 0, background: "rgba(250,243,244,.97)", padding: 12, display: "flex", flexDirection: "column", justifyContent: "center", direction: "rtl" }}>
-            {[["share", "bar-share.png", "הסרגל התחתון של ספארי, עם כפתור השיתוף"], ["dots", "bar-dots.png", "הסרגל התחתון של ספארי במצב מכווץ, עם שלוש נקודות"]].map(([p, img, alt]) => (
-              <button key={p} data-walk-choice={p} onClick={() => choose(p)} className={"mp-walk-pulse" + (p === "dots" ? " mp-walk-pulse2" : "")} style={optBtn}>
-                <img src={DIR + img} alt={alt} style={{ display: "block", width: "100%", borderRadius: 10 }} />
-                <div style={{ marginTop: 8, background: PINK, color: "#fff", borderRadius: 999, padding: "7px 12px", fontSize: 17, fontWeight: 700 }}>זה מה שאני רואה</div>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(250,243,244,.97)", padding: 8, display: "flex", flexDirection: "column", justifyContent: "center", direction: "rtl" }}>
+            {[["share", "bar-share.png", "הסרגל התחתון של ספארי, עם כפתור השיתוף"], ["dots", "bar-dots.png", "הסרגל התחתון של ספארי במצב מכווץ, עם שלוש נקודות"], ["menu", "bar-menu.png", "הסרגל התחתון של ספארי, עם שורת כתובת ושלושה קווים"]].map(([p, img, alt]) => (
+              <button key={p} data-walk-choice={p} onClick={() => choose(p)} className={"mp-walk-pulse" + (p === "dots" ? " mp-walk-pulse2" : p === "menu" ? " mp-walk-pulse3" : "")} style={optBtn}>
+                <img src={DIR + img} alt={alt} style={{ display: "block", maxWidth: "100%", height: 38, margin: "0 auto", objectFit: "contain", borderRadius: 10 }} />
+                <div style={{ marginTop: 6, background: PINK, color: "#fff", borderRadius: 999, padding: "5px 12px", fontSize: 16, fontWeight: 700 }}>זה מה שאני רואה</div>
               </button>
             ))}
           </div>

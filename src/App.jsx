@@ -768,7 +768,7 @@ const C = {
   water: "#7E8DD6", waterBg: "#EBEDF8",
 };
 const fontStack = "'Rubik', system-ui, sans-serif";
-const VERSION = "8.75";
+const VERSION = "8.76";
 const STORAGE_KEY = "myprime_demo_state_v1";
 
 /* ============================================================
@@ -1243,8 +1243,10 @@ function IosBarOptions() {
     <div style={{ marginTop: 6 }}>
       <div style={head}>אם את רואה את הסרגל הזה, הקישי על הכפתור המסומן.</div>
       <InstallShot src="/guides/install-ios-share.png" alt="הסרגל התחתון של ספארי, כפתור השיתוף מסומן בעיגול אדום" />
-      <div style={{ ...head, marginTop: 12 }}>ואם את רואה רק שלוש נקודות, הקישי עליהן ואז בחרי "שיתוף" (Share).</div>
+      <div style={{ ...head, marginTop: 12 }}>ואם את רואה שלוש נקודות או שלושה קווים (≡), הקישי עליהם ואז בחרי "שיתוף" (Share).</div>
       <InstallShot src="/guides/install-ios-dots.png" alt="הסרגל התחתון של ספארי במצב מכווץ, שלוש הנקודות מסומנות בעיגול אדום" />
+      {/* הצורה השלישית, שורת כתובת עם שלושה קווים. רון צילם אותה ב-26.11.2026. v8.76 */}
+      <InstallShot src="/guides/install-ios-menu.png" alt="הסרגל התחתון של ספארי עם שורת כתובת, שלושת הקווים מסומנים בעיגול אדום" />
     </div>
   );
 }

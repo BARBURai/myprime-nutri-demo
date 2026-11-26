@@ -1944,7 +1944,8 @@ const CHECKS = [
       const none = intro === 0 && frame === 0 && walk === 0;
       // באייפון שתי התמונות של הסרגל חייבות להיות שם, כי בלעדיהן ההנחיה חוזרת
       // לתאר צורה במקום מקום, וזה מה ששלח משתתפת לכפתור ה-AirPlay שעל הסרטון.
-      const shotsOk = isIOS ? shots === 2 : true;
+      // מ-v8.76 שלוש: נוספה שורת הכתובת עם שלושת הקווים.
+      const shotsOk = isIOS ? shots === 3 : true;
       // מ-v8.10 המשפט ירד: ההדרכה באייפון שואלת איזה סרגל היא רואה ומראה רק את המסלול
       // שלה, ולכן אין יותר מסלול אחד שצריך להסביר. ובאנדרואיד הוא מעולם לא הופיע.
       const noteOk = vidNote === 0;
@@ -1998,11 +1999,39 @@ const CHECKS = [
       const againChoices = await page.locator("[data-walk-choice]").count();
       await context.close();
       const s1 = first.includes("ודאי שאת בדפדפן Safari.");
-      const stopped = choices === 2 && atChoice.includes("מה את רואה בתחתית המסך?") && atChoice.includes("הקישי על התמונה שנראית כמו אצלך.") && !atChoice.includes("הקישי על הכפתור המסומן");
+      const stopped = choices === 3 && atChoice.includes("מה את רואה בתחתית המסך?") && atChoice.includes("הקישי על התמונה שנראית כמו אצלך.") && !atChoice.includes("הקישי על הכפתור המסומן");
       const onlyDots = all.includes("ואם את רואה רק שלוש נקודות") && !all.includes("אם את רואה את הסרגל הזה");
       const reachedEnd = all.includes("בחרי \"הוספה למסך הבית\" (Add to Home Screen).") && replay === 1;
       const restarted = again.includes("ודאי שאת בדפדפן Safari.") && againChoices === 0;
-      return { ok: s1 && stopped && onlyDots && reachedEnd && restarted, detail: (reachedEnd ? "" : all.slice(-300) + " ### ") + `שלב 1 ${s1} · עצירה ${stopped} · רק שלוש הנקודות ${onlyDots} · הגיעה לסוף ${reachedEnd} · מתחילה שוב ${restarted}` };
+      // v8.76: המסלול השלישי, שלושה קווים. אחרי "לצפות שוב" בוחרים בו, ורק הוא רץ.
+      const page2 = await (async () => {
+        const c2 = await browser.newContext({ ...device, locale: "he-IL", timezoneId: "Asia/Jerusalem" });
+        await c2.route("**/api/**", (route) => {
+          const url = route.request().url();
+          const json = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
+          if (url.includes("/api/access")) return json({ allowed: true, name: "בדיקה", startDate: startForDay(10) });
+          return json({ ok: true });
+        });
+        await c2.addInitScript(() => { localStorage.setItem("myprime_access_email", "qa@myprime.co.il"); localStorage.removeItem("myprime_install_ack"); localStorage.setItem("mp_walk_speed", "6"); });
+        return { c2, p: await c2.newPage() };
+      })();
+      const { c2, p: pg } = page2;
+      await pg.goto(BASE, { waitUntil: "domcontentloaded" });
+      const w2 = pg.locator('[data-walk="ios"]');
+      await w2.waitFor({ timeout: 15000 }); await w2.scrollIntoViewIfNeeded();
+      await pg.locator('[data-walk-choice="menu"]').waitFor({ timeout: 15000 });
+      // שלושת הכפתורים נכנסים כולם בתוך אזור האנימציה, בלי שאחד נחתך
+      const fit = await pg.evaluate(() => {
+        const box = document.querySelector('[data-walk-choice]').parentElement.getBoundingClientRect();
+        return [...document.querySelectorAll('[data-walk-choice]')].every((b) => { const r = b.getBoundingClientRect(); return r.top >= box.top - 1 && r.bottom <= box.bottom + 1; });
+      });
+      await pg.locator('[data-walk-choice="menu"]').click();
+      const seen2 = new Set(); let rep2 = 0;
+      for (let i = 0; i < 200 && !rep2; i++) { seen2.add((await w2.innerText()).replace(/\s+/g, " ")); rep2 = await pg.locator("[data-walk-replay]").count(); await pg.waitForTimeout(150); }
+      await c2.close();
+      const all2 = [...seen2].join(" | ");
+      const onlyMenu = all2.includes("ואם את רואה שלושה קווים (≡)") && !all2.includes("ואם את רואה רק שלוש נקודות") && !all2.includes("אם את רואה את הסרגל הזה") && all2.includes("בחרי \"הוספה למסך הבית\" (Add to Home Screen).") && rep2 === 1;
+      return { ok: s1 && stopped && onlyDots && reachedEnd && restarted && fit && onlyMenu, detail: `נכנסים ${fit} · רק הקווים ${onlyMenu} · ` + (reachedEnd ? "" : all.slice(-300) + " ### ") + `שלב 1 ${s1} · עצירה ${stopped} · רק שלוש הנקודות ${onlyDots} · הגיעה לסוף ${reachedEnd} · מתחילה שוב ${restarted}` };
     },
   },
   {
